@@ -1,0 +1,123 @@
+name: E2E Tests
+
+on:
+  workflow_dispatch:
+  # TODO: Add trigger when new docker images are built
+  # workflow_run:
+  #   workflows: ["Build melosys-api", "Build melosys-web"]
+  #   types:
+  #     - completed
+
+permissions:
+  contents: read
+  packages: read
+  id-token: write
+
+jobs:
+  e2e-tests:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Playwright Browsers
+        run: npx playwright install --with-deps chromium
+
+      - name: Login to NAIS registry
+        uses: nais/login@v0
+        with:
+          team: teammelosys
+
+      - name: Create Docker network
+        run: |
+          docker network create melosys.docker-internal || true
+
+      - name: Set environment variables for GitHub Actions
+        run: |
+          echo "MELOSYS_ORACLE_DB_NAME=XEPDB1" >> $GITHUB_ENV
+          echo "ORACLE_IMAGE=gvenzl/oracle-xe:18.4.0-slim" >> $GITHUB_ENV
+
+      - name: Start Docker Compose services
+        run: |
+          docker compose up -d
+        env:
+          MELOSYS_ORACLE_DB_NAME: XEPDB1
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "⏳ Waiting for services to be ready..."
+          
+          # Wait for melosys-web to be ready (this is the last service that depends on everything)
+          max_attempts=60
+          attempt=0
+          
+          until curl -f http://localhost:3000/melosys/ > /dev/null 2>&1; do
+            attempt=$((attempt + 1))
+            if [ $attempt -eq $max_attempts ]; then
+              echo "❌ Services failed to start within timeout"
+              echo "📋 Docker compose logs:"
+              docker compose logs
+              exit 1
+            fi
+            echo "⏳ Waiting for services... ($attempt/$max_attempts)"
+            sleep 10
+          done
+          
+          echo "✅ All services are ready!"
+          echo "📊 Service status:"
+          docker compose ps
+
+      - name: Run Playwright test - example workflow
+        run: |
+          npx playwright test "should complete a basic workflow" --project=chromium
+        env:
+          CI: true
+
+      - name: Upload test results
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-results
+          path: |
+            test-results/
+            playwright-report/
+          retention-days: 7
+
+      - name: Upload test videos
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-videos
+          path: test-results/**/video.webm
+          retention-days: 7
+
+      - name: Upload test traces
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-traces
+          path: test-results/**/trace.zip
+          retention-days: 7
+
+      - name: Show docker logs on failure
+        if: failure()
+        run: |
+          echo "📋 Docker compose logs:"
+          docker compose logs --tail=100
+
+      - name: Stop Docker Compose services
+        if: always()
+        run: |
+          docker compose down -v
+          docker network rm melosys.docker-internal || true
