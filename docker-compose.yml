@@ -1,0 +1,350 @@
+services:
+  zookeeper:
+    container_name: zookeeper
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - zookeeper.melosys.docker-internal
+    image: confluentinc/cp-zookeeper:7.1.2
+    environment:
+      ZOOKEEPER_CLIENT_PORT: 2181
+      ZOOKEEPER_TICK_TIME: 2000
+
+  kafka:
+    container_name: kafka
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - kafka.melosys.docker-internal
+    image: confluentinc/cp-kafka:7.1.2
+    ports:
+      - "9092:9092"
+      - "29092:29092"
+    depends_on:
+      - zookeeper
+    environment:
+      ADV_HOST: kafka.melosys.docker-internal
+      KAFKA_ZOOKEEPER_CONNECT: zookeeper.melosys.docker-internal:2181
+      KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+      KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
+      KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka.melosys.docker-internal:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+    entrypoint: [ "/scripts/kafka-entrypoint.sh" ]
+    volumes:
+      - ./scripts/kafka-entrypoint.sh:/scripts/kafka-entrypoint.sh
+    healthcheck:
+      test: [ "CMD-SHELL", "nc -z localhost 9092" ]
+      interval: 20s
+      timeout: 5s
+      retries: 8
+
+  mock-oauth2-server:
+    image: ghcr.io/navikt/mock-oauth2-server:2.3.0
+    hostname: host.docker.internal
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - host.docker.internal
+    environment:
+      SERVER_PORT: 8082
+      JSON_CONFIG: '{
+    "interactiveLogin": true,
+    "tokenCallbacks": [
+        {
+            "issuerId": "isso",
+            "tokenExpiry": 120,
+            "requestMappings": [
+                {
+                    "requestParam": "scope",
+                    "match": "melosys-localhost",
+                    "claims": {
+                        "roles": [
+                            "faktureringskomponenten-skriv"
+                        ],
+                        "sub": "melosys-api",
+                        "aud": "melosys-localhost",
+                        "azp": "melosys-api",
+                        "iss": "http://host.docker.internal:8082/isso",
+                        "tid": "isso"
+                    }
+                },
+                {
+                    "requestParam": "audience",
+                    "match": "melosys-localhost",
+                    "claims": {
+                        "roles": [
+                            "faktureringskomponenten-skriv"
+                        ],
+                        "sub": "melosys-api",
+                        "aud": "melosys-localhost",
+                        "azp": "melosys-api",
+                        "iss": "http://host.docker.internal:8082/isso",
+                        "tid": "isso"
+                    }
+                },
+                {
+                    "requestParam": "audience",
+                    "match": "melosys-skjema-api",
+                    "claims": {
+                        "roles": [
+                            "faktureringskomponenten-skriv"
+                        ],
+                        "pid": "$${pid}",
+                        "aud": "$${audience}",
+                        "sub": "$${pid}",
+                        "azp": "$${clientId}",
+                        "iss": "http://host.docker.internal:8082/isso",
+                        "tid": "isso"
+                    }
+                }                
+            ]
+        }       
+    ]
+}'
+    ports:
+      - "8082:8082"
+
+  mock-oauth2-server-sts:
+    image: ghcr.io/navikt/mock-oauth2-server:0.4.8
+    hostname: host.docker.internal.sts
+    environment:
+      SERVER_PORT: 8086
+      JSON_CONFIG: '{
+        "interactiveLogin": false,
+        "httpServer": "NettyWrapper",
+        "tokenCallbacks": [
+          {
+            "issuerId": "reststs",
+            "tokenExpiry": 12000,
+            "requestMappings": [
+              {
+                "requestParam": "grant_type",
+                "match": "client_credentials",
+                "claims": {
+                  "sub": "15084300133",
+                  "sid": "1234",
+                  "aud": "srvmelosys",
+                  "acr": "Level4"
+                }
+              }
+            ]
+          }
+          ]
+        }'
+    ports:
+      - "8086:8086"
+
+  melosys-mock:
+    build: ./mock/
+    ports:
+      - "8083:8083"
+      - "8389:8389"
+    environment:
+      SPRING_PROFILES_ACTIVE: local-docker
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - melosys-mock.melosys.docker-internal
+    volumes:
+      - ${PWD}/mock/src/main/resources:/files
+
+  faktureringskomponenten:
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:latest
+    container_name: faktureringskomponenten
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/postgres?currentSchema=faktureringskomponenten"
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: mysecretpassword
+      SPRING_FLYWAY_ENABLED: "true"
+      KAFKA_BROKERS: "kafka.melosys.docker-internal:9092"
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - faktureringskomponenten.melosys.docker-internal
+    ports:
+      - "8084:8084"
+
+  melosys-dokgen:
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-dokgen:latest
+    container_name: melosys-dokgen
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - melosys-dokgen.melosys.docker-internal
+    ports:
+      - "8888:8080"
+
+  melosys-trygdeavgift-beregning:
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:latest
+    container_name: melosys-trygdeavgift-beregning
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/postgres?currentSchema=trygdeavgift-beregning"
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: mysecretpassword
+      SPRING_FLYWAY_ENABLED: "true"
+      KAFKA_BROKERS: "kafka.melosys.docker-internal:9092"
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - melosys-trygdeavgift-beregning.melosys.docker-internal
+    ports:
+      - "8095:8095"
+
+  melosys-api:
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:latest
+    container_name: melosys-api
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - melosys-api.melosys.docker-internal
+    ports:
+      - "8080:8080"
+    depends_on:
+      - kafka
+      - mock-oauth2-server
+      - mock-oauth2-server-sts
+      - melosys-mock
+      - faktureringskomponenten
+      - melosys-dokgen
+      - melosys-trygdeavgift-beregning
+    environment:
+      SPRING_PROFILES_ACTIVE: local-mock
+      # Kafka configuration
+      KAFKA_BROKERS: kafka.melosys.docker-internal:9092
+      # Oracle database configuration (override localhost with docker service name)
+      SPRING_DATASOURCE_URL: jdbc:oracle:thin:@//melosys-oracle:1521/${MELOSYS_ORACLE_DB_NAME:-freepdb1} # We need freepdb1 for Mac ARM and XEPDB1 for Intel/GitHub Actions
+      # Override service URLs to use docker network aliases instead of localhost
+      DISTRIBUERJOURNALPOST_V1_URL: http://melosys-mock.melosys.docker-internal:8083/rest/v1/distribuerjournalpost
+      DOKUMENTPRODUKSJON_V3_URL: http://melosys-mock.melosys.docker-internal:8083/soap/services/dokumentproduksjon/v3
+      JOURNALPOSTAPI_V1_URL: http://melosys-mock.melosys.docker-internal:8083/rest/journalpostapi/v1
+      KODEVERKAPI_V1_URL: http://felles-kodeverk.melosys.docker-internal:8050/api
+      MELOSYSEESSI_URL: http://melosys-mock.melosys.docker-internal:8083/api
+      OPPGAVEAPI_V1_URL: http://melosys-mock.melosys.docker-internal:8083/api/v1
+      PDL_URL: http://melosys-mock.melosys.docker-internal:8083/graphql
+      REST_STS_URL: http://host.docker.internal.sts:8086/reststs
+      SAF_URL: http://melosys-mock.melosys.docker-internal:8083
+      SAKAPI_V1_URL: http://melosys-mock.melosys.docker-internal:8083/api/v1/saker
+      SAKOGBEHANDLING_V1_URL: http://melosys-mock.melosys.docker-internal:8083/soap/services/sakOgBehandling/v1
+      ARBEIDSFORHOLD_REST_URL: http://melosys-mock.melosys.docker-internal:8083/aareg-services/api/v1/arbeidstaker/arbeidsforhold
+      EREG_REST_URL: http://melosys-mock.melosys.docker-internal:8083/ereg/v2
+      FAKTURERINGSKOMPONENTEN_URL: http://faktureringskomponenten.melosys.docker-internal:8084
+      INNTEKT_REST_URL: http://melosys-mock.melosys.docker-internal:8083/inntektskomponenten/rs/api/v1
+      MEDLEMSKAP_REST_URL: http://melosys-mock.melosys.docker-internal:8083
+      MELOSYSDOKGEN_V1_URL: http://melosys-dokgen.melosys.docker-internal:8080/api/v1
+      MELOSYSTRYGDEAVGIFT_URL: http://melosys-trygdeavgift-beregning.melosys.docker-internal:8095/api
+      MICROSOFT_GRAPH_REST_URL: http://melosys-mock.melosys.docker-internal:8083/graph/v1.0
+      TILGANGSMASKINEN_URL: http://melosys-mock.melosys.docker-internal:8083/tilgangsmaskinen
+      UTBETALING_REST_URL: http://melosys-mock.melosys.docker-internal:8083/utbetaldata/api/v2/hent-utbetalingsinformasjon/intern
+
+  melosys-web:
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-web:latest
+    container_name: melosys-web
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - melosys-web.melosys.docker-internal
+    ports:
+      - "3000:3000"
+    depends_on:
+      - melosys-api
+      - mock-oauth2-server
+      - faktureringskomponenten
+    environment:
+      # Load the local environment configuration
+      ENVIRONMENT_NAME: local
+      # Nginx proxy configuration - these are used in the nginx template
+      APP_URL_MELOSYS: http://melosys-api.melosys.docker-internal:8080
+      APP_URL_FAKTURERINGSKOMPONENTEN: http://faktureringskomponenten.melosys.docker-internal:8084
+      APP_URL_TRYGDEAVTALE: http://melosys-trygdeavtale.melosys.docker-internal:8088
+
+services:
+  postgres_felleskodeverk:
+    image: postgres:13-alpine
+    container_name: postgres_felleskodeverk
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: mysecretpassword
+      POSTGRES_DB: felles-kodeverk
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - postgres_felleskodeverk.melosys.docker-internal
+    ports:
+      - "5433:5432"
+
+  felles-kodeverk:
+    build: ./felles-kodeverk
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres_felleskodeverk.melosys.docker-internal:5432/felles-kodeverk"
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: mysecretpassword
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://host.docker.internal:8082/isso
+      SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: melosys-localhost
+      KODEVERKPRODUKTEIER_AAD_GRP_ID: 0000-GA-MELOSYS
+      SPRING_FLYWAY_ENABLED: "true"
+      SPRING_FLYWAY_LOCATIONS: classpath:db/migration
+      SPRING_LOGGING_LEVEL_ROOT: TRACE
+    entrypoint: "/app/entrypoint.sh"
+    depends_on:
+      - postgres_felleskodeverk
+    volumes:
+      - ./felles-kodeverk/felles-kodeverk-entrypoint.sh:/app/entrypoint.sh
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - felles-kodeverk.melosys.docker-internal
+    ports:
+      - "8050:8050"
+
+  melosys-oracle:
+    image: ${ORACLE_IMAGE:-gvenzl/oracle-xe:18.4.0-slim}
+    container_name: melosys-oracle
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - melosys-oracle.melosys.docker-internal
+    environment:
+      APP_USER: melosys
+      APP_USER_PASSWORD: melosyspwd
+      ORACLE_PASSWORD: oracle
+    ports:
+      - "1521:1521"
+
+  postgres:
+    image: postgres:13-alpine
+    container_name: postgres
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - postgres.melosys.docker-internal
+          - postgres
+    environment:
+      POSTGRES_PASSWORD: mysecretpassword
+    ports:
+      - 5432:5432
+
+  melosys-trygdeavtale:
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:latest
+    depends_on:
+      - mock-oauth2-server
+      - postgres
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - melosys-trygdeavtale.melosys.docker-internal
+    environment:
+      SPRING_PROFILES_ACTIVE: local-docker
+      JDBC_URL: jdbc:postgresql://postgres:5432/postgres
+      MELOSYS_API_URL: http://host.docker.internal:8080
+      ABAC_PDP_ENDPOINT_URL: http://melosys-mock:8083/asm-pdp/authorize
+    ports:
+      - "8088:8088"
+
+networks:
+  melosys.docker-internal:
+    external: true
