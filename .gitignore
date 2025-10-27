@@ -1,0 +1,106 @@
+# Dependencies
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+.pnpm-store/
+
+# Playwright
+/test-results/
+/playwright-report/
+/playwright/.cache/
+/playwright/.auth/
+
+# Test artifacts
+*.mp4
+*.webm
+*.zip
+/videos/
+/traces/
+/screenshots/
+/downloads/
+
+# Authentication & secrets
+.auth-state.json
+auth-state.json
+*.pem
+*.key
+secrets.json
+
+# Environment variables
+.env
+.env.local
+.env.*.local
+.env.development.local
+.env.test.local
+.env.production.local
+
+# Build output
+dist/
+build/
+out/
+.cache/
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+*.sublime-workspace
+*.sublime-project
+
+# OS files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+desktop.ini
+
+# Logs
+*.log
+logs/
+*.log.*
+
+# Coverage
+coverage/
+.nyc_output/
+*.lcov
+
+# TypeScript
+*.tsbuildinfo
+.tscache/
+
+# Database dumps and local DB files
+*.sql
+*.db
+*.sqlite
+*.sqlite3
+db-dumps/
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+*.bak
+*.backup
+
+# Debug
+debug-*.png
+debug-*.jpg
+*.trace
+
+# Package manager locks (keep package-lock.json, exclude others if using different managers)
+# yarn.lock
+# pnpm-lock.yaml
+
+# Serena (AI assistant files)
+.serena/
