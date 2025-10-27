@@ -137,7 +137,7 @@ services:
       - "8086:8086"
 
   melosys-mock:
-    build: ./mock/
+    build: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-mock:latest
     ports:
       - "8083:8083"
       - "8389:8389"
@@ -261,14 +261,9 @@ services:
       APP_URL_FAKTURERINGSKOMPONENTEN: http://faktureringskomponenten.melosys.docker-internal:8084
       APP_URL_TRYGDEAVTALE: http://melosys-trygdeavtale.melosys.docker-internal:8088
 
-services:
   postgres_felleskodeverk:
-    image: postgres:13-alpine
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:latest
     container_name: postgres_felleskodeverk
-    environment:
-      POSTGRES_USER: postgres
-      POSTGRES_PASSWORD: mysecretpassword
-      POSTGRES_DB: felles-kodeverk
     networks:
       melosys.docker-internal:
         aliases:
@@ -277,7 +272,7 @@ services:
       - "5433:5432"
 
   felles-kodeverk:
-    build: ./felles-kodeverk
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/felles-kodeverk:latest
     environment:
       SPRING_PROFILES_ACTIVE: local
       SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres_felleskodeverk.melosys.docker-internal:5432/felles-kodeverk"
@@ -286,8 +281,7 @@ services:
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_ISSUER_URI: http://host.docker.internal:8082/isso
       SPRING_SECURITY_OAUTH2_RESOURCESERVER_JWT_AUDIENCES: melosys-localhost
       KODEVERKPRODUKTEIER_AAD_GRP_ID: 0000-GA-MELOSYS
-      SPRING_FLYWAY_ENABLED: "true"
-      SPRING_FLYWAY_LOCATIONS: classpath:db/migration
+      SPRING_FLYWAY_ENABLED: "false"  # Flyway disabled since data is already in the image
       SPRING_LOGGING_LEVEL_ROOT: TRACE
     entrypoint: "/app/entrypoint.sh"
     depends_on:
