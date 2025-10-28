@@ -59,6 +59,7 @@ jobs:
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:latest &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:latest &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/felles-kodeverk:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-mock:latest &
           docker pull --platform linux/amd64 gvenzl/oracle-xe:18.4.0-slim &
           docker pull --platform linux/amd64 postgres:13-alpine &
           docker pull --platform linux/amd64 confluentinc/cp-zookeeper:7.1.2 &
