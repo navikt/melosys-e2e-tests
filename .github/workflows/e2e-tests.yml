@@ -51,14 +51,20 @@ jobs:
       - name: Pre-pull Docker images in parallel
         run: |
           echo "🐳 Pre-pulling Docker images to avoid timeout during compose up..."
-          docker pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:latest &
-          docker pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-web:latest &
-          docker pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:latest &
-          docker pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-dokgen:latest &
-          docker pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:latest &
-          docker pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:latest &
-          docker pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:latest &
-          docker pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/felles-kodeverk:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-web:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-dokgen:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/felles-kodeverk:latest &
+          docker pull --platform linux/amd64 gvenzl/oracle-xe:18.4.0-slim &
+          docker pull --platform linux/amd64 postgres:13-alpine &
+          docker pull --platform linux/amd64 confluentinc/cp-zookeeper:7.1.2 &
+          docker pull --platform linux/amd64 confluentinc/cp-kafka:7.1.2 &
+          docker pull --platform linux/amd64 ghcr.io/navikt/mock-oauth2-server:2.3.0 &
+          docker pull --platform linux/amd64 ghcr.io/navikt/mock-oauth2-server:0.4.8 &
           wait
           echo "✅ All images pre-pulled successfully"
 
