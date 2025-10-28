@@ -73,13 +73,16 @@ test.describe('Melosys Workflow Example', () => {
         await page.getByRole('group', {name: 'Har søker lovlig opphold i'}).getByLabel('Ja').check();
         await page.getByRole('button', {name: 'Bekreft og fortsett'}).click();
         await page.getByRole('button', {name: 'Bekreft og fortsett'}).click();
-        
-        // Wait for the Trygdeavgift page to load
-        await page.waitForLoadState('domcontentloaded');
-        await page.waitForTimeout(1000);
-        
+
+        // Wait for the Trygdeavgift page to load completely
+        await page.waitForLoadState('networkidle');
+
+        // Wait for the radio button to be available and visible
+        const neiRadio = page.getByRole('radio', {name: 'Nei'});
+        await neiRadio.waitFor({ state: 'visible', timeout: 10000 });
+
         // Step 1: Select "Nei" for Skattepliktig
-        await page.getByRole('radio', {name: 'Nei'}).check();
+        await neiRadio.check();
         
         // Wait a moment for the inntekt section to appear
         await page.waitForTimeout(500);
