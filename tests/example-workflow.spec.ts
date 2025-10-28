@@ -76,13 +76,13 @@ test.describe('Melosys Workflow Example', () => {
         
         // Wait for the Trygdeavgift page to load
         await page.waitForLoadState('domcontentloaded');
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(1000);
         
         // Step 1: Select "Nei" for Skattepliktig
         await page.getByRole('radio', {name: 'Nei'}).check();
         
         // Wait a moment for the inntekt section to appear
-        await page.waitForTimeout(300);
+        await page.waitForTimeout(500);
         
         // Step 2: Select ARBEIDSINNTEKT - this will reveal the Bruttoinntekt field
         await page.getByLabel('Inntektskilde').selectOption('ARBEIDSINNTEKT');
