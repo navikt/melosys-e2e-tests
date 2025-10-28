@@ -79,15 +79,50 @@ test.describe('Melosys Workflow Example', () => {
         await page.getByRole('group', {name: 'Er søkers arbeidsoppdrag i'}).getByLabel('Ja').check();
         await page.getByRole('group', {name: 'Plikter arbeidsgiver å betale'}).getByLabel('Ja').check();
         await page.getByRole('group', {name: 'Har søker lovlig opphold i'}).getByLabel('Ja').check();
-        await page.getByRole('button', {name: 'Bekreft og fortsett'}).click();
-        await page.getByRole('button', {name: 'Bekreft og fortsett'}).click();
+
+        // Wait for the first "Bekreft og fortsett" button to be enabled before clicking
+        let bekreftButton = page.getByRole('button', {name: 'Bekreft og fortsett'});
+        await expect(bekreftButton).toBeEnabled({ timeout: 10000 });
+        console.log('✅ First Bekreft og fortsett button is enabled');
+
+        await bekreftButton.click();
+        console.log('✅ Clicked first Bekreft og fortsett');
+
+        // Wait for page to load after first click
+        await page.waitForLoadState('domcontentloaded');
+        await page.waitForTimeout(500);
+        console.log(`📍 Current URL after first click: ${page.url()}`);
+
+        // Wait for the second "Bekreft og fortsett" button to be enabled
+        bekreftButton = page.getByRole('button', {name: 'Bekreft og fortsett'});
+        await expect(bekreftButton).toBeEnabled({ timeout: 10000 });
+        console.log('✅ Second Bekreft og fortsett button is enabled');
+
+        await bekreftButton.click();
+        console.log('✅ Clicked second Bekreft og fortsett');
 
         // Wait for the Trygdeavgift page to load
         await page.waitForLoadState('domcontentloaded');
-        await page.waitForTimeout(500);
+        await page.waitForTimeout(1000);  // Increased wait time
+        console.log(`📍 Current URL after second click: ${page.url()}`);
+
+        // Verify we're on the Trygdeavgift page by checking for the "Skattepliktig" text
+        // or wait for the first "Nei" radio button to appear (which is the Skattepliktig field)
+        const skattepliktigNei = page.getByRole('radio', {name: 'Nei'}).first();
+
+        try {
+            await skattepliktigNei.waitFor({ state: 'visible', timeout: 10000 });
+            console.log('✅ Trygdeavgift page loaded - Skattepliktig field visible');
+        } catch (error) {
+            console.error('❌ Failed to reach Trygdeavgift page. Taking screenshot for debugging...');
+            console.error(`Current URL: ${page.url()}`);
+            await page.screenshot({ path: 'debug-stuck-page.png', fullPage: true });
+            throw error;
+        }
 
         // Step 1: Select "Nei" for Skattepliktig (use first() since it's the first "Nei" on the page)
-        await page.getByRole('radio', {name: 'Nei'}).first().check();
+        await skattepliktigNei.check();
+        console.log('✅ Checked Skattepliktig = Nei');
 
         // Wait for the inntekt section to appear after checking "Nei"
         const inntektskildeDropdown = page.getByLabel('Inntektskilde');
@@ -101,7 +136,7 @@ test.describe('Melosys Workflow Example', () => {
         
         // Step 4: Fill the Bruttoinntekt field with stable API waiting pattern
         const bruttoinntektField = page.getByRole('textbox', {name: 'Bruttoinntekt'});
-        const bekreftButton = page.getByRole('button', {name: 'Bekreft og fortsett'});
+        const trygdeavgiftButton = page.getByRole('button', {name: 'Bekreft og fortsett'});
 
         // CRITICAL: Create the response promise BEFORE triggering the action
         // This prevents race conditions where the API response comes before we start listening
@@ -120,10 +155,10 @@ test.describe('Melosys Workflow Example', () => {
 
         // Now wait for the button to be enabled (Playwright will auto-retry)
         // The button should enable once validation completes after the API response
-        await expect(bekreftButton).toBeEnabled({ timeout: 15000 });
-        console.log('✅ Bekreft button is enabled');
+        await expect(trygdeavgiftButton).toBeEnabled({ timeout: 15000 });
+        console.log('✅ Trygdeavgift Bekreft button is enabled');
 
-        await bekreftButton.click();
+        await trygdeavgiftButton.click();
         await page.locator('.ql-editor').first().click();
         await page.locator('.ql-editor').first().fill('fritekst');
         await page.getByRole('paragraph').filter({hasText: /^$/}).first().click();
