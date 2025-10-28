@@ -74,15 +74,12 @@ test.describe('Melosys Workflow Example', () => {
         await page.getByRole('button', {name: 'Bekreft og fortsett'}).click();
         await page.getByRole('button', {name: 'Bekreft og fortsett'}).click();
 
-        // Wait for the Trygdeavgift page to load completely
-        await page.waitForLoadState('networkidle');
+        // Wait for the Trygdeavgift page to load
+        await page.waitForLoadState('domcontentloaded');
+        await page.waitForTimeout(500);
 
-        // Wait for the radio button to be available and visible
-        const neiRadio = page.getByRole('radio', {name: 'Nei'});
-        await neiRadio.waitFor({ state: 'visible', timeout: 10000 });
-
-        // Step 1: Select "Nei" for Skattepliktig
-        await neiRadio.check();
+        // Step 1: Select "Nei" for Skattepliktig (use first() since it's the first "Nei" on the page)
+        await page.getByRole('radio', {name: 'Nei'}).first().check();
 
         // Wait for the inntekt section to appear after checking "Nei"
         const inntektskildeDropdown = page.getByLabel('Inntektskilde');
@@ -95,16 +92,16 @@ test.describe('Melosys Workflow Example', () => {
         await page.getByRole('textbox', {name: 'Bruttoinntekt'}).waitFor({ state: 'visible', timeout: 5000 });
         
         // Step 4: Fill the Bruttoinntekt field
-        await formHelper.fillAndWait(
-            page.getByRole('textbox', {name: 'Bruttoinntekt'}),
-            '100000',
-            2000  // Wait for calculation to complete
-        );
+        const bruttoinntektField = page.getByRole('textbox', {name: 'Bruttoinntekt'});
+        await bruttoinntektField.fill('100000');
+        await bruttoinntektField.press('Tab');  // Trigger blur to start API call
+
+        // Wait for network to settle (API call to complete)
+        await page.waitForLoadState('networkidle', { timeout: 15000 });
 
         // Wait for the "Bekreft og fortsett" button to be enabled (form validation must pass)
         const bekreftButton = page.getByRole('button', {name: 'Bekreft og fortsett'});
-        await bekreftButton.waitFor({ state: 'visible' });
-        await expect(bekreftButton).toBeEnabled({ timeout: 10000 });
+        await expect(bekreftButton).toBeEnabled({ timeout: 15000 });
 
         await bekreftButton.click();
         await page.locator('.ql-editor').first().click();

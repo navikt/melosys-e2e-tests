@@ -53,14 +53,12 @@ test.describe('Melosys Workflow Rune', () => {
         await page.getByLabel('Resultat periode').selectOption('INNVILGET');
         await page.getByRole('button', { name: 'Bekreft og fortsett' }).click();
 
-        // Wait for the Trygdeavgift page to load completely
-        await page.waitForLoadState('networkidle');
+        // Wait for the Trygdeavgift page to load
+        await page.waitForLoadState('domcontentloaded');
+        await page.waitForTimeout(500);
 
-        // Wait for the radio button to be available and visible
-        const neiRadio = page.getByRole('radio', { name: 'Nei' });
-        await neiRadio.waitFor({ state: 'visible', timeout: 10000 });
-
-        await neiRadio.check();
+        // Select "Nei" for Skattepliktig (use first() since it's the first "Nei" on the page)
+        await page.getByRole('radio', { name: 'Nei' }).first().check();
 
         // Wait for the inntekt section to appear after checking "Nei"
         const inntektskildeDropdown = page.getByLabel('Inntektskilde');
@@ -68,13 +66,18 @@ test.describe('Melosys Workflow Rune', () => {
 
         await inntektskildeDropdown.selectOption('INNTEKT_FRA_UTLANDET');
         await page.getByRole('group', { name: 'Betales aga.?' }).getByLabel('Nei').check();
-        await page.getByRole('textbox', { name: 'Bruttoinntekt' }).click();
-        await page.getByRole('textbox', { name: 'Bruttoinntekt' }).fill('100000');
+
+        const bruttoinntektField = page.getByRole('textbox', { name: 'Bruttoinntekt' });
+        await bruttoinntektField.click();
+        await bruttoinntektField.fill('100000');
+        await bruttoinntektField.press('Tab');  // Trigger blur to start API call
+
+        // Wait for network to settle (API call to complete)
+        await page.waitForLoadState('networkidle', { timeout: 15000 });
 
         // Wait for the "Bekreft og fortsett" button to be enabled (form validation must pass)
         const bekreftButton = page.getByRole('button', { name: 'Bekreft og fortsett' });
-        await bekreftButton.waitFor({ state: 'visible' });
-        await expect(bekreftButton).toBeEnabled({ timeout: 10000 });
+        await expect(bekreftButton).toBeEnabled({ timeout: 15000 });
 
         await bekreftButton.click();
         await page.getByRole('button', { name: 'Fatt vedtak' }).click();
