@@ -16,7 +16,7 @@ permissions:
 jobs:
   e2e-tests:
     runs-on: ubuntu-latest-8-cores
-    timeout-minutes: 30
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code
@@ -47,6 +47,18 @@ jobs:
         run: |
           echo "MELOSYS_ORACLE_DB_NAME=XEPDB1" >> $GITHUB_ENV
           echo "ORACLE_IMAGE=gvenzl/oracle-xe:18.4.0-slim" >> $GITHUB_ENV
+
+      - name: Pre-pull Docker images in parallel
+        run: |
+          echo "🐳 Pre-pulling Docker images to avoid timeout during compose up..."
+          docker pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:latest &
+          docker pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-web:latest &
+          docker pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:latest &
+          docker pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-dokgen:latest &
+          docker pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:latest &
+          docker pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:latest &
+          wait
+          echo "✅ All images pre-pulled successfully"
 
       - name: Start Docker Compose services
         run: |

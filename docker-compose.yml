@@ -152,6 +152,7 @@ services:
 
   faktureringskomponenten:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:latest
+    platform: linux/amd64
     container_name: faktureringskomponenten
     environment:
       SPRING_PROFILES_ACTIVE: local
@@ -169,6 +170,7 @@ services:
 
   melosys-dokgen:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-dokgen:latest
+    platform: linux/amd64
     container_name: melosys-dokgen
     networks:
       melosys.docker-internal:
@@ -179,6 +181,7 @@ services:
 
   melosys-trygdeavgift-beregning:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:latest
+    platform: linux/amd64
     container_name: melosys-trygdeavgift-beregning
     environment:
       SPRING_PROFILES_ACTIVE: local
@@ -196,6 +199,7 @@ services:
 
   melosys-api:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:latest
+    platform: linux/amd64
     container_name: melosys-api
     networks:
       melosys.docker-internal:
@@ -242,6 +246,7 @@ services:
 
   melosys-web:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-web:latest
+    platform: linux/amd64
     container_name: melosys-web
     networks:
       melosys.docker-internal:
@@ -324,6 +329,7 @@ services:
 
   melosys-trygdeavtale:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:latest
+    platform: linux/amd64
     depends_on:
       - mock-oauth2-server
       - postgres
