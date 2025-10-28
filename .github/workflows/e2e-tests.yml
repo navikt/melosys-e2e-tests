@@ -57,6 +57,8 @@ jobs:
           docker pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-dokgen:latest &
           docker pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:latest &
           docker pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:latest &
+          docker pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:latest &
+          docker pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/felles-kodeverk:latest &
           wait
           echo "✅ All images pre-pulled successfully"
 
