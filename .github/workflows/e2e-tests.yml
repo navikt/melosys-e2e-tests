@@ -99,9 +99,9 @@ jobs:
           echo "📊 Service status:"
           docker compose ps
 
-      - name: Run Playwright test - example workflow
+      - name: Run Playwright tests
         run: |
-          npx playwright test "should complete a basic workflow" --project=chromium
+          npx playwright test example-workflow.spec.ts --project=chromium
         env:
           CI: true
 
