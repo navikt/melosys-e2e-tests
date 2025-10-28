@@ -152,8 +152,6 @@ services:
       melosys.docker-internal:
         aliases:
           - melosys-mock.melosys.docker-internal
-    volumes:
-      - ${PWD}/mock/src/main/resources:/files
 
   faktureringskomponenten:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:latest
