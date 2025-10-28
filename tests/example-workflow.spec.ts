@@ -67,7 +67,15 @@ test.describe('Melosys Workflow Example', () => {
         await page.getByRole('button', {name: 'Bekreft og fortsett'}).click();
         await page.getByLabel('Hvilken bestemmelse skal sø').selectOption('FTRL_KAP2_2_1');
         await page.getByLabel('Angi brukers situasjon').selectOption('MIDLERTIDIG_ARBEID_2_1_FJERDE_LEDD');
-        await page.getByRole('radio', {name: 'Ja'}).check();
+
+        // Wait for the first "Ja" radio button to appear (indicates questions are loaded)
+        const firstJaRadio = page.getByRole('radio', {name: 'Ja'}).first();
+        await firstJaRadio.waitFor({ state: 'visible', timeout: 5000 });
+
+        // Select "Ja" for the first question - use .first() since it's the first "Ja" on the page
+        // This is: "Har søker oppholdt seg eller hatt til hensikt å oppholde seg i Norge..."
+        await firstJaRadio.check();
+
         await page.getByRole('group', {name: 'Er søkers arbeidsoppdrag i'}).getByLabel('Ja').check();
         await page.getByRole('group', {name: 'Plikter arbeidsgiver å betale'}).getByLabel('Ja').check();
         await page.getByRole('group', {name: 'Har søker lovlig opphold i'}).getByLabel('Ja').check();
