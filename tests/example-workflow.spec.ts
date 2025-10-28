@@ -83,12 +83,13 @@ test.describe('Melosys Workflow Example', () => {
 
         // Step 1: Select "Nei" for Skattepliktig
         await neiRadio.check();
-        
-        // Wait a moment for the inntekt section to appear
-        await page.waitForTimeout(500);
-        
+
+        // Wait for the inntekt section to appear after checking "Nei"
+        const inntektskildeDropdown = page.getByLabel('Inntektskilde');
+        await inntektskildeDropdown.waitFor({ state: 'visible', timeout: 5000 });
+
         // Step 2: Select ARBEIDSINNTEKT - this will reveal the Bruttoinntekt field
-        await page.getByLabel('Inntektskilde').selectOption('ARBEIDSINNTEKT');
+        await inntektskildeDropdown.selectOption('ARBEIDSINNTEKT');
         
         // Step 3: Wait for the Bruttoinntekt field to appear (it's shown dynamically after selecting ARBEIDSINNTEKT)
         await page.getByRole('textbox', {name: 'Bruttoinntekt'}).waitFor({ state: 'visible', timeout: 5000 });
@@ -99,7 +100,13 @@ test.describe('Melosys Workflow Example', () => {
             '100000',
             2000  // Wait for calculation to complete
         );
-        await page.getByRole('button',   {name: 'Bekreft og fortsett'}).click();
+
+        // Wait for the "Bekreft og fortsett" button to be enabled (form validation must pass)
+        const bekreftButton = page.getByRole('button', {name: 'Bekreft og fortsett'});
+        await bekreftButton.waitFor({ state: 'visible' });
+        await expect(bekreftButton).toBeEnabled({ timeout: 10000 });
+
+        await bekreftButton.click();
         await page.locator('.ql-editor').first().click();
         await page.locator('.ql-editor').first().fill('fritekst');
         await page.getByRole('paragraph').filter({hasText: /^$/}).first().click();

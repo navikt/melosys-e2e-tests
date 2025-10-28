@@ -61,11 +61,22 @@ test.describe('Melosys Workflow Rune', () => {
         await neiRadio.waitFor({ state: 'visible', timeout: 10000 });
 
         await neiRadio.check();
-        await page.getByLabel('Inntektskilde').selectOption('INNTEKT_FRA_UTLANDET');
+
+        // Wait for the inntekt section to appear after checking "Nei"
+        const inntektskildeDropdown = page.getByLabel('Inntektskilde');
+        await inntektskildeDropdown.waitFor({ state: 'visible', timeout: 5000 });
+
+        await inntektskildeDropdown.selectOption('INNTEKT_FRA_UTLANDET');
         await page.getByRole('group', { name: 'Betales aga.?' }).getByLabel('Nei').check();
         await page.getByRole('textbox', { name: 'Bruttoinntekt' }).click();
         await page.getByRole('textbox', { name: 'Bruttoinntekt' }).fill('100000');
-        await page.getByRole('button', { name: 'Bekreft og fortsett' }).click();
+
+        // Wait for the "Bekreft og fortsett" button to be enabled (form validation must pass)
+        const bekreftButton = page.getByRole('button', { name: 'Bekreft og fortsett' });
+        await bekreftButton.waitFor({ state: 'visible' });
+        await expect(bekreftButton).toBeEnabled({ timeout: 10000 });
+
+        await bekreftButton.click();
         await page.getByRole('button', { name: 'Fatt vedtak' }).click();
 
         console.log('✅ Workflow completed');
