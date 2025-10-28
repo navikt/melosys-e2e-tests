@@ -78,26 +78,63 @@ jobs:
       - name: Wait for services to be healthy
         run: |
           echo "⏳ Waiting for services to be ready..."
-          
-          # Wait for melosys-web to be ready (this is the last service that depends on everything)
+
           max_attempts=60
           attempt=0
-          
-          until curl -f http://localhost:3000/melosys/ > /dev/null 2>&1; do
+
+          # Function to check if a service is healthy
+          check_service() {
+            local service_name=$1
+            local health_check=$2
+            echo "Checking $service_name..."
+            eval $health_check
+          }
+
+          # Wait for critical services to be ready
+          while [ $attempt -lt $max_attempts ]; do
             attempt=$((attempt + 1))
+            echo "⏳ Health check attempt $attempt/$max_attempts"
+
+            # Check Kafka health (docker health status)
+            kafka_health=$(docker inspect --format='{{.State.Health.Status}}' kafka 2>/dev/null || echo "unhealthy")
+            echo "  Kafka: $kafka_health"
+
+            # Check melosys-api health endpoint
+            api_health=$(curl -sf http://localhost:8080/internal/health > /dev/null 2>&1 && echo "healthy" || echo "unhealthy")
+            echo "  melosys-api: $api_health"
+
+            # Check melosys-web
+            web_health=$(curl -sf http://localhost:3000/melosys/ > /dev/null 2>&1 && echo "healthy" || echo "unhealthy")
+            echo "  melosys-web: $web_health"
+
+            # Check if all critical services are healthy
+            if [ "$kafka_health" = "healthy" ] && [ "$api_health" = "healthy" ] && [ "$web_health" = "healthy" ]; then
+              echo "✅ All critical services are healthy!"
+              break
+            fi
+
             if [ $attempt -eq $max_attempts ]; then
               echo "❌ Services failed to start within timeout"
-              echo "📋 Docker compose logs:"
-              docker compose logs
+              echo "📋 Docker compose status:"
+              docker compose ps
+              echo ""
+              echo "📋 Docker compose logs (last 100 lines per service):"
+              docker compose logs --tail=100
               exit 1
             fi
-            echo "⏳ Waiting for services... ($attempt/$max_attempts)"
+
             sleep 10
           done
-          
-          echo "✅ All services are ready!"
-          echo "📊 Service status:"
+
+          echo ""
+          echo "📊 Final service status:"
           docker compose ps
+
+          # Give services a moment to fully stabilize
+          echo ""
+          echo "⏳ Waiting 10 seconds for services to fully stabilize..."
+          sleep 10
+          echo "✅ Ready to run tests!"
 
       - name: Run Playwright tests
         run: |
