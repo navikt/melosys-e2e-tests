@@ -91,17 +91,29 @@ test.describe('Melosys Workflow Example', () => {
         // Step 3: Wait for the Bruttoinntekt field to appear (it's shown dynamically after selecting ARBEIDSINNTEKT)
         await page.getByRole('textbox', {name: 'Bruttoinntekt'}).waitFor({ state: 'visible', timeout: 5000 });
         
-        // Step 4: Fill the Bruttoinntekt field
+        // Step 4: Fill the Bruttoinntekt field with stable API waiting pattern
         const bruttoinntektField = page.getByRole('textbox', {name: 'Bruttoinntekt'});
+        const bekreftButton = page.getByRole('button', {name: 'Bekreft og fortsett'});
+
+        // CRITICAL: Create the response promise BEFORE triggering the action
+        // This prevents race conditions where the API response comes before we start listening
+        const responsePromise = page.waitForResponse(
+            response => response.url().includes('/trygdeavgift/beregning') && response.status() === 200,
+            { timeout: 30000 }  // Generous timeout for CI environment
+        );
+
+        // Now trigger the action that will cause the API call
         await bruttoinntektField.fill('100000');
         await bruttoinntektField.press('Tab');  // Trigger blur to start API call
 
-        // Wait for network to settle (API call to complete)
-        await page.waitForLoadState('networkidle', { timeout: 15000 });
+        // Wait for the specific API response (not networkidle!)
+        await responsePromise;
+        console.log('✅ Trygdeavgift calculation API completed');
 
-        // Wait for the "Bekreft og fortsett" button to be enabled (form validation must pass)
-        const bekreftButton = page.getByRole('button', {name: 'Bekreft og fortsett'});
+        // Now wait for the button to be enabled (Playwright will auto-retry)
+        // The button should enable once validation completes after the API response
         await expect(bekreftButton).toBeEnabled({ timeout: 15000 });
+        console.log('✅ Bekreft button is enabled');
 
         await bekreftButton.click();
         await page.locator('.ql-editor').first().click();
