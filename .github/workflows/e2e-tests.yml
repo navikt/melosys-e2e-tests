@@ -148,11 +148,22 @@ jobs:
           echo "## 🎭 Playwright Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Check if test results exist
-          if [ -f "playwright-report/index.html" ]; then
-            # Count passed/failed tests from the results directory
-            TOTAL=$(find test-results -name "*.xml" 2>/dev/null | wc -l || echo "N/A")
-            FAILED=$(find test-results -type d -name "*-failed-*" 2>/dev/null | wc -l || echo "0")
+          # Count test results from Playwright's test-results directory structure
+          # Each test creates a directory like: test-name-browser/
+          # Failed tests have: test-name-browser-retry1/, test-name-browser-retry2/
+
+          if [ -d "test-results" ]; then
+            # Count total tests (unique test directories, excluding retry attempts)
+            TOTAL=$(find test-results -mindepth 1 -maxdepth 1 -type d | grep -v "retry" | wc -l | tr -d ' ')
+
+            # Count failed tests (directories containing -failed- or that have retry directories)
+            FAILED=$(find test-results -mindepth 1 -maxdepth 1 -type d -name "*-retry*" | sed 's/-retry[0-9]*$//' | sort -u | wc -l | tr -d ' ')
+
+            # If no retries but we have failure indicators in directory names
+            if [ "$FAILED" -eq 0 ]; then
+              FAILED=$(find test-results -mindepth 1 -maxdepth 1 -type d -name "*-failed-*" 2>/dev/null | wc -l | tr -d ' ')
+            fi
+
             PASSED=$((TOTAL - FAILED))
 
             echo "| Status | Count |" >> $GITHUB_STEP_SUMMARY
@@ -161,17 +172,25 @@ jobs:
             echo "| ❌ Failed | $FAILED |" >> $GITHUB_STEP_SUMMARY
             echo "| 📊 Total | $TOTAL |" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "📦 Download the full HTML report from the artifacts below." >> $GITHUB_STEP_SUMMARY
 
             if [ "$FAILED" -gt 0 ]; then
-              echo "" >> $GITHUB_STEP_SUMMARY
               echo "### ❌ Failed Tests:" >> $GITHUB_STEP_SUMMARY
-              find test-results -type d -name "*-failed-*" -exec basename {} \; | sed 's/-chromium-failed-.*//g' | while read test; do
-                echo "- $test" >> $GITHUB_STEP_SUMMARY
-              done
+              echo "" >> $GITHUB_STEP_SUMMARY
+              # List failed test names
+              find test-results -mindepth 1 -maxdepth 1 -type d \( -name "*-retry*" -o -name "*-failed-*" \) | \
+                sed 's/test-results\///' | \
+                sed 's/-chromium.*//' | \
+                sed 's/-retry[0-9]*//' | \
+                sort -u | \
+                while read test; do
+                  echo "- $test" >> $GITHUB_STEP_SUMMARY
+                done
             fi
+
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "📦 Download the full HTML report from the artifacts below." >> $GITHUB_STEP_SUMMARY
           else
-            echo "⚠️ No test report found" >> $GITHUB_STEP_SUMMARY
+            echo "⚠️ No test results found" >> $GITHUB_STEP_SUMMARY
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
 
