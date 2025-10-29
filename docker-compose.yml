@@ -1,5 +1,6 @@
 services:
   zookeeper:
+    platform: linux/amd64
     container_name: zookeeper
     networks:
       melosys.docker-internal:
@@ -11,6 +12,7 @@ services:
       ZOOKEEPER_TICK_TIME: 2000
 
   kafka:
+    platform: linux/amd64
     container_name: kafka
     networks:
       melosys.docker-internal:
@@ -41,6 +43,7 @@ services:
       retries: 8
 
   mock-oauth2-server:
+    platform: linux/amd64
     image: ghcr.io/navikt/mock-oauth2-server:2.3.0
     hostname: host.docker.internal
     networks:
@@ -107,6 +110,7 @@ services:
       - "8082:8082"
 
   mock-oauth2-server-sts:
+    platform: linux/amd64
     image: ghcr.io/navikt/mock-oauth2-server:0.4.8
     hostname: host.docker.internal.sts
     environment:
@@ -137,7 +141,8 @@ services:
       - "8086:8086"
 
   melosys-mock:
-    build: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-mock:latest
+    platform: linux/amd64
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-mock:latest
     ports:
       - "8083:8083"
       - "8389:8389"
@@ -147,11 +152,10 @@ services:
       melosys.docker-internal:
         aliases:
           - melosys-mock.melosys.docker-internal
-    volumes:
-      - ${PWD}/mock/src/main/resources:/files
 
   faktureringskomponenten:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:latest
+    platform: linux/amd64
     container_name: faktureringskomponenten
     environment:
       SPRING_PROFILES_ACTIVE: local
@@ -169,6 +173,7 @@ services:
 
   melosys-dokgen:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-dokgen:latest
+    platform: linux/amd64
     container_name: melosys-dokgen
     networks:
       melosys.docker-internal:
@@ -179,6 +184,7 @@ services:
 
   melosys-trygdeavgift-beregning:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:latest
+    platform: linux/amd64
     container_name: melosys-trygdeavgift-beregning
     environment:
       SPRING_PROFILES_ACTIVE: local
@@ -196,6 +202,7 @@ services:
 
   melosys-api:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:latest
+    platform: linux/amd64
     container_name: melosys-api
     networks:
       melosys.docker-internal:
@@ -242,6 +249,7 @@ services:
 
   melosys-web:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-web:latest
+    platform: linux/amd64
     container_name: melosys-web
     networks:
       melosys.docker-internal:
@@ -262,6 +270,7 @@ services:
       APP_URL_TRYGDEAVTALE: http://melosys-trygdeavtale.melosys.docker-internal:8088
 
   postgres_felleskodeverk:
+    platform: linux/amd64
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:latest
     container_name: postgres_felleskodeverk
     networks:
@@ -272,6 +281,7 @@ services:
       - "5433:5432"
 
   felles-kodeverk:
+    platform: linux/amd64
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/felles-kodeverk:latest
     environment:
       SPRING_PROFILES_ACTIVE: local
@@ -296,6 +306,7 @@ services:
       - "8050:8050"
 
   melosys-oracle:
+    platform: linux/amd64
     image: ${ORACLE_IMAGE:-gvenzl/oracle-xe:18.4.0-slim}
     container_name: melosys-oracle
     networks:
@@ -310,6 +321,7 @@ services:
       - "1521:1521"
 
   postgres:
+    platform: linux/amd64
     image: postgres:13-alpine
     container_name: postgres
     networks:
@@ -324,6 +336,7 @@ services:
 
   melosys-trygdeavtale:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:latest
+    platform: linux/amd64
     depends_on:
       - mock-oauth2-server
       - postgres

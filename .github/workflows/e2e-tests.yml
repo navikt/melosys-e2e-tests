@@ -15,8 +15,8 @@ permissions:
 
 jobs:
   e2e-tests:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    runs-on: ubuntu-latest-8-cores
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code
@@ -48,6 +48,27 @@ jobs:
           echo "MELOSYS_ORACLE_DB_NAME=XEPDB1" >> $GITHUB_ENV
           echo "ORACLE_IMAGE=gvenzl/oracle-xe:18.4.0-slim" >> $GITHUB_ENV
 
+      - name: Pre-pull Docker images in parallel
+        run: |
+          echo "🐳 Pre-pulling Docker images to avoid timeout during compose up..."
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-web:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-dokgen:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/felles-kodeverk:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-mock:latest &
+          docker pull --platform linux/amd64 gvenzl/oracle-xe:18.4.0-slim &
+          docker pull --platform linux/amd64 postgres:13-alpine &
+          docker pull --platform linux/amd64 confluentinc/cp-zookeeper:7.1.2 &
+          docker pull --platform linux/amd64 confluentinc/cp-kafka:7.1.2 &
+          docker pull --platform linux/amd64 ghcr.io/navikt/mock-oauth2-server:2.3.0 &
+          docker pull --platform linux/amd64 ghcr.io/navikt/mock-oauth2-server:0.4.8 &
+          wait
+          echo "✅ All images pre-pulled successfully"
+
       - name: Start Docker Compose services
         run: |
           docker compose up -d
@@ -57,30 +78,67 @@ jobs:
       - name: Wait for services to be healthy
         run: |
           echo "⏳ Waiting for services to be ready..."
-          
-          # Wait for melosys-web to be ready (this is the last service that depends on everything)
+
           max_attempts=60
           attempt=0
-          
-          until curl -f http://localhost:3000/melosys/ > /dev/null 2>&1; do
+
+          # Function to check if a service is healthy
+          check_service() {
+            local service_name=$1
+            local health_check=$2
+            echo "Checking $service_name..."
+            eval $health_check
+          }
+
+          # Wait for critical services to be ready
+          while [ $attempt -lt $max_attempts ]; do
             attempt=$((attempt + 1))
+            echo "⏳ Health check attempt $attempt/$max_attempts"
+
+            # Check Kafka health (docker health status)
+            kafka_health=$(docker inspect --format='{{.State.Health.Status}}' kafka 2>/dev/null || echo "unhealthy")
+            echo "  Kafka: $kafka_health"
+
+            # Check melosys-api health endpoint
+            api_health=$(curl -sf http://localhost:8080/internal/health > /dev/null 2>&1 && echo "healthy" || echo "unhealthy")
+            echo "  melosys-api: $api_health"
+
+            # Check melosys-web
+            web_health=$(curl -sf http://localhost:3000/melosys/ > /dev/null 2>&1 && echo "healthy" || echo "unhealthy")
+            echo "  melosys-web: $web_health"
+
+            # Check if all critical services are healthy
+            if [ "$kafka_health" = "healthy" ] && [ "$api_health" = "healthy" ] && [ "$web_health" = "healthy" ]; then
+              echo "✅ All critical services are healthy!"
+              break
+            fi
+
             if [ $attempt -eq $max_attempts ]; then
               echo "❌ Services failed to start within timeout"
-              echo "📋 Docker compose logs:"
-              docker compose logs
+              echo "📋 Docker compose status:"
+              docker compose ps
+              echo ""
+              echo "📋 Docker compose logs (last 100 lines per service):"
+              docker compose logs --tail=100
               exit 1
             fi
-            echo "⏳ Waiting for services... ($attempt/$max_attempts)"
+
             sleep 10
           done
-          
-          echo "✅ All services are ready!"
-          echo "📊 Service status:"
+
+          echo ""
+          echo "📊 Final service status:"
           docker compose ps
 
-      - name: Run Playwright test - example workflow
+          # Give services a moment to fully stabilize
+          echo ""
+          echo "⏳ Waiting 10 seconds for services to fully stabilize..."
+          sleep 10
+          echo "✅ Ready to run tests!"
+
+      - name: Run Playwright tests
         run: |
-          npx playwright test "should complete a basic workflow" --project=chromium
+          npx playwright test example-workflow.spec.ts --project=chromium
         env:
           CI: true
 

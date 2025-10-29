@@ -1,392 +1,534 @@
 # Melosys E2E Tests
 
-End-to-end tests for Melosys using Playwright and TypeScript.
+End-to-end tests for Melosys using Playwright and TypeScript. Record workflows, automate regression testing, and debug without manual clicking.
 
-## 🎯 Purpose
-
-This project provides:
-
-1. **Workflow Recording** - Record user flows from "melosys flyt" to "vedtak" for automated testing
-2. **Regression Testing** - Ensure changes don't break existing workflows
-3. **Local Debugging** - Replay workflows locally without manual clicking
-
-## 📋 Prerequisites
-
-1. **Docker Compose Services Running**
-   ```bash
-   cd ../melosys-docker-compose
-   make start-all
-   ```
-   
-   Verify services are up:
-   ```bash
-   curl http://localhost:3000/melosys/     # Frontend
-   curl http://localhost:8080/internal/health  # Backend
-   ```
-
-2. **Node.js** (v18 or later)
-
-## 🚀 Quick Start
-
-### 1. Install Dependencies
+## Quick Start
 
 ```bash
+# 1. Start services (required)
+cd ../melosys-docker-compose && make start-all
+
+# 2. Install dependencies
 npm install
-```
-
-### 2. Install Playwright Browsers
-
-```bash
 npx playwright install
-```
 
-### 3. Verify Setup
-
-```bash
-# Run example test
+# 3. Run tests
 npm test
 
-# Open test UI (interactive mode)
+# 4. Interactive mode (recommended for development)
 npm run test:ui
 ```
 
-## 🎬 Recording Workflows
+## Architecture
 
-### Method 1: Codegen (Recommended)
+```mermaid
+graph TB
+    subgraph Tests["🧪 Test Suite"]
+        TestFiles[tests/*.spec.ts]
+        Helpers[Helper Classes]
+    end
 
-This is the easiest way to record a workflow:
+    subgraph HelperLayer["🛠️ Helpers"]
+        Auth[AuthHelper<br/>Login & Sessions]
+        Form[FormHelper<br/>Dynamic Forms]
+        DBHelper[DatabaseHelper<br/>Oracle Queries]
+    end
 
-```bash
-npm run codegen
+    subgraph Frontend["🌐 Frontend"]
+        Web[melosys-web<br/>Port 3000<br/>Nginx + React]
+    end
+
+    subgraph Backend["⚙️ Backend Services"]
+        API[melosys-api<br/>Port 8080<br/>Main API]
+        Fakturering[faktureringskomponenten<br/>Port 8084<br/>Billing]
+        Dokgen[melosys-dokgen<br/>Port 8888<br/>Document Generation]
+        Trygdeavgift[melosys-trygdeavgift-beregning<br/>Port 8095<br/>Tax Calculation]
+        Trygdeavtale[melosys-trygdeavtale<br/>Port 8088<br/>Insurance Agreements]
+        FellesKode[felles-kodeverk<br/>Port 8050<br/>Shared Code Tables]
+    end
+
+    subgraph Databases["💾 Databases"]
+        Oracle[(melosys-oracle<br/>Port 1521<br/>Main Database)]
+        Postgres[(postgres<br/>Port 5432<br/>Supporting Services)]
+        PostgresFK[(postgres_felleskodeverk<br/>Port 5433<br/>Code Tables)]
+    end
+
+    subgraph Messaging["📨 Messaging"]
+        Kafka[kafka<br/>Ports 9092, 29092<br/>Event Stream]
+        Zookeeper[zookeeper<br/>Port 2181<br/>Coordination]
+    end
+
+    subgraph MockServices["🎭 Mock Services"]
+        OAuth[mock-oauth2-server<br/>Port 8082<br/>ISSO Auth]
+        OAuthSTS[mock-oauth2-server-sts<br/>Port 8086<br/>STS Auth]
+        Mock[melosys-mock<br/>Ports 8083, 8389<br/>External APIs]
+    end
+
+    TestFiles --> Helpers
+    Helpers --> Auth
+    Helpers --> Form
+    Helpers --> DBHelper
+
+    Auth --> Web
+    Form --> Web
+    DBHelper --> Oracle
+
+    Web --> API
+    API --> Oracle
+    API --> Postgres
+    API --> Kafka
+    API --> Fakturering
+    API --> Dokgen
+    API --> Trygdeavgift
+    API --> FellesKode
+    API --> Mock
+    API --> OAuth
+    API --> OAuthSTS
+
+    Fakturering --> Postgres
+    Fakturering --> Kafka
+    Trygdeavgift --> Postgres
+    Trygdeavgift --> Kafka
+    Trygdeavtale --> Postgres
+    Trygdeavtale --> OAuth
+    FellesKode --> PostgresFK
+
+    Kafka --> Zookeeper
+
+    style Tests fill:#5B9BD5,stroke:#2E5C8A,color:#000
+    style HelperLayer fill:#82B366,stroke:#4A7C3B,color:#000
+    style Frontend fill:#AB47BC,stroke:#6A2C70,color:#fff
+    style Backend fill:#FF9800,stroke:#C77700,color:#000
+    style Databases fill:#26A69A,stroke:#1A7A6E,color:#fff
+    style Messaging fill:#F4A460,stroke:#C97F3E,color:#000
+    style MockServices fill:#9575CD,stroke:#5E3A99,color:#fff
+
+    style TestFiles fill:#4A90E2,stroke:#2E5C8A,color:#fff
+    style Helpers fill:#7CB342,stroke:#4A7C3B,color:#fff
+    style Auth fill:#66BB6A,stroke:#388E3C,color:#fff
+    style Form fill:#66BB6A,stroke:#388E3C,color:#fff
+    style DBHelper fill:#66BB6A,stroke:#388E3C,color:#fff
+    style Web fill:#9C27B0,stroke:#6A1B9A,color:#fff
+    style API fill:#FF9800,stroke:#EF6C00,color:#000
+    style Oracle fill:#26A69A,stroke:#00897B,color:#fff
 ```
 
-This will:
-1. Open a browser with Playwright Inspector
-2. Navigate to http://localhost:3000/melosys/
-3. Record all your clicks, typing, navigation
-4. Generate TypeScript code automatically
+## Docker Services Overview
 
-**Steps:**
-1. Run `npm run codegen`
-2. Perform your workflow in the browser (e.g., create case → fill form → submit → vedtak)
-3. Copy the generated code from Playwright Inspector
-4. Paste into a new test file in `tests/`
-5. Add assertions and database verification
+All 17 services required for E2E tests:
 
-### Method 2: Manual Recording with Trace
+```mermaid
+graph LR
+    subgraph Frontend["🌐 Frontend Layer"]
+        Web["melosys-web<br/>:3000"]
+    end
 
-If you want more control:
+    subgraph CoreServices["⚙️ Core Backend Services"]
+        API["melosys-api<br/>:8080<br/>(Main API)"]
+        Fakturering["faktureringskomponenten<br/>:8084"]
+        Dokgen["melosys-dokgen<br/>:8888"]
+        Trygdeavgift["melosys-trygdeavgift<br/>:8095"]
+        Trygdeavtale["melosys-trygdeavtale<br/>:8088"]
+        FellesKode["felles-kodeverk<br/>:8050"]
+    end
+
+    subgraph DataLayer["💾 Data Layer"]
+        Oracle["Oracle DB<br/>:1521<br/>(melosys)"]
+        Postgres["PostgreSQL<br/>:5432<br/>(fakturering, trygdeavgift)"]
+        PostgresFK["PostgreSQL FK<br/>:5433<br/>(kodeverk)"]
+    end
+
+    subgraph EventLayer["📨 Event Layer"]
+        Kafka["Kafka<br/>:9092, :29092"]
+        Zookeeper["Zookeeper<br/>:2181"]
+    end
+
+    subgraph AuthLayer["🔐 Auth Layer"]
+        OAuth["OAuth2 ISSO<br/>:8082"]
+        OAuthSTS["OAuth2 STS<br/>:8086"]
+    end
+
+    subgraph MockLayer["🎭 Mock Layer"]
+        Mock["melosys-mock<br/>:8083, :8389<br/>(PDL, SAF, AAREG, EREG,<br/>Oppgave, etc.)"]
+    end
+
+    Web --> API
+    API --> Oracle
+    API --> Postgres
+    API --> Kafka
+    API --> OAuth
+    API --> OAuthSTS
+    API --> Mock
+    API --> Fakturering
+    API --> Dokgen
+    API --> Trygdeavgift
+    API --> FellesKode
+
+    Fakturering --> Postgres
+    Fakturering --> Kafka
+    Trygdeavgift --> Postgres
+    Trygdeavgift --> Kafka
+    Trygdeavtale --> Postgres
+    Trygdeavtale --> OAuth
+    FellesKode --> PostgresFK
+    Kafka --> Zookeeper
+
+    style Frontend fill:#AB47BC,stroke:#6A2C70,color:#fff
+    style CoreServices fill:#FF9800,stroke:#C77700,color:#000
+    style DataLayer fill:#26A69A,stroke:#1A7A6E,color:#fff
+    style EventLayer fill:#F4A460,stroke:#C97F3E,color:#000
+    style AuthLayer fill:#5B9BD5,stroke:#2E5C8A,color:#fff
+    style MockLayer fill:#9575CD,stroke:#5E3A99,color:#fff
+
+    style Web fill:#9C27B0,stroke:#6A1B9A,color:#fff
+    style API fill:#FF9800,stroke:#EF6C00,color:#000
+    style Oracle fill:#26A69A,stroke:#00897B,color:#fff
+    style Postgres fill:#26A69A,stroke:#00897B,color:#fff
+    style PostgresFK fill:#26A69A,stroke:#00897B,color:#fff
+    style Kafka fill:#F4A460,stroke:#C97F3E,color:#000
+    style Zookeeper fill:#E8A87C,stroke:#C97F3E,color:#000
+    style OAuth fill:#5B9BD5,stroke:#2E5C8A,color:#fff
+    style OAuthSTS fill:#5B9BD5,stroke:#2E5C8A,color:#fff
+    style Mock fill:#9575CD,stroke:#5E3A99,color:#fff
+```
+
+## Test Flow
+
+```mermaid
+sequenceDiagram
+    participant Dev as 👨‍💻 Developer
+    participant PW as 🎭 Playwright
+    participant App as 🌐 Melosys App
+    participant API as ⚙️ API
+    participant DB as 💾 Oracle DB
+
+    Note over Dev,DB: Recording Phase
+    Dev->>PW: npm run codegen
+    PW->>App: Opens browser
+    Dev->>App: Perform workflow
+    App->>API: API calls
+    API->>DB: Save data
+    App->>App: Record actions
+    PW->>Dev: Generate test code
+
+    Note over Dev: Copy code to test file
+
+    Note over Dev,DB: Execution Phase
+    Dev->>PW: npm test
+    PW->>App: Execute recorded actions
+    App->>API: API calls
+    API->>DB: Save data
+    API-->>App: Response
+    App-->>PW: Response
+    PW->>DB: Verify data (optional)
+    DB-->>PW: Query result
+    PW->>Dev: Test result + trace + video
+```
+
+## Project Structure
+
+```mermaid
+graph LR
+    Root["📁 melosys-e2e-tests/"]
+
+    Root --> Tests["📂 tests/"]
+    Root --> Helpers["📂 helpers/"]
+    Root --> Config["⚙️ playwright.config.ts"]
+    Root --> GHA["📂 .github/workflows/"]
+    Root --> Docker["🐳 docker-compose.yml"]
+
+    Tests --> T1["example-workflow.spec.ts"]
+    Tests --> T2["form-helper-example.spec.ts"]
+    Tests --> T3["workflow-parts.spec.ts"]
+    Tests --> T4["workflow-rune-tester.spec.ts"]
+
+    Helpers --> H1["auth-helper.ts"]
+    Helpers --> H2["form-helper.ts"]
+    Helpers --> H3["db-helper.ts"]
+    Helpers --> H4["auth-state-helper.ts"]
+
+    GHA --> E2E["e2e-tests.yml"]
+
+    style Root fill:#5B9BD5,stroke:#2E5C8A,color:#fff
+    style Tests fill:#66BB6A,stroke:#388E3C,color:#fff
+    style Helpers fill:#FF9800,stroke:#C77700,color:#000
+    style Config fill:#AB47BC,stroke:#6A2C70,color:#fff
+    style GHA fill:#26A69A,stroke:#1A7A6E,color:#fff
+    style Docker fill:#F4A460,stroke:#C97F3E,color:#000
+
+    style T1 fill:#82B366,stroke:#4A7C3B,color:#fff
+    style T2 fill:#82B366,stroke:#4A7C3B,color:#fff
+    style T3 fill:#82B366,stroke:#4A7C3B,color:#fff
+    style T4 fill:#82B366,stroke:#4A7C3B,color:#fff
+
+    style H1 fill:#FFB74D,stroke:#C77700,color:#000
+    style H2 fill:#FFB74D,stroke:#C77700,color:#000
+    style H3 fill:#FFB74D,stroke:#C77700,color:#000
+    style H4 fill:#FFB74D,stroke:#C77700,color:#000
+
+    style E2E fill:#4DB6AC,stroke:#1A7A6E,color:#fff
+```
+
+## Essential Commands
+
+### Recording Workflows
 
 ```bash
-# Run test with trace
+# Record new workflow with code generation
+npm run codegen
+
+# Run test with trace for debugging
 npx playwright test --trace on
-
-# View the trace
-npm run show-trace
 ```
 
-### Example: Recording "Oppgave to Vedtak" Flow
+### Running Tests
 
 ```bash
-# 1. Start codegen
-npm run codegen
+# All tests
+npm test
 
-# 2. In the browser that opens:
-#    - Login (if needed)
-#    - Navigate to oppgave list
-#    - Click on an oppgave
-#    - Fill in required fields
-#    - Submit
-#    - Verify vedtak is created
+# Specific test file
+npm test tests/example-workflow.spec.ts
 
-# 3. Copy generated code
-# 4. Create new test file:
-cat > tests/oppgave-to-vedtak.spec.ts << 'TESTEOF'
-import { test, expect } from '@playwright/test';
+# Specific test by name
+npx playwright test --grep "workflow name"
+
+# With visible browser
+npm run test:headed
+
+# Debug mode (step through)
+npm run test:debug
+
+# Interactive UI (best for development)
+npm run test:ui
+```
+
+### Viewing Results
+
+```bash
+# HTML report
+npm run show-report
+
+# Trace viewer (most detailed)
+npm run show-trace
+
+# Videos
+npm run open-videos
+
+# Screenshots
+npm run open-screenshots
+
+# Clean results
+npm run clean-results
+```
+
+## Helper Classes
+
+### FormHelper - Handle Dynamic Forms
+
+```typescript
+import { FormHelper } from '../helpers/form-helper';
+
+const formHelper = new FormHelper(page);
+
+// Fill field that triggers API call
+await formHelper.fillAndWaitForApi(
+  page.getByRole('textbox', { name: 'Bruttoinntekt' }),
+  '100000',
+  '/trygdeavgift/beregning'
+);
+
+// Wait for network to be idle (most reliable)
+await formHelper.fillAndWaitForNetworkIdle(
+  page.getByRole('textbox', { name: 'Field' }),
+  'value'
+);
+
+// Conditional radio button
+await formHelper.checkRadioIfNeeded(
+  page.getByRole('radio', { name: 'Option' })
+);
+```
+
+### AuthHelper - Handle Authentication
+
+```typescript
 import { AuthHelper } from '../helpers/auth-helper';
+
+const auth = new AuthHelper(page);
+await auth.login();
+```
+
+### DatabaseHelper - Verify Data
+
+```typescript
 import { withDatabase } from '../helpers/db-helper';
 
-test.describe('Oppgave to Vedtak Workflow', () => {
-  test('should create vedtak from oppgave', async ({ page }) => {
+await withDatabase(async (db) => {
+  const result = await db.queryOne(
+    'SELECT * FROM BEHANDLING WHERE id = :id',
+    { id: 123 }
+  );
+  expect(result).not.toBeNull();
+});
+```
+
+## Test Template
+
+```typescript
+import { test, expect } from '@playwright/test';
+import { AuthHelper } from '../helpers/auth-helper';
+import { FormHelper } from '../helpers/form-helper';
+import { withDatabase } from '../helpers/db-helper';
+
+test.describe('Workflow Name', () => {
+  test('should complete workflow', async ({ page }) => {
+    // Setup
     const auth = new AuthHelper(page);
     await auth.login();
-    
-    // PASTE YOUR RECORDED STEPS HERE
-    
-    // Verify in database
+    const formHelper = new FormHelper(page);
+
+    // Navigate
+    await page.goto('http://localhost:3000/melosys/');
+
+    // Perform workflow steps (from codegen)
+    await formHelper.fillAndWaitForApi(
+      page.getByRole('textbox', { name: 'Field' }),
+      'value',
+      '/api/endpoint'
+    );
+
+    // Verify UI
+    await expect(page.locator('text=Success')).toBeVisible();
+
+    // Verify database (optional)
     await withDatabase(async (db) => {
-      const vedtak = await db.queryOne(
-        'SELECT * FROM VEDTAK WHERE behandling_id = :id',
+      const result = await db.queryOne(
+        'SELECT * FROM TABLE WHERE id = :id',
         { id: 123 }
       );
-      expect(vedtak).not.toBeNull();
+      expect(result).not.toBeNull();
     });
   });
 });
-TESTEOF
 ```
 
-## 🧪 Running Tests
-
-```bash
-# Run all tests
-npm test
-
-# Run specific test file
-npm test tests/oppgave-to-vedtak.spec.ts
-
-# Run with browser visible (headed mode)
-npm run test:headed
-
-# Debug mode (step through test)
-npm run test:debug
-
-# Interactive UI mode (best for development)
-npm run test:ui
-```
-
-## 🐛 Debugging Locally
-
-### Automatic Debugging Features
-
-The tests are configured to automatically capture:
-
-1. **Video** - Recorded on test failure
-2. **Screenshots** - Taken on failure
-3. **Trace** - Full execution trace with network, console, DOM snapshots
-
-These are saved in `test-results/` directory.
-
-### View Test Results
-
-```bash
-# View HTML report
-npm run show-report
-
-# View specific trace file
-npm run show-trace test-results/example-workflow-chromium/trace.zip
-```
-
-### Debug Flow Without Clicking Through
-
-Instead of manually clicking through the workflow every time:
-
-```bash
-# Run the recorded test
-npm test tests/oppgave-to-vedtak.spec.ts
-
-# If it fails, view the trace to see what happened
-npm run show-trace test-results/.../trace.zip
-```
-
-The trace viewer shows:
-- Every action taken
-- Network requests
-- Console logs
-- DOM state at each step
-- Screenshots
-
-### Replay with Slow Motion
-
-For better visibility during development:
-
-```bash
-# Edit playwright.config.ts, set slowMo higher:
-launchOptions: {
-  slowMo: 500,  // 500ms delay between actions
-}
-
-# Then run headed
-npm run test:headed
-```
-
-## 📁 Project Structure
-
-```
-melosys-e2e-tests/
-├── tests/                      # Test files
-│   ├── example-workflow.spec.ts
-│   └── oppgave-to-vedtak.spec.ts
-├── helpers/                    # Helper utilities
-│   ├── auth-helper.ts         # Authentication
-│   ├── db-helper.ts           # Database verification
-│   └── page-objects/          # Page object models
-├── playwright.config.ts       # Playwright configuration
-├── package.json
-└── README.md
-```
-
-## 🛠️ Configuration
+## Configuration
 
 ### Environment Variables
 
-Create a `.env` file for custom configuration:
+Create `.env` file (use `.env.example` as template):
 
 ```bash
-# Database connection (optional)
+# Database (defaults work for Mac ARM)
 DB_USER=MELOSYS
 DB_PASSWORD=melosys
-DB_CONNECT_STRING=localhost:1521/freepdb1
+DB_CONNECT_STRING=localhost:1521/freepdb1  # Mac ARM
+# DB_CONNECT_STRING=localhost:1521/XEPDB1  # Intel/CI
 
-# Base URL (optional, defaults to localhost:3000)
+# Base URL (optional)
 BASE_URL=http://localhost:3000
 ```
 
-### Playwright Config
+### Key Settings (playwright.config.ts)
 
-Edit `playwright.config.ts` to customize:
+- **Base URL**: `http://localhost:3000`
+- **Trace**: Always on (`trace: 'on'`)
+- **Video**: Always recorded (`video: 'on'`)
+- **Screenshots**: Always captured (`screenshot: 'on'`)
+- **Slow motion**: 100ms delay (`slowMo: 100`)
+- **Workers**: 1 on CI, unlimited locally
+- **Parallel**: Disabled (`fullyParallel: false`)
 
-- Trace recording options
-- Video recording
-- Screenshot settings
-- Browser options
-- Timeouts
+## CI/CD - GitHub Actions
 
-## 🔍 Database Verification
+Workflow at `.github/workflows/e2e-tests.yml`:
 
-Use the database helper to verify data after workflows:
+```mermaid
+graph TD
+    A[🚀 Trigger: workflow_dispatch] --> B[📥 Checkout Code]
+    B --> C[⚙️ Setup Node.js 20]
+    C --> D[📦 Install npm dependencies]
+    D --> E[🎭 Install Playwright browsers]
+    E --> F[🔐 Login to NAIS registry]
+    F --> G[🌐 Create Docker network]
+    G --> H[🐳 Start Docker Compose services]
+    H --> I{✅ Services healthy?}
+    I -->|Yes| J[🧪 Run Playwright tests]
+    I -->|No| K[⏳ Wait & Retry]
+    K --> I
+    J --> L{✅ Tests pass?}
+    L -->|Yes| M[📊 Upload test results]
+    L -->|No| M
+    M --> N[📄 Upload Playwright report]
+    N --> O[💬 Publish PR comment]
 
-```typescript
-import { withDatabase } from '../helpers/db-helper';
-
-test('should create behandling', async ({ page }) => {
-  // ... perform workflow ...
-  
-  // Verify database state
-  await withDatabase(async (db) => {
-    const behandling = await db.queryOne(
-      'SELECT * FROM BEHANDLING WHERE id = :id',
-      { id: 123 }
-    );
-    
-    expect(behandling).not.toBeNull();
-    expect(behandling.STATUS).toBe('OPPRETTET');
-  });
-});
+    style A fill:#5B9BD5,stroke:#2E5C8A,color:#fff
+    style B fill:#82B366,stroke:#4A7C3B,color:#fff
+    style C fill:#82B366,stroke:#4A7C3B,color:#fff
+    style D fill:#82B366,stroke:#4A7C3B,color:#fff
+    style E fill:#82B366,stroke:#4A7C3B,color:#fff
+    style F fill:#82B366,stroke:#4A7C3B,color:#fff
+    style G fill:#82B366,stroke:#4A7C3B,color:#fff
+    style H fill:#FF9800,stroke:#C77700,color:#000
+    style I fill:#F4A460,stroke:#C97F3E,color:#000
+    style J fill:#66BB6A,stroke:#388E3C,color:#fff
+    style K fill:#EF5350,stroke:#C62828,color:#fff
+    style L fill:#F4A460,stroke:#C97F3E,color:#000
+    style M fill:#9575CD,stroke:#5E3A99,color:#fff
+    style N fill:#9575CD,stroke:#5E3A99,color:#fff
+    style O fill:#AB47BC,stroke:#6A2C70,color:#fff
 ```
 
-## 📊 CI/CD Integration
+## Troubleshooting
 
-### GitHub Actions
-
-Add to your `.github/workflows/e2e-tests.yml`:
-
-```yaml
-name: E2E Tests
-
-on: [push, pull_request]
-
-jobs:
-  test:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v3
-      
-      - name: Start Docker Compose
-        run: |
-          cd melosys-docker-compose
-          docker compose up -d
-          
-      - name: Setup Node.js
-        uses: actions/setup-node@v3
-        with:
-          node-version: '18'
-      
-      - name: Install dependencies
-        run: |
-          cd melosys-e2e-tests
-          npm ci
-      
-      - name: Install Playwright
-        run: |
-          cd melosys-e2e-tests
-          npx playwright install --with-deps
-      
-      - name: Run tests
-        run: |
-          cd melosys-e2e-tests
-          npm test
-      
-      - name: Upload test results
-        if: always()
-        uses: actions/upload-artifact@v3
-        with:
-          name: playwright-report
-          path: melosys-e2e-tests/playwright-report/
-```
-
-## 💡 Tips & Best Practices
-
-### Recording
-
-1. **Keep workflows focused** - One workflow per test file
-2. **Use meaningful names** - `oppgave-to-vedtak.spec.ts` not `test1.spec.ts`
-3. **Add comments** - Explain what each section of the workflow does
-4. **Test edge cases** - Record both happy path and error scenarios
-
-### Maintenance
-
-1. **Use data-testid** - Ask frontend team to add stable test IDs
-2. **Page objects** - Extract common actions into page object classes
-3. **Fixtures** - Create reusable test data and setup
-4. **Assertions** - Always verify expected state, don't just run actions
-
-### Debugging
-
-1. **Run in UI mode** - Best for development (`npm run test:ui`)
-2. **Check traces** - First thing to check when test fails
-3. **Slow motion** - Use `slowMo` option to see what's happening
-4. **Screenshots** - Automatically captured on failure
-
-## 🆘 Troubleshooting
-
-### Tests fail with "timeout"
-
-**Solution:** Increase timeout in `playwright.config.ts`:
+### Tests timeout
 ```typescript
+// Increase timeout in playwright.config.ts
 use: {
-  actionTimeout: 30000,  // 30 seconds
+  actionTimeout: 30000,
 }
 ```
 
-### Can't connect to services
-
-**Solution:** Verify Docker Compose is running:
+### Services not available
 ```bash
+# Verify services are running
 cd ../melosys-docker-compose
 docker ps
 curl http://localhost:3000/melosys/
 ```
 
 ### Database connection fails
-
-**Solution:** Check Oracle is running and credentials are correct:
 ```bash
+# Check Oracle logs
 docker logs melosys-oracle
+
+# Verify credentials in .env
+cat .env
 ```
 
-Update `.env` with correct credentials.
-
 ### Recorded test breaks after UI changes
+```bash
+# Re-record with codegen
+npm run codegen
 
-**Solution:** 
-1. Re-record the affected workflow with `npm run codegen`
-2. Or update selectors to use stable `data-testid` attributes
+# Or ask frontend for stable data-testid attributes
+```
 
-## 📚 Resources
+## Tips
+
+1. **Always use FormHelper** for fields that trigger API calls
+2. **Use test:ui mode** for development - best debugging experience
+3. **Check traces first** when tests fail - most comprehensive info
+4. **Use meaningful test names** - `oppgave-to-vedtak.spec.ts` not `test1.spec.ts`
+5. **Add database verification** - ensures data is actually persisted
+
+## Resources
 
 - [Playwright Documentation](https://playwright.dev)
-- [Playwright Test Best Practices](https://playwright.dev/docs/best-practices)
-- [Playwright Trace Viewer](https://playwright.dev/docs/trace-viewer)
-- [Oracle Node.js Driver](https://oracle.github.io/node-oracledb/)
-
-## 🤝 Contributing
-
-1. Record your workflow with codegen
-2. Add database verification
-3. Add meaningful assertions
-4. Test locally before committing
-5. Verify traces are helpful for debugging
+- [Playwright Best Practices](https://playwright.dev/docs/best-practices)
+- [Trace Viewer Guide](https://playwright.dev/docs/trace-viewer)
+- [HELPERS-GUIDE.md](reports/HELPERS-GUIDE.md) - Detailed helper usage
 
 ---
 

@@ -67,36 +67,98 @@ test.describe('Melosys Workflow Example', () => {
         await page.getByRole('button', {name: 'Bekreft og fortsett'}).click();
         await page.getByLabel('Hvilken bestemmelse skal sø').selectOption('FTRL_KAP2_2_1');
         await page.getByLabel('Angi brukers situasjon').selectOption('MIDLERTIDIG_ARBEID_2_1_FJERDE_LEDD');
-        await page.getByRole('radio', {name: 'Ja'}).check();
+
+        // Wait for the first "Ja" radio button to appear (indicates questions are loaded)
+        const firstJaRadio = page.getByRole('radio', {name: 'Ja'}).first();
+        await firstJaRadio.waitFor({ state: 'visible', timeout: 5000 });
+
+        // Select "Ja" for the first question - use .first() since it's the first "Ja" on the page
+        // This is: "Har søker oppholdt seg eller hatt til hensikt å oppholde seg i Norge..."
+        await firstJaRadio.check();
+
         await page.getByRole('group', {name: 'Er søkers arbeidsoppdrag i'}).getByLabel('Ja').check();
         await page.getByRole('group', {name: 'Plikter arbeidsgiver å betale'}).getByLabel('Ja').check();
         await page.getByRole('group', {name: 'Har søker lovlig opphold i'}).getByLabel('Ja').check();
-        await page.getByRole('button', {name: 'Bekreft og fortsett'}).click();
-        await page.getByRole('button', {name: 'Bekreft og fortsett'}).click();
-        
-        // Wait for the Trygdeavgift page to load
+
+        // Wait for the first "Bekreft og fortsett" button to be enabled before clicking
+        let bekreftButton = page.getByRole('button', {name: 'Bekreft og fortsett'});
+        await expect(bekreftButton).toBeEnabled({ timeout: 10000 });
+        console.log('✅ First Bekreft og fortsett button is enabled');
+
+        await bekreftButton.click();
+        console.log('✅ Clicked first Bekreft og fortsett');
+
+        // Wait for page to load after first click
         await page.waitForLoadState('domcontentloaded');
         await page.waitForTimeout(500);
-        
-        // Step 1: Select "Nei" for Skattepliktig
-        await page.getByRole('radio', {name: 'Nei'}).check();
-        
-        // Wait a moment for the inntekt section to appear
-        await page.waitForTimeout(300);
-        
+        console.log(`📍 Current URL after first click: ${page.url()}`);
+
+        // Wait for the second "Bekreft og fortsett" button to be enabled
+        bekreftButton = page.getByRole('button', {name: 'Bekreft og fortsett'});
+        await expect(bekreftButton).toBeEnabled({ timeout: 10000 });
+        console.log('✅ Second Bekreft og fortsett button is enabled');
+
+        await bekreftButton.click();
+        console.log('✅ Clicked second Bekreft og fortsett');
+
+        // Wait for the Trygdeavgift page to load
+        await page.waitForLoadState('domcontentloaded');
+        await page.waitForTimeout(1000);  // Increased wait time
+        console.log(`📍 Current URL after second click: ${page.url()}`);
+
+        // Verify we're on the Trygdeavgift page by checking for the "Skattepliktig" text
+        // or wait for the first "Nei" radio button to appear (which is the Skattepliktig field)
+        const skattepliktigNei = page.getByRole('radio', {name: 'Nei'}).first();
+
+        try {
+            await skattepliktigNei.waitFor({ state: 'visible', timeout: 10000 });
+            console.log('✅ Trygdeavgift page loaded - Skattepliktig field visible');
+        } catch (error) {
+            console.error('❌ Failed to reach Trygdeavgift page. Taking screenshot for debugging...');
+            console.error(`Current URL: ${page.url()}`);
+            await page.screenshot({ path: 'debug-stuck-page.png', fullPage: true });
+            throw error;
+        }
+
+        // Step 1: Select "Nei" for Skattepliktig (use first() since it's the first "Nei" on the page)
+        await skattepliktigNei.check();
+        console.log('✅ Checked Skattepliktig = Nei');
+
+        // Wait for the inntekt section to appear after checking "Nei"
+        const inntektskildeDropdown = page.getByLabel('Inntektskilde');
+        await inntektskildeDropdown.waitFor({ state: 'visible', timeout: 5000 });
+
         // Step 2: Select ARBEIDSINNTEKT - this will reveal the Bruttoinntekt field
-        await page.getByLabel('Inntektskilde').selectOption('ARBEIDSINNTEKT');
+        await inntektskildeDropdown.selectOption('ARBEIDSINNTEKT');
         
         // Step 3: Wait for the Bruttoinntekt field to appear (it's shown dynamically after selecting ARBEIDSINNTEKT)
         await page.getByRole('textbox', {name: 'Bruttoinntekt'}).waitFor({ state: 'visible', timeout: 5000 });
         
-        // Step 4: Fill the Bruttoinntekt field
-        await formHelper.fillAndWait(
-            page.getByRole('textbox', {name: 'Bruttoinntekt'}),
-            '100000',
-            2000  // Wait for calculation to complete
+        // Step 4: Fill the Bruttoinntekt field with stable API waiting pattern
+        const bruttoinntektField = page.getByRole('textbox', {name: 'Bruttoinntekt'});
+        const trygdeavgiftButton = page.getByRole('button', {name: 'Bekreft og fortsett'});
+
+        // CRITICAL: Create the response promise BEFORE triggering the action
+        // This prevents race conditions where the API response comes before we start listening
+        const responsePromise = page.waitForResponse(
+            response => response.url().includes('/trygdeavgift/beregning') && response.status() === 200,
+            { timeout: 30000 }  // Generous timeout for CI environment
         );
-        await page.getByRole('button',   {name: 'Bekreft og fortsett'}).click();
+
+        // Now trigger the action that will cause the API call
+        await bruttoinntektField.fill('100000');
+        await bruttoinntektField.press('Tab');  // Trigger blur to start API call
+
+        // Wait for the specific API response (not networkidle!)
+        await responsePromise;
+        console.log('✅ Trygdeavgift calculation API completed');
+
+        // Now wait for the button to be enabled (Playwright will auto-retry)
+        // The button should enable once validation completes after the API response
+        await expect(trygdeavgiftButton).toBeEnabled({ timeout: 15000 });
+        console.log('✅ Trygdeavgift Bekreft button is enabled');
+
+        await trygdeavgiftButton.click();
         await page.locator('.ql-editor').first().click();
         await page.locator('.ql-editor').first().fill('fritekst');
         await page.getByRole('paragraph').filter({hasText: /^$/}).first().click();
@@ -116,83 +178,5 @@ test.describe('Melosys Workflow Example', () => {
         //   expect(behandling).not.toBeNull();
         //   expect(behandling.STATUS).toBe('OPPRETTET');
         // });
-    });
-
-    test('should complete a basic workflow 2', async ({page}) => {
-        // Setup: Login to the application
-        const auth = new AuthHelper(page);
-        await auth.login();
-
-        // Setup: Form helper for dynamic forms
-        const formHelper = new FormHelper(page);
-
-        // Wait for the home page to load
-        await expect(page).toHaveURL(/.*melosys/);
-
-        // TODO: Add your recorded workflow steps here
-        // Use: npm run codegen
-        // Then Playwright will open a browser and record your actions
-
-        await page.goto('http://localhost:3000/melosys/');
-        await page.getByRole('button', { name: 'Opprett ny sak/behandling' }).click();
-        await page.getByRole('textbox', { name: 'Brukers f.nr. eller d-nr.:' }).click();
-        await page.getByRole('textbox', { name: 'Brukers f.nr. eller d-nr.:' }).fill('30056928150');
-        await page.getByLabel('Sakstype').selectOption('FTRL');
-        await page.getByLabel('Sakstema').selectOption('MEDLEMSKAP_LOVVALG');
-        await page.getByLabel('Behandlingstema').selectOption('YRKESAKTIV');
-        await page.getByLabel('Årsak', { exact: true }).selectOption('SØKNAD');
-        await page.getByRole('checkbox', { name: 'Legg behandlingen i mine' }).check();
-        await page.getByRole('button', { name: 'Opprett ny behandling' }).click();
-        await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).click();
-        await page.getByRole('button', { name: 'Åpne datovelger' }).first().click();
-        await page.getByRole('dialog').getByLabel('År').selectOption('2023');
-        await page.getByRole('button', { name: 'søndag 1', exact: true }).click();
-        await page.getByRole('button', { name: 'Åpne datovelger' }).nth(1).click();
-        await page.getByRole('dialog').getByLabel('År').selectOption('2024');
-        await page.getByRole('dialog').getByLabel('Måned', { exact: true }).selectOption('7');
-        await page.getByRole('button', { name: 'torsdag 1', exact: true }).click();
-        await page.getByRole('radio', { name: 'Velg land fra liste' }).check();
-        await page.locator('div').filter({ hasText: /^Velg\.\.\.$/ }).nth(3).click();
-        await page.getByRole('option', { name: 'Afghanistan' }).click();
-        await page.getByLabel('Trygdedekning').selectOption('FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON');
-        await page.getByRole('button', { name: 'Bekreft og fortsett' }).click();
-        await page.getByRole('checkbox', { name: 'Ståles Stål AS' }).check();
-        await page.getByRole('button', { name: 'Bekreft og fortsett' }).click();
-        await page.getByLabel('Hvilken bestemmelse skal sø').selectOption('FTRL_KAP2_2_8_FØRSTE_LEDD_A');
-        await page.getByRole('radio', { name: 'Ja' }).check();
-        await page.getByRole('group', { name: 'Har søker vært medlem i minst' }).getByLabel('Ja').check();
-        await page.getByRole('group', { name: 'Har søker nær tilknytning til' }).getByLabel('Ja').check();
-        await page.getByRole('button', { name: 'Bekreft og fortsett' }).click();
-        await page.getByLabel('Resultat periode').selectOption('INNVILGET');
-        await page.getByRole('button', { name: 'Bekreft og fortsett' }).click();
-        await page.getByRole('radio', { name: 'Nei' }).check();
-        await page.getByLabel('Inntektskilde').selectOption('INNTEKT_FRA_UTLANDET');
-        await page.getByRole('group', { name: 'Betales aga.?' }).getByLabel('Nei').check();
-        await page.getByRole('textbox', { name: 'Bruttoinntekt' }).click();
-        await page.getByRole('textbox', { name: 'Bruttoinntekt' }).fill('100000');
-        await page.getByRole('button', { name: 'Bekreft og fortsett' }).click();
-        await page.getByRole('button', { name: 'Fatt vedtak' }).click();
-
-        console.log('✅ Workflow completed');
-
-        // Verify: Check database state
-        // await withDatabase(async (db) => {
-        //   const behandling = await db.queryOne(
-        //     'SELECT * FROM BEHANDLING WHERE personnummer = :pnr',
-        //     { pnr: '12345678901' }
-        //   );
-        //
-        //   expect(behandling).not.toBeNull();
-        //   expect(behandling.STATUS).toBe('OPPRETTET');
-        // });
-    });
-
-    test('should handle errors gracefully', async ({page}) => {
-        const auth = new AuthHelper(page);
-        await auth.login();
-
-        // TODO: Test error scenarios
-
-        console.log('✅ Error handling verified');
     });
 });

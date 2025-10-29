@@ -10,9 +10,15 @@ export class FormHelper {
   constructor(private page: Page) {}
 
   /**
-   * Fill a field and wait for API response
-   * Handles both immediate triggers and blur-triggered API calls
-   * 
+   * Fill a field and wait for API response (STABLE PATTERN)
+   *
+   * CRITICAL: This uses the correct Playwright pattern to avoid race conditions:
+   * 1. Create the response promise FIRST (before triggering the action)
+   * 2. Trigger the action (fill + blur)
+   * 3. THEN await the response
+   *
+   * This prevents missing API responses that complete before we start listening.
+   *
    * Example:
    *   const formHelper = new FormHelper(page);
    *   await formHelper.fillAndWaitForApi(
@@ -27,42 +33,114 @@ export class FormHelper {
     apiPattern: string | RegExp,
     options?: { timeout?: number; triggerBlur?: boolean }
   ) {
-    const timeout = options?.timeout || 10000;
+    const timeout = options?.timeout || 30000;  // 30s timeout for CI
     const triggerBlur = options?.triggerBlur ?? true; // Default to true
-    
-    // Fill the field
+
+    // CRITICAL: Create the response promise FIRST (no await!)
+    // This prevents race conditions where the API responds before we start listening
+    const responsePromise = this.page.waitForResponse(
+      response => {
+        const matches = typeof apiPattern === 'string'
+          ? response.url().includes(apiPattern)
+          : apiPattern.test(response.url());
+        return matches && response.status() === 200;
+      },
+      { timeout }
+    );
+
+    // Now trigger the action that causes the API call
     await locator.fill(value);
-    
+
     // Trigger blur if needed (many forms trigger API on blur)
     if (triggerBlur) {
       await this.page.keyboard.press('Tab');
     }
-    
-    // Wait for the API response
+
+    // THEN await the response
     try {
-      await this.page.waitForResponse(
-        response => {
-          const matches = typeof apiPattern === 'string'
-            ? response.url().includes(apiPattern)
-            : apiPattern.test(response.url());
-          return matches && response.status() === 200;
-        },
-        { timeout }
-      );
-      
-      // Extra safety: wait a bit for UI to update after API response
+      await responsePromise;
+      console.log(`✅ API response received for pattern: ${apiPattern}`);
+
+      // Small buffer for UI to update after API response
       await this.page.waitForTimeout(100);
     } catch (error) {
-      console.warn(`Warning: API response not detected for pattern ${apiPattern}. Continuing anyway...`);
-      // Wait a bit longer to be safe
-      await this.page.waitForTimeout(500);
+      console.warn(`⚠️ API response timeout for pattern ${apiPattern}. Continuing anyway...`);
+      // Wait longer to be safe if API didn't respond
+      await this.page.waitForTimeout(1000);
+    }
+  }
+
+  /**
+   * Fill a field, wait for API, then wait for button to be enabled (MOST STABLE)
+   *
+   * This is the complete pattern for form fields that trigger API calls
+   * which then enable/disable buttons based on validation.
+   *
+   * Uses the correct Playwright pattern:
+   * 1. Create response promise FIRST
+   * 2. Fill field and trigger blur
+   * 3. Wait for API response
+   * 4. Wait for button to be enabled (with auto-retry)
+   *
+   * Example:
+   *   await formHelper.fillAndWaitForButton(
+   *     page.getByRole('textbox', { name: 'Bruttoinntekt' }),
+   *     '100000',
+   *     '/trygdeavgift/beregning',
+   *     page.getByRole('button', { name: 'Bekreft og fortsett' })
+   *   );
+   */
+  async fillAndWaitForButton(
+    fieldLocator: any,
+    value: string,
+    apiPattern: string | RegExp,
+    buttonLocator: any,
+    options?: { apiTimeout?: number; buttonTimeout?: number }
+  ) {
+    const apiTimeout = options?.apiTimeout || 30000;  // 30s for CI
+    const buttonTimeout = options?.buttonTimeout || 15000;  // 15s for button enable
+
+    // CRITICAL: Create the response promise FIRST (no await!)
+    const responsePromise = this.page.waitForResponse(
+      response => {
+        const matches = typeof apiPattern === 'string'
+          ? response.url().includes(apiPattern)
+          : apiPattern.test(response.url());
+        return matches && response.status() === 200;
+      },
+      { timeout: apiTimeout }
+    );
+
+    // Trigger the action
+    await fieldLocator.fill(value);
+    await this.page.keyboard.press('Tab');
+
+    // Wait for API response
+    try {
+      await responsePromise;
+      console.log(`✅ API response received for pattern: ${apiPattern}`);
+    } catch (error) {
+      console.warn(`⚠️ API response timeout for pattern ${apiPattern}`);
+    }
+
+    // Wait for button to be enabled (Playwright will auto-retry)
+    try {
+      await this.page.waitForTimeout(100);  // Small buffer for validation
+      const { expect } = await import('@playwright/test');
+      await expect(buttonLocator).toBeEnabled({ timeout: buttonTimeout });
+      console.log('✅ Button is enabled and ready to click');
+    } catch (error) {
+      console.error('❌ Button did not become enabled within timeout');
+      throw error;
     }
   }
 
   /**
    * Fill a field, trigger blur, and wait for network idle
-   * This is the most reliable but slowest option
-   * 
+   *
+   * ⚠️ DEPRECATED: Use fillAndWaitForApi() instead
+   * networkidle is NOT recommended by Playwright as it can fail with polling requests
+   *
    * Example:
    *   await formHelper.fillAndWaitForNetworkIdle(
    *     page.getByRole('textbox', { name: 'Bruttoinntekt' }),
@@ -70,6 +148,7 @@ export class FormHelper {
    *   );
    */
   async fillAndWaitForNetworkIdle(locator: any, value: string, timeoutMs: number = 30000) {
+    console.warn('⚠️ fillAndWaitForNetworkIdle is deprecated. Use fillAndWaitForApi instead.');
     await locator.fill(value);
     await this.page.keyboard.press('Tab'); // Trigger blur
     try {
