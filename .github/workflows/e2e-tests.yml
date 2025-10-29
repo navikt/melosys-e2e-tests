@@ -197,28 +197,37 @@ jobs:
           # Add docker log check results
           echo "## 🐳 Docker Log Analysis" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Checking logs from last 15 minutes_" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Check for errors in melosys-api logs
-          ERROR_COUNT=$(docker logs melosys-api --since 10m 2>&1 | grep -c "ERROR\|\[1;31mERROR\[0;39m" || echo "0")
-          WARN_COUNT=$(docker logs melosys-api --since 10m 2>&1 | grep -c "SQL Error\|SQLSyntaxErrorException\|tabellen eller utsnittet finnes ikke" || echo "0")
+          # Check for errors and warnings in melosys-api logs (15 minute window to catch startup issues)
+          ERROR_COUNT=$(docker logs melosys-api --since 15m 2>&1 | grep -cE "ERROR|\[1;31mERROR\[0;39m" || echo "0")
+          WARN_COUNT=$(docker logs melosys-api --since 15m 2>&1 | grep -cE "WARN|\[31mWARN\[0;39m" || echo "0")
 
-          if [ "$ERROR_COUNT" -eq 0 ] && [ "$WARN_COUNT" -eq 0 ]; then
-            echo "✅ No errors found in melosys-api logs" >> $GITHUB_STEP_SUMMARY
-          else
-            echo "⚠️ Found issues in melosys-api logs:" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "| Type | Count |" >> $GITHUB_STEP_SUMMARY
-            echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
-            echo "| ❌ Errors | $ERROR_COUNT |" >> $GITHUB_STEP_SUMMARY
-            echo "| ⚠️ Warnings | $WARN_COUNT |" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "<details><summary>📋 View error samples (click to expand)</summary>" >> $GITHUB_STEP_SUMMARY
+          echo "| Type | Count |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| ❌ Errors | $ERROR_COUNT |" >> $GITHUB_STEP_SUMMARY
+          echo "| ⚠️ Warnings | $WARN_COUNT |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$ERROR_COUNT" -gt 0 ] || [ "$WARN_COUNT" -gt 0 ]; then
+            echo "<details><summary>📋 View error/warning samples (click to expand)</summary>" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            docker logs melosys-api --since 10m 2>&1 | grep "ERROR\|SQL Error" | head -10 >> $GITHUB_STEP_SUMMARY || echo "No error samples available" >> $GITHUB_STEP_SUMMARY
+            docker logs melosys-api --since 15m 2>&1 | grep -E "ERROR|WARN" | tail -20 >> $GITHUB_STEP_SUMMARY || echo "No samples available" >> $GITHUB_STEP_SUMMARY
             echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
             echo "</details>" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ No errors or warnings in the last 15 minutes" >> $GITHUB_STEP_SUMMARY
           fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "<details><summary>📝 Recent log activity (last 30 lines)</summary>" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          docker logs melosys-api --tail 30 2>&1 >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "</details>" >> $GITHUB_STEP_SUMMARY
 
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "🎬 Videos, traces, and screenshots are available in the artifacts." >> $GITHUB_STEP_SUMMARY
