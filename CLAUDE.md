@@ -6,6 +6,8 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is an E2E testing project for Melosys using Playwright and TypeScript. The project records user workflows from "melosys flyt" to "vedtak" for automated regression testing and local debugging.
 
+**📖 See [IMPROVEMENTS.md](reports/better-visibility-and-debugging.md) for recent enhancements to CI reporting and docker log checking.**
+
 ## Essential Commands
 
 ### Running Tests

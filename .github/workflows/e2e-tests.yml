@@ -138,9 +138,99 @@ jobs:
 
       - name: Run Playwright tests
         run: |
-          npx playwright test example-workflow.spec.ts --project=chromium
+          npx playwright test "utenfor-avtaleland.spec.ts" --project=chromium
         env:
           CI: true
+
+      - name: Generate test summary
+        if: always()
+        run: |
+          echo "## 🎭 Playwright Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Count test results from Playwright's test-results directory structure
+          # Each test creates a directory like: test-name-browser/
+          # Failed tests have: test-name-browser-retry1/, test-name-browser-retry2/
+
+          if [ -d "test-results" ]; then
+            # Count total tests (unique test directories, excluding retry attempts)
+            TOTAL=$(find test-results -mindepth 1 -maxdepth 1 -type d | grep -v "retry" | wc -l | tr -d ' ')
+
+            # Count failed tests (directories containing -failed- or that have retry directories)
+            FAILED=$(find test-results -mindepth 1 -maxdepth 1 -type d -name "*-retry*" | sed 's/-retry[0-9]*$//' | sort -u | wc -l | tr -d ' ')
+
+            # If no retries but we have failure indicators in directory names
+            if [ "$FAILED" -eq 0 ]; then
+              FAILED=$(find test-results -mindepth 1 -maxdepth 1 -type d -name "*-failed-*" 2>/dev/null | wc -l | tr -d ' ')
+            fi
+
+            PASSED=$((TOTAL - FAILED))
+
+            echo "| Status | Count |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| ✅ Passed | $PASSED |" >> $GITHUB_STEP_SUMMARY
+            echo "| ❌ Failed | $FAILED |" >> $GITHUB_STEP_SUMMARY
+            echo "| 📊 Total | $TOTAL |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            if [ "$FAILED" -gt 0 ]; then
+              echo "### ❌ Failed Tests:" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              # List failed test names
+              find test-results -mindepth 1 -maxdepth 1 -type d \( -name "*-retry*" -o -name "*-failed-*" \) | \
+                sed 's/test-results\///' | \
+                sed 's/-chromium.*//' | \
+                sed 's/-retry[0-9]*//' | \
+                sort -u | \
+                while read test; do
+                  echo "- $test" >> $GITHUB_STEP_SUMMARY
+                done
+            fi
+
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "📦 Download the full HTML report from the artifacts below." >> $GITHUB_STEP_SUMMARY
+          else
+            echo "⚠️ No test results found" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Add docker log check results
+          echo "## 🐳 Docker Log Analysis" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Checking logs from last 15 minutes_" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check for errors and warnings in melosys-api logs (15 minute window to catch startup issues)
+          ERROR_COUNT=$(docker logs melosys-api --since 15m 2>&1 | grep -cE "ERROR|\[1;31mERROR\[0;39m" || echo "0")
+          WARN_COUNT=$(docker logs melosys-api --since 15m 2>&1 | grep -cE "WARN|\[31mWARN\[0;39m" || echo "0")
+
+          echo "| Type | Count |" >> $GITHUB_STEP_SUMMARY
+          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
+          echo "| ❌ Errors | $ERROR_COUNT |" >> $GITHUB_STEP_SUMMARY
+          echo "| ⚠️ Warnings | $WARN_COUNT |" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "$ERROR_COUNT" -gt 0 ] || [ "$WARN_COUNT" -gt 0 ]; then
+            echo "<details><summary>📋 View error/warning samples (click to expand)</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            docker logs melosys-api --since 15m 2>&1 | grep -E "ERROR|WARN" | tail -20 >> $GITHUB_STEP_SUMMARY || echo "No samples available" >> $GITHUB_STEP_SUMMARY
+            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "✅ No errors or warnings in the last 15 minutes" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "<details><summary>📝 Recent log activity (last 30 lines)</summary>" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          docker logs melosys-api --tail 30 2>&1 >> $GITHUB_STEP_SUMMARY
+          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+          echo "</details>" >> $GITHUB_STEP_SUMMARY
+
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "🎬 Videos, traces, and screenshots are available in the artifacts." >> $GITHUB_STEP_SUMMARY
 
       - name: Upload test results
         uses: actions/upload-artifact@v4

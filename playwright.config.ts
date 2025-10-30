@@ -27,7 +27,9 @@ export default defineConfig({
   /* Reporter to use. See https://playwright.dev/docs/test-reporters */
   reporter: [
     ['html'],
-    ['list']
+    ['list'],
+    // GitHub Actions reporter - creates annotations and summary in CI
+    ...(process.env.CI ? [['github']] : []),
   ],
 
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
@@ -82,4 +84,7 @@ export default defineConfig({
     reuseExistingServer: true,
     timeout: 5000,
   },
+
+  /* Set up hooks to check docker logs after each test */
+  globalSetup: './global-setup.ts',
 });
