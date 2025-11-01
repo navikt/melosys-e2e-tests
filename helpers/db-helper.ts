@@ -180,6 +180,78 @@ export class DatabaseHelper {
   }
 
   /**
+   * Show all database tables with their data
+   * Useful for debugging - shows what data exists in the database
+   * @param skipLookupTables - If true, skip tables ending with _TYPE, _TEMA, _STATUS (default: true)
+   */
+  async showAllData(skipLookupTables = true): Promise<void> {
+    if (!this.connection) {
+      throw new Error('Database not connected. Call connect() first.');
+    }
+
+    console.log('\n🔍 Analyzing database contents...\n');
+
+    // Get all tables
+    const tables = await this.query<{TABLE_NAME: string}>(`
+      SELECT table_name
+      FROM user_tables
+      ORDER BY table_name
+    `, {}, true);
+
+    console.log(`Found ${tables.length} total tables\n`);
+
+    // Filter out lookup tables and check which have data
+    const tablesWithData: {name: string, count: number}[] = [];
+
+    for (const table of tables) {
+      const tableName = table.TABLE_NAME;
+
+      // Skip lookup tables if requested
+      if (skipLookupTables &&
+          (tableName.endsWith('_TYPE') ||
+           tableName.endsWith('_TEMA') ||
+           tableName.endsWith('_STATUS'))) {
+        continue;
+      }
+
+      // Count rows in table
+      try {
+        const countResult = await this.query(`SELECT COUNT(*) as cnt FROM ${tableName}`, {}, true);
+        const count = countResult[0]?.CNT || 0;
+
+        if (count > 0) {
+          tablesWithData.push({ name: tableName, count: count });
+        }
+      } catch (error) {
+        console.log(`⚠️  Could not query ${tableName}: ${error.message || error}`);
+      }
+    }
+
+    // Display results
+    console.log(`\n📊 Tables with data (${tablesWithData.length} tables):\n`);
+    console.log('─'.repeat(60));
+
+    for (const table of tablesWithData) {
+      console.log(`📋 ${table.name.padEnd(40)} ${String(table.count).padStart(6)} rows`);
+
+      // Show sample data from the table
+      try {
+        const sample = await this.query(`SELECT * FROM ${table.name} WHERE ROWNUM <= 1`, {}, true);
+        if (sample.length > 0) {
+          const columns = Object.keys(sample[0]).slice(0, 5); // First 5 columns
+          console.log(`   Columns: ${columns.join(', ')}${columns.length < Object.keys(sample[0]).length ? ', ...' : ''}`);
+        }
+      } catch (error) {
+        // Ignore errors in sample query
+      }
+      console.log('');
+    }
+
+    console.log('─'.repeat(60));
+    console.log(`\nTotal rows across all tables: ${tablesWithData.reduce((sum, t) => sum + t.count, 0)}\n`);
+  }
+
+  /**
    * Close the database connection
    */
   async close() {
