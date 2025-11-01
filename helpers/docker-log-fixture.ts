@@ -1,13 +1,19 @@
 import { test as base } from '@playwright/test';
 import { execSync } from 'child_process';
 import { DockerLogError } from './check-docker-logs';
+import { DatabaseHelper } from './db-helper';
+import { clearMockDataSilent } from './mock-helper';
 
 /**
- * Extended test fixture that checks docker logs after each test
- * Only shows errors that occurred during the test execution
+ * Extended test fixture that checks docker logs and cleans up after each test
+ * Features:
+ * - Automatic database cleanup after each test
+ * - Automatic mock service cleanup after each test
+ * - Docker log error checking after each test
  */
 export const test = base.extend<{
   dockerLogChecker: void;
+  autoCleanup: void;
 }>({
   dockerLogChecker: [async ({}, use, testInfo) => {
     // Record the start time of this test
@@ -65,6 +71,74 @@ export const test = base.extend<{
     } catch (error) {
       console.error('Failed to check docker logs:', error);
     }
+  }, { auto: true }],
+
+  // Auto-cleanup - runs before and after each test
+  autoCleanup: [async ({ page }, use) => {
+    // BEFORE test: clean database and mock data
+    console.log('\n🧹 Cleaning test data before test...');
+
+    // Clean database
+    let db = new DatabaseHelper();
+    try {
+      await db.connect();
+      const result = await db.cleanDatabase(true); // silent = true
+
+      if (result.cleanedCount > 0 || result.totalRowsDeleted > 0) {
+        console.log(`   ✅ Database: ${result.cleanedCount} tables cleaned (${result.totalRowsDeleted} rows)`);
+      }
+    } catch (error: any) {
+      console.log(`   ⚠️  Database cleanup failed: ${error.message || error}`);
+    } finally {
+      await db.close();
+    }
+
+    // Clean mock data
+    try {
+      const mockResult = await clearMockDataSilent(page.request);
+      const totalCleared = (Number(mockResult.journalpostCleared) || 0) + (Number(mockResult.oppgaveCleared) || 0);
+      if (totalCleared > 0) {
+        console.log(`   ✅ Mock data: ${totalCleared} items cleared`);
+      }
+    } catch (error: any) {
+      console.log(`   ⚠️  Mock cleanup failed: ${error.message || error}`);
+    }
+
+    console.log('');
+
+    // Run the test
+    await use();
+
+    // AFTER test: clean database and mock data
+    console.log('\n🧹 Cleaning up test data after test...');
+
+    // Clean database
+    db = new DatabaseHelper();
+    try {
+      await db.connect();
+      const result = await db.cleanDatabase(true); // silent = true
+
+      if (result.cleanedCount > 0 || result.totalRowsDeleted > 0) {
+        console.log(`   ✅ Database: ${result.cleanedCount} tables cleaned (${result.totalRowsDeleted} rows)`);
+      }
+    } catch (error: any) {
+      console.log(`   ⚠️  Database cleanup failed: ${error.message || error}`);
+    } finally {
+      await db.close();
+    }
+
+    // Clean mock data
+    try {
+      const mockResult = await clearMockDataSilent(page.request);
+      const totalCleared = (Number(mockResult.journalpostCleared) || 0) + (Number(mockResult.oppgaveCleared) || 0);
+      if (totalCleared > 0) {
+        console.log(`   ✅ Mock data: ${totalCleared} items cleared`);
+      }
+    } catch (error: any) {
+      console.log(`   ⚠️  Mock cleanup failed: ${error.message || error}`);
+    }
+
+    console.log('');
   }, { auto: true }]
 });
 
