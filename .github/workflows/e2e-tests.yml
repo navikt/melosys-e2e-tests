@@ -31,8 +31,7 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      - name: Install Playwright Browsers
-        run: npx playwright install --with-deps chromium
+      # No need to install Playwright browsers - the container has them pre-installed!
 
       - name: Login to NAIS registry
         uses: nais/login@v0
@@ -140,11 +139,15 @@ jobs:
           sleep 10
           echo "✅ Ready to run tests!"
 
-      - name: Run Playwright tests
+      - name: Run Playwright tests in Docker container
         run: |
-          npx playwright test "utenfor-avtaleland.spec.ts" --project=chromium
-        env:
-          CI: true
+          docker run --rm \
+            --network host \
+            -v $(pwd):/work \
+            -w /work \
+            -e CI=true \
+            mcr.microsoft.com/playwright:v1.40.0-jammy \
+            npx playwright test "utenfor-avtaleland.spec.ts" --project=chromium
 
       - name: Generate test summary
         if: always()
