@@ -95,6 +95,10 @@ jobs:
             attempt=$((attempt + 1))
             echo "⏳ Health check attempt $attempt/$max_attempts"
 
+            # Check Oracle database health (docker health status)
+            oracle_health=$(docker inspect --format='{{.State.Health.Status}}' melosys-oracle 2>/dev/null || echo "unhealthy")
+            echo "  Oracle DB: $oracle_health"
+
             # Check Kafka health (docker health status)
             kafka_health=$(docker inspect --format='{{.State.Health.Status}}' kafka 2>/dev/null || echo "unhealthy")
             echo "  Kafka: $kafka_health"
@@ -108,7 +112,7 @@ jobs:
             echo "  melosys-web: $web_health"
 
             # Check if all critical services are healthy
-            if [ "$kafka_health" = "healthy" ] && [ "$api_health" = "healthy" ] && [ "$web_health" = "healthy" ]; then
+            if [ "$oracle_health" = "healthy" ] && [ "$kafka_health" = "healthy" ] && [ "$api_health" = "healthy" ] && [ "$web_health" = "healthy" ]; then
               echo "✅ All critical services are healthy!"
               break
             fi

@@ -319,6 +319,14 @@ services:
       ORACLE_PASSWORD: oracle
     ports:
       - "1521:1521"
+    # Note: gvenzl/oracle-xe has a built-in healthcheck, but we define it explicitly here
+    # for visibility and to ensure consistent behavior across environments
+    healthcheck:
+      test: ["CMD", "/opt/oracle/healthcheck.sh"]
+      interval: 20s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
 
   postgres:
     platform: linux/amd64
