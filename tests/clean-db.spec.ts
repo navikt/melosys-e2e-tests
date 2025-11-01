@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { withDatabase } from '../helpers/db-helper';
+import { clearMockData } from '../helpers/mock-helper';
 
 test.describe('Clean db', () => {
     test('clean database and mock data', async ({page}) => {
@@ -11,13 +12,9 @@ test.describe('Clean db', () => {
         // Clear mock service data
         console.log('\n🧹 Clearing mock service data...\n');
         try {
-            const response = await page.request.delete('http://localhost:8083/testdata/clear');
-            const data = await response.json();
-            console.log('✅ Mock data cleared:');
-            console.log(`   Journalposter: ${data.journalpostCleared || 0}`);
-            console.log(`   Oppgaver: ${data.oppgaveCleared || 0}\n`);
+            await clearMockData(page.request);
         } catch (error) {
-            console.log(`⚠️  Could not clear mock data: ${error.message || error}\n`);
+            // Error already logged by helper
         }
     });
 

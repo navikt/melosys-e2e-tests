@@ -68,13 +68,16 @@ export class DatabaseHelper {
   /**
    * Clean all data tables except lookup tables and PROSESS_STEG
    * Excludes: tables ending with _TYPE, _TEMA, _STATUS, and PROSESS_STEG
+   * @param silent - If true, suppress console output
    */
-  async cleanDatabase(): Promise<void> {
+  async cleanDatabase(silent = false): Promise<{ cleanedCount: number; totalRowsDeleted: number }> {
     if (!this.connection) {
       throw new Error('Database not connected. Call connect() first.');
     }
 
-    console.log('\n🧹 Starting database cleanup...\n');
+    if (!silent) {
+      console.log('\n🧹 Starting database cleanup...\n');
+    }
 
     try {
       // Get all tables
@@ -82,9 +85,11 @@ export class DatabaseHelper {
         SELECT table_name
         FROM user_tables
         ORDER BY table_name
-      `);
+      `, {}, true);
 
-      console.log(`Found ${tables.length} total tables\n`);
+      if (!silent) {
+        console.log(`Found ${tables.length} total tables\n`);
+      }
 
       const tablesToClean: string[] = [];
       const skippedTables: string[] = [];
@@ -106,8 +111,10 @@ export class DatabaseHelper {
         tablesToClean.push(tableName);
       }
 
-      console.log(`📋 Tables to clean: ${tablesToClean.length}`);
-      console.log(`⏭️  Tables to skip: ${skippedTables.length} (lookup tables, PROSESS_STEG, flyway)\n`);
+      if (!silent) {
+        console.log(`📋 Tables to clean: ${tablesToClean.length}`);
+        console.log(`⏭️  Tables to skip: ${skippedTables.length} (lookup tables, PROSESS_STEG, flyway)\n`);
+      }
 
       // Disable foreign key constraints temporarily
       await this.connection.execute('BEGIN\n' +
@@ -116,7 +123,9 @@ export class DatabaseHelper {
         '  END LOOP;\n' +
         'END;');
 
-      console.log('🔓 Disabled foreign key constraints\n');
+      if (!silent) {
+        console.log('🔓 Disabled foreign key constraints\n');
+      }
 
       let cleanedCount = 0;
       let totalRowsDeleted = 0;
@@ -131,12 +140,16 @@ export class DatabaseHelper {
           if (rowCount > 0) {
             await this.connection.execute(`DELETE FROM ${tableName}`);
             await this.connection.commit();
-            console.log(`✅ Cleaned ${tableName.padEnd(40)} (${rowCount} rows deleted)`);
+            if (!silent) {
+              console.log(`✅ Cleaned ${tableName.padEnd(40)} (${rowCount} rows deleted)`);
+            }
             cleanedCount++;
             totalRowsDeleted += rowCount;
           }
         } catch (error) {
-          console.log(`⚠️  Could not clean ${tableName}: ${error.message || error}`);
+          if (!silent) {
+            console.log(`⚠️  Could not clean ${tableName}: ${error.message || error}`);
+          }
         }
       }
 
@@ -147,15 +160,21 @@ export class DatabaseHelper {
         '  END LOOP;\n' +
         'END;');
 
-      console.log('\n🔒 Re-enabled foreign key constraints');
+      if (!silent) {
+        console.log('\n🔒 Re-enabled foreign key constraints');
 
-      console.log('\n' + '─'.repeat(60));
-      console.log(`\n✨ Database cleanup complete!`);
-      console.log(`   Tables cleaned: ${cleanedCount}`);
-      console.log(`   Total rows deleted: ${totalRowsDeleted}\n`);
+        console.log('\n' + '─'.repeat(60));
+        console.log(`\n✨ Database cleanup complete!`);
+        console.log(`   Tables cleaned: ${cleanedCount}`);
+        console.log(`   Total rows deleted: ${totalRowsDeleted}\n`);
+      }
+
+      return { cleanedCount, totalRowsDeleted };
 
     } catch (error) {
-      console.error('❌ Database cleanup failed:', error);
+      if (!silent) {
+        console.error('❌ Database cleanup failed:', error);
+      }
       throw error;
     }
   }
