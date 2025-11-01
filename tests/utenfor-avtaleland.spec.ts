@@ -2,7 +2,7 @@ import {test, expect} from '../helpers/docker-log-fixture';
 
 test.describe('Utenfor avtaleland - Medlemskap og lovvalg ', () => {
     test.describe('Yrkesaktiv - Førstegangsbehandling', () => {
-            test('2-8 forste ledd bokstav a (arbeidstaker)', async ({page}) => {
+        test('2-8 forste ledd bokstav a (arbeidstaker)', async ({page}) => {
 
             // Full workflow from creation to vedtak
             await page.goto('http://localhost:3000/melosys/');
@@ -21,12 +21,8 @@ test.describe('Utenfor avtaleland - Medlemskap og lovvalg ', () => {
 
             await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).click();
             await page.getByRole('button', {name: 'Åpne datovelger'}).first().click();
-            await page.getByRole('dialog').getByLabel('År').selectOption('2023');
-            await page.getByRole('button', {name: 'søndag 1', exact: true}).click();
-            await page.getByRole('button', {name: 'Åpne datovelger'}).nth(1).click();
-            await page.getByRole('dialog').getByLabel('År').selectOption('2024');
-            await page.getByRole('dialog').getByLabel('Måned', {exact: true}).selectOption('7');
-            await page.getByRole('button', {name: 'torsdag 1', exact: true}).click();
+            await page.getByRole('textbox', { name: 'Fra og med' }).fill('01.01.2023');
+            await page.getByRole('textbox', { name: 'Til og med Til og med' }).fill('01.07.2024');
             await page.getByRole('radio', {name: 'Velg land fra liste'}).check();
             await page.locator('div').filter({hasText: /^Velg\.\.\.$/}).nth(3).click();
             await page.getByRole('option', {name: 'Afghanistan'}).click();
