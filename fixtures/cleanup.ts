@@ -1,6 +1,7 @@
 import { test as base } from '@playwright/test';
 import { DatabaseHelper } from '../helpers/db-helper';
 import { clearMockDataSilent } from '../helpers/mock-helper';
+import { clearApiCaches } from '../helpers/api-helper';
 
 /**
  * Cleanup fixture - automatically cleans database and mock data before and after each test
@@ -21,6 +22,13 @@ async function cleanupTestData(page: any): Promise<void> {
     console.log(`   ⚠️  Database cleanup failed: ${error.message || error}`);
   } finally {
     await db.close();
+  }
+
+  // Clear API caches to prevent JPA errors
+  try {
+    await clearApiCaches(page.request);
+  } catch (error: any) {
+    // Not critical if this fails
   }
 
   // Clean mock data

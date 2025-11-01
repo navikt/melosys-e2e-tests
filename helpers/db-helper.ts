@@ -130,18 +130,18 @@ export class DatabaseHelper {
       let cleanedCount = 0;
       let totalRowsDeleted = 0;
 
-      // Delete data from each table
+      // Truncate data from each table (faster than DELETE and resets sequences)
       for (const tableName of tablesToClean) {
         try {
-          // Count rows before deletion
+          // Count rows before truncation
           const countResult = await this.query(`SELECT COUNT(*) as cnt FROM ${tableName}`, {}, true);
           const rowCount = countResult[0]?.CNT || 0;
 
           if (rowCount > 0) {
-            await this.connection.execute(`DELETE FROM ${tableName}`);
-            await this.connection.commit();
+            // TRUNCATE is faster than DELETE and resets auto-increment sequences
+            await this.connection.execute(`TRUNCATE TABLE ${tableName}`);
             if (!silent) {
-              console.log(`✅ Cleaned ${tableName.padEnd(40)} (${rowCount} rows deleted)`);
+              console.log(`✅ Cleaned ${tableName.padEnd(40)} (${rowCount} rows truncated)`);
             }
             cleanedCount++;
             totalRowsDeleted += rowCount;
