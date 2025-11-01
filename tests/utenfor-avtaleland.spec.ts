@@ -1,4 +1,4 @@
-import {test, expect} from '../helpers/docker-log-fixture';
+import { test, expect } from '../fixtures';
 
 test.describe('Utenfor avtaleland - Medlemskap og lovvalg ', () => {
     test.describe('Yrkesaktiv - Førstegangsbehandling', () => {
@@ -11,6 +11,11 @@ test.describe('Utenfor avtaleland - Medlemskap og lovvalg ', () => {
 
             await page.getByRole('textbox', {name: 'Brukers f.nr. eller d-nr.:'}).click();
             await page.getByRole('textbox', {name: 'Brukers f.nr. eller d-nr.:'}).fill('30056928150');
+            // Only interact if the radio button is visible
+            const radioButton = page.getByRole('radio', {name: 'Opprett ny sak'});
+            if (await radioButton.isVisible()) {
+                await radioButton.check();
+            }
             await page.getByLabel('Sakstype').selectOption('FTRL');
             await page.getByLabel('Sakstema').selectOption('MEDLEMSKAP_LOVVALG');
             await page.getByLabel('Behandlingstema').selectOption('YRKESAKTIV');

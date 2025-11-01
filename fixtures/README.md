@@ -1,80 +1,161 @@
 # Test Fixtures
 
-This directory contains Playwright test fixtures that extend base test functionality.
+Playwright test fixtures that extend base test functionality with automatic cleanup and monitoring.
+
+## Quick Start
+
+**Import this in all your tests:**
+
+```typescript
+import { test, expect } from '../fixtures';
+
+test('my test', async ({ page }) => {
+  // Your test automatically gets:
+  // ✅ Clean database before test
+  // ✅ Clean mock data before test
+  // ✅ Docker log checking after test
+  // ✅ Automatic cleanup after test
+});
+```
 
 ## Available Fixtures
 
-### cleanup-fixture.ts
+### Main Export (fixtures/index.ts)
 
-Automatically cleans database and mock service data after each test to ensure test isolation.
+The default export combines all fixtures. **Use this for all tests.**
 
-**Usage:**
+**Features:**
+- Automatic database cleanup before and after each test
+- Automatic mock service cleanup before and after each test
+- Docker log error checking after each test
+- Test isolation - no data leakage between tests
+
+### Individual Fixtures
+
+You can also import individual fixtures if needed:
+
+#### cleanup.ts
 ```typescript
-import { test, expect } from '../fixtures/cleanup-fixture';
+import { test } from '../fixtures/cleanup';
 
-test('my test', async ({ page }) => {
-  // Your test code here
-  // Database and mock data will be automatically cleaned after this test
-});
+// Provides only cleanup functionality (before and after test)
 ```
 
-**What it cleans:**
-- Database tables (excluding lookup tables, PROSESS_STEG, and flyway_schema_history)
-- Mock service test data (journalposter and oppgaver)
+#### docker-logs.ts
+```typescript
+import { test } from '../fixtures/docker-logs';
 
-**Output:**
+// Provides only docker log checking (after test)
 ```
-🧹 Cleaning up test data...
-   ✅ Database: 5 tables cleaned (91 rows)
+
+## What Happens During Tests
+
+### Before Test
+```
+🧹 Cleaning test data before test...
+   ✅ Database: 5 tables cleaned (27 rows)
    ✅ Mock data: 3 items cleared
+
+🏁 Starting test: my workflow test
 ```
 
-### docker-log-fixture.ts
+### After Test
+```
+🔍 Checking docker logs for: my workflow test
+✅ No errors found in melosys-api logs
 
-Checks Docker logs for errors after each test and attaches findings to test results.
+🧹 Cleaning up test data after test...
+   ✅ Database: 8 tables cleaned (43 rows)
+   ✅ Mock data: 2 items cleared
+```
 
-**Usage:**
+## What Gets Cleaned
+
+**Database:**
+- All data tables (excludes lookup tables ending with _TYPE, _TEMA, _STATUS)
+- Excludes PROSESS_STEG and flyway_schema_history
+- Uses foreign key constraint handling for safe deletion
+
+**Mock Service:**
+- Journalposter from melosys-mock
+- Oppgaver from melosys-mock
+
+## Architecture
+
+```
+fixtures/
+├── index.ts          # Main export - combines all fixtures
+├── cleanup.ts        # Database and mock cleanup (before & after)
+├── docker-logs.ts    # Docker log error checking (after)
+└── README.md         # This file
+```
+
+## Migration Guide
+
+**Old way (multiple imports):**
 ```typescript
-import { test, expect } from '../fixtures/docker-log-fixture';
+// ❌ Don't do this anymore
+import { test } from '../helpers/docker-log-fixture';
+import { test } from '../fixtures/docker-log-fixture';
+import { test } from '../fixtures/cleanup-fixture';
+```
+
+**New way (single import):**
+```typescript
+// ✅ Do this instead
+import { test, expect } from '../fixtures';
+```
+
+## Manual Cleanup
+
+If you need to manually clean during a test (rare):
+
+```typescript
+import { test, expect } from '../fixtures';
+import { withDatabase } from '../helpers/db-helper';
+import { clearMockData } from '../helpers/mock-helper';
 
 test('my test', async ({ page }) => {
-  // Your test code here
-  // Docker logs will be checked automatically after this test
+  // ... some test steps ...
+
+  // Manual cleanup if needed
+  await withDatabase(async (db) => {
+    await db.cleanDatabase();
+  });
+  await clearMockData(page.request);
+
+  // ... more test steps ...
 });
 ```
 
-**Output:**
-```
-🔍 Checking docker logs for errors during: my test
-✅ No docker errors during test
-```
+## Debugging
 
-## Combining Fixtures
-
-You can combine multiple fixtures by creating a new fixture file:
+To see what data exists in database:
 
 ```typescript
-import { test as base } from '@playwright/test';
-import { test as dockerTest } from './docker-log-fixture';
-import { test as cleanupTest } from './cleanup-fixture';
+import { test, expect } from '../fixtures';
+import { withDatabase } from '../helpers/db-helper';
 
-// Merge fixtures
-export const test = base.extend({
-  ...dockerTest,
-  ...cleanupTest,
+test('my test', async ({ page }) => {
+  // ... your test ...
+
+  // Show all data before automatic cleanup runs
+  await withDatabase(async (db) => {
+    await db.showAllData();
+  });
 });
-
-export { expect } from '@playwright/test';
 ```
 
-## When to Use Auto-Cleanup
+## Best Practices
 
-Use the `cleanup-fixture` for:
-- ✅ E2E workflow tests that create data
-- ✅ Tests that should start with a clean database
-- ✅ Tests that need isolation from other tests
+✅ **DO:**
+- Import from `../fixtures` in all tests
+- Let automatic cleanup handle test isolation
+- Trust the fixtures to clean before and after
+- Check docker logs output for errors
 
-Don't use it for:
-- ❌ Tests that verify database cleanup itself (like clean-db.spec.ts)
-- ❌ Tests that need to inspect data after completion
-- ❌ Read-only tests that don't modify data
+❌ **DON'T:**
+- Import from old fixture files (they're removed)
+- Manually clean unless you have a specific reason
+- Skip using fixtures (tests won't be isolated)
+- Commit tests with `showAllData()` calls (debugging only)
