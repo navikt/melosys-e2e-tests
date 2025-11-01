@@ -1,14 +1,24 @@
 import { test as base } from '@playwright/test';
 import { DatabaseHelper } from '../helpers/db-helper';
 import { clearMockDataSilent } from '../helpers/mock-helper';
-import { clearApiCaches } from '../helpers/api-helper';
+import { clearApiCaches, waitForProcessInstances } from '../helpers/api-helper';
 
 /**
  * Cleanup fixture - automatically cleans database and mock data before and after each test
  * This ensures test isolation and prevents leftover data from affecting other tests
  */
 
-async function cleanupTestData(page: any): Promise<void> {
+async function cleanupTestData(page: any, waitForProcesses: boolean = false): Promise<void> {
+  // Wait for async process instances to complete (after test only)
+  if (waitForProcesses) {
+    try {
+      await waitForProcessInstances(page.request, 30);
+    } catch (error: any) {
+      console.log(`   ⚠️  Process instance check failed: ${error.message || error}`);
+      // Continue with cleanup even if processes failed
+    }
+  }
+
   // Clean database
   const db = new DatabaseHelper();
   try {
@@ -47,10 +57,15 @@ export const cleanupFixture = base.extend<{ autoCleanup: void }>({
   autoCleanup: [async ({ page }, use) => {
     // BEFORE test: clean for fresh start
     console.log('\n🧹 Cleaning test data before test...');
-    await cleanupTestData(page);
+    await cleanupTestData(page, false); // Don't wait for processes
     console.log('');
 
     // Run the test
     await use();
+
+    // AFTER test: wait for processes, then clean up
+    console.log('\n🧹 Cleaning up test data after test...');
+    await cleanupTestData(page, true); // Wait for processes to complete
+    console.log('');
   }, { auto: true }]
 });

@@ -54,6 +54,7 @@ import { test } from '../fixtures/docker-logs';
 ```
 🧹 Cleaning test data before test...
    ✅ Database: 5 tables cleaned (27 rows)
+   ✅ API caches cleared: JPA + Hibernate + Spring
    ✅ Mock data: 3 items cleared
 
 🏁 Starting test: my workflow test
@@ -65,8 +66,23 @@ import { test } from '../fixtures/docker-logs';
 ✅ No errors found in melosys-api logs
 
 🧹 Cleaning up test data after test...
+   ✅ Process instances: 2 completed in 3s
    ✅ Database: 8 tables cleaned (43 rows)
+   ✅ API caches cleared: JPA + Hibernate + Spring
    ✅ Mock data: 2 items cleared
+```
+
+**Key Feature: Process Instance Waiting**
+
+After each test, the fixture automatically waits for all async process instances (saksflyt) to complete before cleaning up. This prevents:
+- Race conditions where cleanup happens while processes are still running
+- Failed foreign key constraints
+- Lost error information from async processes
+
+If processes fail, you'll see detailed error information:
+```
+   ❌ Process instances: 1 FAILED
+      - OPPRETT_SAK_OG_BEH: ORA-02291: FK_BEHANDLINGSMAATE constraint violated
 ```
 
 ## What Gets Cleaned

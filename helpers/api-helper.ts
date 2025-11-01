@@ -14,53 +14,94 @@ import { APIRequestContext } from '@playwright/test';
  */
 
 /**
+ * Wait for all process instances to complete
+ *
+ * This calls the melosys-api test endpoint that monitors async process instances.
+ * It ensures all background processes complete before we clean up the database.
+ *
+ * Returns:
+ * - COMPLETED: All processes finished successfully
+ * - FAILED: Some processes failed (details included)
+ * - TIMEOUT: Processes didn't complete in time
+ * - ERROR: Unexpected error occurred
+ */
+export async function waitForProcessInstances(request: APIRequestContext, timeoutSeconds: number = 30): Promise<void> {
+  try {
+    const response = await request.get(`http://localhost:8080/api/test/wait-for-prosessinstanser?timeoutSeconds=${timeoutSeconds}`, {
+      failOnStatusCode: false,
+      timeout: (timeoutSeconds + 5) * 1000 // Add 5s buffer
+    });
+
+    const result = await response.json();
+
+    if (result.status === 'COMPLETED') {
+      if (result.totalInstances > 0) {
+        console.log(`   ✅ Process instances: ${result.totalInstances} completed in ${result.elapsedSeconds}s`);
+      }
+      return;
+    }
+
+    if (result.status === 'FAILED') {
+      console.log(`   ❌ Process instances: ${result.failedInstances?.length || 0} FAILED`);
+      if (result.failedInstances) {
+        result.failedInstances.forEach((failure: any) => {
+          console.log(`      - ${failure.type}: ${failure.error?.melding || 'No error message'}`);
+        });
+      }
+      throw new Error(`Process instances failed: ${result.message}`);
+    }
+
+    if (result.status === 'TIMEOUT') {
+      console.log(`   ⚠️  Process instances: TIMEOUT after ${timeoutSeconds}s`);
+      console.log(`      Not finished: ${result.notFinished}/${result.totalInstances}`);
+      console.log(`      Active threads: ${result.activeThreads}, Queue: ${result.queueSize}`);
+      throw new Error(`Process instances timed out: ${result.message}`);
+    }
+
+    // ERROR or other status
+    console.log(`   ❌ Process instances: ${result.status} - ${result.message}`);
+    throw new Error(`Process instance check failed: ${result.message}`);
+
+  } catch (error: any) {
+    if (error.message?.includes('ECONNREFUSED') || error.message?.includes('connect')) {
+      console.log(`   ⚠️  Could not connect to API - endpoint may not be available`);
+      return; // Don't fail if endpoint doesn't exist
+    }
+    throw error;
+  }
+}
+
+/**
  * Attempt to clear JPA/Hibernate caches in melosys-api
  *
- * This tries common Spring Boot Actuator endpoints to clear caches.
- * If your API doesn't have these endpoints, you'll need to add them.
- *
- * Example Spring Boot endpoint:
- * ```java
- * @RestController
- * @RequestMapping("/api/test")
- * public class TestController {
- *   @Autowired
- *   private EntityManagerFactory entityManagerFactory;
- *
- *   @PostMapping("/clear-caches")
- *   public void clearCaches() {
- *     entityManagerFactory.getCache().evictAll();
- *   }
- * }
- * ```
+ * Calls the POST /api/test/clear-caches endpoint which clears:
+ * - JPA first-level cache (EntityManager)
+ * - JPA second-level cache (Hibernate)
+ * - Spring caches
  */
 export async function clearApiCaches(request: APIRequestContext): Promise<boolean> {
-  const endpoints = [
-    'http://localhost:8080/api/test/clear-caches',
-    'http://localhost:8080/actuator/caches',
-    'http://localhost:8080/internal/caches/clear'
-  ];
+  try {
+    const response = await request.post('http://localhost:8080/api/test/clear-caches', {
+      failOnStatusCode: false,
+      timeout: 5000
+    });
 
-  for (const endpoint of endpoints) {
-    try {
-      const response = await request.post(endpoint, {
-        failOnStatusCode: false,
-        timeout: 5000
-      });
-
-      if (response.ok()) {
-        console.log(`   ✅ API caches cleared via ${endpoint}`);
-        return true;
-      }
-    } catch (error) {
-      // Endpoint doesn't exist, try next one
-      continue;
+    if (response.ok()) {
+      const result = await response.json();
+      console.log(`   ✅ API caches cleared: JPA + Hibernate + Spring`);
+      return true;
     }
-  }
 
-  console.log(`   ⚠️  No cache clearing endpoint found - API may have stale JPA caches`);
-  console.log(`   💡 Consider adding a /api/test/clear-caches endpoint to melosys-api`);
-  return false;
+    console.log(`   ⚠️  Cache clearing failed: HTTP ${response.status()}`);
+    return false;
+  } catch (error: any) {
+    if (error.message?.includes('ECONNREFUSED') || error.message?.includes('connect')) {
+      console.log(`   ⚠️  Could not connect to cache endpoint - may not be available`);
+    } else {
+      console.log(`   ⚠️  Cache clearing error: ${error.message || error}`);
+    }
+    return false;
+  }
 }
 
 /**
