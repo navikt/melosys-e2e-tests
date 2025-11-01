@@ -98,12 +98,22 @@ export class DatabaseHelper {
       for (const table of tables) {
         const tableName = table.TABLE_NAME;
 
-        // Skip lookup tables, PROSESS_STEG, and flyway migration history
+        // Skip lookup/reference tables that should never be cleaned
+        // These tables contain static reference data needed by the application
+        const lookupTables = [
+          'PROSESS_STEG',                  // Process step definitions
+          'BEHANDLINGSMAATE',              // Treatment methods (referenced by FK_BEHANDLINGSMAATE)
+          'PREFERANSE',                    // Preferences/settings
+          'SAKSOPPLYSNING_KILDESYSTEM',    // Source system definitions
+          'UTENLANDSK_MYNDIGHET',          // Foreign authority reference data
+          'UTENLANDSK_MYNDIGHET_PREF',     // Foreign authority preferences
+          'flyway_schema_history'          // Database migration history
+        ];
+
         if (tableName.endsWith('_TYPE') ||
             tableName.endsWith('_TEMA') ||
             tableName.endsWith('_STATUS') ||
-            tableName === 'PROSESS_STEG' ||
-            tableName === 'flyway_schema_history') {
+            lookupTables.includes(tableName)) {
           skippedTables.push(tableName);
           continue;
         }
@@ -113,7 +123,7 @@ export class DatabaseHelper {
 
       if (!silent) {
         console.log(`📋 Tables to clean: ${tablesToClean.length}`);
-        console.log(`⏭️  Tables to skip: ${skippedTables.length} (lookup tables, PROSESS_STEG, flyway)\n`);
+        console.log(`⏭️  Tables to skip: ${skippedTables.length} (lookup/reference tables)\n`);
       }
 
       // Disable foreign key constraints temporarily
