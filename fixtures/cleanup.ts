@@ -52,10 +52,5 @@ export const cleanupFixture = base.extend<{ autoCleanup: void }>({
 
     // Run the test
     await use();
-
-    // AFTER test: clean up created data
-    console.log('\n🧹 Cleaning up test data after test...');
-    await cleanupTestData(page);
-    console.log('');
   }, { auto: true }]
 });
