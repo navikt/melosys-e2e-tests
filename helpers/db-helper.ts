@@ -23,7 +23,7 @@ export class DatabaseHelper {
     try {
       this.connection = await oracledb.getConnection({
         user: process.env.DB_USER || 'MELOSYS',
-        password: process.env.DB_PASSWORD || 'melosys',
+        password: process.env.DB_PASSWORD || 'melosyspwd',
         connectString: process.env.DB_CONNECT_STRING || 'localhost:1521/freepdb1'
       });
       
@@ -36,8 +36,9 @@ export class DatabaseHelper {
 
   /**
    * Execute a query
+   * @param suppressErrors - If true, don't log errors to console (useful when probing for table existence)
    */
-  async query<T = any>(sql: string, binds: any = {}): Promise<T[]> {
+  async query<T = any>(sql: string, binds: any = {}, suppressErrors = false): Promise<T[]> {
     if (!this.connection) {
       throw new Error('Database not connected. Call connect() first.');
     }
@@ -46,10 +47,12 @@ export class DatabaseHelper {
       const result = await this.connection.execute(sql, binds, {
         outFormat: oracledb.OUT_FORMAT_OBJECT
       });
-      
+
       return (result.rows || []) as T[];
     } catch (error) {
-      console.error('❌ Query failed:', error);
+      if (!suppressErrors) {
+        console.error('❌ Query failed:', error);
+      }
       throw error;
     }
   }
@@ -60,6 +63,101 @@ export class DatabaseHelper {
   async queryOne<T = any>(sql: string, binds: any = {}): Promise<T | null> {
     const results = await this.query<T>(sql, binds);
     return results.length > 0 ? results[0] : null;
+  }
+
+  /**
+   * Clean all data tables except lookup tables and PROSESS_STEG
+   * Excludes: tables ending with _TYPE, _TEMA, _STATUS, and PROSESS_STEG
+   */
+  async cleanDatabase(): Promise<void> {
+    if (!this.connection) {
+      throw new Error('Database not connected. Call connect() first.');
+    }
+
+    console.log('\n🧹 Starting database cleanup...\n');
+
+    try {
+      // Get all tables
+      const tables = await this.query<{TABLE_NAME: string}>(`
+        SELECT table_name
+        FROM user_tables
+        ORDER BY table_name
+      `);
+
+      console.log(`Found ${tables.length} total tables\n`);
+
+      const tablesToClean: string[] = [];
+      const skippedTables: string[] = [];
+
+      // Filter tables to clean
+      for (const table of tables) {
+        const tableName = table.TABLE_NAME;
+
+        // Skip lookup tables, PROSESS_STEG, and flyway migration history
+        if (tableName.endsWith('_TYPE') ||
+            tableName.endsWith('_TEMA') ||
+            tableName.endsWith('_STATUS') ||
+            tableName === 'PROSESS_STEG' ||
+            tableName === 'flyway_schema_history') {
+          skippedTables.push(tableName);
+          continue;
+        }
+
+        tablesToClean.push(tableName);
+      }
+
+      console.log(`📋 Tables to clean: ${tablesToClean.length}`);
+      console.log(`⏭️  Tables to skip: ${skippedTables.length} (lookup tables, PROSESS_STEG, flyway)\n`);
+
+      // Disable foreign key constraints temporarily
+      await this.connection.execute('BEGIN\n' +
+        '  FOR c IN (SELECT constraint_name, table_name FROM user_constraints WHERE constraint_type = \'R\') LOOP\n' +
+        '    EXECUTE IMMEDIATE \'ALTER TABLE \' || c.table_name || \' DISABLE CONSTRAINT \' || c.constraint_name;\n' +
+        '  END LOOP;\n' +
+        'END;');
+
+      console.log('🔓 Disabled foreign key constraints\n');
+
+      let cleanedCount = 0;
+      let totalRowsDeleted = 0;
+
+      // Delete data from each table
+      for (const tableName of tablesToClean) {
+        try {
+          // Count rows before deletion
+          const countResult = await this.query(`SELECT COUNT(*) as cnt FROM ${tableName}`, {}, true);
+          const rowCount = countResult[0]?.CNT || 0;
+
+          if (rowCount > 0) {
+            await this.connection.execute(`DELETE FROM ${tableName}`);
+            await this.connection.commit();
+            console.log(`✅ Cleaned ${tableName.padEnd(40)} (${rowCount} rows deleted)`);
+            cleanedCount++;
+            totalRowsDeleted += rowCount;
+          }
+        } catch (error) {
+          console.log(`⚠️  Could not clean ${tableName}: ${error.message || error}`);
+        }
+      }
+
+      // Re-enable foreign key constraints
+      await this.connection.execute('BEGIN\n' +
+        '  FOR c IN (SELECT constraint_name, table_name FROM user_constraints WHERE constraint_type = \'R\') LOOP\n' +
+        '    EXECUTE IMMEDIATE \'ALTER TABLE \' || c.table_name || \' ENABLE CONSTRAINT \' || c.constraint_name;\n' +
+        '  END LOOP;\n' +
+        'END;');
+
+      console.log('\n🔒 Re-enabled foreign key constraints');
+
+      console.log('\n' + '─'.repeat(60));
+      console.log(`\n✨ Database cleanup complete!`);
+      console.log(`   Tables cleaned: ${cleanedCount}`);
+      console.log(`   Total rows deleted: ${totalRowsDeleted}\n`);
+
+    } catch (error) {
+      console.error('❌ Database cleanup failed:', error);
+      throw error;
+    }
   }
 
   /**
