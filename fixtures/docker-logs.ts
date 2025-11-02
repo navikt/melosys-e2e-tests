@@ -20,8 +20,8 @@ interface ErrorCategories {
 
 function getDockerLogsSince(containerName: string, since: Date): DockerLogError[] {
   try {
-    // Format: 2025-10-29T18:30:00
-    const sinceStr = since.toISOString().split('.')[0];
+    // Use full RFC3339 format with timezone (Docker requires this for accurate time filtering)
+    const sinceStr = since.toISOString();
     const command = `docker logs ${containerName} --since ${sinceStr} 2>&1`;
 
     const logs = execSync(command, {
