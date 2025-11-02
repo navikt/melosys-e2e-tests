@@ -1,4 +1,4 @@
-import {test, expect} from '@playwright/test';
+import { test, expect } from '../fixtures';
 import {AuthHelper} from '../helpers/auth-helper';
 import { FormHelper } from '../helpers/form-helper';
 import {withDatabase} from '../helpers/db-helper';

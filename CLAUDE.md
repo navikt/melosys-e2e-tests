@@ -82,9 +82,13 @@ make start-all
 - **tests/** - Test spec files using Playwright Test
 - **helpers/** - Reusable helper classes for common tasks
   - `auth-helper.ts` - Authentication and session management
-  - `db-helper.ts` - Oracle database verification utilities
+  - `db-helper.ts` - Oracle database verification, cleanup, and debugging utilities
+  - `mock-helper.ts` - Mock service data management
   - `form-helper.ts` - Form filling with API wait handling
   - `auth-state-helper.ts` - Authentication state persistence
+- **fixtures/** - Playwright test fixtures for automatic cleanup and logging
+  - `cleanup-fixture.ts` - Auto-cleanup database and mock data after each test
+  - `docker-log-fixture.ts` - Check Docker logs for errors after tests
 
 ### Helper Classes
 
@@ -104,9 +108,10 @@ await formHelper.fillAndWaitForApi(
 await formHelper.fillAndWait(locator, '100000', 1000);
 ```
 
-**DatabaseHelper** - Verify database state after workflows complete.
+**DatabaseHelper** - Verify database state, clean data, and debug tests.
 
 ```typescript
+// Query database
 await withDatabase(async (db) => {
   const result = await db.queryOne(
     'SELECT * FROM BEHANDLING WHERE id = :id',
@@ -114,6 +119,25 @@ await withDatabase(async (db) => {
   );
   expect(result).not.toBeNull();
 });
+
+// Show all database tables (useful for debugging)
+await withDatabase(async (db) => {
+  await db.showAllData(); // Displays all tables with row counts and sample columns
+});
+
+// Clean database manually
+await withDatabase(async (db) => {
+  await db.cleanDatabase(); // Removes all data except lookup tables
+});
+```
+
+**MockHelper** - Manage test data in melosys-mock service.
+
+```typescript
+import { clearMockData } from '../helpers/mock-helper';
+
+// Clear mock service data (journalposter and oppgaver)
+await clearMockData(page.request);
 ```
 
 ### Docker Services Architecture

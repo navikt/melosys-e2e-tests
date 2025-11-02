@@ -1,4 +1,4 @@
-import {test, expect} from '@playwright/test';
+import { test, expect } from '../fixtures';
 import {AuthHelper} from '../helpers/auth-helper';
 import { FormHelper } from '../helpers/form-helper';
 import {withDatabase} from '../helpers/db-helper';
@@ -11,6 +11,7 @@ import {withDatabase} from '../helpers/db-helper';
  * 2. User workflow recording
  * 3. Database verification
  * 4. Trace and video recording for debugging
+ * 5. Docker log checking after each test
  *
  * To record a new workflow:
  *   npm run codegen
