@@ -159,7 +159,7 @@ jobs:
           echo "✅ Ready to run tests!"
 
       - name: Run Playwright tests
-        run: npx playwright test "utenfor-avtaleland.spec.ts" --project=chromium
+        run: npx playwright test --project=chromium
         env:
           CI: true
 
