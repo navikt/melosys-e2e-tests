@@ -42,6 +42,11 @@ export class TrygdeavgiftPage extends BasePage {
     name: 'Bekreft og fortsett'
   });
 
+  // Locator for "Betales aga?" radio group (appears for some income sources)
+  private readonly betalesAgaGroup = this.page.getByRole('group', {
+    name: 'Betales aga.?'
+  });
+
   constructor(page: Page) {
     super(page);
     this.assertions = new TrygdeavgiftAssertions(page);
@@ -87,6 +92,24 @@ export class TrygdeavgiftPage extends BasePage {
     // Wait for dropdown to appear after selecting Skattepliktig
     await this.inntektskildeDropdown.waitFor({ state: 'visible', timeout: 5000 });
     await this.inntektskildeDropdown.selectOption(inntektskilde);
+  }
+
+  /**
+   * Select "Betales aga?" (AGA payment) option
+   * This field appears for certain income sources like INNTEKT_FRA_UTLANDET
+   *
+   * @param betalesAga - true for "Ja", false for "Nei"
+   */
+  async velgBetalesAga(betalesAga: boolean): Promise<void> {
+    // Wait for the group to appear (it may not be visible for all income sources)
+    await this.betalesAgaGroup.waitFor({ state: 'visible', timeout: 5000 });
+
+    if (betalesAga) {
+      await this.betalesAgaGroup.getByLabel('Ja').check();
+    } else {
+      await this.betalesAgaGroup.getByLabel('Nei').check();
+    }
+    console.log(`✅ Selected Betales aga = ${betalesAga ? 'Ja' : 'Nei'}`);
   }
 
   /**
