@@ -21,24 +21,22 @@ The application tries to access entities that no longer exist in the database.
 
 ### 2. Add Cache Clearing Endpoint (Recommended)
 
-Add this endpoint to `melosys-api`:
+**Already implemented** in `melosys-api`:
 
 ```java
-package no.nav.melosys.api.test;
+package no.nav.melosys.api.internal.e2e;
 
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.context.annotation.Profile;
-import org.springframework.web.bind.annotation.PostMapping;
-import org.springframework.web.bind.annotation.RequestMapping;
-import org.springframework.web.bind.annotation.RestController;
+import org.springframework.web.bind.annotation.*;
 
 import javax.persistence.EntityManagerFactory;
 import javax.persistence.Cache;
 
 @RestController
-@RequestMapping("/api/test")
+@RequestMapping("/internal/e2e")
 @Profile({"local", "dev"}) // Only in test environments!
-public class TestCacheController {
+public class E2EController {
 
     @Autowired
     private EntityManagerFactory entityManagerFactory;
@@ -47,7 +45,7 @@ public class TestCacheController {
      * Clear all JPA/Hibernate caches
      * Called by E2E tests after database cleanup
      */
-    @PostMapping("/clear-caches")
+    @PostMapping("/caches/clear")
     public void clearCaches() {
         // Clear second-level cache
         Cache cache = entityManagerFactory.getCache();
@@ -59,6 +57,15 @@ public class TestCacheController {
         entityManagerFactory.unwrap(org.hibernate.SessionFactory.class)
             .getCache()
             .evictAllRegions();
+    }
+
+    /**
+     * Wait for all async process instances to complete
+     * Called by E2E tests before database cleanup
+     */
+    @GetMapping("/process-instances/await")
+    public ProcessInstanceStatus waitForProcessInstances() {
+        // Implementation details...
     }
 }
 ```
@@ -112,22 +119,25 @@ async function cleanupTestData(page: any): Promise<void> {
 }
 ```
 
-It tries these endpoints in order:
-1. `http://localhost:8080/api/test/clear-caches` ← Add this one!
-2. `http://localhost:8080/actuator/caches`
-3. `http://localhost:8080/internal/caches/clear`
+It uses these endpoints:
+1. `POST http://localhost:8080/internal/e2e/caches/clear` - Clear all caches
+2. `GET http://localhost:8080/internal/e2e/process-instances/await` - Wait for async processes
 
-If none exist, it logs a warning but continues.
+If endpoints don't exist, it logs a warning but continues.
 
-## Recommended Implementation
+## Implementation
 
-1. **Add the TestCacheController** to melosys-api (see code above)
-2. **Limit to test profiles** - Only enable in `local` and `dev` environments
-3. **Test it manually**:
+1. **E2E endpoints added** to melosys-api (see code above)
+2. **Limited to test profiles** - Only enabled in `local` and `dev` environments
+3. **Test manually**:
    ```bash
-   curl -X POST http://localhost:8080/api/test/clear-caches
+   # Clear all caches
+   curl -X POST http://localhost:8080/internal/e2e/caches/clear
+
+   # Wait for process instances (30s default timeout)
+   curl http://localhost:8080/internal/e2e/process-instances/await
    ```
-4. **Run E2E tests** - They'll automatically use this endpoint
+4. **E2E tests** automatically use these endpoints
 
 ## Benefits
 
@@ -144,7 +154,6 @@ Another approach is to ensure each test gets a fresh EntityManager session, but 
 
 - ✅ TRUNCATE implementation (faster than DELETE)
 - ✅ Cache clearing helper implemented
-- ⚠️ Cache clearing endpoint not yet added to melosys-api
-- ✅ Fixture tries to call endpoint (gracefully fails if not available)
-
-**Next step**: Add the `TestCacheController` to melosys-api for the best E2E test experience!
+- ✅ E2E endpoints added to melosys-api (`/internal/e2e/caches/clear`)
+- ✅ Process instance waiting endpoint (`/internal/e2e/process-instances/await`)
+- ✅ Fixtures automatically use these endpoints

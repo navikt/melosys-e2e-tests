@@ -27,7 +27,7 @@ import { APIRequestContext } from '@playwright/test';
  */
 export async function waitForProcessInstances(request: APIRequestContext, timeoutSeconds: number = 30): Promise<void> {
   try {
-    const response = await request.get(`http://localhost:8080/api/test/wait-for-prosessinstanser?timeoutSeconds=${timeoutSeconds}`, {
+    const response = await request.get('http://localhost:8080/internal/e2e/process-instances/await', {
       failOnStatusCode: false,
       timeout: (timeoutSeconds + 5) * 1000 // Add 5s buffer
     });
@@ -74,20 +74,19 @@ export async function waitForProcessInstances(request: APIRequestContext, timeou
 /**
  * Attempt to clear JPA/Hibernate caches in melosys-api
  *
- * Calls the POST /api/test/clear-caches endpoint which clears:
+ * Calls the POST /internal/e2e/caches/clear endpoint which clears:
  * - JPA first-level cache (EntityManager)
  * - JPA second-level cache (Hibernate)
  * - Spring caches
  */
 export async function clearApiCaches(request: APIRequestContext): Promise<boolean> {
   try {
-    const response = await request.post('http://localhost:8080/api/test/clear-caches', {
+    const response = await request.post('http://localhost:8080/internal/e2e/caches/clear', {
       failOnStatusCode: false,
       timeout: 5000
     });
 
     if (response.ok()) {
-      const result = await response.json();
       console.log(`   ✅ API caches cleared: JPA + Hibernate + Spring`);
       return true;
     }
