@@ -285,12 +285,6 @@ await formHelper.fillAndWaitForButton(
    - Fixed variable naming conflict (line 139)
    - Added extensive logging for debugging
 
-2. **helpers/form-helper.ts**
-   - Fixed race condition in `fillAndWaitForApi()` (line 39-50)
-   - Added new `fillAndWaitForButton()` method (line 93-136)
-   - Deprecated `fillAndWaitForNetworkIdle()` with warning
-   - Increased default timeout to 30s for CI
-
 3. **Documentation Created**
    - `STABLE-SOLUTION-GUIDE.md` - Complete guide with official patterns
    - `FINAL-DEBUGGING-REPORT.md` - This report

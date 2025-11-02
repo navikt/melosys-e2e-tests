@@ -1,5 +1,4 @@
-import { Page, Locator, expect } from '@playwright/test';
-import { FormHelper } from '../../helpers/form-helper';
+import { Page, Locator } from '@playwright/test';
 import { TIMEOUT_MEDIUM } from './constants';
 
 /**
@@ -13,10 +12,8 @@ import { TIMEOUT_MEDIUM } from './constants';
  * - Includes common navigation and wait utilities
  */
 export abstract class BasePage {
-  protected readonly formHelper: FormHelper;
 
-  constructor(readonly page: Page) {
-    this.formHelper = new FormHelper(page);
+  protected constructor(readonly page: Page) {
   }
 
   /**
@@ -120,30 +117,6 @@ export abstract class BasePage {
         `Dropdown hasn't loaded values after ${maxRetries * retryDelay}ms`
       );
     }
-  }
-
-  /**
-   * Fill field and wait for API response (using FormHelper)
-   * Use this for fields that trigger API calls on blur
-   */
-  async fillFieldWithApiWait(
-    locator: Locator,
-    value: string,
-    apiPattern: string
-  ): Promise<void> {
-    await this.formHelper.fillAndWaitForApi(locator, value, apiPattern);
-  }
-
-  /**
-   * Fill field and wait fixed time (using FormHelper)
-   * Use this when you know how long the API call takes
-   */
-  async fillFieldWithDelay(
-    locator: Locator,
-    value: string,
-    delay = 1000
-  ): Promise<void> {
-    await this.formHelper.fillAndWait(locator, value, delay);
   }
 
   /**

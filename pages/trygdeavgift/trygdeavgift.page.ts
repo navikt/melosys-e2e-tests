@@ -157,21 +157,6 @@ export class TrygdeavgiftPage extends BasePage {
   }
 
   /**
-   * Fill Bruttoinntekt using FormHelper (ALTERNATIVE APPROACH)
-   * Uses FormHelper's fillAndWaitForApi method
-   *
-   * @param beløp - Amount as string (e.g., '100000')
-   */
-  async fyllInnBruttoinntektMedFormHelper(beløp: string): Promise<void> {
-    await this.bruttoinntektField.waitFor({ state: 'visible', timeout: 5000 });
-    await this.fillFieldWithApiWait(
-      this.bruttoinntektField,
-      beløp,
-      '/trygdeavgift/beregning'
-    );
-  }
-
-  /**
    * Click "Bekreft og fortsett" button
    */
   async klikkBekreftOgFortsett(): Promise<void> {

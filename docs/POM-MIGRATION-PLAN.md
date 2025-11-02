@@ -59,14 +59,11 @@ melosys-e2e-tests/
 ├── tests/                           # Flat structure
 │   ├── clean-db.spec.ts
 │   ├── example-workflow.spec.ts     # 183 lines, inline selectors
-│   ├── form-helper-example.spec.ts
-│   ├── utenfor-avtaleland.spec.ts   # Duplicates example-workflow
-│   └── workflow-rune-tester.spec.ts
+│   └── utenfor-avtaleland.spec.ts   # Duplicates example-workflow<
 ├── helpers/
 │   ├── auth-helper.ts               # ✅ Good
 │   ├── auth-state-helper.ts
 │   ├── db-helper.ts                 # ✅ Good
-│   ├── form-helper.ts               # ✅ Good
 │   ├── mock-helper.ts               # ✅ Good
 │   ├── api-helper.ts
 │   └── check-docker-logs.ts
@@ -140,7 +137,6 @@ melosys-e2e-tests/
 ├── helpers/                         # ENHANCED
 │   ├── auth-helper.ts              # Keep as-is
 │   ├── db-helper.ts                # Keep as-is
-│   ├── form-helper.ts              # Keep as-is
 │   ├── mock-helper.ts              # Keep as-is
 │   └── testdata-utils.ts           # NEW - Workflow builders
 │

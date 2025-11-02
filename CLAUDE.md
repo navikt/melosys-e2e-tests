@@ -97,17 +97,7 @@ make start-all
 ```typescript
 const formHelper = new FormHelper(page);
 
-// Fill field and wait for API response
-await formHelper.fillAndWaitForApi(
-  page.getByRole('textbox', { name: 'Bruttoinntekt' }),
-  '100000',
-  '/trygdeavgift/beregning'
-);
-
-// Fill field and wait fixed time (most reliable for API-triggered fields)
-await formHelper.fillAndWait(locator, '100000', 1000);
-```
-
+// Fill field and wait for API respons
 **DatabaseHelper** - Verify database state, clean data, and debug tests.
 
 ```typescript
