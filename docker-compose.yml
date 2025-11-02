@@ -201,7 +201,7 @@ services:
       - "8095:8095"
 
   melosys-api:
-    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:manual
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:${MELOSYS_API_TAG}
     platform: linux/amd64
     container_name: melosys-api
     networks:
