@@ -179,6 +179,223 @@ Key settings in `playwright.config.ts`:
 - **Workers**: 1 on CI, unlimited locally
 - **Browser**: Chromium only (Firefox/WebKit commented out)
 
+## Page Object Model (POM) Pattern
+
+**📖 See [docs/POM-MIGRATION-PLAN.md](docs/POM-MIGRATION-PLAN.md) for complete migration guide and strategy.**
+
+This project is migrating to use the Page Object Model pattern for better maintainability and reusability. POMs are being added incrementally - both old and new test styles can coexist.
+
+### Why POM?
+
+**Benefits:**
+- 80% less code duplication
+- UI changes = update 1 file instead of 10 tests
+- Tests read like documentation
+- Easier to write new tests (compose POMs)
+- Better error messages
+
+**Our Unique Approach:**
+- Combines melosys-web's POM structure with our strengths
+- ✅ Keep: Fixtures (auto-cleanup, docker logs)
+- ✅ Keep: Database helpers (`withDatabase`, `cleanDatabase`)
+- ✅ Keep: FormHelper with API wait handling
+- ✅ Add: Page Objects for encapsulation
+- ✅ Add: Actions/Assertions separation
+
+### Directory Structure
+
+```
+melosys-e2e-tests/
+├── pages/                           # Page Object Models
+│   ├── shared/
+│   │   ├── base.page.ts            # Base class with common functionality
+│   │   └── constants.ts            # Shared test data
+│   ├── hovedside.page.ts           # Main page
+│   └── opprett-ny-sak/
+│       ├── opprett-ny-sak.page.ts  # Actions (what you CAN DO)
+│       └── opprett-ny-sak.assertions.ts  # Verifications (what you EXPECT)
+├── specs/                           # Test specifications (NEW)
+│   ├── 2-opprett-sak/
+│   └── 3-behandle-sak/
+├── tests/                           # Original tests (OLD - still work!)
+├── helpers/                         # Unchanged - still use these!
+├── fixtures/                        # Unchanged - still auto-cleanup!
+└── utils/
+    └── assertions.ts               # Error assertion framework
+```
+
+### POM Architecture
+
+#### 1. BasePage - Common Functionality
+
+All page objects extend `BasePage`:
+
+```typescript
+import { BasePage } from '../shared/base.page';
+
+export class MyPage extends BasePage {
+  // Automatic access to:
+  // - this.page (Playwright Page)
+  // - this.formHelper (FormHelper for API waits)
+  // - Navigation, wait, polling utilities
+}
+```
+
+#### 2. Actions vs Assertions Separation
+
+```typescript
+// opprett-ny-sak.page.ts - ACTIONS
+export class OpprettNySakPage extends BasePage {
+  readonly assertions: OpprettNySakAssertions;
+
+  async fyllInnBrukerID(fnr: string) { /* action */ }
+  async velgSakstype(type: string) { /* action */ }
+  async klikkOpprettNyBehandling() { /* action */ }
+}
+
+// opprett-ny-sak.assertions.ts - ASSERTIONS
+export class OpprettNySakAssertions {
+  async verifiserBehandlingOpprettet() { /* verify */ }
+  async verifiserSakIDatabase(fnr: string) { /* verify */ }
+}
+```
+
+#### 3. Integration with Existing Helpers
+
+POMs work seamlessly with our existing helpers:
+
+```typescript
+// FormHelper - Available in all POMs via BasePage
+class TrygdeavgiftPage extends BasePage {
+  async fyllInnBruttoinntekt(beløp: string): Promise<void> {
+    await this.formHelper.fillAndWaitForApi(
+      this.bruttoinntektField,
+      beløp,
+      '/trygdeavgift/beregning'
+    );
+  }
+}
+
+// Database Helper - Use in assertions
+class OpprettNySakAssertions {
+  async verifiserSakIDatabase(fnr: string): Promise<string> {
+    return await withDatabase(async (db) => {
+      const sak = await db.queryOne(
+        'SELECT * FROM SAK WHERE personnummer = :pnr',
+        { pnr: fnr }
+      );
+      expect(sak).not.toBeNull();
+      return sak.SAK_ID;
+    });
+  }
+}
+
+// Fixtures - Still work automatically!
+test('scenario', async ({ page }) => {
+  const opprettSak = new OpprettNySakPage(page);
+  // ... test runs
+}); // <- cleanup-fixture automatically cleans database
+```
+
+### Using POMs in Tests
+
+#### POM Style (New - Recommended)
+
+```typescript
+import { test } from '../../fixtures';
+import { AuthHelper } from '../../helpers/auth-helper';
+import { HovedsidePage } from '../../pages/hovedside.page';
+import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
+
+test('should create case', async ({ page }) => {
+  // Setup
+  const auth = new AuthHelper(page);
+  await auth.login();
+
+  // Page Objects
+  const hovedside = new HovedsidePage(page);
+  const opprettSak = new OpprettNySakPage(page);
+
+  // Actions - Read like documentation!
+  await hovedside.goto();
+  await hovedside.klikkOpprettNySak();
+  await opprettSak.fyllInnBrukerID('30056928150');
+  await opprettSak.velgSakstype('FTRL');
+  await opprettSak.klikkOpprettNyBehandling();
+
+  // Assertions - Separate from actions
+  await opprettSak.assertions.verifiserBehandlingOpprettet();
+  await opprettSak.assertions.verifiserSakIDatabase('30056928150');
+});
+```
+
+#### Old Style (Still Works)
+
+```typescript
+// Original inline selector tests still work!
+test('should create case', async ({ page }) => {
+  await page.goto('http://localhost:3000/melosys/');
+  await page.getByRole('button', { name: 'Opprett' }).click();
+  // ... inline selectors
+});
+```
+
+Both styles can coexist during migration.
+
+### Error Assertion Framework
+
+POMs include a comprehensive error assertion framework:
+
+```typescript
+import { assertErrors } from '../../utils/assertions';
+
+// Verify NO errors (pass empty array)
+await assertErrors(page, []);
+
+// Verify specific error
+await assertErrors(page, ["Feltet er påkrevd"]);
+
+// Verify multiple errors with regex
+await assertErrors(page, [/påkrevd/i, "Ugyldig format"]);
+```
+
+### Creating New POMs
+
+**Quick Guide:**
+
+1. **Create page file:** `pages/my-feature/my-feature.page.ts`
+   - Extend `BasePage`
+   - Define private locators
+   - Create public action methods (Norwegian names matching UI)
+
+2. **Create assertions file:** `pages/my-feature/my-feature.assertions.ts`
+   - Verification methods only
+   - Use `verifiser...()` naming
+   - Can use database helpers
+
+3. **Use in test:**
+   ```typescript
+   const myFeature = new MyFeaturePage(page);
+   await myFeature.someAction();
+   await myFeature.assertions.verifySomething();
+   ```
+
+**See:** `docs/POM-MIGRATION-PLAN.md` for detailed style guide and examples.
+
+### Available POMs
+
+**Currently Implemented:**
+- ✅ `HovedsidePage` - Main page navigation
+- ✅ `OpprettNySakPage` - Create new case
+
+**Coming Soon:**
+- 🔄 `BehandlingPage` - Case treatment (Medlemskap, Arbeidsforhold, Lovvalg)
+- 🔄 `TrygdeavgiftPage` - Tax calculation
+- 🔄 `VedtakPage` - Decision making
+
+**Example Test:**
+See `specs/2-opprett-sak/opprett-sak-pom-example.spec.ts` for complete example.
+
 ## Common Patterns
 
 ### Test Template
