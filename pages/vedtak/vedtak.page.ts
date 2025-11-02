@@ -122,6 +122,9 @@ export class VedtakPage extends BasePage {
   /**
    * Click "Fatt vedtak" button to submit the decision
    * This completes the workflow
+   *
+   * If the button is disabled, checks for error/warning messages
+   * and throws an error with the actual validation message.
    */
   async klikkFattVedtak(): Promise<void> {
     // Wait for button to be visible
@@ -130,23 +133,87 @@ export class VedtakPage extends BasePage {
     // Check if button is disabled
     const isDisabled = await this.fattVedtakButton.isDisabled();
     if (isDisabled) {
-      console.log('⚠️ Button is disabled, checking form state...');
+      console.log('⚠️ Button is disabled, checking for error messages...');
 
-      // Debug: Print all editor contents
-      const editors = await this.page.locator('.ql-editor').all();
-      for (let i = 0; i < editors.length; i++) {
-        const content = await editors[i].textContent();
-        console.log(`   Editor ${i + 1}: "${content}"`);
+      // Scroll to top to make error messages visible
+      await this.page.evaluate(() => window.scrollTo(0, 0));
+      await this.page.waitForTimeout(500);
+
+      // Try multiple selectors for error messages
+      const errorSelectors = [
+        '.varselstripe',           // From melosys-web Feilmeldinger component
+        '.feilmelding',            // Container class
+        '[role="alert"]',          // Standard alert role
+        '.navds-alert--error',     // Nav design system
+        '.navds-alert--warning'    // Nav design system warnings
+      ];
+
+      const errorMessages: string[] = [];
+
+      // Try each selector
+      for (const selector of errorSelectors) {
+        const elements = this.page.locator(selector);
+        const count = await elements.count();
+
+        if (count > 0) {
+          console.log(`   Found ${count} error(s) with selector: ${selector}`);
+          for (let i = 0; i < count; i++) {
+            const text = await elements.nth(i).textContent();
+            if (text && text.trim().length > 0) {
+              let cleanText = text.trim();
+
+              // Remove common prefixes like "Feil", "Advarsel", "Error", "Warning"
+              cleanText = cleanText
+                .replace(/^Feil\s*/i, '')
+                .replace(/^Advarsel\s*/i, '')
+                .replace(/^Error\s*/i, '')
+                .replace(/^Warning\s*/i, '')
+                .trim();
+
+              if (cleanText.length > 0 && !errorMessages.includes(cleanText)) {
+                errorMessages.push(cleanText);
+              }
+            }
+          }
+        }
       }
 
-      // Force click the button anyway (bypass client validation)
-      await this.fattVedtakButton.click({ force: true });
-      console.log('⚠️ Forced click on disabled button');
-    } else {
-      // Normal click
-      await this.fattVedtakButton.click();
-      console.log('✅ Workflow completed - Vedtak submitted');
+      if (errorMessages.length > 0) {
+        // Debug: Print all editor contents
+        const editors = await this.page.locator('.ql-editor').all();
+        console.log('📝 Editor contents:');
+        for (let i = 0; i < editors.length; i++) {
+          const content = await editors[i].textContent();
+          console.log(`   Editor ${i + 1}: "${content}"`);
+        }
+
+        // Throw error with actual validation messages
+        throw new Error(
+          `❌ Cannot submit vedtak - validation errors found:\n` +
+          errorMessages.map((msg, idx) => `   ${idx + 1}. ${msg}`).join('\n')
+        );
+      }
+
+      // If no error messages found, debug what's on the page
+      console.log('🔍 Debugging: No error messages found. Checking page content...');
+
+      // Take a screenshot at the top of the page
+      await this.page.screenshot({
+        path: 'debug-vedtak-error.png',
+        fullPage: false
+      });
+      console.log('   Screenshot saved to: debug-vedtak-error.png');
+
+      // If no error messages but button is disabled, throw generic error
+      throw new Error(
+        '❌ Cannot submit vedtak - button is disabled but no error messages found. ' +
+        'Screenshot saved to debug-vedtak-error.png for investigation.'
+      );
     }
+
+    // Normal click
+    await this.fattVedtakButton.click();
+    console.log('✅ Workflow completed - Vedtak submitted');
   }
 
   /**
