@@ -6,7 +6,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 This is an E2E testing project for Melosys using Playwright and TypeScript. The project records user workflows from "melosys flyt" to "vedtak" for automated regression testing and local debugging.
 
-**📖 See [IMPROVEMENTS.md](reports/better-visibility-and-debugging.md) for recent enhancements to CI reporting and docker log checking.**
+**📖 See [GitHub Actions Guide](docs/ci-cd/GITHUB-ACTIONS.md) for CI/CD setup and [Fixtures Guide](docs/guides/FIXTURES.md) for automatic cleanup and docker log checking.**
 
 ## Essential Commands
 
@@ -171,7 +171,7 @@ Key settings in `playwright.config.ts`:
 
 ## Page Object Model (POM) Pattern
 
-**📖 See [docs/POM-MIGRATION-PLAN.md](docs/POM-MIGRATION-PLAN.md) for complete migration guide and strategy.**
+**📖 See [docs/pom/MIGRATION-PLAN.md](docs/pom/MIGRATION-PLAN.md) for complete migration guide and strategy.**
 
 This project is migrating to use the Page Object Model pattern for better maintainability and reusability. POMs are being added incrementally - both old and new test styles can coexist.
 
@@ -370,7 +370,7 @@ await assertErrors(page, [/påkrevd/i, "Ugyldig format"]);
    await myFeature.assertions.verifySomething();
    ```
 
-**See:** `docs/POM-MIGRATION-PLAN.md` for detailed style guide and examples.
+**See:** `docs/pom/MIGRATION-PLAN.md` for detailed style guide and examples.
 
 ### Available POMs
 
@@ -522,3 +522,16 @@ Key steps:
 - **Traces are always captured** - Even for successful tests, useful for understanding workflows
 - **Tests run sequentially** - `fullyParallel: false` to avoid race conditions
 - **Network must be idle on Trygdeavgift page** - Wait for calculations to complete before proceeding
+
+## Resources
+
+- **Quick Start**: `QUICK-START.md` - Get started in 5 minutes
+- **Troubleshooting**: `docs/guides/TROUBLESHOOTING.md` - Common issues and solutions
+- **Helpers**: `docs/guides/HELPERS.md` - FormHelper, DatabaseHelper, AuthHelper
+- **Fixtures**: `docs/guides/FIXTURES.md` - Auto-cleanup and Docker log checking
+- **POM Guide**: `docs/pom/QUICK-START.md` - Page Object Model quick reference
+- **POM Migration**: `docs/pom/MIGRATION-PLAN.md` - Complete POM strategy
+- **GitHub Actions**: `docs/ci-cd/GITHUB-ACTIONS.md` - CI/CD setup and usage
+- [Playwright Documentation](https://playwright.dev) - Official Playwright docs
+- [Playwright Best Practices](https://playwright.dev/docs/best-practices)
+- [Trace Viewer Guide](https://playwright.dev/docs/trace-viewer)
