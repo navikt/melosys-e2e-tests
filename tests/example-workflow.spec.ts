@@ -1,7 +1,5 @@
 import { test, expect } from '../fixtures';
 import {AuthHelper} from '../helpers/auth-helper';
-import { FormHelper } from '../helpers/form-helper';
-import {withDatabase} from '../helpers/db-helper';
 
 /**
  * Example E2E test for Melosys workflow
@@ -26,9 +24,6 @@ test.describe('Melosys Workflow Example', () => {
         const auth = new AuthHelper(page);
         await auth.login();
         
-        // Setup: Form helper for dynamic forms
-        const formHelper = new FormHelper(page);
-
         // Wait for the home page to load
         await expect(page).toHaveURL(/.*melosys/);
 
@@ -168,16 +163,5 @@ test.describe('Melosys Workflow Example', () => {
         await page.locator('.ql-editor.ql-blank').fill('trygdeavgift');
         await page.getByRole('button', {name: 'Fatt vedtak'}).click();
         console.log('✅ Workflow completed');
-
-        // Verify: Check database state
-        // await withDatabase(async (db) => {
-        //   const behandling = await db.queryOne(
-        //     'SELECT * FROM BEHANDLING WHERE personnummer = :pnr',
-        //     { pnr: '12345678901' }
-        //   );
-        //
-        //   expect(behandling).not.toBeNull();
-        //   expect(behandling.STATUS).toBe('OPPRETTET');
-        // });
     });
 });

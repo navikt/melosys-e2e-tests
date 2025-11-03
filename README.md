@@ -238,12 +238,9 @@ graph LR
     Root --> Docker["🐳 docker-compose.yml"]
 
     Tests --> T1["example-workflow.spec.ts"]
-    Tests --> T2["form-helper-example.spec.ts"]
     Tests --> T3["workflow-parts.spec.ts"]
-    Tests --> T4["workflow-rune-tester.spec.ts"]
 
     Helpers --> H1["auth-helper.ts"]
-    Helpers --> H2["form-helper.ts"]
     Helpers --> H3["db-helper.ts"]
     Helpers --> H4["auth-state-helper.ts"]
 

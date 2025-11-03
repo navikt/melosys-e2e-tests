@@ -203,7 +203,6 @@ TOTAL=$(find test-results -mindepth 1 -maxdepth 1 -type d | grep -v "retry" | wc
 - `.github/workflows/e2e-tests.yml` - Added summary generation
 - `playwright.config.ts` - Added GitHub reporter, global setup
 - `tests/example-workflow.spec.ts` - Updated import
-- `tests/form-helper-example.spec.ts` - Updated import
 - `tests/Utenfor avtaleland.spec.ts` - Updated import
 
 ### Removed

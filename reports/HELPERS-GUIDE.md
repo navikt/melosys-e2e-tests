@@ -193,27 +193,7 @@ await formHelper.fillMultipleFieldsWithApi([
 
 ### Pattern 2: Optional Elements
 
-```typescript
-// Check radio only if needed
-await formHelper.checkRadioIfNeeded(
-  page.getByRole('radio', { name: 'Option' })
-);
-
-// Click button only if it exists
-await formHelper.clickIfExists(
-  page.getByRole('button', { name: 'Lukk dialog' })
-);
-```
-
 ### Pattern 3: Wait for Network
-
-```typescript
-// When you're not sure which API is called
-await formHelper.fillAndWaitForNetworkIdle(
-  page.getByRole('textbox', { name: 'Bruttoinntekt' }),
-  '100000'
-);
-```
 
 ## Tips
 
