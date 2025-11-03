@@ -210,7 +210,6 @@ Total: 3 passed (11.0s)
 | pages/trygdeavgift/trygdeavgift.assertions.ts | 65 | Tax verifications |
 | pages/vedtak/vedtak.page.ts | 120 | Decision text editors |
 | pages/vedtak/vedtak.assertions.ts | 55 | Decision verifications |
-| tests/example-workflow-pom.spec.ts | 168 | Complete workflow refactored |
 
 **Total Phase 2:** ~1,063 lines of production-ready code
 

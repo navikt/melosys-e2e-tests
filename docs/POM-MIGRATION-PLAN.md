@@ -59,7 +59,6 @@ melosys-e2e-tests/
 ├── tests/                           # Flat structure
 │   ├── clean-db.spec.ts
 │   ├── example-workflow.spec.ts     # 183 lines, inline selectors
-│   └── utenfor-avtaleland.spec.ts   # Duplicates example-workflow<
 ├── helpers/
 │   ├── auth-helper.ts               # ✅ Good
 │   ├── auth-state-helper.ts
@@ -127,7 +126,6 @@ melosys-e2e-tests/
 │   │   └── setup-testdata.spec.ts  # Setup shared test data
 │   ├── 2-opprett-sak/
 │   │   ├── avtaleland.spec.ts
-│   │   └── utenfor-avtaleland.spec.ts
 │   ├── 3-behandle-sak/
 │   │   ├── yrkesaktiv.spec.ts
 │   │   └── selvstendig.spec.ts
