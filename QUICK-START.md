@@ -1,156 +1,114 @@
-# 🚀 Quick Start Guide
+# Quick Start
+
+Get started with Melosys E2E tests in 5 minutes.
+
+---
 
 ## Setup (One Time)
 
 ```bash
-cd melosys-e2e-tests
-
-# Install dependencies
+# 1. Install dependencies
 npm install
-
-# Install Playwright browsers
 npx playwright install
+
+# 2. Create .env file
+cp .env.example .env
+# Edit .env if needed (defaults work for Mac ARM)
 ```
 
-## Recording Your First Workflow
+---
 
-### 1. Start Docker Services
+## Running Tests
+
+### Start Services First
 
 ```bash
+# In melosys-docker-compose directory
 cd ../melosys-docker-compose
 make start-all
 
-# Verify services are running
+# Wait ~2 minutes for services to start
+# Verify services are running:
 curl http://localhost:3000/melosys/
 ```
 
-### 2. Record Workflow
+### Run Tests
 
 ```bash
+# Back to e2e-tests directory
 cd ../melosys-e2e-tests
-
-# Start recording
-npm run codegen
-```
-
-A browser will open. Perform your workflow:
-1. Login
-2. Navigate through your flow (e.g., oppgave → behandling → vedtak)
-3. Playwright records every action
-4. Copy the generated code
-
-### 3. Create Test File
-
-Create `tests/my-workflow.spec.ts`:
-
-```typescript
-import { test, expect } from '@playwright/test';
-import { AuthHelper } from '../helpers/auth-helper';
-
-test('my workflow', async ({ page }) => {
-  const auth = new AuthHelper(page);
-  await auth.login();
-  
-  // PASTE RECORDED STEPS HERE
-  
-  // Add assertions
-  await expect(page.locator('text=Success')).toBeVisible();
-});
-```
-
-### 4. Run Test
-
-```bash
-# Run test
-npm test tests/my-workflow.spec.ts
-
-# Or run in UI mode (recommended for development)
-npm run test:ui
-```
-
-## Common Commands
-
-```bash
-# Record workflow
-npm run codegen
 
 # Run all tests
 npm test
 
-# Run specific test
-npm test tests/my-workflow.spec.ts
-
-# Interactive UI mode (best for development)
+# Run in UI mode (best for development)
 npm run test:ui
 
-# Debug mode (step through)
-npm run test:debug
-
-# View test report
-npm run show-report
-
-# View trace after test failure
-npm run show-trace test-results/.../trace.zip
+# Run specific test
+npm test tests/example-workflow.spec.ts
 ```
-
-## Debugging a Failed Test
-
-When a test fails:
-
-```bash
-# 1. View HTML report
-npm run show-report
-
-# 2. Open the trace file
-npm run show-trace test-results/my-workflow-chromium/trace.zip
-```
-
-The trace shows:
-- Every action
-- Screenshots at each step
-- Network requests
-- Console logs
-- DOM snapshots
-
-## Tips
-
-### Recording Stable Tests
-
-1. Wait for elements to be visible before clicking
-2. Use data-testid attributes when possible
-3. Add meaningful waits: `await page.waitForLoadState('networkidle')`
-
-### Debugging Locally
-
-Instead of clicking through manually:
-1. Record the workflow once
-2. Run the test to replay it
-3. Use trace viewer to see what happened
-
-### Database Verification
-
-Add database checks to verify data:
-
-```typescript
-import { withDatabase } from '../helpers/db-helper';
-
-await withDatabase(async (db) => {
-  const result = await db.queryOne(
-    'SELECT * FROM BEHANDLING WHERE id = :id',
-    { id: 123 }
-  );
-  expect(result).not.toBeNull();
-});
-```
-
-## Next Steps
-
-1. ✅ Record your first workflow
-2. ✅ Add assertions
-3. ✅ Add database verification
-4. ✅ Run test and verify trace
-5. ✅ Create more workflows
 
 ---
 
-Need help? Check README.md for detailed documentation.
+## Recording New Workflows
+
+```bash
+# 1. Make sure services are running
+cd ../melosys-docker-compose && make start-all
+
+# 2. Start recording
+cd ../melosys-e2e-tests
+npm run codegen
+
+# 3. Perform your workflow in the opened browser
+# 4. Copy generated code from Playwright Inspector
+# 5. Create new test file and paste code
+```
+
+---
+
+## Viewing Results
+
+```bash
+# HTML report (after tests run)
+npm run show-report
+
+# Trace viewer (detailed debugging)
+npm run show-trace test-results/[path]/trace.zip
+
+# Videos
+npm run open-videos
+
+# Screenshots
+npm run open-screenshots
+```
+
+---
+
+## Common Commands
+
+```bash
+# Development
+npm run test:ui           # Interactive UI mode
+npm run test:headed       # See browser while running
+npm run test:debug        # Step through test
+npm run codegen           # Record new workflow
+
+# Running
+npm test                  # Run all tests
+npm test tests/my-test.spec.ts  # Run specific test
+
+# Results
+npm run show-report       # View HTML report
+npm run show-trace        # View trace
+npm run clean-results     # Clean old results
+```
+
+---
+
+## Need Help?
+
+- **Full documentation**: `README.md`
+- **Troubleshooting**: `docs/guides/TROUBLESHOOTING.md`
+- **Test helpers**: `docs/guides/HELPERS.md`
+- **POMs**: `docs/pom/QUICK-START.md`
