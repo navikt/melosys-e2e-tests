@@ -142,6 +142,7 @@ services:
 
   melosys-mock:
     platform: linux/amd64
+    container_name: melosys-mock
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-docker-compose-mock:latest
     ports:
       - "8083:8083"
@@ -345,6 +346,7 @@ services:
   melosys-trygdeavtale:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:latest
     platform: linux/amd64
+    container_name: melosys-trygdeavtale
     depends_on:
       - mock-oauth2-server
       - postgres
