@@ -179,10 +179,11 @@ The test suite automatically monitors melosys-api Docker logs for errors and war
 - Categorizes issues: SQL Errors, Connection Errors, Warnings, Other Errors
 - Uses precise RFC3339 timestamps (e.g., `2025-11-02T12:03:26.560105507Z`)
 
-**Complete Logs Archive:**
-- After all tests complete, creates `playwright-report/melosys-api-complete-logs.zip`
-- Contains all melosys-api logs from entire test run
+**Complete Logs File:**
+- After all tests complete, creates `playwright-report/melosys-api-complete.log`
+- Contains all melosys-api logs from entire test run with timestamps
 - Always created (regardless of errors)
+- Included in the `playwright-results` artifact
 - Useful for debugging issues that span multiple tests
 
 **What's Captured:**
@@ -529,10 +530,9 @@ Key steps:
    cat playwright-report/docker-logs-{test-name}.log
    open playwright-report/docker-logs-*.log
 
-   # Complete logs archive (all tests, always created)
-   unzip -p playwright-report/melosys-api-complete-logs.zip | less
-   # Or extract the zip:
-   unzip playwright-report/melosys-api-complete-logs.zip
+   # Complete logs file (all tests, always created)
+   cat playwright-report/melosys-api-complete.log
+   less playwright-report/melosys-api-complete.log
    ```
 
 ## Recording New Workflows
