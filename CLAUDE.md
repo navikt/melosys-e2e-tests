@@ -171,20 +171,30 @@ Key settings in `playwright.config.ts`:
 
 ### Docker Log Monitoring
 
-The test suite automatically monitors melosys-api Docker logs for errors and warnings:
+The test suite automatically monitors Docker logs from all Melosys services for errors and warnings:
+
+**Monitored Services:**
+- melosys-api
+- melosys-web
+- melosys-mock
+- faktureringskomponenten
+- melosys-dokgen
+- melosys-trygdeavgift-beregning
+- melosys-trygdeavtale
 
 **Per-Test Logs:**
 - Captures logs from each test's execution time using `--timestamps`
+- Checks all monitored services for errors during the test
 - Saves `playwright-report/docker-logs-{test-name}.log` when errors/warnings detected
 - Categorizes issues: SQL Errors, Connection Errors, Warnings, Other Errors
 - Uses precise RFC3339 timestamps (e.g., `2025-11-02T12:03:26.560105507Z`)
 
-**Complete Logs File:**
-- After all tests complete, creates `playwright-report/melosys-api-complete.log`
-- Contains all melosys-api logs from entire test run with timestamps
+**Complete Logs Files:**
+- After all tests complete, creates `playwright-report/{service-name}-complete.log` for each service
+- Contains all logs from entire test run with timestamps
 - Always created (regardless of errors)
 - Included in the `playwright-results` artifact
-- Useful for debugging issues that span multiple tests
+- Useful for debugging issues that span multiple tests or services
 
 **What's Captured:**
 - All ERROR-level logs
@@ -524,15 +534,20 @@ Key steps:
    launchOptions: { slowMo: 500 }
    ```
 
-6. **Check Docker logs** - View raw melosys-api logs
+6. **Check Docker logs** - View logs from all services
    ```bash
    # Per-test logs (saved when errors/warnings detected)
    cat playwright-report/docker-logs-{test-name}.log
    open playwright-report/docker-logs-*.log
 
-   # Complete logs file (all tests, always created)
+   # Complete logs files (all tests, always created)
+   # View specific service:
    cat playwright-report/melosys-api-complete.log
-   less playwright-report/melosys-api-complete.log
+   cat playwright-report/melosys-web-complete.log
+   less playwright-report/faktureringskomponenten-complete.log
+
+   # View all complete logs:
+   ls playwright-report/*-complete.log
    ```
 
 ## Recording New Workflows
