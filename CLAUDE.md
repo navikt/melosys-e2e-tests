@@ -169,6 +169,28 @@ Key settings in `playwright.config.ts`:
 - **Workers**: 1 on CI, unlimited locally
 - **Browser**: Chromium only (Firefox/WebKit commented out)
 
+### Docker Log Monitoring
+
+The test suite automatically monitors melosys-api Docker logs for errors and warnings:
+
+**Per-Test Logs:**
+- Captures logs from each test's execution time using `--timestamps`
+- Saves `playwright-report/docker-logs-{test-name}.log` when errors/warnings detected
+- Categorizes issues: SQL Errors, Connection Errors, Warnings, Other Errors
+- Uses precise RFC3339 timestamps (e.g., `2025-11-02T12:03:26.560105507Z`)
+
+**Complete Logs File:**
+- After all tests complete, creates `playwright-report/melosys-api-complete.log`
+- Contains all melosys-api logs from entire test run with timestamps
+- Always created (regardless of errors)
+- Included in the `playwright-results` artifact
+- Useful for debugging issues that span multiple tests
+
+**What's Captured:**
+- All ERROR-level logs
+- All WARN-level logs
+- Logs are filtered per-test using test start/end timestamps
+
 ## Page Object Model (POM) Pattern
 
 **📖 See [docs/pom/MIGRATION-PLAN.md](docs/pom/MIGRATION-PLAN.md) for complete migration guide and strategy.**
@@ -500,6 +522,17 @@ Key steps:
    ```typescript
    // In playwright.config.ts
    launchOptions: { slowMo: 500 }
+   ```
+
+6. **Check Docker logs** - View raw melosys-api logs
+   ```bash
+   # Per-test logs (saved when errors/warnings detected)
+   cat playwright-report/docker-logs-{test-name}.log
+   open playwright-report/docker-logs-*.log
+
+   # Complete logs file (all tests, always created)
+   cat playwright-report/melosys-api-complete.log
+   less playwright-report/melosys-api-complete.log
    ```
 
 ## Recording New Workflows

@@ -253,6 +253,21 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "🎬 Videos, traces, and screenshots are available in the artifacts." >> $GITHUB_STEP_SUMMARY
 
+      - name: Capture complete docker logs
+        if: always()
+        run: |
+          echo "📦 Capturing complete melosys-api docker logs..."
+          mkdir -p playwright-report
+
+          # Save complete docker logs with timestamps
+          docker logs melosys-api --timestamps 2>&1 > playwright-report/melosys-api-complete.log || echo "Failed to capture docker logs"
+
+          # List all docker log files created
+          echo ""
+          echo "📋 Docker log files in playwright-report/:"
+          ls -lh playwright-report/melosys-api-complete.log 2>/dev/null || echo "Complete log file not found"
+          ls -lh playwright-report/docker-logs-* 2>/dev/null || echo "No per-test log files found"
+
       - name: Upload test results
         uses: actions/upload-artifact@v4
         if: always()
