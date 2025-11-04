@@ -99,6 +99,17 @@ function categorizeErrors(errors: DockerLogError[]): ErrorCategories {
   return categories;
 }
 
+// Services to monitor
+const MONITORED_SERVICES = [
+  'melosys-api',
+  'melosys-web',
+  'melosys-mock',
+  'faktureringskomponenten',
+  'melosys-dokgen',
+  'melosys-trygdeavgift-beregning',
+  'melosys-trygdeavtale'
+];
+
 export const dockerLogsFixture = base.extend<{ dockerLogChecker: void }>({
   dockerLogChecker: [async ({}, use, testInfo) => {
     // Record the start time of this test
@@ -110,46 +121,59 @@ export const dockerLogsFixture = base.extend<{ dockerLogChecker: void }>({
     // Run the actual test
     await use();
 
-    // After test completes, check logs
+    // After test completes, check logs from all services
     console.log(`\n🔍 Checking docker logs for: ${testInfo.title}`);
 
     try {
-      const errors = getDockerLogsSince('melosys-api', testStartTime);
+      const allErrors: { service: string; errors: DockerLogError[] }[] = [];
+      let totalErrors = 0;
 
-      if (errors.length === 0) {
-        console.log(`✅ No errors found in melosys-api logs during this test`);
+      // Check each service
+      for (const service of MONITORED_SERVICES) {
+        const errors = getDockerLogsSince(service, testStartTime);
+        if (errors.length > 0) {
+          allErrors.push({ service, errors });
+          totalErrors += errors.length;
+        }
+      }
+
+      if (totalErrors === 0) {
+        console.log(`✅ No errors found in any service logs during this test`);
       } else {
-        console.log(`\n⚠️  Found ${errors.length} error(s) in melosys-api during test:\n`);
+        console.log(`\n⚠️  Found ${totalErrors} error(s) across ${allErrors.length} service(s) during test:\n`);
 
-        const categories = categorizeErrors(errors);
+        // Report errors by service
+        for (const { service, errors } of allErrors) {
+          console.log(`\n🐳 ${service} (${errors.length} error(s)):`);
 
-        if (categories.sqlErrors.length > 0) {
-          console.log(`📊 SQL Errors (${categories.sqlErrors.length}):`);
-          categories.sqlErrors.forEach(err => {
-            console.log(`  [${err.timestamp}] ${err.message.substring(0, 120)}`);
-          });
-          console.log('');
+          const categories = categorizeErrors(errors);
+
+          if (categories.sqlErrors.length > 0) {
+            console.log(`  📊 SQL Errors (${categories.sqlErrors.length}):`);
+            categories.sqlErrors.forEach(err => {
+              console.log(`    [${err.timestamp}] ${err.message.substring(0, 120)}`);
+            });
+          }
+
+          if (categories.connectionErrors.length > 0) {
+            console.log(`  🔌 Connection Errors (${categories.connectionErrors.length}):`);
+            categories.connectionErrors.forEach(err => {
+              console.log(`    [${err.timestamp}] ${err.message.substring(0, 120)}`);
+            });
+          }
+
+          if (categories.otherErrors.length > 0) {
+            console.log(`  ❌ Other Errors (${categories.otherErrors.length}):`);
+            categories.otherErrors.forEach(err => {
+              console.log(`    [${err.timestamp}] ${err.message.substring(0, 120)}`);
+            });
+          }
         }
+        console.log('');
 
-        if (categories.connectionErrors.length > 0) {
-          console.log(`🔌 Connection Errors (${categories.connectionErrors.length}):`);
-          categories.connectionErrors.forEach(err => {
-            console.log(`  [${err.timestamp}] ${err.message.substring(0, 120)}`);
-          });
-          console.log('');
-        }
-
-        if (categories.otherErrors.length > 0) {
-          console.log(`❌ Other Errors (${categories.otherErrors.length}):`);
-          categories.otherErrors.forEach(err => {
-            console.log(`  [${err.timestamp}] ${err.message.substring(0, 120)}`);
-          });
-          console.log('');
-        }
-
-        // Attach errors to the test report
+        // Attach all errors to the test report
         await testInfo.attach('docker-logs-errors', {
-          body: JSON.stringify(errors, null, 2),
+          body: JSON.stringify(allErrors, null, 2),
           contentType: 'application/json'
         });
       }
