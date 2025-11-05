@@ -356,7 +356,7 @@ services:
 #      DATABASE_SCHEMA: unleash
       DATABASE_SSL: "false"
       LOG_LEVEL: info
-      INIT_FRONTEND_API_TOKENS: "*:*.unleash-insecure-api-token"
+      INIT_ADMIN_API_TOKENS: "*:*.unleash-insecure-api-token"
       INIT_CLIENT_API_TOKENS: "*:development.unleash-insecure-client-api-token"
     networks:
       melosys.docker-internal:
