@@ -98,7 +98,7 @@ jobs:
         run: |
           echo "⏳ Waiting for services to be ready..."
 
-          max_attempts=60
+          max_attempts=20
           attempt=0
 
           # Function to check if a service is healthy
