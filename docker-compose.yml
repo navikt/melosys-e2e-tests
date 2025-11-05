@@ -159,6 +159,10 @@ services:
       SPRING_DATASOURCE_PASSWORD: mysecretpassword
       SPRING_FLYWAY_ENABLED: "true"
       KAFKA_BROKERS: "kafka.melosys.docker-internal:9092"
+      UNLEASH_URL: "http://unleash.melosys.docker-internal:4242/api"
+      UNLEASH_TOKEN: "*:development.unleash-insecure-client-api-token"
+      UNLEASH_APP_NAME: "faktureringskomponenten"
+      UNLEASH_ENVIRONMENT: "development"
     networks:
       melosys.docker-internal:
         aliases:
@@ -238,6 +242,11 @@ services:
       MICROSOFT_GRAPH_REST_URL: http://melosys-mock.melosys.docker-internal:8083/graph/v1.0
       TILGANGSMASKINEN_URL: http://melosys-mock.melosys.docker-internal:8083/tilgangsmaskinen
       UTBETALING_REST_URL: http://melosys-mock.melosys.docker-internal:8083/utbetaldata/api/v2/hent-utbetalingsinformasjon/intern
+      # Unleash feature toggle configuration
+      UNLEASH_URL: "http://unleash.melosys.docker-internal:4242/api"
+      UNLEASH_TOKEN: "*:development.unleash-insecure-client-api-token"
+      UNLEASH_APP_NAME: "melosys-api"
+      UNLEASH_ENVIRONMENT: "development"
 
   melosys-web:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-web:latest
@@ -328,6 +337,39 @@ services:
       POSTGRES_PASSWORD: mysecretpassword
     ports:
       - 5432:5432
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  unleash:
+    image: unleashorg/unleash-server:latest
+    container_name: unleash
+    ports:
+      - "4242:4242"
+    environment:
+      DATABASE_HOST: postgres.melosys.docker-internal
+      DATABASE_NAME: postgres
+      DATABASE_USERNAME: postgres
+      DATABASE_PASSWORD: mysecretpassword
+#      DATABASE_SCHEMA: unleash
+      DATABASE_SSL: "false"
+      LOG_LEVEL: info
+      INIT_FRONTEND_API_TOKENS: "*:*.unleash-insecure-api-token"
+      INIT_CLIENT_API_TOKENS: "*:development.unleash-insecure-client-api-token"
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - unleash.melosys.docker-internal
+    depends_on:
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "-q", "http://localhost:4242/health"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
 
   melosys-trygdeavtale:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:latest
@@ -342,6 +384,9 @@ services:
     environment:
       SPRING_PROFILES_ACTIVE: local-docker
       JDBC_URL: jdbc:postgresql://postgres:5432/postgres
+      SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/postgres?currentSchema=melosys-trygdeavtale"
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: mysecretpassword
       MELOSYS_API_URL: http://host.docker.internal:8080
       ABAC_PDP_ENDPOINT_URL: http://melosys-mock:8083/asm-pdp/authorize
     ports:
