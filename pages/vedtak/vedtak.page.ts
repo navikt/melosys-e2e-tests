@@ -29,6 +29,10 @@ export class VedtakPage extends BasePage {
   // Locators for Quill editors
   private readonly quillEditors = this.page.locator('.ql-editor');
 
+  private readonly grunnNyttVedtakDropdown = this.page.getByLabel(
+    'Oppgi grunn for nytt vedtak (Obligatorisk)Oppgi grunn for nytt vedtak ('
+  );
+
   private readonly fattVedtakButton = this.page.getByRole('button', {
     name: 'Fatt vedtak'
   });
@@ -117,6 +121,17 @@ export class VedtakPage extends BasePage {
     await this.fyllInnFritekst(fritekst);
     await this.fyllInnBegrunnelse(begrunnelse);
     await this.fyllInnTrygdeavgiftBegrunnelse(trygdeavgiftBegrunnelse);
+  }
+
+  /**
+   * Select reason for new vedtak (for reassessments/new assessments)
+   * This dropdown appears when creating a new vedtak for an existing case
+   *
+   * @param grunn - Reason code (e.g., 'FEIL_I_BEHANDLING', 'NYE_OPPLYSNINGER')
+   */
+  async velgGrunnNyttVedtak(grunn: string): Promise<void> {
+    await this.grunnNyttVedtakDropdown.selectOption(grunn);
+    console.log(`✅ Selected grunn for nytt vedtak: ${grunn}`);
   }
 
   /**
@@ -226,6 +241,17 @@ export class VedtakPage extends BasePage {
     trygdeavgiftBegrunnelse: string = 'trygdeavgift'
   ): Promise<void> {
     await this.fyllInnAlleTekstfelt(fritekst, begrunnelse, trygdeavgiftBegrunnelse);
+    await this.klikkFattVedtak();
+  }
+
+  /**
+   * Submit vedtak for reassessment without filling text fields
+   * Used when only selecting grunn for nytt vedtak and submitting
+   *
+   * @param grunn - Reason code for new vedtak (e.g., 'FEIL_I_BEHANDLING')
+   */
+  async fattVedtakForNyVurdering(grunn: string): Promise<void> {
+    await this.velgGrunnNyttVedtak(grunn);
     await this.klikkFattVedtak();
   }
 }

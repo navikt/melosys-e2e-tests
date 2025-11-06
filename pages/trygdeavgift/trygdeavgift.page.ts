@@ -29,8 +29,7 @@ export class TrygdeavgiftPage extends BasePage {
   readonly assertions: TrygdeavgiftAssertions;
 
   // Locators
-  private readonly jaRadio = this.page.getByRole('radio', { name: 'Ja' });
-  private readonly neiRadio = this.page.getByRole('radio', { name: 'Nei' }).first();
+  private readonly skattepliktigGroup = this.page.getByRole('group', { name: 'Skattepliktig' });
 
   private readonly inntektskildeDropdown = this.page.getByLabel('Inntektskilde');
 
@@ -58,7 +57,7 @@ export class TrygdeavgiftPage extends BasePage {
    */
   async ventPåSideLastet(): Promise<void> {
     try {
-      await this.neiRadio.waitFor({ state: 'visible', timeout: 10000 });
+      await this.skattepliktigGroup.waitFor({ state: 'visible', timeout: 10000 });
       console.log('✅ Trygdeavgift page loaded - Skattepliktig field visible');
     } catch (error) {
       console.error('❌ Failed to reach Trygdeavgift page');
@@ -71,14 +70,29 @@ export class TrygdeavgiftPage extends BasePage {
   /**
    * Select Skattepliktig (tax liable) status
    *
+   * IMPORTANT: This method properly scopes to the "Skattepliktig" group and waits
+   * for the radio button to be ready. This prevents the double-click issue.
+   *
    * @param erSkattepliktig - true for "Ja", false for "Nei"
    */
   async velgSkattepliktig(erSkattepliktig: boolean): Promise<void> {
-    if (erSkattepliktig) {
-      await this.jaRadio.check();
-    } else {
-      await this.neiRadio.check();
-    }
+    // Wait for the group to be visible
+    await this.skattepliktigGroup.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Get the radio button within the group
+    const radio = erSkattepliktig
+      ? this.skattepliktigGroup.getByLabel('Ja')
+      : this.skattepliktigGroup.getByLabel('Nei');
+
+    // Wait for radio button to be enabled
+    await radio.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Check the radio button
+    await radio.check();
+
+    // Verify it was checked
+    await expect(radio).toBeChecked({ timeout: 5000 });
+
     console.log(`✅ Selected Skattepliktig = ${erSkattepliktig ? 'Ja' : 'Nei'}`);
   }
 
