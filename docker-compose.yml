@@ -150,7 +150,7 @@ services:
           - melosys-mock.melosys.docker-internal
 
   faktureringskomponenten:
-    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:latest
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:${MELOSYS_API_TAG}
     container_name: faktureringskomponenten
     environment:
       SPRING_PROFILES_ACTIVE: local
