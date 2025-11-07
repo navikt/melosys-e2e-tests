@@ -1,6 +1,6 @@
 import { APIRequestContext } from '@playwright/test';
 import * as dotenv from 'dotenv';
-import * as path from 'path';
+import * as path from 'node:path';
 
 // Load .local.env file
 dotenv.config({ path: path.resolve(__dirname, '../.local.env') });
@@ -25,11 +25,11 @@ dotenv.config({ path: path.resolve(__dirname, '../.local.env') });
  * Requires both admin API key and JWT token for authentication.
  */
 export class AdminApiHelper {
-  private apiKey: string;
-  private authToken: string;
-  private baseUrl: string;
+  private readonly apiKey: string;
+  private readonly authToken: string;
+  private readonly baseUrl: string;
 
-  constructor(request: APIRequestContext, baseUrl: string = 'http://localhost:8080') {
+  constructor(baseUrl: string = 'http://localhost:8080') {
     this.baseUrl = baseUrl;
     this.apiKey = process.env.ADMIN_API_KEY || 'dummy';
     this.authToken = process.env.LOCAL_AUTH_TOKEN || '';
@@ -53,9 +53,9 @@ export class AdminApiHelper {
 
     // Add query parameters if provided
     if (params) {
-      Object.entries(params).forEach(([key, value]) => {
+      for (const [key, value] of Object.entries(params)) {
         url.searchParams.append(key, String(value));
-      });
+      }
     }
 
     const options: any = {
@@ -99,7 +99,7 @@ export class AdminApiHelper {
     tomDato: string,
     lagProsessinstanser: boolean = false
   ) {
-    const response = await this.callAdminEndpoint(
+    return await this.callAdminEndpoint(
       request,
       'POST',
       '/admin/aarsavregninger/saker/ikke-skattepliktige/finn',
@@ -109,8 +109,6 @@ export class AdminApiHelper {
         tomDato: tomDato
       }
     );
-
-    return response;
   }
 
   /**
@@ -159,9 +157,9 @@ export async function waitForProcessInstances(request: APIRequestContext, timeou
     if (result.status === 'FAILED') {
       console.log(`   ❌ Process instances: ${result.failedInstances?.length || 0} FAILED`);
       if (result.failedInstances) {
-        result.failedInstances.forEach((failure: any) => {
+        for (const failure of result.failedInstances) {
           console.log(`      - ${failure.type}: ${failure.error?.melding || 'No error message'}`);
-        });
+        }
       }
       throw new Error(`Process instances failed: ${result.message}`);
     }
@@ -177,8 +175,9 @@ export async function waitForProcessInstances(request: APIRequestContext, timeou
     console.log(`   ❌ Process instances: ${result.status} - ${result.message}`);
     throw new Error(`Process instance check failed: ${result.message}`);
 
-  } catch (error: any) {
-    if (error.message?.includes('ECONNREFUSED') || error.message?.includes('connect')) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('connect')) {
       console.log(`   ⚠️  Could not connect to API - endpoint may not be available`);
       return; // Don't fail if endpoint doesn't exist
     }
@@ -208,11 +207,12 @@ export async function clearApiCaches(request: APIRequestContext): Promise<boolea
 
     console.log(`   ⚠️  Cache clearing failed: HTTP ${response.status()}`);
     return false;
-  } catch (error: any) {
-    if (error.message?.includes('ECONNREFUSED') || error.message?.includes('connect')) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('connect')) {
       console.log(`   ⚠️  Could not connect to cache endpoint - may not be available`);
     } else {
-      console.log(`   ⚠️  Cache clearing error: ${error.message || error}`);
+      console.log(`   ⚠️  Cache clearing error: ${errorMessage}`);
     }
     return false;
   }
@@ -223,7 +223,7 @@ export async function clearApiCaches(request: APIRequestContext): Promise<boolea
  * This is a heavy-handed approach but guaranteed to work
  */
 export async function restartApiContainer(): Promise<void> {
-  const { execSync } = require('child_process');
+  const { execSync } = require('node:child_process');
 
   try {
     console.log('   🔄 Restarting melosys-api container...');
@@ -236,13 +236,15 @@ export async function restartApiContainer(): Promise<void> {
         execSync('curl -s http://localhost:8080/actuator/health > /dev/null 2>&1');
         console.log('   ✅ API restarted and healthy');
         return;
-      } catch (error) {
+      } catch {
+        // Ignore health check errors, continue waiting
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
 
     console.log('   ⚠️  API restarted but health check timed out');
-  } catch (error) {
-    console.log(`   ⚠️  Failed to restart API: ${error.message || error}`);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.log(`   ⚠️  Failed to restart API: ${errorMessage}`);
   }
 }

@@ -4,7 +4,7 @@ import { AdminApiHelper } from '../../helpers/api-helper';
 test.describe('Melosys Admin API', () => {
   test('should find ikke-skattepliktige saker via admin API', async ({ request }) => {
     // Create admin API helper
-    const adminApi = new AdminApiHelper(request);
+    const adminApi = new AdminApiHelper();
 
     // Call the admin API to find ikke-skattepliktige saker
     const response = await adminApi.finnIkkeSkattepliktigeSaker(
