@@ -99,18 +99,20 @@ test.describe('Yrkesaktiv - Førstegangsbehandling', () => {
         await hovedside.klikkOpprettNySak();
         await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
 
-        console.log('📝 Step 12: Wait for process instances after ny vurdering...');
+        console.log('📝 Step 12: Wait for behandling creation...');
         await waitForProcessInstances(page.request, 30);
 
+        // Step 13: Open the NEW active behandling immediately (before it auto-completes)
+        console.log('📝 Step 13: Opening active behandling BEFORE it completes...');
         await hovedside.goto();
-        console.log('✅ Ny vurdering behandling opprettet');
+        // Click on the FIRST link (the new active behandling)
+        await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).first().click();
 
-        // Step 13: Open the case and navigate to Trygdeavgift
-        console.log('📝 Step 13: Opening case and navigating to Trygdeavgift...');
-        await hovedside.åpneSak('TRIVIELL KARAFFEL -');
+        // Navigate to Trygdeavgift immediately
         await behandling.gåTilTrygdeavgift();
 
-        // Step 14: Update Skattepliktig to 'Ja' (this is the critical fix - no more double-click!)
+        // Step 14: Update Skattepliktig to 'Ja'
+        // The velgSkattepliktig method now waits for the PUT API call to complete
         console.log('📝 Step 14: Updating Skattepliktig to Ja...');
         await trygdeavgift.velgSkattepliktig(true);
 
