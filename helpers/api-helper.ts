@@ -1,4 +1,9 @@
 import { APIRequestContext } from '@playwright/test';
+import * as dotenv from 'dotenv';
+import * as path from 'path';
+
+// Load .local.env file
+dotenv.config({ path: path.resolve(__dirname, '../.local.env') });
 
 /**
  * Helper for managing melosys-api application state
@@ -12,6 +17,116 @@ import { APIRequestContext } from '@playwright/test';
  * 2. Restart the API container
  * 3. Use TRUNCATE instead of DELETE (already implemented)
  */
+
+/**
+ * Admin API Helper
+ *
+ * Provides authenticated access to melosys-api admin endpoints.
+ * Requires both admin API key and JWT token for authentication.
+ */
+export class AdminApiHelper {
+  private apiKey: string;
+  private authToken: string;
+  private baseUrl: string;
+
+  constructor(request: APIRequestContext, baseUrl: string = 'http://localhost:8080') {
+    this.baseUrl = baseUrl;
+    this.apiKey = process.env.ADMIN_API_KEY || 'dummy';
+    this.authToken = process.env.LOCAL_AUTH_TOKEN || '';
+
+    if (!this.authToken) {
+      throw new Error('LOCAL_AUTH_TOKEN not found in environment');
+    }
+  }
+
+  /**
+   * Call an admin API endpoint with proper authentication headers
+   */
+  private async callAdminEndpoint(
+    request: APIRequestContext,
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    endpoint: string,
+    params?: Record<string, string | boolean>,
+    body?: any
+  ) {
+    const url = new URL(`${this.baseUrl}${endpoint}`);
+
+    // Add query parameters if provided
+    if (params) {
+      Object.entries(params).forEach(([key, value]) => {
+        url.searchParams.append(key, String(value));
+      });
+    }
+
+    const options: any = {
+      headers: {
+        'X-MELOSYS-ADMIN-APIKEY': this.apiKey,
+        'Authorization': `Bearer ${this.authToken}`,
+        'Content-Type': 'application/json'
+      }
+    };
+
+    // Add body for POST/PUT requests
+    if (body && (method === 'POST' || method === 'PUT')) {
+      options.data = body;
+    }
+
+    // Make the request based on method
+    switch (method) {
+      case 'GET':
+        return await request.get(url.toString(), options);
+      case 'POST':
+        return await request.post(url.toString(), options);
+      case 'PUT':
+        return await request.put(url.toString(), options);
+      case 'DELETE':
+        return await request.delete(url.toString(), options);
+    }
+  }
+
+  /**
+   * Find ikke-skattepliktige saker (non-taxable cases) for annual settlement
+   *
+   * @param request - Playwright API request context
+   * @param fomDato - Start date (YYYY-MM-DD)
+   * @param tomDato - End date (YYYY-MM-DD)
+   * @param lagProsessinstanser - Whether to create process instances (default: false)
+   * @returns API response with job details
+   */
+  async finnIkkeSkattepliktigeSaker(
+    request: APIRequestContext,
+    fomDato: string,
+    tomDato: string,
+    lagProsessinstanser: boolean = false
+  ) {
+    const response = await this.callAdminEndpoint(
+      request,
+      'POST',
+      '/admin/aarsavregninger/saker/ikke-skattepliktige/finn',
+      {
+        lagProsessinstanser: lagProsessinstanser,
+        fomDato: fomDato,
+        tomDato: tomDato
+      }
+    );
+
+    return response;
+  }
+
+  /**
+   * Add more admin API methods here following this pattern:
+   *
+   * @example
+   * async someOtherAdminEndpoint(request: APIRequestContext, param1: string) {
+   *   return await this.callAdminEndpoint(
+   *     request,
+   *     'GET',  // or 'POST', 'PUT', 'DELETE'
+   *     '/admin/some/endpoint',
+   *     { param1 }  // query parameters
+   *   );
+   * }
+   */
+}
 
 /**
  * Wait for all process instances to complete
