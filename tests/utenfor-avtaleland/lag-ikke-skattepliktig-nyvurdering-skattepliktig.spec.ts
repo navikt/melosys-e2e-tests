@@ -1,4 +1,4 @@
-import {expect, test} from '../../fixtures';
+import {test} from '../../fixtures';
 import {AuthHelper} from '../../helpers/auth-helper';
 import {HovedsidePage} from '../../pages/hovedside.page';
 import {OpprettNySakPage} from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
@@ -6,12 +6,12 @@ import {MedlemskapPage} from '../../pages/behandling/medlemskap.page';
 import {ArbeidsforholdPage} from '../../pages/behandling/arbeidsforhold.page';
 import {LovvalgPage} from '../../pages/behandling/lovvalg.page';
 import {ResultatPeriodePage} from '../../pages/behandling/resultat-periode.page';
+import {BehandlingPage} from '../../pages/behandling/behandling.page';
 import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
 import {UnleashHelper} from "../../helpers/unleash-helper";
 import { waitForProcessInstances } from '../../helpers/api-helper';
-import {json} from "node:stream/consumers";
 
 
 test.describe('Yrkesaktiv - Førstegangsbehandling', () => {
@@ -30,6 +30,7 @@ test.describe('Yrkesaktiv - Førstegangsbehandling', () => {
         const arbeidsforhold = new ArbeidsforholdPage(page);
         const lovvalg = new LovvalgPage(page);
         const resultatPeriode = new ResultatPeriodePage(page);
+        const behandling = new BehandlingPage(page);
         const trygdeavgift = new TrygdeavgiftPage(page);
         const vedtak = new VedtakPage(page);
 
@@ -83,44 +84,49 @@ test.describe('Yrkesaktiv - Førstegangsbehandling', () => {
         console.log('📝 Step 8: Making decision...');
         await vedtak.klikkFattVedtak();
 
-        console.log('📝 Step 9: waitForProcessInstances...');
+        console.log('📝 Step 9: Wait for process instances after first vedtak...');
         await waitForProcessInstances(page.request, 30);
 
+        // Step 10: Navigate and search for case
+        console.log('📝 Step 10: Search for case and verify...');
+        await hovedside.goto();
+        await hovedside.søkEtterBruker(USER_ID_VALID);
+        await hovedside.klikkVisBehandling();
+        await hovedside.gåTilForsiden();
 
-        await page.goto('http://localhost:3000/melosys/');
-        await page.getByPlaceholder('F.nr./d-nr./saksnr.').click();
-        await page.getByPlaceholder('F.nr./d-nr./saksnr.').fill('30056928150');
-        await page.getByRole('button', { name: 'Søk' }).click();
-        await page.getByRole('button', { name: 'Vis behandling' }).click();
-        await page.getByRole('link', { name: 'Gå til forsiden' }).click();
-        await page.getByRole('button', { name: 'Opprett ny sak/behandling' }).click();
-        await page.getByRole('textbox', { name: 'Brukers f.nr. eller d-nr.:' }).click();
-        await page.getByRole('textbox', { name: 'Brukers f.nr. eller d-nr.:' }).fill('30056928150');
+        // Step 11: Create ny vurdering
+        console.log('📝 Step 11: Creating ny vurdering...');
+        await hovedside.klikkOpprettNySak();
+        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
 
-        await page.getByLabel('', { exact: true }).check();
-        await page.getByRole('radio', { name: 'Ny vurdering' }).check();
-        await page.getByLabel('Årsak', { exact: true }).selectOption('SØKNAD');
-        await opprettSak.leggBehandlingIMine();
-        await opprettSak.klikkOpprettNyBehandling();
-
-        console.log('📝 waitForProcessInstances...');
+        console.log('📝 Step 12: Wait for behandling creation...');
         await waitForProcessInstances(page.request, 30);
 
-        await page.goto('http://localhost:3000/melosys/');
-        console.log('✅ behandling opprettet');
+        // Step 13: Open the NEW active behandling immediately (before it auto-completes)
+        console.log('📝 Step 13: Opening active behandling BEFORE it completes...');
+        await hovedside.goto();
+        // Click on the FIRST link (the new active behandling)
+        await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).first().click();
 
-        await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).click();
-        await page.locator('button').filter({ hasText: 'Trygdeavgift' }).click();
+        // Navigate to Trygdeavgift immediately
+        await behandling.gåTilTrygdeavgift();
 
-        await page.getByRole('group', { name: 'Skattepliktig' }).getByLabel('Ja').check();
-        await page.getByRole('group', { name: 'Skattepliktig' }).getByLabel('Ja').check();
+        // Step 14: Update Skattepliktig to 'Ja'
+        // The velgSkattepliktig method now waits for the PUT API call to complete
+        console.log('📝 Step 14: Updating Skattepliktig to Ja...');
+        await trygdeavgift.velgSkattepliktig(true);
 
-        await page.locator('button').filter({ hasText: 'Vedtak' }).click();
-        await page.getByLabel('Oppgi grunn for nytt vedtak (Obligatorisk)Oppgi grunn for nytt vedtak (').selectOption('FEIL_I_BEHANDLING');
-        await page.getByRole('button', { name: 'Fatt vedtak' }).click();
+        // Step 15: Navigate to Vedtak and submit
+        console.log('📝 Step 15: Submitting vedtak for ny vurdering...');
+        await behandling.gåTilVedtak();
+        await vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING');
 
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
 
-        console.log('✅ Workflow completed');
+        // TODO call melosys-api with
+        // http://localhost:8080/admin/aarsavregninger/saker/ikke-skattepliktige/finn?lagProsessinstanser=true&fomDato=2024-01-01&tomDato=2024-12-31
+        // and I think we need a token
+
+        console.log('✅ Workflow completed successfully!');
     });
 });

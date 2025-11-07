@@ -24,6 +24,18 @@ export class HovedsidePage extends BasePage {
     name: 'Opprett ny sak/behandling',
   });
 
+  private readonly søkField = this.page.getByPlaceholder('F.nr./d-nr./saksnr.');
+
+  private readonly søkButton = this.page.getByRole('button', { name: 'Søk' });
+
+  private readonly visBehandlingButton = this.page.getByRole('button', {
+    name: 'Vis behandling',
+  });
+
+  private readonly gåTilForsidenLink = this.page.getByRole('link', {
+    name: 'Gå til forsiden',
+  });
+
   constructor(page: Page) {
     super(page);
   }
@@ -58,5 +70,39 @@ export class HovedsidePage extends BasePage {
    */
   async verifiserHovedside(): Promise<void> {
     await this.waitForElement(this.opprettNySakButton);
+  }
+
+  /**
+   * Search for a user by their fødselsnummer, d-nummer, or saksnummer
+   *
+   * @param søkeord - Search term (fnr/d-nr/saksnr)
+   */
+  async søkEtterBruker(søkeord: string): Promise<void> {
+    await this.søkField.click();
+    await this.søkField.fill(søkeord);
+    await this.søkButton.click();
+  }
+
+  /**
+   * Click "Vis behandling" button after searching
+   */
+  async klikkVisBehandling(): Promise<void> {
+    await this.visBehandlingButton.click();
+  }
+
+  /**
+   * Click "Gå til forsiden" link to return to main page
+   */
+  async gåTilForsiden(): Promise<void> {
+    await this.gåTilForsidenLink.click();
+  }
+
+  /**
+   * Click on a case link by user name (e.g., "TRIVIELL KARAFFEL -")
+   *
+   * @param userName - Part of the link text to match
+   */
+  async åpneSak(userName: string): Promise<void> {
+    await this.page.getByRole('link', { name: userName }).click();
   }
 }

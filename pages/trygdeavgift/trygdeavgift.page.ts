@@ -29,8 +29,7 @@ export class TrygdeavgiftPage extends BasePage {
   readonly assertions: TrygdeavgiftAssertions;
 
   // Locators
-  private readonly jaRadio = this.page.getByRole('radio', { name: 'Ja' });
-  private readonly neiRadio = this.page.getByRole('radio', { name: 'Nei' }).first();
+  private readonly skattepliktigGroup = this.page.getByRole('group', { name: 'Skattepliktig' });
 
   private readonly inntektskildeDropdown = this.page.getByLabel('Inntektskilde');
 
@@ -58,7 +57,7 @@ export class TrygdeavgiftPage extends BasePage {
    */
   async ventPåSideLastet(): Promise<void> {
     try {
-      await this.neiRadio.waitFor({ state: 'visible', timeout: 10000 });
+      await this.skattepliktigGroup.waitFor({ state: 'visible', timeout: 10000 });
       console.log('✅ Trygdeavgift page loaded - Skattepliktig field visible');
     } catch (error) {
       console.error('❌ Failed to reach Trygdeavgift page');
@@ -71,14 +70,58 @@ export class TrygdeavgiftPage extends BasePage {
   /**
    * Select Skattepliktig (tax liable) status
    *
+   * IMPORTANT: This method waits for the debounced PUT API call to complete.
+   * The form uses a 500ms debounce before making the PUT request to save changes.
+   *
+   * Timing breakdown:
+   * - t=0ms: Click radio button
+   * - t=50ms: useEffect triggers 500ms debounce
+   * - t=500ms: Debounce fires, PUT /trygdeavgift/beregning starts
+   * - t=700-1000ms: PUT completes, value saved to database
+   *
+   * We wait 1500ms to ensure the entire sequence completes reliably.
+   *
    * @param erSkattepliktig - true for "Ja", false for "Nei"
    */
   async velgSkattepliktig(erSkattepliktig: boolean): Promise<void> {
-    if (erSkattepliktig) {
-      await this.jaRadio.check();
+    // Wait for the group to be visible
+    await this.skattepliktigGroup.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Get the radio button within the group
+    const radio = erSkattepliktig
+      ? this.skattepliktigGroup.getByLabel('Ja')
+      : this.skattepliktigGroup.getByLabel('Nei');
+
+    // Wait for radio button to be enabled
+    await radio.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Set up response listener BEFORE clicking to catch the debounced PUT
+    const responsePromise = this.page.waitForResponse(
+      response => response.url().includes('/trygdeavgift/beregning') &&
+                  response.request().method() === 'PUT' &&
+                  response.status() === 200,
+      { timeout: 3000 } // 500ms debounce + 2500ms for API
+    ).catch(() => null); // Don't fail if no PUT (form might prevent it)
+
+    // Check the radio button (triggers change event)
+    await radio.check();
+
+    // Verify it was checked
+    await expect(radio).toBeChecked({ timeout: 5000 });
+
+    // CRITICAL: Wait for the debounced PUT request to fire and complete
+    // The form has a 500ms debounce, so we need to wait for that plus the API time
+    const response = await responsePromise;
+
+    if (response) {
+      console.log('✅ Debounced PUT /trygdeavgift/beregning completed - value saved');
     } else {
-      await this.neiRadio.check();
+      // If no PUT detected, wait a bit longer to be safe
+      // This can happen if form validation prevents the PUT
+      console.log('⚠️  No PUT detected, waiting for debounce period...');
+      await this.page.waitForTimeout(1500);
     }
+
     console.log(`✅ Selected Skattepliktig = ${erSkattepliktig ? 'Ja' : 'Nei'}`);
   }
 

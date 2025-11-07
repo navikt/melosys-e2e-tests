@@ -1,8 +1,8 @@
-import { test as base } from '@playwright/test';
-import { DatabaseHelper } from '../helpers/db-helper';
-import { clearMockDataSilent } from '../helpers/mock-helper';
-import { clearApiCaches, waitForProcessInstances } from '../helpers/api-helper';
-import { UnleashHelper } from '../helpers/unleash-helper';
+import {test as base} from '@playwright/test';
+import {DatabaseHelper} from '../helpers/db-helper';
+import {clearMockDataSilent} from '../helpers/mock-helper';
+import {clearApiCaches, waitForProcessInstances} from '../helpers/api-helper';
+import {UnleashHelper} from '../helpers/unleash-helper';
 
 /**
  * Cleanup fixture - automatically cleans database and mock data before and after each test
@@ -10,72 +10,75 @@ import { UnleashHelper } from '../helpers/unleash-helper';
  */
 
 async function cleanupTestData(page: any, waitForProcesses: boolean = false): Promise<void> {
-  // Wait for async process instances to complete (after test only)
-  if (waitForProcesses) {
+    // Wait for async process instances to complete (after test only)
+    if (waitForProcesses) {
+        try {
+            await waitForProcessInstances(page.request, 30);
+        } catch (error: any) {
+            console.log(`   ⚠️  Process instance check failed: ${error.message || error}`);
+            // Continue with cleanup even if processes failed
+        }
+    }
+
+    // Clean database
+    const db = new DatabaseHelper();
     try {
-      await waitForProcessInstances(page.request, 30);
+        await db.connect();
+        const result = await db.cleanDatabase(true); // silent = true
+
+        if (result.cleanedCount > 0 || result.totalRowsDeleted > 0) {
+            console.log(`   ✅ Database: ${result.cleanedCount} tables cleaned (${result.totalRowsDeleted} rows)`);
+        }
     } catch (error: any) {
-      console.log(`   ⚠️  Process instance check failed: ${error.message || error}`);
-      // Continue with cleanup even if processes failed
+        console.log(`   ⚠️  Database cleanup failed: ${error.message || error}`);
+    } finally {
+        await db.close();
     }
-  }
 
-  // Clean database
-  const db = new DatabaseHelper();
-  try {
-    await db.connect();
-    const result = await db.cleanDatabase(true); // silent = true
-
-    if (result.cleanedCount > 0 || result.totalRowsDeleted > 0) {
-      console.log(`   ✅ Database: ${result.cleanedCount} tables cleaned (${result.totalRowsDeleted} rows)`);
+    // Clear API caches to prevent JPA errors
+    try {
+        await clearApiCaches(page.request);
+    } catch (error: any) {
+        console.log(`   ⚠️  clearApiCaches failed: ${error.message || error}`);
     }
-  } catch (error: any) {
-    console.log(`   ⚠️  Database cleanup failed: ${error.message || error}`);
-  } finally {
-    await db.close();
-  }
 
-  // Clear API caches to prevent JPA errors
-  try {
-    await clearApiCaches(page.request);
-  } catch (error: any) {
-    // Not critical if this fails
-  }
-
-  // Clean mock data
-  try {
-    const mockResult = await clearMockDataSilent(page.request);
-    const totalCleared = (Number(mockResult.journalpostCleared) || 0) + (Number(mockResult.oppgaveCleared) || 0);
-    if (totalCleared > 0) {
-      console.log(`   ✅ Mock data: ${totalCleared} items cleared`);
+    // Clean mock data
+    try {
+        const mockResult = await clearMockDataSilent(page.request);
+        const totalCleared = (Number(mockResult.journalpostCleared) || 0) + (Number(mockResult.oppgaveCleared) || 0);
+        if (totalCleared > 0) {
+            console.log(`   ✅ Mock data: ${totalCleared} items cleared`);
+        }
+    } catch (error: any) {
+        console.log(`   ⚠️  Mock cleanup failed: ${error.message || error}`);
     }
-  } catch (error: any) {
-    console.log(`   ⚠️  Mock cleanup failed: ${error.message || error}`);
-  }
 
-  // Reset Unleash feature toggles to defaults
-  try {
-    const unleash = new UnleashHelper(page.request);
-    await unleash.resetToDefaults();
-    console.log(`   ✅ Unleash: Toggles reset to defaults`);
-  } catch (error: any) {
-    console.log(`   ⚠️  Unleash reset failed: ${error.message || error}`);
-  }
+    // Reset Unleash feature toggles to defaults
+    try {
+        const unleash = new UnleashHelper(page.request);
+        await unleash.resetToDefaults();
+        console.log(`   ✅ Unleash: Toggles reset to defaults`);
+    } catch (error: any) {
+        console.log(`   ⚠️  Unleash reset failed: ${error.message || error}`);
+    }
 }
 
 export const cleanupFixture = base.extend<{ autoCleanup: void }>({
-  autoCleanup: [async ({ page }, use) => {
-    // BEFORE test: clean for fresh start
-    console.log('\n🧹 Cleaning test data before test...');
-    await cleanupTestData(page, false); // Don't wait for processes
-    console.log('');
+    autoCleanup: [async ({page}, use) => {
+        // BEFORE test: clean for fresh start
+        console.log('\n🧹 Cleaning test data before test...');
+        await cleanupTestData(page, false); // Don't wait for processes
+        console.log('');
 
-    // Run the test
-    await use();
+        // Run the test
+        await use();
 
-    // AFTER test: wait for processes, then clean up
-    console.log('\n🧹 Cleaning up test data after test...');
-    await cleanupTestData(page, true); // Wait for processes to complete
-    console.log('');
-  }, { auto: true }]
+        // AFTER test: wait for processes to complete, but leave data so we can inspect it
+        try {
+            await waitForProcessInstances(page.request, 30);
+        } catch (error: any) {
+            console.log(`   ⚠️  Process instance check failed: ${error.message || error}`);
+            // Non-critical - continue anyway
+        }
+    }, {auto: true}]
 });

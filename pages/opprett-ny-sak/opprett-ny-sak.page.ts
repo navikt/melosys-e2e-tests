@@ -34,6 +34,10 @@ export class OpprettNySakPage extends BasePage {
     name: 'Opprett ny sak',
   });
 
+  private readonly nyVurderingRadio = this.page.getByRole('radio', {
+    name: 'Ny vurdering',
+  });
+
   private readonly sakstypeDropdown = this.page.getByLabel('Sakstype');
 
   private readonly sakstemaDropdown = this.page.getByLabel('Sakstema');
@@ -71,6 +75,14 @@ export class OpprettNySakPage extends BasePage {
    */
   async velgOpprettNySak(): Promise<void> {
     await this.checkRadioIfExists(this.opprettNySakRadio);
+  }
+
+  /**
+   * Select "Ny vurdering" radio button
+   * Used for creating a reassessment of an existing case
+   */
+  async velgNyVurdering(): Promise<void> {
+    await this.nyVurderingRadio.check();
   }
 
   /**
@@ -140,6 +152,23 @@ export class OpprettNySakPage extends BasePage {
     await this.velgSakstema(SAKSTEMA.MEDLEMSKAP_LOVVALG);
     await this.velgBehandlingstema(BEHANDLINGSTEMA.YRKESAKTIV);
     await this.velgAarsak(AARSAK.SØKNAD);
+    await this.leggBehandlingIMine();
+    await this.klikkOpprettNyBehandling();
+  }
+
+  /**
+   * Complete workflow to create a new reassessment (Ny vurdering)
+   * Convenience method for reassessment creation
+   *
+   * @param fnr - User's national ID
+   * @param aarsak - Reason for reassessment (e.g., 'SØKNAD')
+   */
+  async opprettNyVurdering(fnr: string, aarsak: string = AARSAK.SØKNAD): Promise<void> {
+    await this.fyllInnBrukerID(fnr);
+    // The checkbox for selecting existing case (unnamed label)
+    await this.page.getByLabel('', { exact: true }).check();
+    await this.velgNyVurdering();
+    await this.velgAarsak(aarsak);
     await this.leggBehandlingIMine();
     await this.klikkOpprettNyBehandling();
   }
