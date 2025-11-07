@@ -123,6 +123,10 @@ test.describe('Yrkesaktiv - Førstegangsbehandling', () => {
 
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
 
+        // TODO call melosys-api with
+        // http://localhost:8080/admin/aarsavregninger/saker/ikke-skattepliktige/finn?lagProsessinstanser=true&fomDato=2024-01-01&tomDato=2024-12-31
+        // and I think we need a token
+
         console.log('✅ Workflow completed successfully!');
     });
 });
