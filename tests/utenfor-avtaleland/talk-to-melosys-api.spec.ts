@@ -31,6 +31,34 @@ test.describe('Melosys Admin API', () => {
     expect(data.tomDato).toBe('2024-12-31');
     expect(data.lagProsessinstanser).toBe(false);
   });
+
+  test('should get status of ikke-skattepliktige saker job', async ({ request }) => {
+    // Create admin API helper
+    const adminApi = new AdminApiHelper();
+
+    // Call the admin API to get job status
+    const response = await adminApi.getIkkeSkattepliktigeSakerStatus(request);
+
+    // Verify response
+    expect(response.status()).toBe(200);
+    expect(response.ok()).toBeTruthy();
+
+    // Parse and log response data
+    const data = await response.json();
+    console.log('\n=== Job Status ===');
+    console.log(JSON.stringify(data, null, 2));
+    console.log('==================\n');
+
+    // Verify response structure
+    expect(data).toHaveProperty('jobName');
+    expect(data).toHaveProperty('isRunning');
+    expect(data).toHaveProperty('startedAt');
+    expect(data).toHaveProperty('runtime');
+    expect(data).toHaveProperty('antallFunnet');
+    expect(data).toHaveProperty('antallProsessert');
+    expect(data.jobName).toBe('FinnSakerForÅrsavregningIkkeSkattepliktige');
+    expect(typeof data.isRunning).toBe('boolean');
+  });
 });
 
 

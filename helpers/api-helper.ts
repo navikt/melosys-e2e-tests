@@ -112,6 +112,20 @@ export class AdminApiHelper {
   }
 
   /**
+   * Get status of ikke-skattepliktige saker job
+   *
+   * @param request - Playwright API request context
+   * @returns API response with job status
+   */
+  async getIkkeSkattepliktigeSakerStatus(request: APIRequestContext) {
+    return await this.callAdminEndpoint(
+      request,
+      'GET',
+      '/admin/aarsavregninger/saker/ikke-skattepliktige/status'
+    );
+  }
+
+  /**
    * Add more admin API methods here following this pattern:
    *
    * @example
