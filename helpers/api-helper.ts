@@ -112,7 +112,7 @@ export class AdminApiHelper {
   }
 
   /**
-   * Get status of ikke-skattepliktige saker job
+   * Get status of ikke-skattepliktige saker job (single check)
    *
    * @param request - Playwright API request context
    * @returns API response with job status
@@ -123,6 +123,62 @@ export class AdminApiHelper {
       'GET',
       '/admin/aarsavregninger/saker/ikke-skattepliktige/status'
     );
+  }
+
+  /**
+   * Wait for ikke-skattepliktige saker job to complete
+   *
+   * Polls the status endpoint until the job is done (isRunning becomes false)
+   *
+   * @param request - Playwright API request context
+   * @param timeoutSeconds - Maximum time to wait (default: 10 seconds)
+   * @param pollIntervalMs - Time between polls (default: 100ms)
+   * @returns Final job status data
+   */
+  async waitForIkkeSkattepliktigeSakerJob(
+    request: APIRequestContext,
+    timeoutSeconds: number = 10,
+    pollIntervalMs: number = 100
+  ) {
+    const startTime = Date.now();
+    const timeoutMs = timeoutSeconds * 1000;
+
+    console.log(`\n⏳ Waiting for ikke-skattepliktige saker job to complete (timeout: ${timeoutSeconds}s)...`);
+
+    while (true) {
+      const response = await this.getIkkeSkattepliktigeSakerStatus(request);
+      const data = await response.json();
+
+      if (!response.ok()) {
+        throw new Error(`Failed to get job status: HTTP ${response.status()}`);
+      }
+
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+
+      if (!data.isRunning) {
+        console.log(`✅ Job completed after ${elapsed}s`);
+        console.log(`   - Funnet: ${data.antallFunnet || 0}`);
+        console.log(`   - Prosessert: ${data.antallProsessert || 0}`);
+        console.log(`   - Errors: ${data.errorCount || 0}`);
+        return data;
+      }
+
+      // Check timeout
+      if (Date.now() - startTime > timeoutMs) {
+        console.log(`\n❌ Timeout after ${elapsed}s - job still running`);
+        console.log(`   - Funnet: ${data.antallFunnet || 0}`);
+        console.log(`   - Prosessert: ${data.antallProsessert || 0}`);
+        throw new Error(`Job did not complete within ${timeoutSeconds} seconds`);
+      }
+
+      // Log progress
+      if (elapsed % 10 === 0 && elapsed > 0) { // Log every 10 seconds
+        console.log(`   Still running... ${elapsed}s elapsed (funnet: ${data.antallFunnet || 0}, prosessert: ${data.antallProsessert || 0})`);
+      }
+
+      // Wait before next poll
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+    }
   }
 
   /**

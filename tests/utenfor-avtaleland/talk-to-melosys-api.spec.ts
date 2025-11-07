@@ -59,6 +59,42 @@ test.describe('Melosys Admin API', () => {
     expect(data.jobName).toBe('FinnSakerForÅrsavregningIkkeSkattepliktige');
     expect(typeof data.isRunning).toBe('boolean');
   });
+
+  test('should start job and wait for completion', async ({ request }) => {
+    // Create admin API helper
+    const adminApi = new AdminApiHelper();
+
+    // Start the job
+    console.log('\n🚀 Starting ikke-skattepliktige saker job...');
+    const startResponse = await adminApi.finnIkkeSkattepliktigeSaker(
+      request,
+      '2024-01-01',
+      '2024-12-31',
+      false
+    );
+
+    expect(startResponse.status()).toBe(200);
+    const startData = await startResponse.json();
+    console.log('Job started:', JSON.stringify(startData, null, 2));
+
+    // Wait for job to complete
+    const finalStatus = await adminApi.waitForIkkeSkattepliktigeSakerJob(
+      request,
+      60, // 60 seconds timeout
+      1000 // Poll every 1 second
+    );
+
+    // Verify job completed successfully
+    expect(finalStatus.isRunning).toBe(false);
+    expect(finalStatus.jobName).toBe('FinnSakerForÅrsavregningIkkeSkattepliktige');
+    expect(finalStatus).toHaveProperty('antallFunnet');
+    expect(finalStatus).toHaveProperty('antallProsessert');
+    expect(finalStatus.errorCount).toBe(0);
+
+    console.log('\n✅ Job completed successfully');
+    console.log(`   Total found: ${finalStatus.antallFunnet}`);
+    console.log(`   Total processed: ${finalStatus.antallProsessert}`);
+  });
 });
 
 
