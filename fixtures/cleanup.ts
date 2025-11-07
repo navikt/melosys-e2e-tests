@@ -2,6 +2,7 @@ import { test as base } from '@playwright/test';
 import { DatabaseHelper } from '../helpers/db-helper';
 import { clearMockDataSilent } from '../helpers/mock-helper';
 import { clearApiCaches, waitForProcessInstances } from '../helpers/api-helper';
+import { UnleashHelper } from '../helpers/unleash-helper';
 
 /**
  * Cleanup fixture - automatically cleans database and mock data before and after each test
@@ -50,6 +51,15 @@ async function cleanupTestData(page: any, waitForProcesses: boolean = false): Pr
     }
   } catch (error: any) {
     console.log(`   ⚠️  Mock cleanup failed: ${error.message || error}`);
+  }
+
+  // Reset Unleash feature toggles to defaults
+  try {
+    const unleash = new UnleashHelper(page.request);
+    await unleash.resetToDefaults();
+    console.log(`   ✅ Unleash: Toggles reset to defaults`);
+  } catch (error: any) {
+    console.log(`   ⚠️  Unleash reset failed: ${error.message || error}`);
   }
 }
 

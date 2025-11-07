@@ -70,7 +70,7 @@ jobs:
           echo "🐳 Pre-pulling Docker images to avoid timeout during compose up..."
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:${{ inputs.environment }} &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-web:latest &
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:${{ inputs.environment }} &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-dokgen:latest &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:latest &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:latest &
@@ -83,6 +83,7 @@ jobs:
           docker pull --platform linux/amd64 confluentinc/cp-kafka:7.1.2 &
           docker pull --platform linux/amd64 ghcr.io/navikt/mock-oauth2-server:2.3.0 &
           docker pull --platform linux/amd64 ghcr.io/navikt/mock-oauth2-server:0.4.8 &
+          docker pull --platform linux/amd64 unleashorg/unleash-server:latest &
           wait
           echo "✅ All images pre-pulled successfully"
 
@@ -97,7 +98,7 @@ jobs:
         run: |
           echo "⏳ Waiting for services to be ready..."
 
-          max_attempts=60
+          max_attempts=20
           attempt=0
 
           # Function to check if a service is healthy
@@ -129,8 +130,12 @@ jobs:
             web_health=$(curl -sf http://localhost:3000/melosys/ > /dev/null 2>&1 && echo "healthy" || echo "unhealthy")
             echo "  melosys-web: $web_health"
 
+            # Check Unleash health endpoint
+            unleash_health=$(curl -sf http://localhost:4242/health > /dev/null 2>&1 && echo "healthy" || echo "unhealthy")
+            echo "  unleash: $unleash_health"
+
             # Check if all critical services are healthy
-            if [ "$oracle_health" = "healthy" ] && [ "$kafka_health" = "healthy" ] && [ "$api_health" = "healthy" ] && [ "$web_health" = "healthy" ]; then
+            if [ "$oracle_health" = "healthy" ] && [ "$kafka_health" = "healthy" ] && [ "$api_health" = "healthy" ] && [ "$web_health" = "healthy" ] && [ "$unleash_health" = "healthy" ]; then
               echo "✅ All critical services are healthy!"
               break
             fi
@@ -157,6 +162,13 @@ jobs:
           echo "⏳ Waiting 10 seconds for services to fully stabilize..."
           sleep 10
           echo "✅ Ready to run tests!"
+
+      - name: Seed Unleash feature toggles
+        run: |
+          echo "🎯 Seeding Unleash with feature toggles..."
+          chmod +x ./scripts/seed-unleash.sh
+          ./scripts/seed-unleash.sh
+          echo "✅ Unleash seeded successfully!"
 
       - name: Run Playwright tests
         run: npx playwright test --project=chromium

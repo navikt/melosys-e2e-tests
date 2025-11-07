@@ -86,8 +86,9 @@ make start-all
   - `mock-helper.ts` - Mock service data management
   - `form-helper.ts` - Form filling with API wait handling
   - `auth-state-helper.ts` - Authentication state persistence
+  - `unleash-helper.ts` - Feature toggle control for all services
 - **fixtures/** - Playwright test fixtures for automatic cleanup and logging
-  - `cleanup-fixture.ts` - Auto-cleanup database and mock data after each test
+  - `cleanup-fixture.ts` - Auto-cleanup database, mock data, and Unleash toggles after each test
   - `docker-log-fixture.ts` - Check Docker logs for errors after tests
 
 ### Helper Classes
@@ -130,6 +131,41 @@ import { clearMockData } from '../helpers/mock-helper';
 await clearMockData(page.request);
 ```
 
+**UnleashHelper** - Control feature toggles for all services during tests.
+
+```typescript
+import { UnleashHelper } from '../helpers/unleash-helper';
+
+const unleash = new UnleashHelper(request);
+
+// Enable a feature toggle (affects ALL services)
+await unleash.enableFeature('melosys.new-feature');
+
+// Disable a feature toggle
+await unleash.disableFeature('melosys.old-feature');
+
+// Enable multiple features at once
+await unleash.enableFeatures([
+  'melosys.pensjonist',
+  'melosys.arsavregning'
+]);
+
+// Check if feature is enabled
+const isEnabled = await unleash.isFeatureEnabled('melosys.pensjonist');
+
+// List all feature toggles
+const features = await unleash.listFeatures();
+
+// Reset all toggles to defaults (automatic via cleanup fixture)
+await unleash.resetToDefaults();
+```
+
+**Key Points:**
+- Feature toggles affect **all services** (melosys-api, faktureringskomponenten, trygdeavgift-beregning)
+- Toggles are **automatically reset** after each test via cleanup fixture
+- Unleash UI available at `http://localhost:4242` (admin/unleash4all)
+- See `tests/unleash-example.spec.ts` for complete examples
+
 ### Docker Services Architecture
 
 The test suite depends on a full Docker Compose stack running in `../melosys-docker-compose`. Key services:
@@ -137,14 +173,23 @@ The test suite depends on a full Docker Compose stack running in `../melosys-doc
 - **melosys-web** (port 3000) - Frontend application
 - **melosys-api** (port 8080) - Backend API
 - **melosys-oracle** (port 1521) - Oracle database
+- **postgres** (port 5432) - PostgreSQL database (for faktureringskomponenten, trygdeavgift, and Unleash)
 - **kafka** + **zookeeper** - Message queue
 - **mock-oauth2-server** (ports 8082, 8086) - OAuth authentication
+- **unleash** (port 4242) - Feature toggle server (shared by all services)
 - **faktureringskomponenten** (port 8084) - Billing component
 - **melosys-dokgen** (port 8888) - Document generation
 - **melosys-trygdeavgift-beregning** (port 8095) - Tax calculation
 - **melosys-mock** (port 8083) - Mock external services
 
 All services must be healthy before tests run. The GitHub Actions workflow waits for `http://localhost:3000/melosys/` to be responsive.
+
+**Initial Setup After Starting Services:**
+After first `make start-all`, run the seed script to populate Unleash with feature toggles:
+```bash
+cd ../melosys-docker-compose
+./unleash/seed-toggles.sh
+```
 
 ### Database Configuration
 
