@@ -88,7 +88,7 @@ test.describe('Melosys Admin API', () => {
     expect(finalStatus.isRunning).toBe(false);
     expect(finalStatus.jobName).toBe('FinnSakerForÅrsavregningIkkeSkattepliktige');
     expect(finalStatus).toHaveProperty('antallFunnet');
-    expect(finalStatus).toHaveProperty('antallProsessert');
+    expect(finalStatus.antallProsessert).toBe(1);
     expect(finalStatus.errorCount).toBe(0);
 
     console.log('\n✅ Job completed successfully');
