@@ -20,7 +20,7 @@ npm test
 npm test tests/example-workflow.spec.ts
 
 # Run specific test by name
-npx playwright test "should complete a basic workflow" --project=chromium
+npx playwright test "should complete a basic workflow" --project=chromium --reporter=list --workers=1
 
 # Run with browser visible (headed mode)
 npm run test:headed
