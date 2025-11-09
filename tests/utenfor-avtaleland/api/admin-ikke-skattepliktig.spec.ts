@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { AdminApiHelper } from '../../../helpers/api-helper';
 
-test.describe('Melosys Admin API', () => {
+test.describe('Melosys Admin API @manual', () => {
   test('skal finne ikke-skattepliktige saker via admin API', async ({ request }) => {
     // Create admin API helper
     const adminApi = new AdminApiHelper();
