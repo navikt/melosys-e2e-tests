@@ -114,4 +114,68 @@ test.describe('Lovvalg Validation Scenarios - Valid Paths', () => {
 
     console.log('✅ Scenario 2 PASSED: Can proceed - no warnings, button enabled');
   });
+
+  test('Scenario 3: § 2-8 andre ledd (særlig grunn) + Multinasjonalt konsern - Can proceed', async ({ page }) => {
+    const lovvalg = await setupBehandlingToLovvalg(page);
+
+    console.log('📝 Testing: § 2-8 andre ledd with all Ja + first dropdown option (SHOULD ALLOW PROCEEDING)');
+
+    // Select bestemmelse
+    await lovvalg.velgBestemmelse('FTRL_KAP2_2_8_ANDRE_LEDD');
+
+    // Answer all three questions with "Ja"
+    console.log('📝 Answering question 1: Ja');
+    await lovvalg.svarJaPaaFørsteSpørsmål();
+
+    console.log('📝 Answering question 2: Ja');
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker vært medlem i minst');
+
+    console.log('📝 Answering question 3: Ja');
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker nær tilknytning til');
+
+    // Select "Særlig grunn" dropdown option
+    console.log('📝 Selecting Særlig grunn: Arbeid i mor- eller søsterselskap i multinasjonalt konsern');
+    await lovvalg.velgSærligGrunn('Arbeid i mor- eller søsterselskap i multinasjonalt konsern');
+
+    // Verify no warnings and button is enabled
+    console.log('📝 Verifying no warnings present');
+    await lovvalg.assertions.verifiserIngenAdvarsler();
+
+    console.log('📝 Verifying button is enabled');
+    await lovvalg.assertions.verifiserBekreftKnappAktiv();
+
+    console.log('✅ Scenario 3 PASSED: Can proceed - no warnings, button enabled');
+  });
+
+  test('Scenario 4: § 2-8 andre ledd (særlig grunn) + Annen grunn - Can proceed', async ({ page }) => {
+    const lovvalg = await setupBehandlingToLovvalg(page);
+
+    console.log('📝 Testing: § 2-8 andre ledd with all Ja + last dropdown option (SHOULD ALLOW PROCEEDING)');
+
+    // Select bestemmelse
+    await lovvalg.velgBestemmelse('FTRL_KAP2_2_8_ANDRE_LEDD');
+
+    // Answer all three questions with "Ja"
+    console.log('📝 Answering question 1: Ja');
+    await lovvalg.svarJaPaaFørsteSpørsmål();
+
+    console.log('📝 Answering question 2: Ja');
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker vært medlem i minst');
+
+    console.log('📝 Answering question 3: Ja');
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker nær tilknytning til');
+
+    // Select "Særlig grunn" dropdown option - last option
+    console.log('📝 Selecting Særlig grunn: Annen grunn (fritekst)');
+    await lovvalg.velgSærligGrunn('Annen grunn (fritekst)');
+
+    // Verify no warnings and button is enabled
+    console.log('📝 Verifying no warnings present');
+    await lovvalg.assertions.verifiserIngenAdvarsler();
+
+    console.log('📝 Verifying button is enabled');
+    await lovvalg.assertions.verifiserBekreftKnappAktiv();
+
+    console.log('✅ Scenario 4 PASSED: Can proceed - no warnings, button enabled');
+  });
 });

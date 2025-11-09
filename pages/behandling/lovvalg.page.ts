@@ -121,6 +121,19 @@ export class LovvalgPage extends BasePage {
   }
 
   /**
+   * Select a "Særlig grunn" (special reason) option from dropdown
+   * Used for § 2-8 andre ledd (særlig grunn)
+   *
+   * @param option - The text of the dropdown option to select
+   *
+   * @example
+   * await lovvalg.velgSærligGrunn('Arbeid i mor- eller søsterselskap i multinasjonalt konsern');
+   */
+  async velgSærligGrunn(option: string): Promise<void> {
+    await this.page.getByLabel('Særlig grunnSærlig grunn').selectOption([option]);
+  }
+
+  /**
    * Click "Bekreft og fortsett" button and wait for it to be enabled
    *
    * Note: This button may take time to enable after answering questions
