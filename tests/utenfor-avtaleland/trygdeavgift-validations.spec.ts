@@ -83,7 +83,13 @@ test.describe('Trygdeavgift Validation Scenarios', () => {
         // Should calculate tax at 37.5% (2023) and 37% (2024)
         await trygdeavgift.assertions.verifiserTrygdeavgiftBeregnet();
 
-        console.log('✅ Scenario 1 succeeded - Tax calculated at 37% rate');
+        // Verify actual calculated values (2 periods with different rates per year)
+        await trygdeavgift.assertions.verifiserBeregnedeTrygdeavgiftVerdier([
+            { sats: '37.5', avgiftPerMnd: '37500 nkr' },  // 01.01.2023 - 31.12.2023 (37.5% rate)
+            { sats: '37', avgiftPerMnd: '37000 nkr' }     // 01.01.2024 - 01.07.2024 (37% rate)
+        ]);
+
+        console.log('✅ Scenario 1 succeeded - Tax calculated at 37.5% (2023) and 37% (2024) rates');
     });
 
     test('Scenario 2: Ikke skattepliktig + Inntekt fra utlandet + Betales AGA - Tax rate 28%', async ({page}) => {
@@ -98,7 +104,13 @@ test.describe('Trygdeavgift Validation Scenarios', () => {
         // Should calculate tax at 28.3% (2023) and 27.8% (2024) - lower rate because AGA is paid
         await trygdeavgift.assertions.verifiserTrygdeavgiftBeregnet();
 
-        console.log('✅ Scenario 2 succeeded - Tax calculated at 28% rate (lower because AGA is paid)');
+        // Verify actual calculated values (2 periods with different rates per year)
+        await trygdeavgift.assertions.verifiserBeregnedeTrygdeavgiftVerdier([
+            { sats: '28.3', avgiftPerMnd: '28300 nkr' },  // 01.01.2023 - 31.12.2023 (28.3% rate)
+            { sats: '27.8', avgiftPerMnd: '27800 nkr' }   // 01.01.2024 - 01.07.2024 (27.8% rate)
+        ]);
+
+        console.log('✅ Scenario 2 succeeded - Tax calculated at 28.3% (2023) and 27.8% (2024) rates');
     });
 
     test('Scenario 3: Skattepliktig + Inntekt fra utlandet + Betales ikke AGA - Tax rate 9.2%', async ({page}) => {
