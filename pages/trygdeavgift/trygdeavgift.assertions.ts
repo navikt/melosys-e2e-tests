@@ -150,17 +150,38 @@ export class TrygdeavgiftAssertions {
       }
     }
 
-    // Filter to likely error messages (shorter, more focused text)
-    const likelyErrors = foundErrors.filter(msg => msg.length < 200);
+    // Filter to actual validation error messages by excluding common UI noise
+    const isLikelyValidationError = (msg: string): boolean => {
+      // Exclude common UI elements that contain "må" or other trigger words
+      const uiNoisePatterns = [
+        /^Gå til/i,
+        /^Måned/i,
+        /^Åpne datovelger/i,
+        /hjelpetekst/i,
+        /^Hvis bruker har flere/i
+      ];
 
-    console.log(`📋 Found ${likelyErrors.length} validation message(s) on page:`);
-    likelyErrors.forEach((msg, idx) => {
+      if (uiNoisePatterns.some(pattern => pattern.test(msg))) {
+        return false;
+      }
+
+      // Must contain actual error keywords and be reasonably short
+      const hasErrorKeyword = /kan ikke velges|påkrevd|ugyldig|ikke tillatt|Feil/i.test(msg);
+      const isReasonableLength = msg.length > 10 && msg.length < 200;
+
+      return hasErrorKeyword && isReasonableLength;
+    };
+
+    const validationErrors = foundErrors.filter(isLikelyValidationError);
+
+    console.log(`📋 Found ${validationErrors.length} validation error(s) on page:`);
+    validationErrors.forEach((msg, idx) => {
       console.log(`   ${idx + 1}. "${msg}"`);
     });
 
     // Now check if expected error is among them
     const expectedPattern = typeof expectedErrorText === 'string' ? expectedErrorText : expectedErrorText.source;
-    const matchingError = likelyErrors.find(msg => {
+    const matchingError = validationErrors.find(msg => {
       if (typeof expectedErrorText === 'string') {
         return msg.includes(expectedErrorText);
       } else {
@@ -172,7 +193,8 @@ export class TrygdeavgiftAssertions {
       throw new Error(
         `❌ Expected validation error not found!\n\n` +
         `Expected (substring): "${expectedPattern}"\n\n` +
-        `Actual validation messages found:\n${likelyErrors.map((e, i) => `  ${i + 1}. "${e}"`).join('\n')}`
+        `Actual validation errors found:\n${validationErrors.map((e, i) => `  ${i + 1}. "${e}"`).join('\n')}\n\n` +
+        `(Filtered out ${foundErrors.length - validationErrors.length} UI noise elements)`
       );
     }
 
