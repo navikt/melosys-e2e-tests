@@ -116,4 +116,73 @@ export class TrygdeavgiftAssertions {
     await expect(rateCell).toBeVisible({ timeout: 5000 });
     console.log(`✅ Tax rate ${expectedRate}% found in calculation table`);
   }
+
+  /**
+   * Verify that a validation error is displayed
+   * @param expectedErrorText - Part of the error message to match (can be substring or regex)
+   */
+  async verifiserValideringsfeil(expectedErrorText: string | RegExp): Promise<void> {
+    // Look for text containing the error message
+    // The error message appears somewhere on the page in a red alert box
+    if (typeof expectedErrorText === 'string') {
+      const errorLocator = this.page.getByText(expectedErrorText, { exact: false });
+      await expect(errorLocator).toBeVisible({ timeout: 5000 });
+      const actualErrorText = await errorLocator.textContent();
+      console.log(`✅ Validation error displayed: ${actualErrorText}`);
+    } else {
+      // For regex patterns, use locator with filter
+      const errorLocator = this.page.locator('body').getByText(expectedErrorText);
+      await expect(errorLocator).toBeVisible({ timeout: 5000 });
+      const actualErrorText = await errorLocator.textContent();
+      console.log(`✅ Validation error displayed: ${actualErrorText}`);
+    }
+  }
+
+  /**
+   * Verify that "Bekreft og fortsett" button is disabled due to validation error
+   */
+  async verifiserBekreftKnappDeaktivert(): Promise<void> {
+    const button = this.page.getByRole('button', { name: 'Bekreft og fortsett' });
+    await expect(button).toBeDisabled({ timeout: 5000 });
+    console.log('✅ "Bekreft og fortsett" button is disabled');
+  }
+
+  /**
+   * Verify calculated tax values in the table
+   * @param expectedValues - Array of expected tax calculations for each period
+   *
+   * @example
+   * await trygdeavgift.assertions.verifiserBeregnedeTrygdeavgiftVerdier([
+   *   { sats: '9.2', avgiftPerMnd: '9200 nkr' },
+   *   { sats: '9.2', avgiftPerMnd: '9200 nkr' }
+   * ]);
+   */
+  async verifiserBeregnedeTrygdeavgiftVerdier(expectedValues: Array<{ sats: string; avgiftPerMnd: string }>): Promise<void> {
+    // Wait for the table to be visible
+    const table = this.page.locator('table').filter({ has: this.page.getByText('Trygdeperiode') });
+    await expect(table).toBeVisible({ timeout: 5000 });
+
+    // Get all rows in the table body (skip header)
+    const rows = table.locator('tbody tr');
+    const rowCount = await rows.count();
+
+    expect(rowCount).toBe(expectedValues.length);
+    console.log(`✅ Found ${rowCount} tax calculation rows`);
+
+    // Verify each row
+    for (let i = 0; i < expectedValues.length; i++) {
+      const row = rows.nth(i);
+      const expected = expectedValues[i];
+
+      // Get cells by column position
+      const satsCell = row.locator('td').nth(3); // "Sats" column (4th column, index 3)
+      const avgiftCell = row.locator('td').nth(4); // "Avgift per md." column (5th column, index 4)
+
+      // Verify values
+      await expect(satsCell).toHaveText(expected.sats);
+      await expect(avgiftCell).toHaveText(expected.avgiftPerMnd);
+
+      console.log(`✅ Row ${i + 1}: Sats=${expected.sats}%, Avgift=${expected.avgiftPerMnd}`);
+    }
+  }
 }

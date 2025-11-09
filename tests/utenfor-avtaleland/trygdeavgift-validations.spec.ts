@@ -114,6 +114,12 @@ test.describe('Trygdeavgift Validation Scenarios', () => {
         await trygdeavgift.assertions.verifiserTrygdeavgiftBeregnet();
         await trygdeavgift.assertions.verifiserTrygdeavgiftSats('9.2');
 
+        // Verify actual calculated values (2 periods: 2023 and 2024)
+        await trygdeavgift.assertions.verifiserBeregnedeTrygdeavgiftVerdier([
+            { sats: '9.2', avgiftPerMnd: '9200 nkr' },  // 01.01.2023 - 31.12.2023
+            { sats: '9.2', avgiftPerMnd: '9200 nkr' }   // 01.01.2024 - 01.07.2024
+        ]);
+
         console.log('✅ Scenario 3 succeeded - Tax calculated at 9.2% rate');
     });
 
