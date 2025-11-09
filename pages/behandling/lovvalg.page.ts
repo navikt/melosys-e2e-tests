@@ -1,5 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+import { LovvalgAssertions } from './lovvalg.assertions';
 
 /**
  * Page Object for Lovvalg (Rules) section in behandling workflow
@@ -23,6 +24,7 @@ import { BasePage } from '../shared/base.page';
  * await lovvalg.klikkBekreftOgFortsett();
  */
 export class LovvalgPage extends BasePage {
+  readonly assertions: LovvalgAssertions;
   // Locators
   private readonly bestemmelseDropdown = this.page.getByLabel('Hvilken bestemmelse skal sø');
 
@@ -34,6 +36,7 @@ export class LovvalgPage extends BasePage {
 
   constructor(page: Page) {
     super(page);
+    this.assertions = new LovvalgAssertions(page);
   }
 
   /**
@@ -62,6 +65,16 @@ export class LovvalgPage extends BasePage {
     const firstJaRadio = this.page.getByRole('radio', { name: 'Ja' }).first();
     await firstJaRadio.waitFor({ state: 'visible', timeout: 5000 });
     await firstJaRadio.check();
+  }
+
+  /**
+   * Answer "Nei" to the first question on the page
+   * Used for testing blocking scenarios
+   */
+  async svarNeiPaaFørsteSpørsmål(): Promise<void> {
+    const firstNeiRadio = this.page.getByRole('radio', { name: 'Nei' }).first();
+    await firstNeiRadio.waitFor({ state: 'visible', timeout: 5000 });
+    await firstNeiRadio.check();
   }
 
   /**
