@@ -150,7 +150,7 @@ services:
           - melosys-mock.melosys.docker-internal
 
   faktureringskomponenten:
-    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:${MELOSYS_API_TAG}
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:${FAKTURERINGSKOMPONENTEN_TAG:-latest}
     container_name: faktureringskomponenten
     environment:
       SPRING_PROFILES_ACTIVE: local
@@ -181,7 +181,7 @@ services:
       - "8888:8080"
 
   melosys-trygdeavgift-beregning:
-    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:latest
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:${MELOSYS_TRYGDEAVGIFT_TAG:-latest}
     container_name: melosys-trygdeavgift-beregning
     environment:
       SPRING_PROFILES_ACTIVE: local
@@ -198,7 +198,7 @@ services:
       - "8095:8095"
 
   melosys-api:
-    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:${MELOSYS_API_TAG}
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:${MELOSYS_API_TAG:-latest}
     container_name: melosys-api
     networks:
       melosys.docker-internal:
@@ -249,7 +249,7 @@ services:
       UNLEASH_ENVIRONMENT: "development"
 
   melosys-web:
-    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-web:latest
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-web:${MELOSYS_WEB_TAG:-latest}
     container_name: melosys-web
     networks:
       melosys.docker-internal:
@@ -372,7 +372,7 @@ services:
       retries: 10
 
   melosys-trygdeavtale:
-    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:latest
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:${MELOSYS_TRYGDEAVTALE_TAG:-latest}
     container_name: melosys-trygdeavtale
     depends_on:
       - mock-oauth2-server
