@@ -55,8 +55,8 @@ async function setupBehandlingToLovvalg(page: Page): Promise<LovvalgPage> {
   return lovvalg;
 }
 
-test.describe('Lovvalg - Blocking Scenarios (§ 2-8 a arbeidstaker)', () => {
-  test('§ 2-8 a: Question 1 = Nei should block progression', async ({ page }) => {
+test.describe('Lovvalg - Blokkerende scenarioer (§ 2-8 a arbeidstaker)', () => {
+  test('§ 2-8 a: Spørsmål 1 = Nei skal blokkere videre progresjon', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
     console.log('📝 Testing: § 2-8 a with Nei on first question (SHOULD BLOCK)');
@@ -81,7 +81,7 @@ test.describe('Lovvalg - Blocking Scenarios (§ 2-8 a arbeidstaker)', () => {
     console.log('✅ Scenario 1 PASSED: Correctly blocked - warning shown, button disabled');
   });
 
-  test('BLOCKED: Question 1 = Ja, Question 2 = Nei - Blocks progression', async ({ page }) => {
+  test('§ 2-8 a: Spørsmål 1 = Ja, Spørsmål 2 = Nei skal blokkere videre progresjon', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
     console.log('📝 Testing: § 2-8 a with Ja on Q1, Nei on Q2 (SHOULD BLOCK)');
@@ -110,7 +110,7 @@ test.describe('Lovvalg - Blocking Scenarios (§ 2-8 a arbeidstaker)', () => {
     console.log('✅ Scenario 2 PASSED: Correctly blocked - warning shown, button disabled');
   });
 
-  test('BLOCKED: Questions 1 & 2 = Ja, Question 3 = Nei - Blocks progression', async ({ page }) => {
+  test('§ 2-8 a: Spørsmål 1 & 2 = Ja, Spørsmål 3 = Nei skal blokkere videre progresjon', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
     console.log('📝 Testing: § 2-8 a with Ja on Q1 & Q2, Nei on Q3 (SHOULD BLOCK)');
@@ -144,8 +144,8 @@ test.describe('Lovvalg - Blocking Scenarios (§ 2-8 a arbeidstaker)', () => {
   });
 });
 
-test.describe('Lovvalg Blocking Scenarios - § 2-8 første ledd bokstav b (student)', () => {
-  test('BLOCKED: Question 1 = Nei - Blocks progression', async ({ page }) => {
+test.describe('Lovvalg - Blokkerende scenarioer (§ 2-8 b student)', () => {
+  test('§ 2-8 b: Spørsmål 1 = Nei skal blokkere videre progresjon', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
     console.log('📝 Testing: § 2-8 b with Nei on first question (SHOULD BLOCK)');
@@ -170,7 +170,7 @@ test.describe('Lovvalg Blocking Scenarios - § 2-8 første ledd bokstav b (stude
     console.log('✅ Scenario 1 PASSED: Correctly blocked - warning shown, button disabled');
   });
 
-  test('BLOCKED: Question 1 = Ja, Question 2 = Nei - Blocks progression', async ({ page }) => {
+  test('§ 2-8 b: Spørsmål 1 = Ja, Spørsmål 2 = Nei skal blokkere videre progresjon', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
     console.log('📝 Testing: § 2-8 b with Ja on Q1, Nei on Q2 (SHOULD BLOCK)');
@@ -199,7 +199,7 @@ test.describe('Lovvalg Blocking Scenarios - § 2-8 første ledd bokstav b (stude
     console.log('✅ Scenario 2 PASSED: Correctly blocked - warning shown, button disabled');
   });
 
-  test('BLOCKED: Questions 1 & 2 = Ja, Question 3 = Nei - Blocks progression', async ({ page }) => {
+  test('§ 2-8 b: Spørsmål 1 & 2 = Ja, Spørsmål 3 = Nei skal blokkere videre progresjon', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
     console.log('📝 Testing: § 2-8 b with Ja on Q1 & Q2, Nei on Q3 (SHOULD BLOCK)');
@@ -232,7 +232,7 @@ test.describe('Lovvalg Blocking Scenarios - § 2-8 første ledd bokstav b (stude
     console.log('✅ Scenario 3 PASSED: Correctly blocked - warning shown, button disabled');
   });
 
-  test('BLOCKED: Questions 1, 2 & 3 = Ja, Question 4 = Nei - Blocks progression', async ({ page }) => {
+  test('§ 2-8 b: Spørsmål 1, 2 & 3 = Ja, Spørsmål 4 = Nei skal blokkere videre progresjon', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
     console.log('📝 Testing: § 2-8 b with Ja on Q1, Q2 & Q3, Nei on Q4 (SHOULD BLOCK)');
@@ -270,8 +270,8 @@ test.describe('Lovvalg Blocking Scenarios - § 2-8 første ledd bokstav b (stude
   });
 });
 
-test.describe('Lovvalg Blocking Scenarios - § 2-8 andre ledd (særlig grunn)', () => {
-  test('BLOCKED: Question 1 = Nei - Blocks progression', async ({ page }) => {
+test.describe('Lovvalg - Blokkerende scenarioer (§ 2-8 andre ledd)', () => {
+  test('§ 2-8 andre ledd: Spørsmål 1 = Nei skal blokkere videre progresjon', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
     console.log('📝 Testing: § 2-8 andre ledd with Nei on first question (SHOULD BLOCK)');
@@ -296,7 +296,7 @@ test.describe('Lovvalg Blocking Scenarios - § 2-8 andre ledd (særlig grunn)', 
     console.log('✅ Scenario 1 PASSED: Correctly blocked - warning shown, button disabled');
   });
 
-  test('BLOCKED: Question 1 = Ja, Question 2 = Nei - Blocks progression', async ({ page }) => {
+  test('§ 2-8 andre ledd: Spørsmål 1 = Ja, Spørsmål 2 = Nei skal blokkere videre progresjon', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
     console.log('📝 Testing: § 2-8 andre ledd with Ja on Q1, Nei on Q2 (SHOULD BLOCK)');
@@ -325,7 +325,7 @@ test.describe('Lovvalg Blocking Scenarios - § 2-8 andre ledd (særlig grunn)', 
     console.log('✅ Scenario 2 PASSED: Correctly blocked - warning shown, button disabled');
   });
 
-  test('BLOCKED: Questions 1 & 2 = Ja, Question 3 = Nei - Blocks progression', async ({ page }) => {
+  test('§ 2-8 andre ledd: Spørsmål 1 & 2 = Ja, Spørsmål 3 = Nei skal blokkere videre progresjon', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
     console.log('📝 Testing: § 2-8 andre ledd with Ja on Q1 & Q2, Nei on Q3 (SHOULD BLOCK)');

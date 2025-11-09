@@ -15,8 +15,8 @@ import {AdminApiHelper, waitForProcessInstances} from '../../helpers/api-helper'
 import {expect} from "@playwright/test";
 
 
-test.describe('Reassessment Workflow - Tax Status Changes', () => {
-    test('should change tax status from non-tax-liable to tax-liable via reassessment', async ({page, request}) => {
+test.describe('Nyvurdering - Endring av skattestatus', () => {
+    test('skal endre skattestatus fra ikke-skattepliktig til skattepliktig via nyvurdering', async ({page, request}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);
@@ -127,7 +127,7 @@ test.describe('Reassessment Workflow - Tax Status Changes', () => {
         console.log('✅ Workflow completed successfully!');
     });
 
-    test('should change tax status from tax-liable to non-tax-liable via reassessment', async ({page, request}) => {
+    test('skal endre skattestatus fra skattepliktig til ikke-skattepliktig via nyvurdering', async ({page, request}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);

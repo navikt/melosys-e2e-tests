@@ -55,8 +55,8 @@ async function setupBehandlingToLovvalg(page: Page): Promise<LovvalgPage> {
   return lovvalg;
 }
 
-test.describe('Lovvalg - Valid Scenarios', () => {
-  test('§ 2-8 a (arbeidstaker): All Ja answers should allow proceeding', async ({ page }) => {
+test.describe('Lovvalg - Gyldige scenarioer', () => {
+  test('§ 2-8 a (arbeidstaker): Alle Ja-svar skal tillate å gå videre', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
     console.log('📝 Testing: § 2-8 a with all Ja answers (SHOULD ALLOW PROCEEDING)');
@@ -84,7 +84,7 @@ test.describe('Lovvalg - Valid Scenarios', () => {
     console.log('✅ Scenario 1 PASSED: Can proceed - no warnings, button enabled');
   });
 
-  test('§ 2-8 b (student): All Ja answers should allow proceeding', async ({ page }) => {
+  test('§ 2-8 b (student): Alle Ja-svar skal tillate å gå videre', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
     console.log('📝 Testing: § 2-8 b (student) with all Ja answers (SHOULD ALLOW PROCEEDING)');
@@ -115,7 +115,7 @@ test.describe('Lovvalg - Valid Scenarios', () => {
     console.log('✅ Scenario 2 PASSED: Can proceed - no warnings, button enabled');
   });
 
-  test('§ 2-8 andre ledd: All Ja + Multinasjonalt konsern should allow proceeding', async ({ page }) => {
+  test('§ 2-8 andre ledd: Alle Ja + Multinasjonalt konsern skal tillate å gå videre', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
     console.log('📝 Testing: § 2-8 andre ledd with all Ja + first dropdown option (SHOULD ALLOW PROCEEDING)');
@@ -147,7 +147,7 @@ test.describe('Lovvalg - Valid Scenarios', () => {
     console.log('✅ Scenario 3 PASSED: Can proceed - no warnings, button enabled');
   });
 
-  test('§ 2-8 andre ledd: All Ja + Annen grunn should allow proceeding', async ({ page }) => {
+  test('§ 2-8 andre ledd: Alle Ja + Annen grunn skal tillate å gå videre', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
     console.log('📝 Testing: § 2-8 andre ledd with all Ja + last dropdown option (SHOULD ALLOW PROCEEDING)');

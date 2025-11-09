@@ -69,9 +69,9 @@ async function setupBehandlingToTrygdeavgift(page: Page) {
     return trygdeavgift;
 }
 
-test.describe('Trygdeavgift Validation Scenarios', () => {
+test.describe('Trygdeavgift - Gyldige scenarioer', () => {
 
-    test('Scenario 1: Ikke skattepliktig + Inntekt fra utlandet + Betales ikke AGA - Tax rate 37%', async ({page}) => {
+    test('Scenario 1: Ikke skattepliktig + Inntekt fra utlandet + Betales ikke AGA - Skattesats 37%', async ({page}) => {
         const trygdeavgift = await setupBehandlingToTrygdeavgift(page);
 
         console.log('📝 Testing: Ikke skattepliktig + Inntekt fra utlandet + Betales ikke AGA');
@@ -92,7 +92,7 @@ test.describe('Trygdeavgift Validation Scenarios', () => {
         console.log('✅ Scenario 1 succeeded - Tax calculated at 37.5% (2023) and 37% (2024) rates');
     });
 
-    test('Scenario 2: Ikke skattepliktig + Inntekt fra utlandet + Betales AGA - Tax rate 28%', async ({page}) => {
+    test('Scenario 2: Ikke skattepliktig + Inntekt fra utlandet + Betales AGA - Skattesats 28%', async ({page}) => {
         const trygdeavgift = await setupBehandlingToTrygdeavgift(page);
 
         console.log('📝 Testing: Ikke skattepliktig + Inntekt fra utlandet + Betales AGA');
@@ -113,7 +113,7 @@ test.describe('Trygdeavgift Validation Scenarios', () => {
         console.log('✅ Scenario 2 succeeded - Tax calculated at 28.3% (2023) and 27.8% (2024) rates');
     });
 
-    test('Scenario 3: Skattepliktig + Inntekt fra utlandet + Betales ikke AGA - Tax rate 9.2%', async ({page}) => {
+    test('Scenario 3: Skattepliktig + Inntekt fra utlandet + Betales ikke AGA - Skattesats 9.2%', async ({page}) => {
         const trygdeavgift = await setupBehandlingToTrygdeavgift(page);
 
         console.log('📝 Testing: Skattepliktig + Inntekt fra utlandet + Betales ikke AGA');
@@ -135,7 +135,7 @@ test.describe('Trygdeavgift Validation Scenarios', () => {
         console.log('✅ Scenario 3 succeeded - Tax calculated at 9.2% rate');
     });
 
-    test('Scenario 4: Skattepliktig + Inntekt fra utlandet + Betales AGA - No tax to NAV', async ({page}) => {
+    test('Scenario 4: Skattepliktig + Inntekt fra utlandet + Betales AGA - Ingen trygdeavgift til NAV', async ({page}) => {
         const trygdeavgift = await setupBehandlingToTrygdeavgift(page);
 
         console.log('📝 Testing: Skattepliktig + Inntekt fra utlandet + Betales AGA');
@@ -147,7 +147,7 @@ test.describe('Trygdeavgift Validation Scenarios', () => {
         await trygdeavgift.assertions.verifiserIngenTrygdeavgift();
         await trygdeavgift.assertions.verifiserBruttoinntektIkkeRelevant();
 
-        console.log('✅ Scenario 4 succeeded - No tax to NAV when skattepliktig and AGA is paid');
+        console.log('✅ Scenario 4 succeeded - Ingen trygdeavgift til NAV when skattepliktig and AGA is paid');
     });
 
     test('Scenario 5: Skattepliktig + Arbeidsinntekt fra Norge - Betales aga disabled', async ({page}) => {

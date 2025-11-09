@@ -71,9 +71,9 @@ async function setupBehandlingToTrygdeavgift(page: Page) {
     return trygdeavgift;
 }
 
-test.describe('Trygdeavgift Validation Error Scenarios', () => {
+test.describe('Trygdeavgift - Valideringsfeil', () => {
 
-    test('ERROR: Skattepliktig=Ja + Pensjon/uføretrygd det betales kildeskatt av', async ({page}) => {
+    test('FEIL: Skattepliktig=Ja + Pensjon/uføretrygd det betales kildeskatt av', async ({page}) => {
         const trygdeavgift = await setupBehandlingToTrygdeavgift(page);
 
         console.log('📝 Testing: Skattepliktig + Pensjon/uføretrygd det betales kildeskatt av (SHOULD FAIL)');
