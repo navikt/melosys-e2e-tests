@@ -5,8 +5,8 @@
 Complete validation matrix for Lovvalg (Bestemmelse) step in "Utenfor avtaleland" flow. This documents all tested scenarios, their expected behaviors, warning messages, and button states.
 
 **Test files:**
-- `lovvalg-validations.spec.ts` - Valid scenarios (1 test)
-- `lovvalg-blocking-scenarios.spec.ts` - Blocking scenarios (3 tests)
+- `lovvalg-validations.spec.ts` - Valid scenarios (2 tests)
+- `lovvalg-blocking-scenarios.spec.ts` - Blocking scenarios (7 tests)
 
 **Page objects:**
 - `pages/behandling/lovvalg.page.ts` - Actions
@@ -55,21 +55,91 @@ Du kan ikke gå videre, men:
 |----------|----|----|----|----|---------|--------|-----------|
 | All Ja | Ja | Ja | Ja | ✅ CAN PROCEED | None | Enabled | `lovvalg-validations.spec.ts:59` |
 
+## Bestemmelse: § 2-8 første ledd bokstav b (student)
+
+Code: `FTRL_KAP2_2_8_FØRSTE_LEDD_B`
+
+### Conditional Questions Flow
+
+The questions appear conditionally based on previous answers (**4 questions total** - one more than § 2-8 a):
+
+1. **Question 1** (always appears):
+   - "Har du kommet frem til at søker ikke er omfattet av et annet lands trygdelovgivning, etter en avtale som hindrer frivillig medlemskap?"
+
+2. **Question 2** (only if Q1 = "Ja"):
+   - "Er søker student ved universitet eller høgskole?"
+
+3. **Question 3** (only if Q1 = "Ja" AND Q2 = "Ja"):
+   - "Har søker vært medlem i minst tre av de fem siste kalenderårene?"
+
+4. **Question 4** (only if Q1 = "Ja" AND Q2 = "Ja" AND Q3 = "Ja"):
+   - "Har søker nær tilknytning til det norske samfunnet?"
+
+### Blocking Scenarios
+
+Any "Nei" answer blocks progression with the same warning message as § 2-8 a.
+
+| Scenario | Q1 | Q2 | Q3 | Q4 | Result | Warning | Button | Test File |
+|----------|----|----|----|----|--------|---------|--------|-----------|
+| 1 | Nei | - | - | - | ❌ BLOCKED | Yes | Disabled | `lovvalg-blocking-scenarios.spec.ts:148` |
+| 2 | Ja | Nei | - | - | ❌ BLOCKED | Yes | Disabled | `lovvalg-blocking-scenarios.spec.ts:173` |
+| 3 | Ja | Ja | Nei | - | ❌ BLOCKED | Yes | Disabled | `lovvalg-blocking-scenarios.spec.ts:202` |
+| 4 | Ja | Ja | Ja | Nei | ❌ BLOCKED | Yes | Disabled | `lovvalg-blocking-scenarios.spec.ts:235` |
+
+**Warning Message:**
+```
+Du kan ikke gå videre, men:
+- du kan bruke "Send brev"-fanen for å sende brev og vedtak, og "Opprett ny BUC"-fanen for å sende SED
+- du må avslutte behandlingen og angi resultatet i behandlingsmenyen
+- periode i MEDL og eventuelt avgiftssystemet må registreres manuelt
+```
+
+**Note:** Same warning message text as § 2-8 a.
+
+### Valid Scenarios
+
+| Scenario | Q1 | Q2 | Q3 | Q4 | Result | Warning | Button | Test File |
+|----------|----|----|----|----|---------|--------|-----------|
+| All Ja | Ja | Ja | Ja | Ja | ✅ CAN PROCEED | None | Enabled | `lovvalg-validations.spec.ts:87` |
+
+### Comparison with § 2-8 a
+
+**Similarities:**
+- Same conditional pattern (questions appear based on previous answers)
+- Any "Nei" answer blocks progression
+- Same warning message text
+- Same button behavior
+
+**Differences:**
+- § 2-8 b has **4 questions** vs § 2-8 a has **3 questions**
+- Different question texts (student-specific)
+- Additional Question 4 about "nær tilknytning til det norske samfunnet"
+
 ## Test Results Summary
 
 **Date:** 2025-11-09
 
 ### lovvalg-validations.spec.ts
-- ✅ Scenario 1: § 2-8 a + All Ja answers - Can proceed **(11.7s)**
-- **Total:** 1 passed
+- ✅ Scenario 1: § 2-8 a + All Ja answers - Can proceed **(11.3s)**
+- ✅ Scenario 2: § 2-8 b (student) + All Ja answers - Can proceed **(11.6s)**
+- **Total:** 2 passed **(22.9s)**
 
 ### lovvalg-blocking-scenarios.spec.ts
-- ✅ BLOCKED: Question 1 = Nei - Blocks progression **(11.8s)**
-- ✅ BLOCKED: Question 1 = Ja, Question 2 = Nei - Blocks progression **(11.7s)**
-- ✅ BLOCKED: Questions 1 & 2 = Ja, Question 3 = Nei - Blocks progression **(12.0s)**
-- **Total:** 3 passed **(36.5s)**
 
-**All tests:** 4 passed
+**§ 2-8 a (arbeidstaker):**
+- ✅ BLOCKED: Question 1 = Nei - Blocks progression **(11.9s)**
+- ✅ BLOCKED: Question 1 = Ja, Question 2 = Nei - Blocks progression **(11.8s)**
+- ✅ BLOCKED: Questions 1 & 2 = Ja, Question 3 = Nei - Blocks progression **(12.3s)**
+
+**§ 2-8 b (student):**
+- ✅ BLOCKED: Question 1 = Nei - Blocks progression **(11.8s)**
+- ✅ BLOCKED: Question 1 = Ja, Question 2 = Nei - Blocks progression **(11.8s)**
+- ✅ BLOCKED: Questions 1 & 2 = Ja, Question 3 = Nei - Blocks progression **(11.9s)**
+- ✅ BLOCKED: Questions 1, 2 & 3 = Ja, Question 4 = Nei - Blocks progression **(12.2s)**
+
+- **Total:** 7 passed **(83.7s)**
+
+**All tests:** 9 passed **(1.8m)**
 
 ## Key Differences: Lovvalg vs. Trygdeavgift
 
@@ -163,7 +233,7 @@ The following bestemmelser may have similar conditional logic and blocking scena
 1. **§ 2-1** (bosatt i Norge)
 2. **§ 2-2** (arbeidstaker i Norge)
 3. **§ 2-7 første ledd** (opphold i Norge)
-4. **§ 2-8 første ledd bokstav b** (student)
+4. ~~**§ 2-8 første ledd bokstav b** (student)~~ ✅ **COMPLETED**
 5. **§ 2-8 andre ledd** (særlig grunn)
 
 **Testing strategy:**
@@ -198,6 +268,7 @@ The following bestemmelser may have similar conditional logic and blocking scena
 
 ## Success Criteria
 
+### § 2-8 a (arbeidstaker)
 - ✅ LovvalgPage enhanced with new methods
 - ✅ LovvalgAssertions created with warning verification
 - ✅ All blocking scenarios discovered via Playwright MCP
@@ -207,4 +278,13 @@ The following bestemmelser may have similar conditional logic and blocking scena
 - ✅ Complete validation matrix documented
 - ✅ Warning message filtering works (excludes UI noise)
 
-**Status:** ✅ ALL SUCCESS CRITERIA MET
+### § 2-8 b (student)
+- ✅ Questions discovered via Playwright MCP (4 questions)
+- ✅ All blocking scenarios tested (4 scenarios)
+- ✅ Valid scenario tested (all Ja answers)
+- ✅ Tests added to existing files
+- ✅ All tests pass (5/5)
+- ✅ Documentation updated
+- ✅ Discovery notes created
+
+**Status:** ✅ ALL SUCCESS CRITERIA MET FOR BOTH BESTEMMELSER

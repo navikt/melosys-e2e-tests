@@ -83,4 +83,35 @@ test.describe('Lovvalg Validation Scenarios - Valid Paths', () => {
 
     console.log('✅ Scenario 1 PASSED: Can proceed - no warnings, button enabled');
   });
+
+  test('Scenario 2: § 2-8 b (student) + All Ja answers - Can proceed', async ({ page }) => {
+    const lovvalg = await setupBehandlingToLovvalg(page);
+
+    console.log('📝 Testing: § 2-8 b (student) with all Ja answers (SHOULD ALLOW PROCEEDING)');
+
+    // Select bestemmelse
+    await lovvalg.velgBestemmelse('FTRL_KAP2_2_8_FØRSTE_LEDD_B');
+
+    // Answer all four questions with "Ja"
+    console.log('📝 Answering question 1: Ja');
+    await lovvalg.svarJaPaaFørsteSpørsmål();
+
+    console.log('📝 Answering question 2: Ja');
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Er søker student ved universitet');
+
+    console.log('📝 Answering question 3: Ja');
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker vært medlem i minst');
+
+    console.log('📝 Answering question 4: Ja');
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker nær tilknytning til');
+
+    // Verify no warnings and button is enabled
+    console.log('📝 Verifying no warnings present');
+    await lovvalg.assertions.verifiserIngenAdvarsler();
+
+    console.log('📝 Verifying button is enabled');
+    await lovvalg.assertions.verifiserBekreftKnappAktiv();
+
+    console.log('✅ Scenario 2 PASSED: Can proceed - no warnings, button enabled');
+  });
 });

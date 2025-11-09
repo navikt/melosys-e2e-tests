@@ -143,3 +143,129 @@ test.describe('Lovvalg Blocking Scenarios - § 2-8 første ledd bokstav a', () =
     console.log('✅ Scenario 3 PASSED: Correctly blocked - warning shown, button disabled');
   });
 });
+
+test.describe('Lovvalg Blocking Scenarios - § 2-8 første ledd bokstav b (student)', () => {
+  test('BLOCKED: Question 1 = Nei - Blocks progression', async ({ page }) => {
+    const lovvalg = await setupBehandlingToLovvalg(page);
+
+    console.log('📝 Testing: § 2-8 b with Nei on first question (SHOULD BLOCK)');
+
+    // Select bestemmelse
+    await lovvalg.velgBestemmelse('FTRL_KAP2_2_8_FØRSTE_LEDD_B');
+
+    // Answer first question with "Nei"
+    console.log('📝 Answering question 1: Nei');
+    await lovvalg.svarNeiPaaFørsteSpørsmål();
+
+    // Should show warning and disable button
+    console.log('📝 Verifying warning message appears');
+    await lovvalg.assertions.verifiserAdvarselsmelding('Du kan ikke gå videre');
+
+    console.log('📝 Verifying alternative action messages');
+    await lovvalg.assertions.verifiserAlternativeHandlinger();
+
+    console.log('📝 Verifying button is disabled');
+    await lovvalg.assertions.verifiserBekreftKnappDeaktivert();
+
+    console.log('✅ Scenario 1 PASSED: Correctly blocked - warning shown, button disabled');
+  });
+
+  test('BLOCKED: Question 1 = Ja, Question 2 = Nei - Blocks progression', async ({ page }) => {
+    const lovvalg = await setupBehandlingToLovvalg(page);
+
+    console.log('📝 Testing: § 2-8 b with Ja on Q1, Nei on Q2 (SHOULD BLOCK)');
+
+    // Select bestemmelse
+    await lovvalg.velgBestemmelse('FTRL_KAP2_2_8_FØRSTE_LEDD_B');
+
+    // Answer first question with "Ja"
+    console.log('📝 Answering question 1: Ja');
+    await lovvalg.svarJaPaaFørsteSpørsmål();
+
+    // Answer second question with "Nei"
+    console.log('📝 Answering question 2: Nei');
+    await lovvalg.svarNeiPaaSpørsmålIGruppe('Er søker student ved universitet');
+
+    // Should show warning and disable button
+    console.log('📝 Verifying warning message appears');
+    await lovvalg.assertions.verifiserAdvarselsmelding('Du kan ikke gå videre');
+
+    console.log('📝 Verifying alternative action messages');
+    await lovvalg.assertions.verifiserAlternativeHandlinger();
+
+    console.log('📝 Verifying button is disabled');
+    await lovvalg.assertions.verifiserBekreftKnappDeaktivert();
+
+    console.log('✅ Scenario 2 PASSED: Correctly blocked - warning shown, button disabled');
+  });
+
+  test('BLOCKED: Questions 1 & 2 = Ja, Question 3 = Nei - Blocks progression', async ({ page }) => {
+    const lovvalg = await setupBehandlingToLovvalg(page);
+
+    console.log('📝 Testing: § 2-8 b with Ja on Q1 & Q2, Nei on Q3 (SHOULD BLOCK)');
+
+    // Select bestemmelse
+    await lovvalg.velgBestemmelse('FTRL_KAP2_2_8_FØRSTE_LEDD_B');
+
+    // Answer first question with "Ja"
+    console.log('📝 Answering question 1: Ja');
+    await lovvalg.svarJaPaaFørsteSpørsmål();
+
+    // Answer second question with "Ja"
+    console.log('📝 Answering question 2: Ja');
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Er søker student ved universitet');
+
+    // Answer third question with "Nei"
+    console.log('📝 Answering question 3: Nei');
+    await lovvalg.svarNeiPaaSpørsmålIGruppe('Har søker vært medlem i minst');
+
+    // Should show warning and disable button
+    console.log('📝 Verifying warning message appears');
+    await lovvalg.assertions.verifiserAdvarselsmelding('Du kan ikke gå videre');
+
+    console.log('📝 Verifying alternative action messages');
+    await lovvalg.assertions.verifiserAlternativeHandlinger();
+
+    console.log('📝 Verifying button is disabled');
+    await lovvalg.assertions.verifiserBekreftKnappDeaktivert();
+
+    console.log('✅ Scenario 3 PASSED: Correctly blocked - warning shown, button disabled');
+  });
+
+  test('BLOCKED: Questions 1, 2 & 3 = Ja, Question 4 = Nei - Blocks progression', async ({ page }) => {
+    const lovvalg = await setupBehandlingToLovvalg(page);
+
+    console.log('📝 Testing: § 2-8 b with Ja on Q1, Q2 & Q3, Nei on Q4 (SHOULD BLOCK)');
+
+    // Select bestemmelse
+    await lovvalg.velgBestemmelse('FTRL_KAP2_2_8_FØRSTE_LEDD_B');
+
+    // Answer first question with "Ja"
+    console.log('📝 Answering question 1: Ja');
+    await lovvalg.svarJaPaaFørsteSpørsmål();
+
+    // Answer second question with "Ja"
+    console.log('📝 Answering question 2: Ja');
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Er søker student ved universitet');
+
+    // Answer third question with "Ja"
+    console.log('📝 Answering question 3: Ja');
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker vært medlem i minst');
+
+    // Answer fourth question with "Nei"
+    console.log('📝 Answering question 4: Nei');
+    await lovvalg.svarNeiPaaSpørsmålIGruppe('Har søker nær tilknytning til');
+
+    // Should show warning and disable button
+    console.log('📝 Verifying warning message appears');
+    await lovvalg.assertions.verifiserAdvarselsmelding('Du kan ikke gå videre');
+
+    console.log('📝 Verifying alternative action messages');
+    await lovvalg.assertions.verifiserAlternativeHandlinger();
+
+    console.log('📝 Verifying button is disabled');
+    await lovvalg.assertions.verifiserBekreftKnappDeaktivert();
+
+    console.log('✅ Scenario 4 PASSED: Correctly blocked - warning shown, button disabled');
+  });
+});
