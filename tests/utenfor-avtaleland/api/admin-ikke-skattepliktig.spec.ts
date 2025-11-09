@@ -1,8 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { AdminApiHelper } from '../../helpers/api-helper';
+import { AdminApiHelper } from '../../../helpers/api-helper';
 
-test.describe('Melosys Admin API', () => {
-  test('should find ikke-skattepliktige saker via admin API', async ({ request }) => {
+test.describe('Melosys Admin API @manual', () => {
+  test('skal finne ikke-skattepliktige saker via admin API', async ({ request }) => {
     // Create admin API helper
     const adminApi = new AdminApiHelper();
 
@@ -32,7 +32,7 @@ test.describe('Melosys Admin API', () => {
     expect(data.lagProsessinstanser).toBe(false);
   });
 
-  test('should get status of ikke-skattepliktige saker job', async ({ request }) => {
+  test('skal hente status for ikke-skattepliktige saker jobb', async ({ request }) => {
     // Create admin API helper
     const adminApi = new AdminApiHelper();
 

@@ -1,22 +1,22 @@
-import {test} from '../../fixtures';
-import {AuthHelper} from '../../helpers/auth-helper';
-import {HovedsidePage} from '../../pages/hovedside.page';
-import {OpprettNySakPage} from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
-import {MedlemskapPage} from '../../pages/behandling/medlemskap.page';
-import {ArbeidsforholdPage} from '../../pages/behandling/arbeidsforhold.page';
-import {LovvalgPage} from '../../pages/behandling/lovvalg.page';
-import {ResultatPeriodePage} from '../../pages/behandling/resultat-periode.page';
-import {BehandlingPage} from '../../pages/behandling/behandling.page';
-import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
-import {VedtakPage} from '../../pages/vedtak/vedtak.page';
-import {USER_ID_VALID} from '../../pages/shared/constants';
-import {UnleashHelper} from "../../helpers/unleash-helper";
-import {AdminApiHelper, waitForProcessInstances} from '../../helpers/api-helper';
+import {test} from '../../../fixtures';
+import {AuthHelper} from '../../../helpers/auth-helper';
+import {HovedsidePage} from '../../../pages/hovedside.page';
+import {OpprettNySakPage} from '../../../pages/opprett-ny-sak/opprett-ny-sak.page';
+import {MedlemskapPage} from '../../../pages/behandling/medlemskap.page';
+import {ArbeidsforholdPage} from '../../../pages/behandling/arbeidsforhold.page';
+import {LovvalgPage} from '../../../pages/behandling/lovvalg.page';
+import {ResultatPeriodePage} from '../../../pages/behandling/resultat-periode.page';
+import {BehandlingPage} from '../../../pages/behandling/behandling.page';
+import {TrygdeavgiftPage} from '../../../pages/trygdeavgift/trygdeavgift.page';
+import {VedtakPage} from '../../../pages/vedtak/vedtak.page';
+import {USER_ID_VALID} from '../../../pages/shared/constants';
+import {UnleashHelper} from "../../../helpers/unleash-helper";
+import {AdminApiHelper, waitForProcessInstances} from '../../../helpers/api-helper';
 import {expect} from "@playwright/test";
 
 
-test.describe('Yrkesaktiv - Førstegangsbehandling', () => {
-    test('change from ikke skattepliktig til skattepliktig', async ({page, request}) => {
+test.describe('Nyvurdering - Endring av skattestatus', () => {
+    test('skal endre skattestatus fra ikke-skattepliktig til skattepliktig via nyvurdering', async ({page, request}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);
@@ -127,7 +127,7 @@ test.describe('Yrkesaktiv - Førstegangsbehandling', () => {
         console.log('✅ Workflow completed successfully!');
     });
 
-    test('change from skattepliktig til ikke skattepliktig', async ({page, request}) => {
+    test('skal endre skattestatus fra skattepliktig til ikke-skattepliktig via nyvurdering', async ({page, request}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);

@@ -129,12 +129,89 @@ export class TrygdeavgiftPage extends BasePage {
    * Select Inntektskilde (income source) from dropdown
    * This reveals different fields based on selection
    *
-   * @param inntektskilde - Income source code (e.g., 'ARBEIDSINNTEKT', 'INNTEKT_FRA_UTLANDET')
+   * @param inntektskilde - Income source label (e.g., 'Arbeidsinntekt', 'Pensjon')
+   *                        or legacy code (e.g., 'ARBEIDSINNTEKT', 'PENSJON')
+   *
+   * Available options (actual dropdown labels):
+   * - 'Arbeidsinntekt' (code: ARBEIDSINNTEKT)
+   * - 'Næringsinntekt' (code: NÆRINGSINNTEKT)
+   * - 'Inntekt fra utlandet' (code: INNTEKT_FRA_UTLANDET)
+   * - 'Ansatt i FN' (code: FN_SKATTEFRITAK)
+   * - 'Misjonær' (code: MISJONÆR)
+   * - 'Pensjon' (code: PENSJON)
+   * - 'Pensjon kildeskatt' (code: PENSJON_KILDESKATT)
    */
   async velgInntektskilde(inntektskilde: string): Promise<void> {
-    // Wait for dropdown to appear after selecting Skattepliktig
+    // Map both legacy codes AND old full display text to actual dropdown labels
+    // Note: Dropdown labels are simpler than full display text used in old tests
+    const labelMapping: { [key: string]: string } = {
+      // Legacy codes (recommended format)
+      'ARBEIDSINNTEKT': 'Arbeidsinntekt',
+      'NÆRINGSINNTEKT': 'Næringsinntekt',
+      'INNTEKT_FRA_UTLANDET': 'Inntekt fra utlandet',
+      'FN_SKATTEFRITAK': 'Ansatt i FN',
+      'MISJONÆR': 'Misjonær',
+      'PENSJON': 'Pensjon',
+      'PENSJON_KILDESKATT': 'Pensjon kildeskatt',
+      // Old full display text (backward compatibility)
+      'Arbeidsinntekt fra Norge': 'Arbeidsinntekt',
+      'Næringsinntekt fra Norge': 'Næringsinntekt',
+      'Ansatt i FN med skattefritak': 'Ansatt i FN',
+      'Misjonær som skal arbeide i utlandet i minst to år': 'Misjonær',
+      'Pensjon/uføretrygd': 'Pensjon',
+      'Pensjon/uføretrygd det betales kildeskatt av': 'Pensjon kildeskatt'
+    };
+
+    // Use mapped label if exists, otherwise use input as-is (might be actual label)
+    const label = labelMapping[inntektskilde] || inntektskilde;
+
+    // Wait for dropdown to appear and be enabled after selecting Skattepliktig
+    // The dropdown might be visible but disabled while loading options
     await this.inntektskildeDropdown.waitFor({ state: 'visible', timeout: 5000 });
-    await this.inntektskildeDropdown.selectOption(inntektskilde);
+    await expect(this.inntektskildeDropdown).toBeEnabled({ timeout: 10000 });
+
+    // CRITICAL: Wait for options to be populated in the dropdown
+    // After selecting Skattepliktig, the options are loaded dynamically
+    // We need to poll until the dropdown has options (not just enabled)
+    await this.page.waitForFunction(
+      (selector) => {
+        const dropdown = document.querySelector(selector) as HTMLSelectElement;
+        return dropdown && dropdown.options.length > 1; // More than just placeholder
+      },
+      'select[name="inntektskilder[0].kildetype"]',
+      { timeout: 10000 }
+    );
+
+    // Get available options to determine which label format to use
+    const availableLabels = await this.page.evaluate(() => {
+      const dropdown = document.querySelector('select[name="inntektskilder[0].kildetype"]') as HTMLSelectElement;
+      if (!dropdown) return [];
+      return Array.from(dropdown.options).map(opt => opt.text || opt.label || opt.value).filter(v => v);
+    });
+
+    // Try to find a matching option in the dropdown
+    // The dropdown uses different label formats depending on Skattepliktig value:
+    // - Skattepliktig = Ja: Full text like "Arbeidsinntekt fra Norge"
+    // - Skattepliktig = Nei: Short text like "Arbeidsinntekt"
+    let labelToSelect = label;
+
+    if (!availableLabels.includes(label)) {
+      // Try ALL keys that map to this label value
+      const possibleLabels = Object.entries(labelMapping)
+        .filter(([key, val]) => val === label)
+        .map(([key]) => key);
+
+      // Find the first one that exists in the dropdown
+      for (const possibleLabel of possibleLabels) {
+        if (availableLabels.includes(possibleLabel)) {
+          labelToSelect = possibleLabel;
+          break;
+        }
+      }
+    }
+
+    await this.inntektskildeDropdown.selectOption({ label: labelToSelect });
+    console.log(`✅ Selected Inntektskilde = ${labelToSelect}`);
   }
 
   /**
