@@ -20,6 +20,88 @@ Complete guide for running E2E tests in GitHub Actions with Docker Compose stack
 - **Test artifacts** - Download `playwright-results`, `playwright-videos`, `playwright-traces`
 - **Annotations** - Failed tests shown inline in workflow view
 
+**Automatic Triggers:**
+
+The workflow can also be **automatically triggered** when source repositories push new Docker images:
+
+- When `melosys-api` pushes a new image → E2E tests run automatically
+- When `faktureringskomponenten` pushes a new image → E2E tests run automatically
+- And more...
+
+See [Repository Dispatch Trigger Guide](./REPOSITORY-DISPATCH-TRIGGER.md) for setup instructions.
+
+---
+
+## Automatic Triggers (repository_dispatch)
+
+### Overview
+
+Source repositories (like `melosys-api`, `faktureringskomponenten`) can automatically trigger E2E tests when they push new Docker images to GCP Artifact Registry.
+
+**How it works:**
+1. Source repo builds and pushes Docker image
+2. Source repo sends trigger to this E2E workflow
+3. E2E tests run with the newly pushed image
+4. Results are reported
+
+**Supported triggers:**
+- `melosys-api-published`
+- `faktureringskomponenten-published`
+- `melosys-web-published`
+- `melosys-trygdeavgift-beregning-published`
+- `melosys-dokgen-published`
+- `melosys-trygdeavtale-published`
+
+### Example Workflow Trigger
+
+From `melosys-api` build workflow:
+
+```yaml
+- name: Trigger E2E tests
+  if: github.ref == 'refs/heads/main'
+  uses: peter-evans/repository-dispatch@v4
+  with:
+    token: ${{ secrets.E2E_TRIGGER_PAT }}
+    repository: navikt/melosys-e2e-tests
+    event-type: melosys-api-published
+    client-payload: |
+      {
+        "repository": "melosys-api",
+        "image_tag": "${{ github.sha }}",
+        "commit_sha": "${{ github.sha }}",
+        "actor": "${{ github.actor }}"
+      }
+```
+
+### Workflow Logs
+
+When triggered by `repository_dispatch`, the workflow logs show:
+
+```
+🔔 Triggered by repository_dispatch event
+📦 Event type: melosys-api-published
+📌 Source repository: melosys-api
+🏷️  Image tag: abc123def456
+📝 Commit: abc123def456
+👤 Actor: username
+
+📋 Image tags to be used:
+  melosys-api: abc123def456
+  faktureringskomponenten: latest
+```
+
+### Setup Guide
+
+**For source repositories:**
+
+See complete setup guide: [Repository Dispatch Trigger Guide](./REPOSITORY-DISPATCH-TRIGGER.md)
+
+**Quick steps:**
+1. Create Personal Access Token (PAT) - See [PAT Setup Guide](./PAT-SETUP.md)
+2. Add PAT secret to source repo
+3. Add trigger step to source repo's build workflow
+4. Test trigger
+
 ---
 
 ## Workflow Configuration
