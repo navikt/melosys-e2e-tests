@@ -15,8 +15,8 @@ import {AdminApiHelper, waitForProcessInstances} from '../../helpers/api-helper'
 import {expect} from "@playwright/test";
 
 
-test.describe('Yrkesaktiv - Førstegangsbehandling', () => {
-    test('change from ikke skattepliktig til skattepliktig', async ({page, request}) => {
+test.describe('Reassessment Workflow - Tax Status Changes', () => {
+    test('should change tax status from non-tax-liable to tax-liable via reassessment', async ({page, request}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);
@@ -127,7 +127,7 @@ test.describe('Yrkesaktiv - Førstegangsbehandling', () => {
         console.log('✅ Workflow completed successfully!');
     });
 
-    test('change from skattepliktig til ikke skattepliktig', async ({page, request}) => {
+    test('should change tax status from tax-liable to non-tax-liable via reassessment', async ({page, request}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);

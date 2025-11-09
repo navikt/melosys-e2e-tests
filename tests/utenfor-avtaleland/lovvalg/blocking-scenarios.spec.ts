@@ -55,8 +55,8 @@ async function setupBehandlingToLovvalg(page: Page): Promise<LovvalgPage> {
   return lovvalg;
 }
 
-test.describe('Lovvalg Blocking Scenarios - § 2-8 første ledd bokstav a', () => {
-  test('BLOCKED: Question 1 = Nei - Blocks progression', async ({ page }) => {
+test.describe('Lovvalg - Blocking Scenarios (§ 2-8 a arbeidstaker)', () => {
+  test('§ 2-8 a: Question 1 = Nei should block progression', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
     console.log('📝 Testing: § 2-8 a with Nei on first question (SHOULD BLOCK)');

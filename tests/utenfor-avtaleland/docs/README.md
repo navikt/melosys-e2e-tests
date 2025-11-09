@@ -2,108 +2,152 @@
 
 End-to-end tests for the "Utenfor avtaleland" (Outside Agreement Countries) workflow in Melosys.
 
-## Test Structure
+## 📁 Folder Structure
 
-### Trygdeavgift (Tax Calculation)
+```
+tests/utenfor-avtaleland/
+├── workflows/              # Complete E2E user journeys
+├── lovvalg/               # Lovvalg validation tests
+├── trygdeavgift/          # Trygdeavgift validation tests
+├── discovery/             # Discovery & exploration tools
+├── api/                   # API-only tests
+└── docs/                  # Documentation
+    ├── lovvalg/
+    └── trygdeavgift/
+```
 
-Tests for tax calculation validation and error scenarios.
+## 🔄 Workflows (Complete E2E Tests)
+
+Full user journeys from case creation to vedtak.
 
 **Test Files:**
-- `trygdeavgift-validations.spec.ts` - Valid tax calculation scenarios (14 tests)
-- `trygdeavgift-validation-errors.spec.ts` - Invalid input combinations (5 tests)
+- `workflows/complete-case-with-2-8a.spec.ts` - Standard case using § 2-8 a (arbeidstaker)
+- `workflows/annual-settlement-non-tax-liable.spec.ts` - Creates årsavregning for non-tax-liable users
+- `workflows/reassessment-tax-status-change.spec.ts` - Tax status changes via ny vurdering (2 tests)
 
-**Documentation:**
-- [TRYGDEAVGIFT-VALIDATION-MATRIX.md](./TRYGDEAVGIFT-VALIDATION-MATRIX.md) - Complete validation rules and tax calculations
-- [TRYGDEAVGIFT-VALIDATION-README.md](./TRYGDEAVGIFT-VALIDATION-README.md) - Quick reference and how to run tests
+**Run workflows:**
+```bash
+npm test tests/utenfor-avtaleland/workflows/
+```
 
-**Page Objects:**
-- `pages/behandling/trygdeavgift.page.ts` - Actions
-- `pages/behandling/trygdeavgift.assertions.ts` - Assertions
-
-### Lovvalg (Law Selection)
+## ⚖️ Lovvalg (Law Selection) Tests
 
 Tests for bestemmelse (regulation) selection and conditional validation.
 
 **Test Files:**
-- `lovvalg-validations.spec.ts` - Valid scenarios (4 tests)
-- `lovvalg-blocking-scenarios.spec.ts` - Blocking/warning scenarios (10 tests)
+- `lovvalg/valid-scenarios.spec.ts` - Valid scenarios (4 tests)
+- `lovvalg/blocking-scenarios.spec.ts` - Blocking/warning scenarios (10 tests)
 
 **Documentation:**
-- [LOVVALG-VALIDATION-MATRIX.md](./LOVVALG-VALIDATION-MATRIX.md) - Complete validation matrix for all tested bestemmelser
-
-**Discovery Notes:**
-- [LOVVALG-DISCOVERY-RESULTS.md](./LOVVALG-DISCOVERY-RESULTS.md) - § 2-8 a (arbeidstaker)
-- [LOVVALG-2-8-B-DISCOVERY.md](./LOVVALG-2-8-B-DISCOVERY.md) - § 2-8 b (student)
-- [LOVVALG-2-8-ANDRE-LEDD-DISCOVERY.md](./LOVVALG-2-8-ANDRE-LEDD-DISCOVERY.md) - § 2-8 andre ledd (særlig grunn)
+- [lovvalg/LOVVALG-VALIDATION-MATRIX.md](./lovvalg/LOVVALG-VALIDATION-MATRIX.md) - Complete validation matrix
+- [lovvalg/LOVVALG-DISCOVERY-RESULTS.md](./lovvalg/LOVVALG-DISCOVERY-RESULTS.md) - § 2-8 a discovery
+- [lovvalg/LOVVALG-2-8-B-DISCOVERY.md](./lovvalg/LOVVALG-2-8-B-DISCOVERY.md) - § 2-8 b discovery
+- [lovvalg/LOVVALG-2-8-ANDRE-LEDD-DISCOVERY.md](./lovvalg/LOVVALG-2-8-ANDRE-LEDD-DISCOVERY.md) - § 2-8 andre ledd discovery
 
 **Page Objects:**
 - `pages/behandling/lovvalg.page.ts` - Actions
 - `pages/behandling/lovvalg.assertions.ts` - Assertions
 
-### Discovery Scripts
+**Run lovvalg tests:**
+```bash
+npm test tests/utenfor-avtaleland/lovvalg/
+```
+
+## 💰 Trygdeavgift (Tax Calculation) Tests
+
+Tests for tax calculation validation and error scenarios.
+
+**Test Files:**
+- `trygdeavgift/valid-scenarios.spec.ts` - Valid tax calculation scenarios (14 tests)
+- `trygdeavgift/validation-errors.spec.ts` - Invalid input combinations (5 tests)
+
+**Documentation:**
+- [trygdeavgift/TRYGDEAVGIFT-VALIDATION-MATRIX.md](./trygdeavgift/TRYGDEAVGIFT-VALIDATION-MATRIX.md) - Complete validation rules
+- [trygdeavgift/TRYGDEAVGIFT-VALIDATION-README.md](./trygdeavgift/TRYGDEAVGIFT-VALIDATION-README.md) - Quick reference
+
+**Page Objects:**
+- `pages/trygdeavgift/trygdeavgift.page.ts` - Actions
+- `pages/trygdeavgift/trygdeavgift.assertions.ts` - Assertions
+
+**Run trygdeavgift tests:**
+```bash
+npm test tests/utenfor-avtaleland/trygdeavgift/
+```
+
+## 🔍 Discovery Scripts
 
 Automated tools for discovering questions and validation patterns.
 
 **Scripts:**
-- `discover-all-bestemmelser.spec.ts` - Lists all available bestemmelser
-- `automated-bestemmelse-discovery.spec.ts` - Tests all Ja/Nei combinations systematically
+- `discovery/list-all-bestemmelser.spec.ts` - Lists all available bestemmelser
+- `discovery/automated-discovery.spec.ts` - Tests all Ja/Nei combinations systematically
 
-## Tested Bestemmelser
+**Run discovery:**
+```bash
+npm test tests/utenfor-avtaleland/discovery/
+```
 
-### § 2-8 første ledd bokstav a (arbeidstaker)
-- **Code:** `FTRL_KAP2_2_8_FØRSTE_LEDD_A`
-- **Questions:** 3 (conditional)
-- **Tests:** 1 valid + 3 blocking = 4 tests
+## 🔌 API Tests
 
-### § 2-8 første ledd bokstav b (student)
-- **Code:** `FTRL_KAP2_2_8_FØRSTE_LEDD_B`
-- **Questions:** 4 (conditional)
-- **Tests:** 1 valid + 4 blocking = 5 tests
+Direct API tests without UI interaction.
 
-### § 2-8 andre ledd (særlig grunn)
-- **Code:** `FTRL_KAP2_2_8_ANDRE_LEDD`
-- **Questions:** 3 (conditional) + 1 dropdown (8 options)
-- **Tests:** 2 valid + 3 blocking = 5 tests
+**Test Files:**
+- `api/admin-ikke-skattepliktig.spec.ts` - Admin API for non-tax-liable cases
 
-## Running Tests
+**Run API tests:**
+```bash
+npm test tests/utenfor-avtaleland/api/
+```
+
+## 📊 Test Coverage Summary
+
+### Lovvalg - Tested Bestemmelser
+
+| Bestemmelse | Code | Questions | Tests |
+|-------------|------|-----------|-------|
+| § 2-8 a (arbeidstaker) | `FTRL_KAP2_2_8_FØRSTE_LEDD_A` | 3 (conditional) | 1 valid + 3 blocking |
+| § 2-8 b (student) | `FTRL_KAP2_2_8_FØRSTE_LEDD_B` | 4 (conditional) | 1 valid + 4 blocking |
+| § 2-8 andre ledd | `FTRL_KAP2_2_8_ANDRE_LEDD` | 3 + 1 dropdown (8 options) | 2 valid + 3 blocking |
+
+### Test Counts
+
+- **Workflows:** 4 tests (3 files)
+- **Lovvalg:** 14 tests (4 valid + 10 blocking)
+- **Trygdeavgift:** 19 tests (14 valid + 5 validation errors)
+- **Discovery:** 2 scripts
+- **API:** 2 tests
+
+**Total:** 39 tests covering Utenfor avtaleland workflow
+
+## 🚀 Running Tests
 
 ### Run all tests
 ```bash
 npm test tests/utenfor-avtaleland/
 ```
 
-### Run specific feature
+### Run by category
 ```bash
-# Trygdeavgift tests
-npm test tests/utenfor-avtaleland/trygdeavgift-validations.spec.ts
-npm test tests/utenfor-avtaleland/trygdeavgift-validation-errors.spec.ts
+# Workflows
+npm test tests/utenfor-avtaleland/workflows/
 
-# Lovvalg tests
-npm test tests/utenfor-avtaleland/lovvalg-validations.spec.ts
-npm test tests/utenfor-avtaleland/lovvalg-blocking-scenarios.spec.ts
+# Lovvalg
+npm test tests/utenfor-avtaleland/lovvalg/
+
+# Trygdeavgift
+npm test tests/utenfor-avtaleland/trygdeavgift/
 ```
 
 ### Run specific test
 ```bash
-npx playwright test "Scenario 1: § 2-8 a + All Ja answers" --project=chromium --reporter=list --workers=1
+npx playwright test "§ 2-8 a (arbeidstaker): All Ja answers should allow proceeding" --project=chromium --reporter=list --workers=1
 ```
 
-## Test Results Summary
-
-**Trygdeavgift:** 19 tests
-- ✅ 14 valid scenarios
-- ❌ 5 validation error scenarios
-
-**Lovvalg:** 14 tests
-- ✅ 4 valid scenarios (allow proceeding)
-- ⚠️ 10 blocking scenarios (show warnings)
-
-**Total:** 33 tests covering Utenfor avtaleland workflow
-
-## Key Patterns
+## 🔑 Key Testing Patterns
 
 ### Conditional Questions (Lovvalg)
-Questions appear conditionally based on previous answers. Any "Nei" answer blocks progression and shows warning message:
+Questions appear conditionally based on previous answers. Any "Nei" answer blocks progression and shows warning:
+
 ```
 Du kan ikke gå videre, men:
 - du kan bruke "Send brev"-fanen for å sende brev og vedtak...
@@ -120,7 +164,7 @@ All valid scenarios:
 - Enable "Bekreft og fortsett" button
 - Allow progression to next step
 
-## Future Work
+## 📝 Future Work
 
 Additional bestemmelser to test:
 1. § 2-1 (bosatt i Norge)
@@ -128,4 +172,4 @@ Additional bestemmelser to test:
 3. § 2-7 første ledd (opphold i Norge)
 4. § 2-7a (bosatt i Norge, arbeid på utenlandsk skip)
 
-Use the discovery scripts to systematically explore questions and validation patterns.
+Use the discovery scripts in `discovery/` to systematically explore questions and validation patterns.

@@ -55,8 +55,8 @@ async function setupBehandlingToLovvalg(page: Page): Promise<LovvalgPage> {
   return lovvalg;
 }
 
-test.describe('Lovvalg Validation Scenarios - Valid Paths', () => {
-  test('Scenario 1: § 2-8 a + All Ja answers - Can proceed', async ({ page }) => {
+test.describe('Lovvalg - Valid Scenarios', () => {
+  test('§ 2-8 a (arbeidstaker): All Ja answers should allow proceeding', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
     console.log('📝 Testing: § 2-8 a with all Ja answers (SHOULD ALLOW PROCEEDING)');
@@ -84,7 +84,7 @@ test.describe('Lovvalg Validation Scenarios - Valid Paths', () => {
     console.log('✅ Scenario 1 PASSED: Can proceed - no warnings, button enabled');
   });
 
-  test('Scenario 2: § 2-8 b (student) + All Ja answers - Can proceed', async ({ page }) => {
+  test('§ 2-8 b (student): All Ja answers should allow proceeding', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
     console.log('📝 Testing: § 2-8 b (student) with all Ja answers (SHOULD ALLOW PROCEEDING)');
@@ -115,7 +115,7 @@ test.describe('Lovvalg Validation Scenarios - Valid Paths', () => {
     console.log('✅ Scenario 2 PASSED: Can proceed - no warnings, button enabled');
   });
 
-  test('Scenario 3: § 2-8 andre ledd (særlig grunn) + Multinasjonalt konsern - Can proceed', async ({ page }) => {
+  test('§ 2-8 andre ledd: All Ja + Multinasjonalt konsern should allow proceeding', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
     console.log('📝 Testing: § 2-8 andre ledd with all Ja + first dropdown option (SHOULD ALLOW PROCEEDING)');
@@ -147,7 +147,7 @@ test.describe('Lovvalg Validation Scenarios - Valid Paths', () => {
     console.log('✅ Scenario 3 PASSED: Can proceed - no warnings, button enabled');
   });
 
-  test('Scenario 4: § 2-8 andre ledd (særlig grunn) + Annen grunn - Can proceed', async ({ page }) => {
+  test('§ 2-8 andre ledd: All Ja + Annen grunn should allow proceeding', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
     console.log('📝 Testing: § 2-8 andre ledd with all Ja + last dropdown option (SHOULD ALLOW PROCEEDING)');

@@ -15,8 +15,8 @@ import {AdminApiHelper, waitForProcessInstances} from '../../helpers/api-helper'
 import {expect} from "@playwright/test";
 
 
-test.describe('Yrkesaktiv - Førstegangsbehandling', () => {
-    test('Lag årsavregning', async ({page, request}) => {
+test.describe('Annual Settlement Workflow - Non-Tax-Liable Cases', () => {
+    test('should create annual settlement (årsavregning) for non-tax-liable user', async ({page, request}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);

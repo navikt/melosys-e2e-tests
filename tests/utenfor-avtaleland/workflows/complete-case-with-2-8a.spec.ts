@@ -10,8 +10,8 @@ import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
 
-test.describe('Yrkesaktiv - Førstegangsbehandling', () => {
-    test('2-8 forste ledd bokstav a (arbeidstaker)', async ({page}) => {
+test.describe('Complete Case Workflow - Utenfor Avtaleland', () => {
+    test('should complete full case workflow using § 2-8 første ledd bokstav a (arbeidstaker)', async ({page}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);
         await auth.login();
