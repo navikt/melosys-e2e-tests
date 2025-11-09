@@ -129,12 +129,37 @@ export class TrygdeavgiftPage extends BasePage {
    * Select Inntektskilde (income source) from dropdown
    * This reveals different fields based on selection
    *
-   * @param inntektskilde - Income source code (e.g., 'ARBEIDSINNTEKT', 'INNTEKT_FRA_UTLANDET')
+   * @param inntektskilde - Income source display text (e.g., 'Arbeidsinntekt fra Norge', 'Inntekt fra utlandet')
+   *                        or legacy code (e.g., 'ARBEIDSINNTEKT', 'INNTEKT_FRA_UTLANDET')
+   *
+   * Available options:
+   * - 'Arbeidsinntekt fra Norge'
+   * - 'Næringsinntekt fra Norge'
+   * - 'Inntekt fra utlandet'
+   * - 'Ansatt i FN med skattefritak'
+   * - 'Misjonær som skal arbeide i utlandet i minst to år'
+   * - 'Pensjon/uføretrygd'
+   * - 'Pensjon/uføretrygd det betales kildeskatt av'
    */
   async velgInntektskilde(inntektskilde: string): Promise<void> {
+    // Map legacy codes to display text for backward compatibility
+    const codeToDisplayText: { [key: string]: string } = {
+      'ARBEIDSINNTEKT': 'Arbeidsinntekt fra Norge',
+      'NÆRINGSINNTEKT': 'Næringsinntekt fra Norge',
+      'INNTEKT_FRA_UTLANDET': 'Inntekt fra utlandet',
+      'FN_SKATTEFRITAK': 'Ansatt i FN med skattefritak',
+      'MISJONÆR': 'Misjonær som skal arbeide i utlandet i minst to år',
+      'PENSJON': 'Pensjon/uføretrygd',
+      'PENSJON_KILDESKATT': 'Pensjon/uføretrygd det betales kildeskatt av'
+    };
+
+    // Use display text if provided, otherwise map from code
+    const displayText = codeToDisplayText[inntektskilde] || inntektskilde;
+
     // Wait for dropdown to appear after selecting Skattepliktig
     await this.inntektskildeDropdown.waitFor({ state: 'visible', timeout: 5000 });
-    await this.inntektskildeDropdown.selectOption(inntektskilde);
+    await this.inntektskildeDropdown.selectOption({ label: displayText });
+    console.log(`✅ Selected Inntektskilde = ${displayText}`);
   }
 
   /**
