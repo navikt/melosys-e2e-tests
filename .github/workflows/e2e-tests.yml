@@ -80,18 +80,32 @@ jobs:
             echo "📝 Commit: ${{ github.event.client_payload.commit_sha }}"
             echo "👤 Actor: ${{ github.event.client_payload.actor }}"
 
-            # Set image tags based on which service triggered
-            MELOSYS_API_TAG="${{ github.event.client_payload.image_tag || 'latest' }}"
+            # Default all services to latest
+            MELOSYS_API_TAG="latest"
             FAKTURERINGSKOMPONENTEN_TAG="latest"
+            MELOSYS_WEB_TAG="latest"
+            MELOSYS_TRYGDEAVGIFT_TAG="latest"
+            MELOSYS_TRYGDEAVTALE_TAG="latest"
 
-            # If melosys-api triggered this, use its tag
+            # Override with specific tag based on which service triggered
             if [ "${{ github.event.action }}" = "melosys-api-published" ]; then
               MELOSYS_API_TAG="${{ github.event.client_payload.image_tag }}"
             fi
 
-            # If faktureringskomponenten triggered this, use its tag
             if [ "${{ github.event.action }}" = "faktureringskomponenten-published" ]; then
               FAKTURERINGSKOMPONENTEN_TAG="${{ github.event.client_payload.image_tag }}"
+            fi
+
+            if [ "${{ github.event.action }}" = "melosys-web-published" ]; then
+              MELOSYS_WEB_TAG="${{ github.event.client_payload.image_tag }}"
+            fi
+
+            if [ "${{ github.event.action }}" = "melosys-trygdeavgift-beregning-published" ]; then
+              MELOSYS_TRYGDEAVGIFT_TAG="${{ github.event.client_payload.image_tag }}"
+            fi
+
+            if [ "${{ github.event.action }}" = "melosys-trygdeavtale-published" ]; then
+              MELOSYS_TRYGDEAVTALE_TAG="${{ github.event.client_payload.image_tag }}"
             fi
           else
             # Manual trigger via workflow_dispatch
@@ -101,32 +115,44 @@ jobs:
 
             MELOSYS_API_TAG="${{ inputs.environment }}"
             FAKTURERINGSKOMPONENTEN_TAG="latest"
+            MELOSYS_WEB_TAG="latest"
+            MELOSYS_TRYGDEAVGIFT_TAG="latest"
+            MELOSYS_TRYGDEAVTALE_TAG="latest"
           fi
 
           echo "melosys_api_tag=$MELOSYS_API_TAG" >> $GITHUB_OUTPUT
           echo "faktureringskomponenten_tag=$FAKTURERINGSKOMPONENTEN_TAG" >> $GITHUB_OUTPUT
+          echo "melosys_web_tag=$MELOSYS_WEB_TAG" >> $GITHUB_OUTPUT
+          echo "melosys_trygdeavgift_tag=$MELOSYS_TRYGDEAVGIFT_TAG" >> $GITHUB_OUTPUT
+          echo "melosys_trygdeavtale_tag=$MELOSYS_TRYGDEAVTALE_TAG" >> $GITHUB_OUTPUT
 
           echo ""
           echo "📋 Image tags to be used:"
           echo "  melosys-api: $MELOSYS_API_TAG"
+          echo "  melosys-web: $MELOSYS_WEB_TAG"
           echo "  faktureringskomponenten: $FAKTURERINGSKOMPONENTEN_TAG"
+          echo "  melosys-trygdeavgift-beregning: $MELOSYS_TRYGDEAVGIFT_TAG"
+          echo "  melosys-trygdeavtale: $MELOSYS_TRYGDEAVTALE_TAG"
 
       - name: Set environment variables for GitHub Actions
         run: |
           echo "MELOSYS_ORACLE_DB_NAME=XEPDB1" >> $GITHUB_ENV
           echo "ORACLE_IMAGE=gvenzl/oracle-xe:18.4.0-slim" >> $GITHUB_ENV
           echo "MELOSYS_API_TAG=${{ steps.image-tags.outputs.melosys_api_tag }}" >> $GITHUB_ENV
+          echo "MELOSYS_WEB_TAG=${{ steps.image-tags.outputs.melosys_web_tag }}" >> $GITHUB_ENV
           echo "FAKTURERINGSKOMPONENTEN_TAG=${{ steps.image-tags.outputs.faktureringskomponenten_tag }}" >> $GITHUB_ENV
+          echo "MELOSYS_TRYGDEAVGIFT_TAG=${{ steps.image-tags.outputs.melosys_trygdeavgift_tag }}" >> $GITHUB_ENV
+          echo "MELOSYS_TRYGDEAVTALE_TAG=${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }}" >> $GITHUB_ENV
 
       - name: Pre-pull Docker images in parallel
         run: |
           echo "🐳 Pre-pulling Docker images to avoid timeout during compose up..."
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:${{ steps.image-tags.outputs.melosys_api_tag }} &
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-web:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-web:${{ steps.image-tags.outputs.melosys_web_tag }} &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:${{ steps.image-tags.outputs.faktureringskomponenten_tag }} &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-dokgen:latest &
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:latest &
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:${{ steps.image-tags.outputs.melosys_trygdeavgift_tag }} &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }} &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:latest &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/felles-kodeverk:latest &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-mock:latest &
@@ -146,7 +172,10 @@ jobs:
         env:
           MELOSYS_ORACLE_DB_NAME: XEPDB1
           MELOSYS_API_TAG: ${{ steps.image-tags.outputs.melosys_api_tag }}
+          MELOSYS_WEB_TAG: ${{ steps.image-tags.outputs.melosys_web_tag }}
           FAKTURERINGSKOMPONENTEN_TAG: ${{ steps.image-tags.outputs.faktureringskomponenten_tag }}
+          MELOSYS_TRYGDEAVGIFT_TAG: ${{ steps.image-tags.outputs.melosys_trygdeavgift_tag }}
+          MELOSYS_TRYGDEAVTALE_TAG: ${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }}
 
       - name: Wait for services to be healthy
         run: |
