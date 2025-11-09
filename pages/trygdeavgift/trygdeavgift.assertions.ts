@@ -122,20 +122,61 @@ export class TrygdeavgiftAssertions {
    * @param expectedErrorText - Part of the error message to match (can be substring or regex)
    */
   async verifiserValideringsfeil(expectedErrorText: string | RegExp): Promise<void> {
-    // Look for text containing the error message
-    // The error message appears somewhere on the page in a red alert box
-    if (typeof expectedErrorText === 'string') {
-      const errorLocator = this.page.getByText(expectedErrorText, { exact: false });
-      await expect(errorLocator).toBeVisible({ timeout: 5000 });
-      const actualErrorText = await errorLocator.textContent();
-      console.log(`✅ Validation error displayed: ${actualErrorText}`);
-    } else {
-      // For regex patterns, use locator with filter
-      const errorLocator = this.page.locator('body').getByText(expectedErrorText);
-      await expect(errorLocator).toBeVisible({ timeout: 5000 });
-      const actualErrorText = await errorLocator.textContent();
-      console.log(`✅ Validation error displayed: ${actualErrorText}`);
+    // Wait a bit for errors to appear
+    await this.page.waitForTimeout(500);
+
+    // Find validation error messages - look for elements with error-related text
+    // that are reasonably short (< 500 chars to avoid capturing entire page sections)
+    const allErrorLocators = this.page.locator('div, p, span').filter({
+      hasText: /kan ikke velges|påkrevd|ugyldig|må|feil|ikke tillatt/i
+    });
+
+    const errorCount = await allErrorLocators.count();
+
+    if (errorCount === 0) {
+      throw new Error('❌ No validation errors found on page. Expected error containing: ' + expectedErrorText);
     }
+
+    // Collect validation messages (filter out noise like date pickers, long UI sections)
+    const foundErrors: string[] = [];
+    for (let i = 0; i < errorCount; i++) {
+      const text = await allErrorLocators.nth(i).textContent();
+      if (text && text.trim().length > 0 && text.trim().length < 500) {
+        const trimmed = text.trim();
+        // Avoid duplicates
+        if (!foundErrors.includes(trimmed)) {
+          foundErrors.push(trimmed);
+        }
+      }
+    }
+
+    // Filter to likely error messages (shorter, more focused text)
+    const likelyErrors = foundErrors.filter(msg => msg.length < 200);
+
+    console.log(`📋 Found ${likelyErrors.length} validation message(s) on page:`);
+    likelyErrors.forEach((msg, idx) => {
+      console.log(`   ${idx + 1}. "${msg}"`);
+    });
+
+    // Now check if expected error is among them
+    const expectedPattern = typeof expectedErrorText === 'string' ? expectedErrorText : expectedErrorText.source;
+    const matchingError = likelyErrors.find(msg => {
+      if (typeof expectedErrorText === 'string') {
+        return msg.includes(expectedErrorText);
+      } else {
+        return expectedErrorText.test(msg);
+      }
+    });
+
+    if (!matchingError) {
+      throw new Error(
+        `❌ Expected validation error not found!\n\n` +
+        `Expected (substring): "${expectedPattern}"\n\n` +
+        `Actual validation messages found:\n${likelyErrors.map((e, i) => `  ${i + 1}. "${e}"`).join('\n')}`
+      );
+    }
+
+    console.log(`✅ Validation error verified: "${matchingError}"`);
   }
 
   /**
