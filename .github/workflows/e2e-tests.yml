@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'latest or manual tag'
+        description: 'Image tag for melosys-api (other services use latest)'
         required: true
         default: 'latest'
 
@@ -96,10 +96,11 @@ jobs:
           else
             # Manual trigger via workflow_dispatch
             echo "👆 Manually triggered via workflow_dispatch"
-            echo "🏷️  Using environment: ${{ inputs.environment }}"
+            echo "🏷️  Using tag for melosys-api: ${{ inputs.environment }}"
+            echo "🏷️  Using tag for other services: latest"
 
             MELOSYS_API_TAG="${{ inputs.environment }}"
-            FAKTURERINGSKOMPONENTEN_TAG="${{ inputs.environment }}"
+            FAKTURERINGSKOMPONENTEN_TAG="latest"
           fi
 
           echo "melosys_api_tag=$MELOSYS_API_TAG" >> $GITHUB_OUTPUT
