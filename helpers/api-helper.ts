@@ -155,7 +155,7 @@ export class AdminApiHelper {
 
       const elapsed = Math.round((Date.now() - startTime) / 1000);
 
-      if (!data.isRunning) {
+      if (!data.isRunning && data.antallProsessert > 0 || elapsed > 1) {
         console.log(`✅ Job completed after ${elapsed}s`);
         console.log(`   - Funnet: ${data.antallFunnet || 0}`);
         console.log(`   - Prosessert: ${data.antallProsessert || 0}`);
