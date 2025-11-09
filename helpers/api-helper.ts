@@ -1,4 +1,9 @@
 import { APIRequestContext } from '@playwright/test';
+import * as dotenv from 'dotenv';
+import * as path from 'node:path';
+
+// Load .local.env file
+dotenv.config({ path: path.resolve(__dirname, '../.local.env') });
 
 /**
  * Helper for managing melosys-api application state
@@ -12,6 +17,184 @@ import { APIRequestContext } from '@playwright/test';
  * 2. Restart the API container
  * 3. Use TRUNCATE instead of DELETE (already implemented)
  */
+
+/**
+ * Admin API Helper
+ *
+ * Provides authenticated access to melosys-api admin endpoints.
+ * Requires both admin API key and JWT token for authentication.
+ */
+export class AdminApiHelper {
+  private readonly apiKey: string;
+  private readonly authToken: string;
+  private readonly baseUrl: string;
+
+  constructor(baseUrl: string = 'http://localhost:8080') {
+    this.baseUrl = baseUrl;
+    this.apiKey = process.env.ADMIN_API_KEY || 'dummy';
+    this.authToken = process.env.LOCAL_AUTH_TOKEN || '';
+
+    if (!this.authToken) {
+      throw new Error('LOCAL_AUTH_TOKEN not found in environment');
+    }
+  }
+
+  /**
+   * Call an admin API endpoint with proper authentication headers
+   */
+  private async callAdminEndpoint(
+    request: APIRequestContext,
+    method: 'GET' | 'POST' | 'PUT' | 'DELETE',
+    endpoint: string,
+    params?: Record<string, string | boolean>,
+    body?: any
+  ) {
+    const url = new URL(`${this.baseUrl}${endpoint}`);
+
+    // Add query parameters if provided
+    if (params) {
+      for (const [key, value] of Object.entries(params)) {
+        url.searchParams.append(key, String(value));
+      }
+    }
+
+    const options: any = {
+      headers: {
+        'X-MELOSYS-ADMIN-APIKEY': this.apiKey,
+        'Authorization': `Bearer ${this.authToken}`,
+        'Content-Type': 'application/json'
+      }
+    };
+
+    // Add body for POST/PUT requests
+    if (body && (method === 'POST' || method === 'PUT')) {
+      options.data = body;
+    }
+
+    // Make the request based on method
+    switch (method) {
+      case 'GET':
+        return await request.get(url.toString(), options);
+      case 'POST':
+        return await request.post(url.toString(), options);
+      case 'PUT':
+        return await request.put(url.toString(), options);
+      case 'DELETE':
+        return await request.delete(url.toString(), options);
+    }
+  }
+
+  /**
+   * Find ikke-skattepliktige saker (non-taxable cases) for annual settlement
+   *
+   * @param request - Playwright API request context
+   * @param fomDato - Start date (YYYY-MM-DD)
+   * @param tomDato - End date (YYYY-MM-DD)
+   * @param lagProsessinstanser - Whether to create process instances (default: false)
+   * @returns API response with job details
+   */
+  async finnIkkeSkattepliktigeSaker(
+    request: APIRequestContext,
+    fomDato: string,
+    tomDato: string,
+    lagProsessinstanser: boolean = false
+  ) {
+    return await this.callAdminEndpoint(
+      request,
+      'POST',
+      '/admin/aarsavregninger/saker/ikke-skattepliktige/finn',
+      {
+        lagProsessinstanser: lagProsessinstanser,
+        fomDato: fomDato,
+        tomDato: tomDato
+      }
+    );
+  }
+
+  /**
+   * Get status of ikke-skattepliktige saker job (single check)
+   *
+   * @param request - Playwright API request context
+   * @returns API response with job status
+   */
+  async getIkkeSkattepliktigeSakerStatus(request: APIRequestContext) {
+    return await this.callAdminEndpoint(
+      request,
+      'GET',
+      '/admin/aarsavregninger/saker/ikke-skattepliktige/status'
+    );
+  }
+
+  /**
+   * Wait for ikke-skattepliktige saker job to complete
+   *
+   * Polls the status endpoint until the job is done (isRunning becomes false)
+   *
+   * @param request - Playwright API request context
+   * @param timeoutSeconds - Maximum time to wait (default: 10 seconds)
+   * @param pollIntervalMs - Time between polls (default: 100ms)
+   * @returns Final job status data
+   */
+  async waitForIkkeSkattepliktigeSakerJob(
+    request: APIRequestContext,
+    timeoutSeconds: number = 10,
+    pollIntervalMs: number = 100
+  ) {
+    const startTime = Date.now();
+    const timeoutMs = timeoutSeconds * 1000;
+
+    console.log(`\n⏳ Waiting for ikke-skattepliktige saker job to complete (timeout: ${timeoutSeconds}s)...`);
+
+    while (true) {
+      const response = await this.getIkkeSkattepliktigeSakerStatus(request);
+      const data = await response.json();
+
+      if (!response.ok()) {
+        throw new Error(`Failed to get job status: HTTP ${response.status()}`);
+      }
+
+      const elapsed = Math.round((Date.now() - startTime) / 1000);
+
+      if (!data.isRunning) {
+        console.log(`✅ Job completed after ${elapsed}s`);
+        console.log(`   - Funnet: ${data.antallFunnet || 0}`);
+        console.log(`   - Prosessert: ${data.antallProsessert || 0}`);
+        console.log(`   - Errors: ${data.errorCount || 0}`);
+        return data;
+      }
+
+      // Check timeout
+      if (Date.now() - startTime > timeoutMs) {
+        console.log(`\n❌ Timeout after ${elapsed}s - job still running`);
+        console.log(`   - Funnet: ${data.antallFunnet || 0}`);
+        console.log(`   - Prosessert: ${data.antallProsessert || 0}`);
+        throw new Error(`Job did not complete within ${timeoutSeconds} seconds`);
+      }
+
+      // Log progress
+      if (elapsed % 10 === 0 && elapsed > 0) { // Log every 10 seconds
+        console.log(`   Still running... ${elapsed}s elapsed (funnet: ${data.antallFunnet || 0}, prosessert: ${data.antallProsessert || 0})`);
+      }
+
+      // Wait before next poll
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+    }
+  }
+
+  /**
+   * Add more admin API methods here following this pattern:
+   *
+   * @example
+   * async someOtherAdminEndpoint(request: APIRequestContext, param1: string) {
+   *   return await this.callAdminEndpoint(
+   *     request,
+   *     'GET',  // or 'POST', 'PUT', 'DELETE'
+   *     '/admin/some/endpoint',
+   *     { param1 }  // query parameters
+   *   );
+   * }
+   */
+}
 
 /**
  * Wait for all process instances to complete
@@ -44,9 +227,9 @@ export async function waitForProcessInstances(request: APIRequestContext, timeou
     if (result.status === 'FAILED') {
       console.log(`   ❌ Process instances: ${result.failedInstances?.length || 0} FAILED`);
       if (result.failedInstances) {
-        result.failedInstances.forEach((failure: any) => {
+        for (const failure of result.failedInstances) {
           console.log(`      - ${failure.type}: ${failure.error?.melding || 'No error message'}`);
-        });
+        }
       }
       throw new Error(`Process instances failed: ${result.message}`);
     }
@@ -62,8 +245,9 @@ export async function waitForProcessInstances(request: APIRequestContext, timeou
     console.log(`   ❌ Process instances: ${result.status} - ${result.message}`);
     throw new Error(`Process instance check failed: ${result.message}`);
 
-  } catch (error: any) {
-    if (error.message?.includes('ECONNREFUSED') || error.message?.includes('connect')) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('connect')) {
       console.log(`   ⚠️  Could not connect to API - endpoint may not be available`);
       return; // Don't fail if endpoint doesn't exist
     }
@@ -93,11 +277,12 @@ export async function clearApiCaches(request: APIRequestContext): Promise<boolea
 
     console.log(`   ⚠️  Cache clearing failed: HTTP ${response.status()}`);
     return false;
-  } catch (error: any) {
-    if (error.message?.includes('ECONNREFUSED') || error.message?.includes('connect')) {
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('connect')) {
       console.log(`   ⚠️  Could not connect to cache endpoint - may not be available`);
     } else {
-      console.log(`   ⚠️  Cache clearing error: ${error.message || error}`);
+      console.log(`   ⚠️  Cache clearing error: ${errorMessage}`);
     }
     return false;
   }
@@ -108,7 +293,7 @@ export async function clearApiCaches(request: APIRequestContext): Promise<boolea
  * This is a heavy-handed approach but guaranteed to work
  */
 export async function restartApiContainer(): Promise<void> {
-  const { execSync } = require('child_process');
+  const { execSync } = require('node:child_process');
 
   try {
     console.log('   🔄 Restarting melosys-api container...');
@@ -121,13 +306,15 @@ export async function restartApiContainer(): Promise<void> {
         execSync('curl -s http://localhost:8080/actuator/health > /dev/null 2>&1');
         console.log('   ✅ API restarted and healthy');
         return;
-      } catch (error) {
+      } catch {
+        // Ignore health check errors, continue waiting
         await new Promise(resolve => setTimeout(resolve, 1000));
       }
     }
 
     console.log('   ⚠️  API restarted but health check timed out');
-  } catch (error) {
-    console.log(`   ⚠️  Failed to restart API: ${error.message || error}`);
+  } catch (error: unknown) {
+    const errorMessage = error instanceof Error ? error.message : String(error);
+    console.log(`   ⚠️  Failed to restart API: ${errorMessage}`);
   }
 }
