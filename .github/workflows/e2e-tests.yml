@@ -380,7 +380,7 @@ jobs:
 
       - name: Upload test results
         uses: actions/upload-artifact@v4
-        if: always()
+        if: failure()
         with:
           name: playwright-results
           path: |
@@ -390,7 +390,7 @@ jobs:
 
       - name: Upload test videos
         uses: actions/upload-artifact@v4
-        if: always()
+        if: failure()
         with:
           name: playwright-videos
           path: test-results/**/video.webm
@@ -398,7 +398,7 @@ jobs:
 
       - name: Upload test traces
         uses: actions/upload-artifact@v4
-        if: always()
+        if: failure()
         with:
           name: playwright-traces
           path: test-results/**/trace.zip
