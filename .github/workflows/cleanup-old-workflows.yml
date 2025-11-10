@@ -1,0 +1,83 @@
+name: Cleanup Old Workflow Runs
+
+on:
+  # Run weekly on Sundays at 2 AM UTC
+  schedule:
+    - cron: '0 2 * * 0'
+
+  # Allow manual trigger
+  workflow_dispatch:
+    inputs:
+      days_to_keep:
+        description: 'Number of days to keep workflow runs'
+        required: false
+        default: '7'
+        type: string
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Delete old workflow runs
+        run: |
+          # Set retention period (default 7 days, or from manual input)
+          DAYS_TO_KEEP=${{ inputs.days_to_keep || '7' }}
+          echo "🗑️  Deleting workflow runs older than $DAYS_TO_KEEP days..."
+
+          # Calculate the cutoff date
+          CUTOFF_DATE=$(date -u -d "$DAYS_TO_KEEP days ago" +%Y-%m-%d)
+          echo "📅 Cutoff date: $CUTOFF_DATE"
+
+          # Get the repository owner and name
+          REPO="${{ github.repository }}"
+
+          # List all workflows
+          WORKFLOWS=$(gh api repos/$REPO/actions/workflows --jq '.workflows[].id')
+
+          for WORKFLOW_ID in $WORKFLOWS; do
+            echo ""
+            echo "🔍 Processing workflow ID: $WORKFLOW_ID"
+
+            # Get workflow name
+            WORKFLOW_NAME=$(gh api repos/$REPO/actions/workflows/$WORKFLOW_ID --jq '.name')
+            echo "📝 Workflow: $WORKFLOW_NAME"
+
+            # Get old workflow runs
+            RUN_IDS=$(gh api \
+              "repos/$REPO/actions/workflows/$WORKFLOW_ID/runs?created=<$CUTOFF_DATE&per_page=100" \
+              --jq '.workflow_runs[].id')
+
+            if [ -z "$RUN_IDS" ]; then
+              echo "✅ No old runs to delete for this workflow"
+              continue
+            fi
+
+            # Count runs to delete
+            RUN_COUNT=$(echo "$RUN_IDS" | wc -l | tr -d ' ')
+            echo "🗑️  Found $RUN_COUNT old run(s) to delete"
+
+            # Delete each run
+            for RUN_ID in $RUN_IDS; do
+              echo "  Deleting run $RUN_ID..."
+              gh api repos/$REPO/actions/runs/$RUN_ID -X DELETE >/dev/null && \
+                echo "  ✅ Deleted run $RUN_ID" || \
+                echo "  ❌ Failed to delete run $RUN_ID"
+            done
+          done
+
+          echo ""
+          echo "✅ Cleanup complete!"
+        env:
+          GH_TOKEN: ${{ github.token }}
+
+      - name: Summary
+        run: |
+          echo "## 🗑️ Workflow Cleanup Summary" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Deleted workflow runs older than **${{ inputs.days_to_keep || '7' }}** days" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Cleanup completed successfully" >> $GITHUB_STEP_SUMMARY
