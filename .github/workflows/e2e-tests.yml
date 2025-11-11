@@ -78,6 +78,7 @@ jobs:
             echo "📌 Source repository: ${{ github.event.client_payload.repository }}"
             echo "🏷️  Image tag: ${{ github.event.client_payload.image_tag }}"
             echo "📝 Commit: ${{ github.event.client_payload.commit_sha }}"
+            echo "💬 Commit message: ${{ github.event.client_payload.commit_message }}"
             echo "👤 Actor: ${{ github.event.client_payload.actor }}"
 
             # Default all services to latest
@@ -256,6 +257,18 @@ jobs:
         if: always()
         run: |
           echo "## 🎭 Playwright Test Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Add trigger information if this was a repository dispatch
+          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+            echo "### 📦 Triggered by: \`${{ github.event.client_payload.repository }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "- **Image tag:** \`${{ github.event.client_payload.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Commit:** \`${{ github.event.client_payload.commit_sha }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Message:** ${{ github.event.client_payload.commit_message }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Actor:** @${{ github.event.client_payload.actor }}" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
 
           # Count test results from Playwright's test-results directory structure
