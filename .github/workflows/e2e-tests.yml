@@ -245,13 +245,7 @@ jobs:
           echo "⏳ Waiting 10 seconds for services to fully stabilize..."
           sleep 10
           echo "✅ Ready to run tests!"
-
-      - name: Seed Unleash feature toggles
-        run: |
-          echo "🎯 Seeding Unleash with feature toggles..."
-          chmod +x ./scripts/seed-unleash.sh
-          ./scripts/seed-unleash.sh
-          echo "✅ Unleash seeded successfully!"
+          echo "ℹ️  Note: Feature toggles are automatically created by melosys-api on startup"
 
       - name: Run Playwright tests
         run: npx playwright test --project=chromium

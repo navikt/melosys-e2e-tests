@@ -26,7 +26,7 @@ start: network-check ## Start all services (Mac ARM)
 	@echo "   Platform: Mac ARM (Oracle: freepdb1)"
 	@MELOSYS_ORACLE_DB_NAME=freepdb1 MELOSYS_API_TAG=latest docker compose up -d
 	@echo ""
-	@$(MAKE) seed-unleash
+	@echo "ℹ️  Note: Feature toggles are automatically created by melosys-api on startup"
 	@echo ""
 	@echo "✅ All services started!"
 	@echo ""
@@ -38,7 +38,7 @@ start-intel: network-check ## Start all services (Intel/Linux)
 	@echo "   Platform: Intel/Linux (Oracle: XEPDB1)"
 	@MELOSYS_ORACLE_DB_NAME=XEPDB1 ORACLE_IMAGE=gvenzl/oracle-xe:18.4.0-slim MELOSYS_API_TAG=latest docker compose up -d
 	@echo ""
-	@$(MAKE) seed-unleash
+	@echo "ℹ️  Note: Feature toggles are automatically created by melosys-api on startup"
 	@echo ""
 	@echo "✅ All services started!"
 	@echo ""
@@ -47,7 +47,7 @@ start-intel: network-check ## Start all services (Intel/Linux)
 .PHONY: start-detached
 start-detached: network-check ## Start services in detached mode (no logs)
 	@MELOSYS_ORACLE_DB_NAME=freepdb1 MELOSYS_API_TAG=latest docker compose up -d
-	@$(MAKE) seed-unleash
+	@echo "ℹ️  Note: Feature toggles are automatically created by melosys-api on startup"
 
 .PHONY: stop
 stop: ## Stop all services
@@ -143,11 +143,6 @@ wait-healthy: ## Wait for all services to be healthy
 # ==============================================================================
 # Unleash Management
 # ==============================================================================
-
-.PHONY: seed-unleash
-seed-unleash: ## Seed Unleash with feature toggles
-	@echo "🌱 Seeding Unleash with feature toggles..."
-	@./scripts/seed-unleash.sh
 
 .PHONY: unleash-ui
 unleash-ui: ## Open Unleash UI in browser

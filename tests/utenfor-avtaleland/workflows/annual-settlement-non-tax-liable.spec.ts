@@ -1,4 +1,4 @@
-import {test} from '../../../fixtures';
+import {test} from '../../../fixtures/unleash-cleanup';
 import {AuthHelper} from '../../../helpers/auth-helper';
 import {HovedsidePage} from '../../../pages/hovedside.page';
 import {OpprettNySakPage} from '../../../pages/opprett-ny-sak/opprett-ny-sak.page';

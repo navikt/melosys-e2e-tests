@@ -88,8 +88,10 @@ make start-all
   - `auth-state-helper.ts` - Authentication state persistence
   - `unleash-helper.ts` - Feature toggle control for all services
 - **fixtures/** - Playwright test fixtures for automatic cleanup and logging
-  - `cleanup-fixture.ts` - Auto-cleanup database, mock data, and Unleash toggles after each test
-  - `docker-log-fixture.ts` - Check Docker logs for errors after tests
+  - `cleanup.ts` - Auto-cleanup database and mock data after each test
+  - `unleash-cleanup.ts` - Opt-in fixture for tests that use feature toggles (restores only changed toggles)
+  - `docker-logs.ts` - Check Docker logs for errors after tests
+  - `index.ts` - Main test fixture (combines cleanup + docker-logs)
 
 ### Helper Classes
 
@@ -134,35 +136,43 @@ await clearMockData(page.request);
 **UnleashHelper** - Control feature toggles for all services during tests.
 
 ```typescript
+// IMPORTANT: Use the unleash-cleanup fixture for tests that use Unleash
+import { test, expect } from '../fixtures/unleash-cleanup'; // Opt-in fixture
 import { UnleashHelper } from '../helpers/unleash-helper';
 
-const unleash = new UnleashHelper(request);
+test('my test with unleash', async ({ page, request }) => {
+  const unleash = new UnleashHelper(request);
 
-// Enable a feature toggle (affects ALL services)
-await unleash.enableFeature('melosys.new-feature');
+  // Enable a feature toggle (affects ALL services)
+  await unleash.enableFeature('melosys.new-feature');
 
-// Disable a feature toggle
-await unleash.disableFeature('melosys.old-feature');
+  // Disable a feature toggle
+  await unleash.disableFeature('melosys.old-feature');
 
-// Enable multiple features at once
-await unleash.enableFeatures([
-  'melosys.pensjonist',
-  'melosys.arsavregning'
-]);
+  // Enable multiple features at once
+  await unleash.enableFeatures([
+    'melosys.pensjonist',
+    'melosys.arsavregning'
+  ]);
 
-// Check if feature is enabled
-const isEnabled = await unleash.isFeatureEnabled('melosys.pensjonist');
+  // Check if feature is enabled
+  const isEnabled = await unleash.isFeatureEnabled('melosys.pensjonist');
 
-// List all feature toggles
-const features = await unleash.listFeatures();
+  // List all feature toggles
+  const features = await unleash.listFeatures();
 
-// Reset all toggles to defaults (automatic via cleanup fixture)
-await unleash.resetToDefaults();
+  // ... test logic ...
+
+  // Cleanup happens automatically - only changed toggles are restored
+});
 ```
 
 **Key Points:**
 - Feature toggles affect **all services** (melosys-api, faktureringskomponenten, trygdeavgift-beregning)
-- Toggles are **automatically reset** after each test via cleanup fixture
+- **Opt-in cleanup**: Import from `fixtures/unleash-cleanup` for tests that use toggles
+- **Smart cleanup**: Only restores toggles that changed during the test (no unnecessary API calls)
+- **Default fixture**: Tests that don't use Unleash should import from `fixtures` (standard cleanup)
+- **melosys-api creates toggles**: No need to run seed script - toggles are created automatically
 - Unleash UI available at `http://localhost:4242` (admin/unleash4all)
 - See `tests/unleash-example.spec.ts` for complete examples
 
@@ -184,12 +194,7 @@ The test suite depends on a full Docker Compose stack running in `../melosys-doc
 
 All services must be healthy before tests run. The GitHub Actions workflow waits for `http://localhost:3000/melosys/` to be responsive.
 
-**Initial Setup After Starting Services:**
-After first `make start-all`, run the seed script to populate Unleash with feature toggles:
-```bash
-cd ../melosys-docker-compose
-./unleash/seed-toggles.sh
-```
+**Note:** Unleash feature toggles are automatically created by melosys-api on startup. No manual seed script is needed.
 
 ### Database Configuration
 
