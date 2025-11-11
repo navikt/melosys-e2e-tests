@@ -261,10 +261,14 @@ jobs:
 
           # Add trigger information if this was a repository dispatch
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
-            echo "### 📦 Triggered by: \`${{ github.event.client_payload.repository }}\`" >> $GITHUB_STEP_SUMMARY
+            REPO="${{ github.event.client_payload.repository }}"
+            COMMIT_SHA="${{ github.event.client_payload.commit_sha }}"
+            COMMIT_URL="https://github.com/navikt/${REPO}/commit/${COMMIT_SHA}"
+
+            echo "### 📦 Triggered by: [\`$REPO\`](https://github.com/navikt/$REPO)" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "- **Image tag:** \`${{ github.event.client_payload.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
-            echo "- **Commit:** \`${{ github.event.client_payload.commit_sha }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Commit:** [\`${COMMIT_SHA:0:7}\`]($COMMIT_URL)" >> $GITHUB_STEP_SUMMARY
             echo "- **Message:** ${{ github.event.client_payload.commit_message }}" >> $GITHUB_STEP_SUMMARY
             echo "- **Actor:** @${{ github.event.client_payload.actor }}" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
