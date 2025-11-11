@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures';
+import { test, expect } from '../fixtures/unleash-cleanup';
 import { AuthHelper } from '../helpers/auth-helper';
 import { UnleashHelper } from '../helpers/unleash-helper';
 
