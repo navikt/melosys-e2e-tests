@@ -1,39 +1,42 @@
 services:
-  zookeeper:
-    container_name: zookeeper
-    networks:
-      melosys.docker-internal:
-        aliases:
-          - zookeeper.melosys.docker-internal
-    image: confluentinc/cp-zookeeper:7.1.2
-    environment:
-      ZOOKEEPER_CLIENT_PORT: 2181
-      ZOOKEEPER_TICK_TIME: 2000
-
   kafka:
     container_name: kafka
     networks:
       melosys.docker-internal:
         aliases:
           - kafka.melosys.docker-internal
-    image: confluentinc/cp-kafka:7.1.2
+    image: confluentinc/cp-kafka:7.8.0
     ports:
       - "9092:9092"
       - "29092:29092"
-    depends_on:
-      - zookeeper
     environment:
-      ADV_HOST: kafka.melosys.docker-internal
-      KAFKA_ZOOKEEPER_CONNECT: zookeeper.melosys.docker-internal:2181
+      # KRaft mode configuration
+      KAFKA_NODE_ID: 1
+      KAFKA_PROCESS_ROLES: broker,controller
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@kafka.melosys.docker-internal:9093
+      KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
+
+      # Listener configuration
+      KAFKA_LISTENERS: PLAINTEXT://kafka.melosys.docker-internal:9092,PLAINTEXT_HOST://0.0.0.0:29092,CONTROLLER://kafka.melosys.docker-internal:9093
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka.melosys.docker-internal:9092,PLAINTEXT_HOST://localhost:29092
+      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT,CONTROLLER:PLAINTEXT
+      KAFKA_INTER_BROKER_LISTENER_NAME: PLAINTEXT
+
+      # Replication settings
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
-      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka.melosys.docker-internal:9092,PLAINTEXT_HOST://localhost:29092
-      KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT,PLAINTEXT_HOST:PLAINTEXT
+      KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
+
+      # Log directory
+      KAFKA_LOG_DIRS: /var/lib/kafka/data
+
+      # Cluster ID (required for KRaft)
+      CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
     entrypoint: [ "/scripts/kafka-entrypoint.sh" ]
     volumes:
       - ./scripts/kafka-entrypoint.sh:/scripts/kafka-entrypoint.sh
+      - kafka-data:/var/lib/kafka/data
     healthcheck:
       test: [ "CMD-SHELL", "nc -z localhost 9092" ]
       interval: 20s
@@ -152,6 +155,9 @@ services:
   faktureringskomponenten:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:${FAKTURERINGSKOMPONENTEN_TAG:-latest}
     container_name: faktureringskomponenten
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: local
       SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/postgres?currentSchema=faktureringskomponenten"
@@ -183,6 +189,9 @@ services:
   melosys-trygdeavgift-beregning:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:${MELOSYS_TRYGDEAVGIFT_TAG:-latest}
     container_name: melosys-trygdeavgift-beregning
+    depends_on:
+      postgres:
+        condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: local
       SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/postgres?currentSchema=trygdeavgift-beregning"
@@ -395,3 +404,6 @@ services:
 networks:
   melosys.docker-internal:
     external: true
+
+volumes:
+  kafka-data:
