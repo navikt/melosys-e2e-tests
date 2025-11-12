@@ -159,8 +159,7 @@ jobs:
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-mock:latest &
           docker pull --platform linux/amd64 gvenzl/oracle-xe:18.4.0-slim &
           docker pull --platform linux/amd64 postgres:13-alpine &
-          docker pull --platform linux/amd64 confluentinc/cp-zookeeper:7.1.2 &
-          docker pull --platform linux/amd64 confluentinc/cp-kafka:7.1.2 &
+          docker pull --platform linux/amd64 confluentinc/cp-kafka:7.8.0 &
           docker pull --platform linux/amd64 ghcr.io/navikt/mock-oauth2-server:2.3.0 &
           docker pull --platform linux/amd64 ghcr.io/navikt/mock-oauth2-server:0.4.8 &
           docker pull --platform linux/amd64 unleashorg/unleash-server:latest &
