@@ -1,12 +1,18 @@
 #!/bin/bash
 
-echo "Venter til Zookeeper er oppe..."
-until timeout 5 nc zookeeper 2181; do
-    echo "Zookeeper er ikke oppe. Tester igjen om 2 sekunder..."
-    sleep 2;
-done
+echo "Initialiserer Kafka i KRaft-modus..."
 
-echo "ZooKeeper er oppe og kjører. Starter Kafka..."
+# Format storage hvis det ikke allerede er gjort
+if [ ! -d "/var/lib/kafka/data/meta.properties" ]; then
+    echo "Formaterer Kafka storage for KRaft-modus..."
+    /usr/bin/kafka-storage format \
+        -t ${CLUSTER_ID} \
+        -c /etc/kafka/kafka.properties
+else
+    echo "Kafka storage er allerede formatert"
+fi
+
+echo "Starter Kafka i KRaft-modus..."
 
 # Start Kafka
 exec /etc/confluent/docker/run
