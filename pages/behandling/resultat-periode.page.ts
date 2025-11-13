@@ -7,6 +7,7 @@ import { BasePage } from '../shared/base.page';
  * Responsibilities:
  * - Select result for the period (Innvilget/Avslått)
  * - Navigate to next step
+ * - Handle multiple periods when present
  *
  * Related pages:
  * - LovvalgPage (navigates from)
@@ -14,12 +15,12 @@ import { BasePage } from '../shared/base.page';
  *
  * @example
  * const resultatPeriode = new ResultatPeriodePage(page);
- * await resultatPeriode.velgResultat('INNVILGET');
+ * await resultatPeriode.velgResultat('INNVILGET'); // Period 1
+ * await resultatPeriode.velgResultat('INNVILGET', 2); // Period 2
  * await resultatPeriode.klikkBekreftOgFortsett();
  */
 export class ResultatPeriodePage extends BasePage {
   // Locators
-  private readonly resultatDropdown = this.page.getByLabel('Resultat periode');
   private readonly bekreftOgFortsettButton = this.page.getByRole('button', {
     name: 'Bekreft og fortsett'
   });
@@ -29,13 +30,24 @@ export class ResultatPeriodePage extends BasePage {
   }
 
   /**
+   * Get the resultat dropdown for a specific period
+   * @param periodIndex - Period number (1-based, defaults to 1)
+   * @returns Locator for the resultat dropdown
+   */
+  private getResultatDropdown(periodIndex: number = 1) {
+    return this.page.getByLabel(`Resultat periode ${periodIndex}`);
+  }
+
+  /**
    * Select result for the period
    *
    * @param resultat - Result value (e.g., 'INNVILGET', 'AVSLÅTT')
+   * @param periodIndex - Period number (1-based, defaults to 1)
    */
-  async velgResultat(resultat: string): Promise<void> {
-    await this.resultatDropdown.selectOption(resultat);
-    console.log(`✅ Selected resultat: ${resultat}`);
+  async velgResultat(resultat: string, periodIndex: number = 1): Promise<void> {
+    const dropdown = this.getResultatDropdown(periodIndex);
+    await dropdown.selectOption(resultat);
+    console.log(`✅ Selected resultat: ${resultat} for periode ${periodIndex}`);
   }
 
   /**
@@ -52,9 +64,10 @@ export class ResultatPeriodePage extends BasePage {
    * Convenience method for standard workflow
    *
    * @param resultat - Result value (default: 'INNVILGET')
+   * @param periodIndex - Period number (1-based, defaults to 1)
    */
-  async fyllUtResultatPeriode(resultat: string = 'INNVILGET'): Promise<void> {
-    await this.velgResultat(resultat);
+  async fyllUtResultatPeriode(resultat: string = 'INNVILGET', periodIndex: number = 1): Promise<void> {
+    await this.velgResultat(resultat, periodIndex);
     await this.klikkBekreftOgFortsett();
   }
 }

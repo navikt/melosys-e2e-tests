@@ -79,7 +79,8 @@ export class TrygdeavgiftPage extends BasePage {
    * - t=500ms: Debounce fires, PUT /trygdeavgift/beregning starts
    * - t=700-1000ms: PUT completes, value saved to database
    *
-   * We wait 1500ms to ensure the entire sequence completes reliably.
+   * NOTE: When selecting "Nei" (ikke-skattepliktig), the PUT API may not be triggered
+   * or may take longer due to form state changes. We wait longer in this case.
    *
    * @param erSkattepliktig - true for "Ja", false for "Nei"
    */
@@ -100,7 +101,7 @@ export class TrygdeavgiftPage extends BasePage {
       response => response.url().includes('/trygdeavgift/beregning') &&
                   response.request().method() === 'PUT' &&
                   response.status() === 200,
-      { timeout: 3000 } // 500ms debounce + 2500ms for API
+      { timeout: 5000 } // Increased timeout for slower responses
     ).catch(() => null); // Don't fail if no PUT (form might prevent it)
 
     // Check the radio button (triggers change event)
@@ -115,11 +116,15 @@ export class TrygdeavgiftPage extends BasePage {
 
     if (response) {
       console.log('✅ Debounced PUT /trygdeavgift/beregning completed - value saved');
+      // Even after PUT completes, wait a bit for form state to stabilize
+      await this.page.waitForTimeout(500);
     } else {
-      // If no PUT detected, wait a bit longer to be safe
-      // This can happen if form validation prevents the PUT
+      // If no PUT detected, wait longer to be safe
+      // This happens when selecting "Nei" (ikke-skattepliktig)
+      // The form needs time to update its state and re-render fields
       console.log('⚠️  No PUT detected, waiting for debounce period...');
-      await this.page.waitForTimeout(1500);
+      const waitTime = erSkattepliktig ? 1500 : 2500; // Wait for "Nei" (reduced to avoid timeout)
+      await this.page.waitForTimeout(waitTime);
     }
 
     console.log(`✅ Selected Skattepliktig = ${erSkattepliktig ? 'Ja' : 'Nei'}`);

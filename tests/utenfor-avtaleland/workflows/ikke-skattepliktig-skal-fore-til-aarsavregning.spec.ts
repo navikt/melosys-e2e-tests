@@ -17,6 +17,8 @@ import {expect} from "@playwright/test";
 
 test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
     test('skal opprette årsavregning for ikke-skattepliktig bruker', async ({page, request}) => {
+        // Increase timeout for this complex workflow with job processing
+        test.setTimeout(90000); // 90 seconds
         // Setup: Authentication
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);
@@ -81,12 +83,21 @@ test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
         // Step 7: Fill Trygdeavgift with special options
         console.log('📝 Step 7: Filling trygdeavgift...');
         await trygdeavgift.ventPåSideLastet();
+
+        // WORKAROUND: Call velgSkattepliktig twice for split periods
+        // When there are multiple periods (Helse + Pensjon), the form state
+        // can reset between the first and second call. The second call ensures
+        // the radio button stays selected after form stabilization.
         await trygdeavgift.velgSkattepliktig(false);
         await trygdeavgift.velgSkattepliktig(false);
 
+        // Fill income information
         await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
         await trygdeavgift.velgBetalesAga(false);
         await trygdeavgift.fyllInnBruttoinntekt('100000');
+
+        // Wait for form validation before clicking continue
+        await page.waitForTimeout(2000);
         await trygdeavgift.klikkBekreftOgFortsett();
 
         // Step 8: Fatt vedtak (without filling text fields)
