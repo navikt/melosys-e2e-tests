@@ -25,6 +25,7 @@ export interface NyVurderingOptions {
     nySkattepliktigStatus: SkattepliktigStatus;
     nyPeriodeFra?: string;
     nyPeriodeTil?: string;
+    userId?: string;
 }
 
 /**
@@ -127,11 +128,13 @@ export class AarsavregningWorkflowHelper {
 
     /**
      * Create a "ny vurdering" (new assessment) for existing case
+     * Follows the workflow: Search -> Vis behandling -> Opprett ny sak -> Ny vurdering
      */
     async opprettNyVurdering(options: NyVurderingOptions): Promise<void> {
-        const { nySkattepliktigStatus, nyPeriodeFra, nyPeriodeTil } = options;
+        const { nySkattepliktigStatus, nyPeriodeFra, nyPeriodeTil, userId = USER_ID_VALID } = options;
 
         const hovedside = new HovedsidePage(this.page);
+        const opprettSak = new OpprettNySakPage(this.page);
         const medlemskap = new MedlemskapPage(this.page);
         const arbeidsforhold = new ArbeidsforholdPage(this.page);
         const lovvalg = new LovvalgPage(this.page);
@@ -139,14 +142,28 @@ export class AarsavregningWorkflowHelper {
         const trygdeavgift = new TrygdeavgiftPage(this.page);
         const vedtak = new VedtakPage(this.page);
 
-        console.log('📝 Creating ny vurdering...');
+        // Navigate to hovedside and search for case
+        console.log('📝 Navigating to hovedside and searching for case...');
         await hovedside.goto();
-        await this.page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).click();
+        await hovedside.søkEtterBruker(userId);
+        await hovedside.klikkVisBehandling();
 
-        // Click "Ny vurdering" button
-        await this.page.getByRole('button', { name: 'Ny vurdering' }).click();
+        // Go back to forside and create ny vurdering
+        await hovedside.gåTilForsiden();
+        await hovedside.klikkOpprettNySak();
 
-        // If new period provided, update medlemskap period
+        console.log('📝 Creating ny vurdering...');
+        await opprettSak.opprettNyVurdering(userId, 'SØKNAD');
+
+        // Wait for behandling creation
+        console.log('📝 Waiting for behandling creation...');
+        await waitForProcessInstances(this.request, 30);
+
+        // Navigate to the new behandling
+        await hovedside.goto();
+        await this.page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).first().click();
+
+        // Medlemskap - optionally update period
         if (nyPeriodeFra && nyPeriodeTil) {
             console.log(`📝 Updating period (${nyPeriodeFra} → ${nyPeriodeTil})...`);
             await medlemskap.velgPeriode(nyPeriodeFra, nyPeriodeTil);
@@ -182,9 +199,9 @@ export class AarsavregningWorkflowHelper {
         await this.fyllTrygdeavgift(trygdeavgift, nySkattepliktigStatus);
         await trygdeavgift.klikkBekreftOgFortsett();
 
-        // Fatt vedtak
+        // Fatt vedtak for ny vurdering (with required grunn dropdown)
         console.log('📝 Making decision for ny vurdering...');
-        await vedtak.klikkFattVedtak();
+        await vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING');
 
         console.log('📝 Waiting for process instances after ny vurdering...');
         await waitForProcessInstances(this.request, 30);
