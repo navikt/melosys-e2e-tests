@@ -1,11 +1,12 @@
-# Årsavregning Workflow Tests
+# Årsavregning Workflow Tests - Ikke-skattepliktige Saker
 
 **JIRA:** MELOSYS-7560
 **Test Script:** `/test-script.md`
+**Status:** 🔄 In Progress - Awaiting domain expert clarification on "delvis" scenarios
 
 ## Overview
 
-Automated E2E tests for verifying automatic creation of annual settlement (årsavregning) based on tax liability status changes.
+Automated E2E tests for verifying automatic creation of annual settlement (årsavregning) for ikke-skattepliktige (non-tax-liable) cases based on tax liability status changes.
 
 ## Test Organization
 
@@ -17,19 +18,24 @@ Automated E2E tests for verifying automatic creation of annual settlement (årsa
 ### Test Structure
 
 ```
-├─ Årsavregning - Førstegangsbehandling (7 tests)
-│  ├─ ikke-skattepliktig (3 period variations) ✅ SKAL opprette
-│  ├─ skattepliktig (3 period variations) ❌ SKAL IKKE opprette
-│  └─ delvis skattepliktig ❌ SKAL IKKE opprette
+├─ Årsavregning - Førstegangsbehandling
+│  ├─ ✅ ikke-skattepliktig (3 period variations) - SKAL opprette - PASSING
+│  ├─ ✅ skattepliktig (3 period variations) - SKAL IKKE opprette - PASSING
+│  └─ ⚠️  delvis skattepliktig - SKAL IKKE opprette - PENDING (needs domain clarification)
 │
-├─ Årsavregning - Ny vurdering (4 tests)
-│  ├─ skattepliktig → ikke-skattepliktig ✅ SKAL opprette
-│  ├─ ikke-skattepliktig → skattepliktig ❌ SKAL IKKE opprette
-│  ├─ ikke-skattepliktig → delvis ✅ SKAL opprette
-│  └─ skattepliktig → delvis ✅ SKAL opprette
+├─ Årsavregning - Ny vurdering (endre skattstatus)
+│  ├─ ✅ skattepliktig → ikke-skattepliktig - SKAL opprette - PASSING
+│  ├─ ⏳ ikke-skattepliktig → skattepliktig - SKAL IKKE opprette - NOT TESTED YET
+│  ├─ ⚠️  ikke-skattepliktig → delvis - SKAL opprette - PENDING (needs domain clarification)
+│  └─ ⚠️  skattepliktig → delvis - SKAL opprette - PENDING (needs domain clarification)
 │
-└─ Årsavregning - Feature toggle (1 test)
-   └─ Toggle AV → Toggle PÅ ✅ SKAL opprette
+└─ Årsavregning - Feature toggle
+   └─ ⏳ Toggle AV → Toggle PÅ - SKAL opprette - NOT TESTED YET
+
+Legend:
+✅ Working and passing
+⏳ Not tested yet
+⚠️  Needs domain expert clarification
 ```
 
 ### Period Variations
@@ -42,19 +48,75 @@ All førstegangsbehandling tests run with 3 different period types:
 | **overlap2023_2024** | 03.11.2023 | 01.04.2024 | Spans year boundary 2023→2024 |
 | **overlap2024_2025** | 03.11.2024 | 01.04.2025 | Spans year boundary 2024→2025 |
 
+## Test Implementation Status
+
+### ✅ Completed & Passing (5 tests)
+
+| Test | Status | Result |
+|------|--------|--------|
+| Førstegangsbehandling: ikke-skattepliktig (kun 2024) | ✅ PASSING | Processes 1 case |
+| Førstegangsbehandling: ikke-skattepliktig (overlap 2023-2024) | ✅ PASSING | Processes 1 case |
+| Førstegangsbehandling: ikke-skattepliktig (overlap 2024-2025) | ✅ PASSING | Processes 1 case |
+| Førstegangsbehandling: skattepliktig (all 3 periods) | ✅ PASSING | Processes 0 cases |
+| Ny vurdering: skattepliktig → ikke-skattepliktig | ✅ PASSING | Processes 1 case |
+
+### ⏳ Not Tested Yet (2 tests)
+
+| Test | Status | Expected Result |
+|------|--------|-----------------|
+| Ny vurdering: ikke-skattepliktig → skattepliktig | ⏳ NOT TESTED | Should process 0 cases |
+| Feature toggle: AV → PÅ with script | ⏳ NOT TESTED | Should process 1 case |
+
+### ⚠️ Needs Domain Expert Clarification (4 tests)
+
+**Issue:** Implementation of "delvis skattepliktig" (partially tax-liable) is unclear.
+
+| Test | Question |
+|------|----------|
+| Førstegangsbehandling: delvis | How to create a case that is "delvis skattepliktig og delvis ikke skattepliktig"? |
+| Ny vurdering: ikke-skattepliktig → delvis | How to change existing period to "delvis" status? |
+| Ny vurdering: skattepliktig → delvis | Same question - what does "delvis" mean in practice? |
+
+**Current Implementation Attempt:**
+```typescript
+case 'delvis':
+    // First period: skattepliktig
+    await trygdeavgift.velgSkattepliktig(true);
+    await trygdeavgift.fyllInnBruttoinntekt('50000');
+
+    // Try to add second period via "Legg til periode" button
+    const leggTilButton = page.getByRole('button', { name: 'Legg til periode' });
+    if (await leggTilButton.isVisible()) {
+        await leggTilButton.click();
+        // Second period: ikke-skattepliktig
+        await trygdeavgift.velgSkattepliktig(false);
+        await trygdeavgift.fyllInnBruttoinntekt('50000');
+    }
+```
+
+**Problem:** The "Legg til periode" button may not exist in certain flows, or "delvis" may need to be created differently (e.g., splitting periods earlier in medlemskap/resultat-periode steps).
+
+**Questions for Domain Expert:**
+1. What does "delvis skattepliktig og delvis ikke skattepliktig" mean in business terms?
+2. How would a saksbehandler manually create such a case in the UI?
+3. Should periods be split earlier (medlemskap) or later (trygdeavgift)?
+4. Is there a different UI flow for "delvis" cases?
+
 ## Test Coverage Matrix
 
-| Step | Scenario | Period Variations | Expected Result | Test Count |
-|------|----------|-------------------|-----------------|------------|
-| 1 | Førstegangsbehandling: ikke-skattepliktig | 3 (kun 2024, 2023-2024, 2024-2025) | ✅ Oppretter | 3 |
-| 2 | Førstegangsbehandling: skattepliktig | 3 (kun 2024, 2023-2024, 2024-2025) | ❌ Oppretter IKKE | 3 |
-| 3 | Ny vurdering: skattepliktig → ikke-skattepliktig | 1 (kun 2024) | ✅ Oppretter | 1 |
-| 4 | Ny vurdering: ikke-skattepliktig → skattepliktig | 1 (kun 2024) | ❌ Oppretter IKKE | 1 |
-| 5 | Ny vurdering: ikke-skattepliktig → delvis | 1 (kun 2024) | ✅ Oppretter | 1 |
-| 6 | Ny vurdering: skattepliktig → delvis | 1 (kun 2024) | ✅ Oppretter | 1 |
-| 7 | Førstegangsbehandling: delvis skattepliktig | 1 (kun 2024) | ❌ Oppretter IKKE | 1 |
-| 8 | Toggle AV → Toggle PÅ med script | 1 (kun 2024) | ✅ Oppretter | 1 |
-| **TOTAL** | | | | **11 tests** |
+| Step | Scenario | Period Variations | Expected Result | Status |
+|------|----------|-------------------|-----------------|--------|
+| 1 | Førstegangsbehandling: ikke-skattepliktig | 3 variations | ✅ Oppretter | ✅ PASSING (3 tests) |
+| 2 | Førstegangsbehandling: skattepliktig | 3 variations | ❌ Oppretter IKKE | ✅ PASSING (3 tests) |
+| 3 | Ny vurdering: skattepliktig → ikke-skattepliktig | kun 2024 | ✅ Oppretter | ✅ PASSING |
+| 4 | Ny vurdering: ikke-skattepliktig → skattepliktig | kun 2024 | ❌ Oppretter IKKE | ⏳ NOT TESTED |
+| 5 | Ny vurdering: ikke-skattepliktig → delvis | kun 2024 | ✅ Oppretter | ⚠️ PENDING |
+| 6 | Ny vurdering: skattepliktig → delvis | kun 2024 | ✅ Oppretter | ⚠️ PENDING |
+| 7 | Førstegangsbehandling: delvis skattepliktig | kun 2024 | ❌ Oppretter IKKE | ⚠️ PENDING |
+| 8 | Toggle AV → Toggle PÅ med script | kun 2024 | ✅ Oppretter | ⏳ NOT TESTED |
+| **TOTAL** | | | | **11 tests planned** |
+| **COMPLETED** | | | | **5 passing** |
+| **REMAINING** | | | | **6 tests** |
 
 ## Business Rules
 
