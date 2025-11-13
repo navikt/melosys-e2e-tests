@@ -93,10 +93,14 @@ export class AarsavregningWorkflowHelper {
         // When using FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON, there are 2 periods (Helse + Pensjon)
         console.log('📝 Selecting resultat periode (Innvilget)...');
 
-        // Check if there are multiple periods by checking for "Resultat periode 2"
-        const periode2Exists = await this.page.getByLabel('Resultat periode 2').count() > 0;
+        // Wait for page to load and check for multiple periods
+        await this.page.waitForTimeout(1000); // Let page stabilize
 
-        if (periode2Exists) {
+        // Check if there are multiple periods by counting resultat dropdowns
+        const resultatDropdowns = await this.page.locator('select[name^="medlemskapsperioder"][name$=".innvilgelsesResultat"]').count();
+        console.log(`📝 Found ${resultatDropdowns} resultat periode dropdown(s)`);
+
+        if (resultatDropdowns > 1) {
             // Multiple periods (Helse + Pensjon split)
             // System defaults: Period 1 (Helsedel) = Avslått, Period 2 (Pensjonsdel) = Innvilget
             // Accept these defaults to avoid overlap error
@@ -157,9 +161,13 @@ export class AarsavregningWorkflowHelper {
 
         // Resultat periode - select Innvilget (handle multiple periods)
         console.log('📝 Selecting resultat periode (Innvilget)...');
-        const periode2Exists = await this.page.getByLabel('Resultat periode 2').count() > 0;
 
-        if (periode2Exists) {
+        // Wait for page to load and check for multiple periods
+        await this.page.waitForTimeout(1000);
+        const resultatDropdowns = await this.page.locator('select[name^="medlemskapsperioder"][name$=".innvilgelsesResultat"]').count();
+        console.log(`📝 Found ${resultatDropdowns} resultat periode dropdown(s)`);
+
+        if (resultatDropdowns > 1) {
             // Multiple periods - accept defaults to avoid overlap
             console.log('📝 Multiple periods detected, accepting defaults (Helsedel: Avslått, Pensjonsdel: Innvilget)...');
             await resultatPeriode.klikkBekreftOgFortsett();
@@ -231,7 +239,7 @@ export class AarsavregningWorkflowHelper {
                 await trygdeavgift.velgSkattepliktig(true);
                 await trygdeavgift.velgSkattepliktig(true);
                 await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
-                await trygdeavgift.velgBetalesAga(true);
+                await trygdeavgift.velgBetalesAga(false); // false to show Bruttoinntekt field
                 await trygdeavgift.fyllInnBruttoinntekt('100000');
                 await this.page.waitForTimeout(2000);
                 break;
@@ -242,7 +250,7 @@ export class AarsavregningWorkflowHelper {
                 await trygdeavgift.velgSkattepliktig(true);
                 await trygdeavgift.velgSkattepliktig(true);
                 await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
-                await trygdeavgift.velgBetalesAga(true);
+                await trygdeavgift.velgBetalesAga(false); // false to show Bruttoinntekt field
                 await trygdeavgift.fyllInnBruttoinntekt('50000');
                 await this.page.waitForTimeout(1000);
 
