@@ -90,8 +90,22 @@ export class AarsavregningWorkflowHelper {
         await lovvalg.klikkBekreftOgFortsett();
 
         // Step 6: Select Innvilget for Resultat Periode
+        // When using FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON, there are 2 periods (Helse + Pensjon)
         console.log('📝 Selecting resultat periode (Innvilget)...');
-        await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
+
+        // Check if there are multiple periods by checking for "Resultat periode 2"
+        const periode2Exists = await this.page.getByLabel('Resultat periode 2').count() > 0;
+
+        if (periode2Exists) {
+            // Multiple periods (Helse + Pensjon split)
+            // System defaults: Period 1 (Helsedel) = Avslått, Period 2 (Pensjonsdel) = Innvilget
+            // Accept these defaults to avoid overlap error
+            console.log('📝 Multiple periods detected, accepting defaults (Helsedel: Avslått, Pensjonsdel: Innvilget)...');
+            await resultatPeriode.klikkBekreftOgFortsett();
+        } else {
+            // Single period - default is Avslått, needs to be changed to Innvilget
+            await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
+        }
 
         // Step 7: Fill Trygdeavgift
         console.log(`📝 Filling trygdeavgift (${skattepliktigStatus})...`);
@@ -141,9 +155,18 @@ export class AarsavregningWorkflowHelper {
         // Lovvalg - use same answers
         await lovvalg.klikkBekreftOgFortsett();
 
-        // Resultat periode - select Innvilget
+        // Resultat periode - select Innvilget (handle multiple periods)
         console.log('📝 Selecting resultat periode (Innvilget)...');
-        await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
+        const periode2Exists = await this.page.getByLabel('Resultat periode 2').count() > 0;
+
+        if (periode2Exists) {
+            // Multiple periods - accept defaults to avoid overlap
+            console.log('📝 Multiple periods detected, accepting defaults (Helsedel: Avslått, Pensjonsdel: Innvilget)...');
+            await resultatPeriode.klikkBekreftOgFortsett();
+        } else {
+            // Single period - change to Innvilget
+            await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
+        }
 
         // Trygdeavgift - apply new status
         console.log(`📝 Filling trygdeavgift (${nySkattepliktigStatus})...`);

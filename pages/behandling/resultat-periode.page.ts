@@ -34,13 +34,18 @@ export class ResultatPeriodePage extends BasePage {
    * @param periodIndex - Period number (1-based, defaults to 1)
    * @returns Locator for the resultat dropdown
    */
-  private getResultatDropdown(periodIndex: number = 1) {
-    // Try specific period label first, fall back to generic "Resultat"
+  private async getResultatDropdown(periodIndex: number = 1) {
+    // Try specific period label first (for multiple periods like Helse/Pensjon split)
     const specificLabel = this.page.getByLabel(`Resultat periode ${periodIndex}`);
-    const genericLabel = this.page.getByLabel('Resultat');
 
-    // Return first available locator
-    return specificLabel.or(genericLabel);
+    // Check if specific label exists
+    const count = await specificLabel.count();
+    if (count > 0) {
+        return specificLabel;
+    }
+
+    // Fall back to generic "Resultat" for single period cases
+    return this.page.getByLabel('Resultat');
   }
 
   /**
@@ -50,7 +55,7 @@ export class ResultatPeriodePage extends BasePage {
    * @param periodIndex - Period number (1-based, defaults to 1)
    */
   async velgResultat(resultat: string, periodIndex: number = 1): Promise<void> {
-    const dropdown = this.getResultatDropdown(periodIndex);
+    const dropdown = await this.getResultatDropdown(periodIndex);
     await dropdown.selectOption(resultat);
     console.log(`✅ Selected resultat: ${resultat} for periode ${periodIndex}`);
   }
