@@ -35,7 +35,12 @@ export class ResultatPeriodePage extends BasePage {
    * @returns Locator for the resultat dropdown
    */
   private getResultatDropdown(periodIndex: number = 1) {
-    return this.page.getByLabel(`Resultat periode ${periodIndex}`);
+    // Try specific period label first, fall back to generic "Resultat"
+    const specificLabel = this.page.getByLabel(`Resultat periode ${periodIndex}`);
+    const genericLabel = this.page.getByLabel('Resultat');
+
+    // Return first available locator
+    return specificLabel.or(genericLabel);
   }
 
   /**
