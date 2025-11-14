@@ -16,10 +16,7 @@ import {expect} from "@playwright/test";
 
 
 test.describe('Nyvurdering - Endring av skattestatus', () => {
-    // forrandering etter https://jira.adeo.no/browse/MELOSYS-7689 krever oppdatering på alle disse
-    // A Trygdeavgift for tidligere ar skal fastsettes pà årsavregning. Du skal derfor ikke oppgi
-    // skatte- og inntektsperioder for tidligere år i denne behandlingen.
-    test('skal endre skattestatus fra ikke-skattepliktig til skattepliktig via nyvurdering @manual', async ({page, request}) => {
+    test('skal endre skattestatus fra ikke-skattepliktig til skattepliktig via nyvurdering', async ({page, request}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);
@@ -52,9 +49,9 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
 
         await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).click();
 
-        // Step 3: Fill Medlemskap
+        // Step 3: Fill Medlemskap (2024-only dates for MELOSYS-7689)
         console.log('📝 Step 3: Filling medlemskap information...');
-        await medlemskap.velgPeriode('01.01.2023', '01.07.2024');
+        await medlemskap.velgPeriode('01.01.2024', '01.07.2024');
         await medlemskap.velgLand('Afghanistan');
         await medlemskap.velgTrygdedekning('FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON');
         await medlemskap.klikkBekreftOgFortsett();
@@ -71,17 +68,23 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker nær tilknytning til');
         await lovvalg.klikkBekreftOgFortsett();
 
-        // Step 6: Select Resultat Periode
-        console.log('📝 Step 6: Selecting resultat periode...');
-        await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
+        // Wait for Medlemskapsperioder page to load
+        await page.waitForTimeout(3000);
 
-        // Step 7: Fill Trygdeavgift with special options
-        console.log('📝 Step 7: Filling trygdeavgift...');
-        await trygdeavgift.ventPåSideLastet();
-        await trygdeavgift.velgSkattepliktig(false);
-        await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
-        await trygdeavgift.velgBetalesAga(false);
-        await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
+        // Step 6: Accept default Resultat Periode values (split periods)
+        console.log('📝 Step 6: Accepting default resultat periode values...');
+        await resultatPeriode.klikkBekreftOgFortsett();
+
+        // Step 7: Handle Trygdeavgift with årsavregning warning (MELOSYS-7689)
+        console.log('📝 Step 7: Handling trygdeavgift with årsavregning warning...');
+        const hasAarsavregningWarning = await page.getByText(/tidligere år skal fastsettes på årsavregning/i).isVisible({ timeout: 5000 }).catch(() => false);
+
+        // Verify that the årsavregning warning is displayed (test should fail if not present)
+        expect(hasAarsavregningWarning,
+            'Expected årsavregning warning to be displayed. ' +
+            'The warning "tidligere år skal fastsettes på årsavregning" should appear when using 2024-only dates.'
+        ).toBe(true);
+
         await trygdeavgift.klikkBekreftOgFortsett();
 
         // Step 8: Fatt vedtak (without filling text fields)
@@ -115,14 +118,19 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         // Navigate to Trygdeavgift immediately
         await behandling.gåTilTrygdeavgift();
 
-        // Step 14: Update Skattepliktig to 'Ja'
+        // Step 14: Update Skattepliktig to 'Ja' and complete the form
         // The velgSkattepliktig method now waits for the PUT API call to complete
         console.log('📝 Step 14: Updating Skattepliktig to Ja...');
         await trygdeavgift.velgSkattepliktig(true);
 
-        // Step 15: Navigate to Vedtak and submit
+        // For ny vurdering with skattepliktig=true, we need to fill in all income fields
+        await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
+        await trygdeavgift.velgBetalesAga(false);
+        await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
+        await trygdeavgift.klikkBekreftOgFortsett();
+
+        // Step 15: Submit vedtak for ny vurdering
         console.log('📝 Step 15: Submitting vedtak for ny vurdering...');
-        await behandling.gåTilVedtak();
         await vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING');
 
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
@@ -164,9 +172,9 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
 
         await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).click();
 
-        // Step 3: Fill Medlemskap
+        // Step 3: Fill Medlemskap (2024-only dates for MELOSYS-7689)
         console.log('📝 Step 3: Filling medlemskap information...');
-        await medlemskap.velgPeriode('01.01.2023', '01.07.2024');
+        await medlemskap.velgPeriode('01.01.2024', '01.07.2024');
         await medlemskap.velgLand('Afghanistan');
         await medlemskap.velgTrygdedekning('FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON');
         await medlemskap.klikkBekreftOgFortsett();
@@ -183,18 +191,23 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker nær tilknytning til');
         await lovvalg.klikkBekreftOgFortsett();
 
-        // Step 6: Select Resultat Periode
-        console.log('📝 Step 6: Selecting resultat periode...');
-        await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
+        // Wait for Medlemskapsperioder page to load
+        await page.waitForTimeout(3000);
 
-        // Step 7: Fill Trygdeavgift with special options
-        console.log('📝 Step 7: Filling trygdeavgift...');
-        await trygdeavgift.ventPåSideLastet();
-        await trygdeavgift.velgSkattepliktig(true);
+        // Step 6: Accept default Resultat Periode values (split periods)
+        console.log('📝 Step 6: Accepting default resultat periode values...');
+        await resultatPeriode.klikkBekreftOgFortsett();
 
-        await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
-        await trygdeavgift.velgBetalesAga(false);
-        await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
+        // Step 7: Handle Trygdeavgift with årsavregning warning (MELOSYS-7689)
+        console.log('📝 Step 7: Handling trygdeavgift with årsavregning warning...');
+        const hasAarsavregningWarning = await page.getByText(/tidligere år skal fastsettes på årsavregning/i).isVisible({ timeout: 5000 }).catch(() => false);
+
+        // Verify that the årsavregning warning is displayed (test should fail if not present)
+        expect(hasAarsavregningWarning,
+            'Expected årsavregning warning to be displayed. ' +
+            'The warning "tidligere år skal fastsettes på årsavregning" should appear when using 2024-only dates.'
+        ).toBe(true);
+
         await trygdeavgift.klikkBekreftOgFortsett();
 
         // Step 8: Fatt vedtak (without filling text fields)
@@ -228,14 +241,19 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         // Navigate to Trygdeavgift immediately
         await behandling.gåTilTrygdeavgift();
 
-        // Step 14: Update Skattepliktig to 'Ja'
+        // Step 14: Update Skattepliktig to 'Nei' and complete the form
         // The velgSkattepliktig method now waits for the PUT API call to complete
         console.log('📝 Step 14: Updating Skattepliktig to Nei...');
         await trygdeavgift.velgSkattepliktig(false);
 
-        // Step 15: Navigate to Vedtak and submit
+        // For ny vurdering, we need to fill in ALL required fields even when skattepliktig=false
+        await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
+        await trygdeavgift.velgBetalesAga(false);
+        await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
+        await trygdeavgift.klikkBekreftOgFortsett();
+
+        // Step 15: Submit vedtak for ny vurdering
         console.log('📝 Step 15: Submitting vedtak for ny vurdering...');
-        await behandling.gåTilVedtak();
         await vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING');
 
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
