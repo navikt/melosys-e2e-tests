@@ -10,7 +10,9 @@ import {TrygdeavgiftPage} from '../../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../../pages/shared/constants';
 
-test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
+// forrandering etter https://jira.adeo.no/browse/MELOSYS-7689 krever oppdatering på alle disse
+//Inntektsperiode eller skatteforholdsperiode kan ikke vare i tidligere ar
+test.describe('Komplett saksflyt - Utenfor avtaleland @manual', () => {
     test('skal fullføre komplett saksflyt med § 2-8 første ledd bokstav a (arbeidstaker)', async ({page}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);

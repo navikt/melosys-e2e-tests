@@ -16,7 +16,10 @@ import {expect} from "@playwright/test";
 
 
 test.describe('Nyvurdering - Endring av skattestatus', () => {
-    test('skal endre skattestatus fra ikke-skattepliktig til skattepliktig via nyvurdering', async ({page, request}) => {
+    // forrandering etter https://jira.adeo.no/browse/MELOSYS-7689 krever oppdatering på alle disse
+    // A Trygdeavgift for tidligere ar skal fastsettes pà årsavregning. Du skal derfor ikke oppgi
+    // skatte- og inntektsperioder for tidligere år i denne behandlingen.
+    test('skal endre skattestatus fra ikke-skattepliktig til skattepliktig via nyvurdering @manual', async ({page, request}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);

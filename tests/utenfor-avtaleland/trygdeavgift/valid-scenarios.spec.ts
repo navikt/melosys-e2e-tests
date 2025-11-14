@@ -69,7 +69,8 @@ async function setupBehandlingToTrygdeavgift(page: Page) {
     return trygdeavgift;
 }
 
-test.describe('Trygdeavgift - Gyldige scenarioer', () => {
+// forrandering etter https://jira.adeo.no/browse/MELOSYS-7689 krever oppdatering på alle disse
+test.describe('Trygdeavgift - Gyldige scenarioer @manual', () => {
 
     test('Scenario 1: Ikke skattepliktig + Inntekt fra utlandet + Betales ikke AGA - Skattesats 37%', async ({page}) => {
         const trygdeavgift = await setupBehandlingToTrygdeavgift(page);
