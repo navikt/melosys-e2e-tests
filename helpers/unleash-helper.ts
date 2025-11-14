@@ -73,6 +73,9 @@ export class UnleashHelper {
     }
 
     console.log(`✅ Unleash: Enabled feature '${featureName}'`);
+
+    // Wait for Unleash cache to propagate the change
+    await this.waitForToggleState(featureName, true);
   }
 
   /**
@@ -92,10 +95,14 @@ export class UnleashHelper {
       // Feature might not exist, try to create it first (disabled)
       await this.createFeatureIfNotExists(featureName, false);
       console.log(`✅ Unleash: Created and disabled feature '${featureName}'`);
+      await this.waitForToggleState(featureName, false);
       return;
     }
 
     console.log(`✅ Unleash: Disabled feature '${featureName}'`);
+
+    // Wait for Unleash cache to propagate the change
+    await this.waitForToggleState(featureName, false);
   }
 
   /**
@@ -156,6 +163,73 @@ export class UnleashHelper {
       (env: any) => env.name === this.environment
     );
     return envConfig?.enabled || false;
+  }
+
+  /**
+   * Wait for a toggle to reach the expected state
+   * Polls the toggle state until it matches expectedState or timeout is reached
+   * This is necessary because Unleash has server-side caching (~10-15s refresh interval)
+   * and the frontend also caches toggle responses
+   */
+  private async waitForToggleState(
+    featureName: string,
+    expectedState: boolean,
+    timeoutMs: number = 30000,
+    pollIntervalMs: number = 500
+  ): Promise<void> {
+    const startTime = Date.now();
+
+    // Poll both Admin API and Frontend API to ensure both caches are updated
+    let adminState = await this.isFeatureEnabled(featureName);
+    let frontendState = await this.getFrontendToggleState(featureName);
+
+    while (adminState !== expectedState || (frontendState !== null && frontendState !== expectedState)) {
+      if (Date.now() - startTime > timeoutMs) {
+        console.log(
+          `   ⚠️  Unleash: Timeout waiting for '${featureName}' to be ${expectedState ? 'enabled' : 'disabled'}`
+        );
+        console.log(`       Admin API state: ${adminState}, Frontend API state: ${frontendState}`);
+        return; // Don't throw, just warn - the test might still work
+      }
+
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+      adminState = await this.isFeatureEnabled(featureName);
+      frontendState = await this.getFrontendToggleState(featureName);
+
+      // If frontend API becomes unavailable (page closed), just check admin API
+      if (frontendState === null) {
+        if (adminState === expectedState) {
+          break;
+        }
+      }
+    }
+
+    console.log(
+      `   ✅ Unleash: Confirmed '${featureName}' is ${expectedState ? 'enabled' : 'disabled'} (took ${Date.now() - startTime}ms)`
+    );
+  }
+
+  /**
+   * Get toggle state from the frontend API endpoint (melosys-api/featuretoggle)
+   * This is what the frontend actually sees
+   */
+  private async getFrontendToggleState(featureName: string): Promise<boolean | null> {
+    try {
+      const response = await this.request.get('http://localhost:8080/melosys/api/featuretoggle');
+
+      if (!response.ok()) {
+        return null; // Return null to indicate we couldn't fetch (different from false)
+      }
+
+      const data = await response.json();
+      return data[featureName] === true;
+    } catch (error: any) {
+      // If browser/context is closed, skip frontend check
+      if (error.message?.includes('closed') || error.message?.includes('disposed')) {
+        return null;
+      }
+      return null;
+    }
   }
 
   /**
