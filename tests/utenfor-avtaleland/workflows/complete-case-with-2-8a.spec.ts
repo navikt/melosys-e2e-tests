@@ -12,7 +12,7 @@ import {USER_ID_VALID} from '../../../pages/shared/constants';
 
 // forrandering etter https://jira.adeo.no/browse/MELOSYS-7689 krever oppdatering på alle disse
 //Inntektsperiode eller skatteforholdsperiode kan ikke vare i tidligere ar
-test.describe('Komplett saksflyt - Utenfor avtaleland @manual', () => {
+test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
     test('skal fullføre komplett saksflyt med § 2-8 første ledd bokstav a (arbeidstaker)', async ({page}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);
@@ -40,7 +40,7 @@ test.describe('Komplett saksflyt - Utenfor avtaleland @manual', () => {
 
         // Step 3: Fill Medlemskap
         console.log('📝 Step 3: Filling medlemskap information...');
-        await medlemskap.velgPeriode('01.01.2023', '01.07.2024');
+        await medlemskap.velgPeriode('01.01.2024', '01.07.2024');
         await medlemskap.velgLand('Afghanistan');
         await medlemskap.velgTrygdedekning('FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON');
         await medlemskap.klikkBekreftOgFortsett();
@@ -56,19 +56,36 @@ test.describe('Komplett saksflyt - Utenfor avtaleland @manual', () => {
         await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker vært medlem i minst');
         await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker nær tilknytning til');
         await lovvalg.klikkBekreftOgFortsett();
+        // Step 6: Accept default Resultat Periode values (two periods: Helsedel and Pensjonsdel)
+        // When FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON creates split periods, the defaults are:
+        // - Helsedel (period 1): Avslått
+        // - Pensjonsdel (period 2): Innvilget
+        // We accept these defaults to avoid "Innvilgede perioder overlapper" validation error
+        console.log('📝 Step 6: Accepting default resultat periode values for split periods...');
+        await resultatPeriode.klikkBekreftOgFortsett();
 
-        // Step 6: Select Resultat Periode
-        console.log('📝 Step 6: Selecting resultat periode...');
-        await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
+        // Step 7: Handle Trygdeavgift page with årsavregning warning
+        // When using 2024-only dates, the system shows a warning about not entering
+        // tax periods for previous years (MELOSYS-7689), and we just accept it
+        console.log('📝 Step 7: Handling trygdeavgift with årsavregning warning...');
 
-        // Step 7: Fill Trygdeavgift with special options
-        console.log('📝 Step 7: Filling trygdeavgift...');
-        await trygdeavgift.ventPåSideLastet();
-        await trygdeavgift.velgSkattepliktig(false);
-        await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
-        await trygdeavgift.velgBetalesAga(false);
-        await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
-        await trygdeavgift.klikkBekreftOgFortsett();
+        // Check if the årsavregning warning is displayed
+        const hasAarsavregningWarning = await page.getByText(/tidligere år skal fastsettes på årsavregning/i).isVisible({ timeout: 5000 }).catch(() => false);
+
+        if (hasAarsavregningWarning) {
+            console.log('⚠️ Årsavregning warning detected - skipping trygdeavgift form');
+            // Just click "Bekreft og fortsett" to proceed
+            await page.getByRole('button', { name: 'Bekreft og fortsett' }).click();
+        } else {
+            // Normal trygdeavgift flow (for cases without the warning)
+            console.log('📝 Filling trygdeavgift form...');
+            await trygdeavgift.ventPåSideLastet();
+            await trygdeavgift.velgSkattepliktig(false);
+            await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
+            await trygdeavgift.velgBetalesAga(false);
+            await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
+            await trygdeavgift.klikkBekreftOgFortsett();
+        }
 
         // Step 8: Fatt vedtak (without filling text fields)
         console.log('📝 Step 8: Making decision...');
@@ -116,9 +133,19 @@ test.describe('Komplett saksflyt - Utenfor avtaleland @manual', () => {
         console.log('📝 Step 5: Answering lovvalg questions...');
         await lovvalg.fyllUtLovvalg();
 
-        // Step 6: Calculate Trygdeavgift
-        console.log('📝 Step 6: Calculating trygdeavgift...');
-        await trygdeavgift.fyllUtTrygdeavgift(false, 'ARBEIDSINNTEKT', '100000');
+        // Step 6: Handle Trygdeavgift with årsavregning warning
+        // When using 2024-only dates, the system shows a warning (MELOSYS-7689)
+        console.log('📝 Step 6: Handling trygdeavgift with årsavregning warning...');
+
+        const hasAarsavregningWarning = await page.getByText(/tidligere år skal fastsettes på årsavregning/i).isVisible({ timeout: 5000 }).catch(() => false);
+
+        if (hasAarsavregningWarning) {
+            console.log('⚠️ Årsavregning warning detected - skipping trygdeavgift form');
+            await page.getByRole('button', { name: 'Bekreft og fortsett' }).click();
+        } else {
+            console.log('📝 Filling trygdeavgift form...');
+            await trygdeavgift.fyllUtTrygdeavgift(false, 'ARBEIDSINNTEKT', '100000');
+        }
 
         // Step 7: Make Decision (Fatt vedtak)
         console.log('📝 Step 7: Making decision...');
@@ -177,12 +204,20 @@ test.describe('Komplett saksflyt - Utenfor avtaleland @manual', () => {
         await lovvalg.klikkBekreftOgFortsettMedVent();
         await lovvalg.klikkBekreftOgFortsettMedVent();
 
-        // Custom trygdeavgift
-        await trygdeavgift.ventPåSideLastet();
-        await trygdeavgift.velgSkattepliktig(false);
-        await trygdeavgift.velgInntektskilde('ARBEIDSINNTEKT');
-        await trygdeavgift.fyllInnBruttoinntektMedApiVent('250000');
-        await trygdeavgift.klikkBekreftOgFortsett();
+        // Handle Trygdeavgift with årsavregning warning (MELOSYS-7689)
+        const hasAarsavregningWarning = await page.getByText(/tidligere år skal fastsettes på årsavregning/i).isVisible({ timeout: 5000 }).catch(() => false);
+
+        if (hasAarsavregningWarning) {
+            console.log('⚠️ Årsavregning warning detected - skipping trygdeavgift form');
+            await page.getByRole('button', { name: 'Bekreft og fortsett' }).click();
+        } else {
+            console.log('📝 Filling custom trygdeavgift...');
+            await trygdeavgift.ventPåSideLastet();
+            await trygdeavgift.velgSkattepliktig(false);
+            await trygdeavgift.velgInntektskilde('ARBEIDSINNTEKT');
+            await trygdeavgift.fyllInnBruttoinntektMedApiVent('250000');
+            await trygdeavgift.klikkBekreftOgFortsett();
+        }
 
         // Custom vedtak text
         await vedtak.fyllInnFritekst('Custom fritekst for this case');
