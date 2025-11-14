@@ -31,7 +31,6 @@ test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
         const arbeidsforhold = new ArbeidsforholdPage(page);
         const lovvalg = new LovvalgPage(page);
         const resultatPeriode = new ResultatPeriodePage(page);
-        const behandling = new BehandlingPage(page);
         const trygdeavgift = new TrygdeavgiftPage(page);
         const vedtak = new VedtakPage(page);
         const adminApi = new AdminApiHelper();
@@ -76,6 +75,7 @@ test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
         // Step 7: Fill Trygdeavgift with special options
         console.log('📝 Step 7: Filling trygdeavgift...');
         await trygdeavgift.ventPåSideLastet();
+        await trygdeavgift.velgSkattepliktig(false);
         await trygdeavgift.velgSkattepliktig(false);
 
         await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
