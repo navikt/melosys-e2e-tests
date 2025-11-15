@@ -1,5 +1,6 @@
 import {expect, test} from '../../../fixtures';
 import {AuthHelper} from '../../../helpers/auth-helper';
+import {UnleashHelper} from '../../../helpers/unleash-helper';
 import {HovedsidePage} from '../../../pages/hovedside.page';
 import {OpprettNySakPage} from '../../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import {MedlemskapPage} from '../../../pages/behandling/medlemskap.page';
@@ -11,7 +12,7 @@ import {VedtakPage} from '../../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../../pages/shared/constants';
 
 test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
-    test('skal fullføre komplett saksflyt med § 2-8 første ledd bokstav a (arbeidstaker)', async ({page}) => {
+    test('skal fullføre komplett saksflyt med § 2-8 første ledd bokstav a (arbeidstaker)', async ({page, request}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);
         await auth.login();
@@ -67,6 +68,20 @@ test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
         // tax periods for previous years (MELOSYS-7689), and we just accept it
         console.log('📝 Step 7: Handling trygdeavgift with årsavregning warning...');
 
+        // Verify that the required Unleash toggle is enabled
+        const unleash = new UnleashHelper(request);
+        const toggleName = 'melosys.faktureringskomponenten.ikke-tidligere-perioder';
+        const isToggleEnabled = await unleash.isFeatureEnabled(toggleName);
+
+        console.log(`🔧 Unleash toggle '${toggleName}': ${isToggleEnabled ? 'ENABLED ✅' : 'DISABLED ❌'}`);
+
+        // Assert that the toggle is enabled (test depends on this)
+        expect(isToggleEnabled,
+            `Unleash toggle '${toggleName}' must be ENABLED for this test to work. ` +
+            `The toggle controls the årsavregning warning display. ` +
+            `See docs/guides/UNLEASH-DEBUGGING.md for troubleshooting.`
+        ).toBe(true);
+
         // Check if the årsavregning warning is displayed
         const hasAarsavregningWarning = await page.getByText(/tidligere år skal fastsettes på årsavregning/i).isVisible({ timeout: 5000 }).catch(() => false);
 
@@ -86,7 +101,7 @@ test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
         console.log('✅ Workflow completed');
     });
 
-    test('FULL_DEKNING_FTRL', async ({page}) => {
+    test('FULL_DEKNING_FTRL', async ({page, request}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);
         await auth.login();
@@ -128,6 +143,20 @@ test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
         // Step 6: Handle Trygdeavgift with årsavregning warning
         // When using 2024-only dates, the system shows a warning (MELOSYS-7689)
         console.log('📝 Step 6: Handling trygdeavgift with årsavregning warning...');
+
+        // Verify that the required Unleash toggle is enabled
+        const unleash = new UnleashHelper(request);
+        const toggleName = 'melosys.faktureringskomponenten.ikke-tidligere-perioder';
+        const isToggleEnabled = await unleash.isFeatureEnabled(toggleName);
+
+        console.log(`🔧 Unleash toggle '${toggleName}': ${isToggleEnabled ? 'ENABLED ✅' : 'DISABLED ❌'}`);
+
+        // Assert that the toggle is enabled (test depends on this)
+        expect(isToggleEnabled,
+            `Unleash toggle '${toggleName}' must be ENABLED for this test to work. ` +
+            `The toggle controls the årsavregning warning display. ` +
+            `See docs/guides/UNLEASH-DEBUGGING.md for troubleshooting.`
+        ).toBe(true);
 
         const hasAarsavregningWarning = await page.getByText(/tidligere år skal fastsettes på årsavregning/i).isVisible({ timeout: 5000 }).catch(() => false);
 
