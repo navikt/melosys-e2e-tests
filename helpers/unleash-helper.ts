@@ -50,11 +50,11 @@ export class UnleashHelper {
     this.project = config?.project || 'default';
     this.environment = config?.environment || 'development';
 
-    // Support both Docker (with /melosys prefix) and non-Docker (without prefix)
-    // Default is Docker setup. Set MELOSYS_API_BASE_URL in .local.env to override for non-Docker
+    // Direct API access to melosys-api (without /melosys web app prefix)
+    // Set MELOSYS_API_BASE_URL in .env to override
     this.melosysApiBaseUrl = config?.melosysApiBaseUrl ||
                              process.env.MELOSYS_API_BASE_URL ||
-                             'http://localhost:8080/melosys/api';
+                             'http://localhost:8080/api';
 
     // Get auth token from environment (required for authenticated endpoints)
     this.authToken = process.env.LOCAL_AUTH_TOKEN || '';
@@ -244,6 +244,8 @@ export class UnleashHelper {
       const cacheBust = Date.now();
       const url = `${this.melosysApiBaseUrl}/featuretoggle?features=${encodeURIComponent(featureName)}&_=${cacheBust}`;
 
+      console.log(`🔍 Unleash: Calling frontend API: ${url}`);
+
       const options: any = {};
       if (this.authToken) {
         options.headers = {
@@ -252,6 +254,8 @@ export class UnleashHelper {
       }
 
       const response = await this.request.get(url, options);
+
+      console.log(`🔍 Unleash: Frontend API response status: ${response.status()}`);
 
       if (!response.ok()) {
         return null; // Return null to indicate we couldn't fetch (different from false)

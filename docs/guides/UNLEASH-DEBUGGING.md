@@ -84,10 +84,11 @@ Open Playwright trace and check Network tab:
 - Purpose: Serve toggle state to applications
 
 ### melosys-api Feature Toggle Endpoint
-- URL: `http://localhost:8080/melosys/api/featuretoggle`
-- Used by: Frontend (melosys-web)
+- URL: `http://localhost:8080/api/featuretoggle`
+- Used by: Frontend (melosys-web) and E2E tests
 - Cache: Backend polling interval (typically 10-30s)
 - Returns: JSON map of all toggle states
+- Authentication: Requires Bearer token (LOCAL_AUTH_TOKEN)
 
 ### Frontend (melosys-web)
 - Fetches toggles on page load
@@ -186,11 +187,14 @@ private async waitForToggleState(featureName: string, expectedState: boolean) {
 
 ### 2. Cache-Busting
 
-Frontend API calls include timestamp to avoid HTTP cache:
+Frontend API calls include feature names and timestamp to avoid HTTP cache:
 
 ```typescript
 const cacheBust = Date.now();
-await this.request.get(`http://localhost:8080/melosys/api/featuretoggle?_=${cacheBust}`);
+const featureName = 'melosys.my-feature';
+await this.request.get(`http://localhost:8080/api/featuretoggle?features=${encodeURIComponent(featureName)}&_=${cacheBust}`, {
+  headers: { 'Authorization': `Bearer ${authToken}` }
+});
 ```
 
 ### 3. Automatic Cleanup Polling
