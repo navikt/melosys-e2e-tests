@@ -22,6 +22,10 @@ test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
         const unleash = new UnleashHelper(request);
         await unleash.disableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
 
+        // Log what the frontend API returns (for debugging)
+        console.log('📊 Logging frontend toggle states after disabling toggle:');
+        await unleash.logFrontendToggleStates();
+
         await auth.login();
 
         // Setup: Page Objects
@@ -91,6 +95,11 @@ test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
         await waitForProcessInstances(page.request, 30);
 
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
+
+        // Log what the frontend API returns after enabling (for debugging)
+        console.log('📊 Logging frontend toggle states after enabling toggle:');
+        await unleash.logFrontendToggleStates();
+
         await adminApi.finnIkkeSkattepliktigeSaker(
             request,
             '2024-01-01',

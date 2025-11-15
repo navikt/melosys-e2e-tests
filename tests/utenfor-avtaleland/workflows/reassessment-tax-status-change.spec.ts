@@ -71,6 +71,10 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         // Wait for Medlemskapsperioder page to load
         await page.waitForTimeout(3000);
 
+        // Log what the frontend API returns (for debugging)
+        console.log('📊 Logging all frontend toggle states:');
+        await unleash.logFrontendToggleStates();
+
         // Step 6: Accept default Resultat Periode values (split periods)
         console.log('📝 Step 6: Accepting default resultat periode values...');
         await resultatPeriode.klikkBekreftOgFortsett();
@@ -193,6 +197,10 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
 
         // Wait for Medlemskapsperioder page to load
         await page.waitForTimeout(3000);
+
+        // Log what the frontend API returns (for debugging)
+        console.log('📊 Logging all frontend toggle states:');
+        await unleash.logFrontendToggleStates();
 
         // Step 6: Accept default Resultat Periode values (split periods)
         console.log('📝 Step 6: Accepting default resultat periode values...');

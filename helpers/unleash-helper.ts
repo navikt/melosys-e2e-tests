@@ -1,4 +1,11 @@
 import { APIRequestContext } from '@playwright/test';
+import * as dotenv from 'dotenv';
+import * as path from 'node:path';
+
+// Load .env (required, checked in with dev config)
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+// Load .local.env (optional, for local overrides - not on CI/CD)
+dotenv.config({ path: path.resolve(__dirname, '../.local.env'), override: true });
 
 /**
  * UnleashHelper - Control feature toggles in Unleash server during E2E tests
@@ -25,6 +32,8 @@ export class UnleashHelper {
   private apiToken: string;
   private project: string;
   private environment: string;
+  private melosysApiBaseUrl: string;
+  private authToken: string;
 
   constructor(
     private request: APIRequestContext,
@@ -33,12 +42,22 @@ export class UnleashHelper {
       apiToken?: string;
       project?: string;
       environment?: string;
+      melosysApiBaseUrl?: string;
     }
   ) {
     this.baseUrl = config?.baseUrl || 'http://localhost:4242';
     this.apiToken = config?.apiToken || '*:*.unleash-insecure-api-token';
     this.project = config?.project || 'default';
     this.environment = config?.environment || 'development';
+
+    // Support both Docker (with /melosys prefix) and non-Docker (without prefix)
+    // Default is Docker setup. Set MELOSYS_API_BASE_URL in .local.env to override for non-Docker
+    this.melosysApiBaseUrl = config?.melosysApiBaseUrl ||
+                             process.env.MELOSYS_API_BASE_URL ||
+                             'http://localhost:8080/melosys/api';
+
+    // Get auth token from environment (required for authenticated endpoints)
+    this.authToken = process.env.LOCAL_AUTH_TOKEN || '';
   }
 
   /**
@@ -220,7 +239,16 @@ export class UnleashHelper {
     try {
       // Add cache-busting query parameter to avoid stale responses
       const cacheBust = Date.now();
-      const response = await this.request.get(`http://localhost:8080/melosys/api/featuretoggle?_=${cacheBust}`);
+      const url = `${this.melosysApiBaseUrl}/featuretoggle?_=${cacheBust}`;
+
+      const options: any = {};
+      if (this.authToken) {
+        options.headers = {
+          'Authorization': `Bearer ${this.authToken}`,
+        };
+      }
+
+      const response = await this.request.get(url, options);
 
       if (!response.ok()) {
         return null; // Return null to indicate we couldn't fetch (different from false)
@@ -314,5 +342,71 @@ export class UnleashHelper {
 
     const data = await response.json();
     return data.features?.map((f: any) => f.name) || [];
+  }
+
+  /**
+   * Log all feature toggles from the frontend API (what the web app sees)
+   * This is useful for debugging when the web app shows unexpected toggle states
+   *
+   * @param featureNames - Optional list of feature names to request. If not provided, uses default list.
+   * @returns The toggle states as returned by the API
+   */
+  async logFrontendToggleStates(featureNames?: string[]): Promise<Record<string, boolean>> {
+    try {
+      // Default feature names that melosys-web typically requests
+      const defaultFeatures = [
+        'melosys.faktureringskomponent.vis_referanse',
+        'melosys.ftrl.begrense_periode_vedtak',
+        'melosys.11_3_a_Norge_er_utpekt',
+        'melosys.pensjonist',
+        'melosys.pensjonist_eos',
+        'standardvedlegg_eget_vedlegg_avtaleland',
+        'melosys.arsavregning',
+        'melosys.arsavregning.uten.flyt',
+        'melosys.faktureringskomponenten.ikke-tidligere-perioder',
+        'melosys.eos_fakturering_av_trygdeavgift',
+      ];
+
+      const features = featureNames || defaultFeatures;
+
+      // Build query string: ?features=toggle1&features=toggle2&...
+      const queryParams = features.map(f => `features=${encodeURIComponent(f)}`).join('&');
+      const cacheBust = Date.now();
+      const url = `${this.melosysApiBaseUrl}/featuretoggle?${queryParams}&_=${cacheBust}`;
+
+      console.log(`🔍 Unleash: Fetching frontend toggle states for ${features.length} toggles...`);
+      console.log(`   URL: ${url}`);
+
+      const options: any = {};
+      if (this.authToken) {
+        options.headers = {
+          'Authorization': `Bearer ${this.authToken}`,
+        };
+        console.log(`   Using authentication: Bearer ${this.authToken.substring(0, 20)}...`);
+      } else {
+        console.log(`   ⚠️  No auth token found - request may fail if endpoint requires authentication`);
+      }
+
+      const response = await this.request.get(url, options);
+
+      if (!response.ok()) {
+        console.error(`❌ Unleash: Frontend API returned ${response.status()}`);
+        console.error(`   Response: ${await response.text()}`);
+        return {};
+      }
+
+      const data = await response.json();
+
+      console.log('🔧 Unleash: Frontend API response (what web app sees):');
+      for (const [key, value] of Object.entries(data)) {
+        const emoji = value ? '✅' : '❌';
+        console.log(`   ${emoji} ${key}: ${value}`);
+      }
+
+      return data;
+    } catch (error: any) {
+      console.error(`❌ Unleash: Error fetching frontend toggles: ${error.message}`);
+      return {};
+    }
   }
 }

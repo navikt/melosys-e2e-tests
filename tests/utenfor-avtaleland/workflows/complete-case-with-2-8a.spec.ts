@@ -82,6 +82,10 @@ test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
             `See docs/guides/UNLEASH-DEBUGGING.md for troubleshooting.`
         ).toBe(true);
 
+        // Log what the frontend API returns (for debugging)
+        console.log('📊 Logging all frontend toggle states:');
+        await unleash.logFrontendToggleStates();
+
         // Check if the årsavregning warning is displayed
         const hasAarsavregningWarning = await page.getByText(/tidligere år skal fastsettes på årsavregning/i).isVisible({ timeout: 5000 }).catch(() => false);
 
@@ -157,6 +161,10 @@ test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
             `The toggle controls the årsavregning warning display. ` +
             `See docs/guides/UNLEASH-DEBUGGING.md for troubleshooting.`
         ).toBe(true);
+
+        // Log what the frontend API returns (for debugging)
+        console.log('📊 Logging all frontend toggle states:');
+        await unleash.logFrontendToggleStates();
 
         const hasAarsavregningWarning = await page.getByText(/tidligere år skal fastsettes på årsavregning/i).isVisible({ timeout: 5000 }).catch(() => false);
 
