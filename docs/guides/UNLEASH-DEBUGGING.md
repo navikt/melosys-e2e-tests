@@ -212,12 +212,20 @@ if (wasEnabled) {
 
 **Symptom:** Test expects toggle enabled, but trace shows disabled
 
-**Cause:** Previous test's cleanup didn't propagate
+**Cause:** Previous test's cleanup didn't propagate, or race condition between Admin API and Frontend API
 
 **Fix:**
-1. Ensure previous test uses `unleash-cleanup` fixture
-2. Check cleanup logs for "Restored X toggle(s)"
-3. Increase polling timeout if needed
+1. **Add frontend API assertion** to catch race condition early:
+   ```typescript
+   const adminState = await unleash.isFeatureEnabled(toggleName);
+   const frontendState = await unleash.getFrontendToggleState(toggleName);
+
+   expect(adminState, 'Admin API should show toggle enabled').toBe(true);
+   expect(frontendState, 'Frontend API should match Admin API').toBe(true);
+   ```
+2. Ensure previous test uses `unleash-cleanup` fixture
+3. Check cleanup logs for "Restored X toggle(s)"
+4. Increase polling timeout if needed
 
 ### Issue 2: Test Times Out Waiting for Toggle
 
@@ -291,7 +299,38 @@ test('my test', async ({ page, request }) => {
 });
 ```
 
-### 2. Set Toggles BEFORE Login
+### 2. Always Assert Frontend API State
+
+Don't just check the Admin API - **always verify what the frontend actually sees**:
+
+```typescript
+// ✅ Correct - Check both APIs
+const unleash = new UnleashHelper(request);
+const toggleName = 'melosys.my-feature';
+
+// Check both Admin API and Frontend API
+const adminState = await unleash.isFeatureEnabled(toggleName);
+const frontendState = await unleash.getFrontendToggleState(toggleName);
+
+console.log(`Admin API: ${adminState ? 'ENABLED' : 'DISABLED'}`);
+console.log(`Frontend API: ${frontendState ? 'ENABLED' : 'DISABLED'}`);
+
+// Assert both states match expected
+expect(adminState).toBe(true);
+expect(frontendState, 'Frontend API must match Admin API state').toBe(true);
+
+// ❌ Wrong - Only checks Admin API
+const isEnabled = await unleash.isFeatureEnabled(toggleName);
+expect(isEnabled).toBe(true);  // Might be true in Admin but false in Frontend!
+```
+
+**Why this matters:**
+- Admin API might return `true` immediately after enabling
+- Frontend API (melosys-api) might still return `false` due to caching
+- Test proceeds with wrong assumption → flaky test
+- Asserting frontend state catches the race condition early
+
+### 3. Set Toggles BEFORE Login
 
 Frontend fetches toggles on page load, so set them **before** authentication:
 
@@ -305,7 +344,7 @@ await auth.login();
 await unleash.disableFeature('melosys.feature');  // Too late!
 ```
 
-### 3. Don't Mix Toggle States
+### 4. Don't Mix Toggle States
 
 Each test should be self-contained:
 
@@ -323,7 +362,7 @@ test('my test', async ({ page, request }) => {
 });
 ```
 
-### 4. Check Playwright Traces
+### 5. Check Playwright Traces
 
 When debugging flaky tests:
 
@@ -332,7 +371,7 @@ When debugging flaky tests:
 3. Compare toggle values with test expectations
 4. Look for timing patterns
 
-### 5. Monitor Cleanup Logs
+### 6. Monitor Cleanup Logs
 
 In CI output, verify cleanup is working:
 
@@ -342,7 +381,7 @@ In CI output, verify cleanup is working:
 
 If you don't see this after a test that changes toggles, cleanup might not be running.
 
-### 6. Use Descriptive Test Names
+### 7. Use Descriptive Test Names
 
 Include toggle state in test name when relevant:
 

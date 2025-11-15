@@ -71,15 +71,32 @@ test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
         // Verify that the required Unleash toggle is enabled
         const unleash = new UnleashHelper(request);
         const toggleName = 'melosys.faktureringskomponenten.ikke-tidligere-perioder';
-        const isToggleEnabled = await unleash.isFeatureEnabled(toggleName);
 
-        console.log(`🔧 Unleash toggle '${toggleName}': ${isToggleEnabled ? 'ENABLED ✅' : 'DISABLED ❌'}`);
+        // Check both Admin API and Frontend API
+        const adminState = await unleash.isFeatureEnabled(toggleName);
+        const frontendState = await unleash.getFrontendToggleState(toggleName);
 
-        // Assert that the toggle is enabled (test depends on this)
-        expect(isToggleEnabled,
-            `Unleash toggle '${toggleName}' must be ENABLED for this test to work. ` +
-            `The toggle controls the årsavregning warning display. ` +
+        console.log(`🔧 Unleash toggle '${toggleName}':`);
+        console.log(`   Admin API: ${adminState ? 'ENABLED ✅' : 'DISABLED ❌'}`);
+        console.log(`   Frontend API (what browser sees): ${frontendState === true ? 'ENABLED ✅' : frontendState === false ? 'DISABLED ❌' : 'UNAVAILABLE ⚠️'}`);
+
+        // Assert that Admin API state is correct
+        expect(adminState,
+            `Unleash Admin API reports '${toggleName}' as ${adminState ? 'enabled' : 'disabled'}, but test expects it to be enabled. ` +
             `See docs/guides/UNLEASH-DEBUGGING.md for troubleshooting.`
+        ).toBe(true);
+
+        // Assert that Frontend API state matches (this is what the browser actually sees)
+        expect(frontendState,
+            `RACE CONDITION DETECTED!\n` +
+            `Admin API reports '${toggleName}' as enabled, but Frontend API (melosys-api/featuretoggle) reports it as ${frontendState === false ? 'disabled' : 'unavailable'}.\n` +
+            `This is a caching issue - the toggle change hasn't propagated to melosys-api yet.\n\n` +
+            `Diagnostic info:\n` +
+            `- Admin API state: ${adminState}\n` +
+            `- Frontend API state: ${frontendState}\n` +
+            `- Expected state: true\n\n` +
+            `This test should use the unleash-cleanup fixture to ensure proper cleanup from previous tests.\n` +
+            `See docs/guides/UNLEASH-DEBUGGING.md for complete troubleshooting guide.`
         ).toBe(true);
 
         // Log what the frontend API returns (for debugging)
@@ -151,15 +168,32 @@ test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
         // Verify that the required Unleash toggle is enabled
         const unleash = new UnleashHelper(request);
         const toggleName = 'melosys.faktureringskomponenten.ikke-tidligere-perioder';
-        const isToggleEnabled = await unleash.isFeatureEnabled(toggleName);
 
-        console.log(`🔧 Unleash toggle '${toggleName}': ${isToggleEnabled ? 'ENABLED ✅' : 'DISABLED ❌'}`);
+        // Check both Admin API and Frontend API
+        const adminState = await unleash.isFeatureEnabled(toggleName);
+        const frontendState = await unleash.getFrontendToggleState(toggleName);
 
-        // Assert that the toggle is enabled (test depends on this)
-        expect(isToggleEnabled,
-            `Unleash toggle '${toggleName}' must be ENABLED for this test to work. ` +
-            `The toggle controls the årsavregning warning display. ` +
+        console.log(`🔧 Unleash toggle '${toggleName}':`);
+        console.log(`   Admin API: ${adminState ? 'ENABLED ✅' : 'DISABLED ❌'}`);
+        console.log(`   Frontend API (what browser sees): ${frontendState === true ? 'ENABLED ✅' : frontendState === false ? 'DISABLED ❌' : 'UNAVAILABLE ⚠️'}`);
+
+        // Assert that Admin API state is correct
+        expect(adminState,
+            `Unleash Admin API reports '${toggleName}' as ${adminState ? 'enabled' : 'disabled'}, but test expects it to be enabled. ` +
             `See docs/guides/UNLEASH-DEBUGGING.md for troubleshooting.`
+        ).toBe(true);
+
+        // Assert that Frontend API state matches (this is what the browser actually sees)
+        expect(frontendState,
+            `RACE CONDITION DETECTED!\n` +
+            `Admin API reports '${toggleName}' as enabled, but Frontend API (melosys-api/featuretoggle) reports it as ${frontendState === false ? 'disabled' : 'unavailable'}.\n` +
+            `This is a caching issue - the toggle change hasn't propagated to melosys-api yet.\n\n` +
+            `Diagnostic info:\n` +
+            `- Admin API state: ${adminState}\n` +
+            `- Frontend API state: ${frontendState}\n` +
+            `- Expected state: true\n\n` +
+            `This test should use the unleash-cleanup fixture to ensure proper cleanup from previous tests.\n` +
+            `See docs/guides/UNLEASH-DEBUGGING.md for complete troubleshooting guide.`
         ).toBe(true);
 
         // Log what the frontend API returns (for debugging)

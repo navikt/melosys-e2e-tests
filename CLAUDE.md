@@ -75,6 +75,52 @@ cd ../melosys-docker-compose
 make start-all
 ```
 
+## Git Commit Rules
+
+**IMPORTANT: Always ask before amending or pushing commits!**
+
+### Never Do These Without Asking First:
+1. **Never amend commits** (`git commit --amend`) - This rewrites history and requires force push
+2. **Never force push** (`git push --force`) - Can overwrite remote history
+3. **Never push commits** (`git push`) - User should review commits first
+
+### Why Commit History Matters:
+- Debugging: Need to see what changed and when
+- Rollback: May need to revert specific changes
+- Understanding: History shows the evolution of fixes and features
+- Collaboration: Others may have pulled commits we're rewriting
+
+### Correct Workflow:
+1. **Make changes** - Edit files as needed
+2. **Stage changes** - `git add <files>`
+3. **Create new commit** - `git commit -m "message"` (NO --amend!)
+4. **Ask user** - "I've created a commit with X changes. Should I push it?"
+5. **Let user push** - They decide when to push
+
+### Commit Messages:
+- Clear, descriptive messages
+- No Claude footer unless user explicitly requests it
+- Focus on what and why, not how
+
+### Example Good Flow:
+```bash
+# ✅ CORRECT
+git add file1.ts file2.ts
+git commit -m "Add feature toggle logging"
+# Then tell user: "Created commit, ready for you to review and push"
+
+# ❌ WRONG
+git commit --amend  # Never without asking!
+git push --force    # Never without asking!
+git push           # Never without asking!
+```
+
+### Multiple Related Changes:
+If multiple changes are related to the same feature:
+- **Ask first**: "Should I create separate commits or one commit for all changes?"
+- **Default**: Create separate commits for better history
+- **User decides**: They know best how they want history organized
+
 ## Architecture
 
 ### Test Structure

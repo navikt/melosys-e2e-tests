@@ -234,12 +234,15 @@ export class UnleashHelper {
   /**
    * Get toggle state from the frontend API endpoint (melosys-api/featuretoggle)
    * This is what the frontend actually sees
+   *
+   * @param featureName - The name of the feature toggle to check
+   * @returns The toggle state (true/false) or null if unavailable
    */
-  private async getFrontendToggleState(featureName: string): Promise<boolean | null> {
+  async getFrontendToggleState(featureName: string): Promise<boolean | null> {
     try {
-      // Add cache-busting query parameter to avoid stale responses
+      // Build URL with feature name and cache-busting parameter
       const cacheBust = Date.now();
-      const url = `${this.melosysApiBaseUrl}/featuretoggle?_=${cacheBust}`;
+      const url = `${this.melosysApiBaseUrl}/featuretoggle?features=${encodeURIComponent(featureName)}&_=${cacheBust}`;
 
       const options: any = {};
       if (this.authToken) {
