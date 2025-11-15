@@ -179,6 +179,9 @@ export class UnleashHelper {
   ): Promise<void> {
     const startTime = Date.now();
 
+    // Give melosys-api cache a moment to start refreshing (it polls Unleash every 10s by default)
+    await new Promise(resolve => setTimeout(resolve, 100));
+
     // Poll both Admin API and Frontend API to ensure both caches are updated
     let adminState = await this.isFeatureEnabled(featureName);
     let frontendState = await this.getFrontendToggleState(featureName);
@@ -215,7 +218,9 @@ export class UnleashHelper {
    */
   private async getFrontendToggleState(featureName: string): Promise<boolean | null> {
     try {
-      const response = await this.request.get('http://localhost:8080/melosys/api/featuretoggle');
+      // Add cache-busting query parameter to avoid stale responses
+      const cacheBust = Date.now();
+      const response = await this.request.get(`http://localhost:8080/melosys/api/featuretoggle?_=${cacheBust}`);
 
       if (!response.ok()) {
         return null; // Return null to indicate we couldn't fetch (different from false)

@@ -58,9 +58,9 @@ const unleashCleanupFixture = base.extend<{ unleashReset: void }>({
         // Only restore if state changed
         if (isEnabled !== wasEnabled) {
           if (wasEnabled) {
-            await unleash.enableFeature(feature);
+            await unleash.enableFeature(feature);  // This now waits for propagation
           } else {
-            await unleash.disableFeature(feature);
+            await unleash.disableFeature(feature);  // This now waits for propagation
           }
           restoredCount++;
         }
