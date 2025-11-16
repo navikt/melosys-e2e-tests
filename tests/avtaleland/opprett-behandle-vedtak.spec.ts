@@ -1,0 +1,35 @@
+import { test, expect } from '@playwright/test';
+
+test('test', async ({ page }) => {
+  await page.goto('http://localhost:3000/melosys/');
+  await page.getByRole('button', { name: 'Opprett ny sak/behandling' }).click();
+  await page.getByRole('textbox', { name: 'Brukers f.nr. eller d-nr.:' }).fill('30056928150');
+  await page.getByLabel('Sakstype').selectOption('TRYGDEAVTALE');
+  await page.getByLabel('Sakstema').selectOption('MEDLEMSKAP_LOVVALG');
+  await page.getByLabel('Behandlingstema').selectOption('YRKESAKTIV');
+  await page.getByLabel('Årsak', { exact: true }).selectOption('SØKNAD');
+  await page.getByRole('checkbox', { name: 'Legg behandlingen i mine' }).check();
+  await page.getByRole('button', { name: 'Opprett ny behandling' }).click();
+  await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).click();
+  await page.getByRole('button', { name: 'Åpne datovelger' }).first().click();
+  await page.getByRole('textbox', { name: 'Fra og med' }).click();
+  await page.getByRole('textbox', { name: 'Fra og med' }).fill('01.01.2024');
+  await page.getByRole('textbox', { name: 'Fra og med' }).press('ControlOrMeta+Shift+ArrowLeft');
+  await page.getByRole('textbox', { name: 'Fra og med' }).press('ControlOrMeta+c');
+  await page.getByRole('textbox', { name: 'Til og med Til og med' }).click();
+  await page.getByRole('textbox', { name: 'Til og med Til og med' }).fill('01.01.2026');
+  await page.getByLabel('ArbeidslandArbeidsland').selectOption('AU');
+  await page.getByRole('button', { name: 'Bekreft og fortsett' }).click();
+  await page.locator('html').click();
+  await page.getByRole('radio', { name: 'Ståles Stål AS' }).check();
+  await page.getByRole('button', { name: 'Bekreft og fortsett' }).click();
+  await page.getByRole('radio', { name: 'Jeg vil innvilge søknaden' }).check();
+  await page.getByLabel('Velg bestemmelse').selectOption('AUS_ART9_3');
+  await page.getByRole('button', { name: 'Bekreft og fortsett' }).click();
+  await page.getByRole('button', { name: 'Arbeidssted(er)' }).click();
+  await page.getByRole('button', { name: 'Legg til arbeidssted/' }).click();
+  await page.getByRole('textbox', { name: 'Navn på arbeidssted/skip/' }).click();
+  await page.getByRole('textbox', { name: 'Navn på arbeidssted/skip/' }).fill('Test');
+  await page.getByRole('button', { name: 'Lagre' }).click();
+  await page.getByRole('button', { name: 'Fatt vedtak' }).click();
+});
