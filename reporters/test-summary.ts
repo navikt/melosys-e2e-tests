@@ -161,8 +161,8 @@ class TestSummaryReporter implements Reporter {
         byFile.get(file)!.push(test);
       }
 
-      md += `| File | Test | Status | Attempts | Errors |\n`;
-      md += `|------|------|--------|----------|--------|\n`;
+      md += `| File | Test | Status | Attempts | Playwright | Docker Logs |\n`;
+      md += `|------|------|--------|----------|------------|-------------|\n`;
 
       // Sort by file name
       const sortedFiles = Array.from(byFile.entries()).sort((a, b) => a[0].localeCompare(b[0]));
@@ -177,10 +177,17 @@ class TestSummaryReporter implements Reporter {
             ? `${testInfo.totalAttempts} (${testInfo.failedAttempts} failed)`
             : '1';
 
-          const errorCount = this.getErrorCount(testInfo);
-          const errorCell = errorCount > 0 ? `${errorCount} error(s)` : '-';
+          // Get Playwright error info
+          const hasPlaywrightError = testInfo.results.some(r =>
+            r.status === 'failed' && r.error && !r.error.message.includes('Docker error') && !r.error.message.includes('process instance')
+          );
+          const playwrightCell = hasPlaywrightError ? '❌ Failed' : testInfo.finalStatus === 'failed' ? '✅ Passed' : '-';
 
-          md += `| \`${file}\` | ${testInfo.test.title} | ${statusEmoji} ${testInfo.finalStatus} | ${attempts} | ${errorCell} |\n`;
+          // Get Docker log errors by service
+          const dockerServices = this.getDockerErrorServices(testInfo);
+          const dockerCell = dockerServices.length > 0 ? dockerServices.join(', ') : testInfo.finalStatus === 'failed' ? '✅ No errors' : '-';
+
+          md += `| \`${file}\` | ${testInfo.test.title} | ${statusEmoji} ${testInfo.finalStatus} | ${attempts} | ${playwrightCell} | ${dockerCell} |\n`;
         }
       }
       md += '\n';
@@ -301,6 +308,18 @@ class TestSummaryReporter implements Reporter {
       count++;
     }
     return count;
+  }
+
+  private getDockerErrorServices(testInfo: TestInfo): string[] {
+    const services: string[] = [];
+    if (testInfo.dockerErrors && Array.isArray(testInfo.dockerErrors)) {
+      for (const { service, errors } of testInfo.dockerErrors) {
+        if (errors.length > 0) {
+          services.push(`❌ ${service} (${errors.length})`);
+        }
+      }
+    }
+    return services;
   }
 
   private deduplicateErrors(errors: any[]): any[] {
