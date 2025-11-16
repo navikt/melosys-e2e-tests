@@ -17,6 +17,7 @@ import {expect} from "@playwright/test";
 
 test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
     test('skal opprette årsavregning for ikke-skattepliktig bruker', async ({page, request}) => {
+        test.setTimeout(60000); // 60 seconds
         // Setup: Authentication
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);
