@@ -165,23 +165,31 @@ export class UnleashHelper {
    * Get the current state of a feature toggle
    */
   async isFeatureEnabled(featureName: string): Promise<boolean> {
-    const url = `${this.baseUrl}/api/admin/projects/${this.project}/features/${featureName}`;
+    try {
+      const url = `${this.baseUrl}/api/admin/projects/${this.project}/features/${featureName}`;
 
-    const response = await this.request.get(url, {
-      headers: {
-        Authorization: this.apiToken,
-      },
-    });
+      const response = await this.request.get(url, {
+        headers: {
+          Authorization: this.apiToken,
+        },
+      });
 
-    if (!response.ok()) {
-      return false;
+      if (!response.ok()) {
+        return false;
+      }
+
+      const data = await response.json();
+      const envConfig = data.environments?.find(
+        (env: any) => env.name === this.environment
+      );
+      return envConfig?.enabled || false;
+    } catch (error: any) {
+      // If browser/context is closed, return false to stop polling
+      if (error.message?.includes('closed') || error.message?.includes('disposed')) {
+        return false;
+      }
+      throw error;
     }
-
-    const data = await response.json();
-    const envConfig = data.environments?.find(
-      (env: any) => env.name === this.environment
-    );
-    return envConfig?.enabled || false;
   }
 
   /**
@@ -244,8 +252,6 @@ export class UnleashHelper {
       const cacheBust = Date.now();
       const url = `${this.melosysApiBaseUrl}/featuretoggle?features=${encodeURIComponent(featureName)}&_=${cacheBust}`;
 
-      console.log(`🔍 Unleash: Calling frontend API: ${url}`);
-
       const options: any = {};
       if (this.authToken) {
         options.headers = {
@@ -254,8 +260,6 @@ export class UnleashHelper {
       }
 
       const response = await this.request.get(url, options);
-
-      console.log(`🔍 Unleash: Frontend API response status: ${response.status()}`);
 
       if (!response.ok()) {
         return null; // Return null to indicate we couldn't fetch (different from false)

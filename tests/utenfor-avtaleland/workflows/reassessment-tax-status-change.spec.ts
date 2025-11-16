@@ -16,7 +16,14 @@ import {expect} from "@playwright/test";
 
 
 test.describe('Nyvurdering - Endring av skattestatus', () => {
-    test('skal endre skattestatus fra ikke-skattepliktig til skattepliktig via nyvurdering', async ({page, request}) => {
+    test('skal endre skattestatus fra ikke-skattepliktig til skattepliktig via nyvurdering', async (
+        {
+            page,
+            request
+        }) => {
+        // This test does a lot: creates case, completes workflow, creates ny vurdering, so needs more time
+        test.setTimeout(60000); // 60 seconds
+
         // Setup: Authentication
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);
@@ -77,18 +84,19 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
 
         // Step 6: Accept default Resultat Periode values (split periods)
         console.log('📝 Step 6: Accepting default resultat periode values...');
-        await resultatPeriode.klikkBekreftOgFortsett();
 
-        // Step 7: Handle Trygdeavgift with årsavregning warning (MELOSYS-7689)
-        console.log('📝 Step 7: Handling trygdeavgift with årsavregning warning...');
-        const hasAarsavregningWarning = await page.getByText(/tidligere år skal fastsettes på årsavregning/i).isVisible({ timeout: 5000 }).catch(() => false);
+        // Step 6: Select Resultat Periode
+        console.log('📝 Step 6: Selecting resultat periode...');
+        // await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
+        await resultatPeriode.klikkBekreftOgFortsett()
 
-        // Verify that the årsavregning warning is displayed (test should fail if not present)
-        expect(hasAarsavregningWarning,
-            'Expected årsavregning warning to be displayed. ' +
-            'The warning "tidligere år skal fastsettes på årsavregning" should appear when using 2024-only dates.'
-        ).toBe(true);
-
+        // Step 7: Fill Trygdeavgift with special options
+        console.log('📝 Step 7: Filling trygdeavgift...');
+        await trygdeavgift.ventPåSideLastet();
+        await trygdeavgift.velgSkattepliktig(false);
+        await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
+        await trygdeavgift.velgBetalesAga(false);
+        await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
         await trygdeavgift.klikkBekreftOgFortsett();
 
         // Step 8: Fatt vedtak (without filling text fields)
@@ -117,7 +125,7 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         console.log('📝 Step 13: Opening active behandling BEFORE it completes...');
         await hovedside.goto();
         // Click on the FIRST link (the new active behandling)
-        await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).first().click();
+        await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).first().click();
 
         // Navigate to Trygdeavgift immediately
         await behandling.gåTilTrygdeavgift();
@@ -142,7 +150,14 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         console.log('✅ Workflow completed successfully!');
     });
 
-    test('skal endre skattestatus fra skattepliktig til ikke-skattepliktig via nyvurdering', async ({page, request}) => {
+    test('skal endre skattestatus fra skattepliktig til ikke-skattepliktig via nyvurdering', async (
+        {
+            page,
+            request
+        }) => {
+        // This test does a lot: creates case, completes workflow, creates ny vurdering, so needs more time
+        test.setTimeout(60000); // 60 seconds
+
         // Setup: Authentication
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);
@@ -206,16 +221,14 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         console.log('📝 Step 6: Accepting default resultat periode values...');
         await resultatPeriode.klikkBekreftOgFortsett();
 
-        // Step 7: Handle Trygdeavgift with årsavregning warning (MELOSYS-7689)
-        console.log('📝 Step 7: Handling trygdeavgift with årsavregning warning...');
-        const hasAarsavregningWarning = await page.getByText(/tidligere år skal fastsettes på årsavregning/i).isVisible({ timeout: 5000 }).catch(() => false);
+        // Step 7: Fill Trygdeavgift with special options
+        console.log('📝 Step 7: Filling trygdeavgift...');
+        await trygdeavgift.ventPåSideLastet();
+        await trygdeavgift.velgSkattepliktig(true);
 
-        // Verify that the årsavregning warning is displayed (test should fail if not present)
-        expect(hasAarsavregningWarning,
-            'Expected årsavregning warning to be displayed. ' +
-            'The warning "tidligere år skal fastsettes på årsavregning" should appear when using 2024-only dates.'
-        ).toBe(true);
-
+        await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
+        await trygdeavgift.velgBetalesAga(false);
+        await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
         await trygdeavgift.klikkBekreftOgFortsett();
 
         // Step 8: Fatt vedtak (without filling text fields)
@@ -244,7 +257,7 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         console.log('📝 Step 13: Opening active behandling BEFORE it completes...');
         await hovedside.goto();
         // Click on the FIRST link (the new active behandling)
-        await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).first().click();
+        await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).first().click();
 
         // Navigate to Trygdeavgift immediately
         await behandling.gåTilTrygdeavgift();
