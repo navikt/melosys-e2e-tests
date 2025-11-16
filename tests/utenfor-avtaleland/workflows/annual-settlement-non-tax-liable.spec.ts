@@ -94,7 +94,8 @@ test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
         console.log('📝 Step 9: Wait for process instances after first vedtak...');
         await waitForProcessInstances(page.request, 30);
 
-        // Note: Toggle will be reset to default (enabled) before next test runs
+        // Re-enable toggle for årsavregning job (was disabled at start of test)
+        await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
 
         await adminApi.finnIkkeSkattepliktigeSaker(
             request,
