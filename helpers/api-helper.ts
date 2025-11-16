@@ -2,8 +2,10 @@ import { APIRequestContext } from '@playwright/test';
 import * as dotenv from 'dotenv';
 import * as path from 'node:path';
 
-// Load .local.env file
-dotenv.config({ path: path.resolve(__dirname, '../.local.env') });
+// Load .env (required, checked in with dev config)
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+// Load .local.env (optional, for local overrides - not on CI/CD)
+dotenv.config({ path: path.resolve(__dirname, '../.local.env'), override: true });
 
 /**
  * Helper for managing melosys-api application state

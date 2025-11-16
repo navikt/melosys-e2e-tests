@@ -2,10 +2,25 @@ import {test as base} from '@playwright/test';
 import {DatabaseHelper} from '../helpers/db-helper';
 import {clearMockDataSilent} from '../helpers/mock-helper';
 import {clearApiCaches, waitForProcessInstances} from '../helpers/api-helper';
+import {UnleashHelper} from '../helpers/unleash-helper';
 
 /**
- * Cleanup fixture - automatically cleans database and mock data before and after each test
+ * Cleanup fixture - automatically cleans database, mock data, and Unleash toggles
  * This ensures test isolation and prevents leftover data from affecting other tests
+ *
+ * Before each test:
+ * - Cleans database (removes all test data)
+ * - Clears mock service data
+ * - Resets ALL Unleash feature toggles to default state
+ * - Adds 2s delay for melosys-api cache propagation
+ *
+ * After each test:
+ * - Waits for async processes to complete
+ * - Resets Unleash toggles (ensures next test gets clean state)
+ * - Leaves data intact for debugging
+ *
+ * Environment variables:
+ * - SKIP_UNLEASH_CLEANUP_AFTER=true - Skip Unleash cleanup after test (for local debugging)
  */
 
 async function cleanupTestData(page: any, waitForProcesses: boolean = false): Promise<void> {
@@ -52,12 +67,23 @@ async function cleanupTestData(page: any, waitForProcesses: boolean = false): Pr
         console.log(`   ⚠️  Mock cleanup failed: ${error.message || error}`);
     }
 
-    // Note: Unleash cleanup is now opt-in via fixtures/unleash-cleanup.ts
-    // Only tests that use feature toggles should import from that fixture
+    // Reset Unleash feature toggles to default state
+    // This ensures all tests start with consistent toggle state
+    try {
+        const unleash = new UnleashHelper(page.request);
+        await unleash.resetToDefaults(true, true); // silent mode, skip frontend check
+        console.log(`   ✅ Unleash: All toggles reset to defaults`);
+
+        // Give melosys-api extra time to poll Unleash and update its cache
+        // melosys-api polls every ~10 seconds, so we wait a bit to ensure cache refresh
+        await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second safety buffer
+    } catch (error: any) {
+        console.log(`   ⚠️  Unleash reset failed: ${error.message || error}`);
+    }
 }
 
 export const cleanupFixture = base.extend<{ autoCleanup: void }>({
-    autoCleanup: [async ({page}, use) => {
+    autoCleanup: [async ({page, request}, use) => {
         // BEFORE test: clean for fresh start
         console.log('\n🧹 Cleaning test data before test...');
         await cleanupTestData(page, false); // Don't wait for processes
@@ -66,12 +92,27 @@ export const cleanupFixture = base.extend<{ autoCleanup: void }>({
         // Run the test
         await use();
 
-        // AFTER test: wait for processes to complete, but leave data so we can inspect it
+        // AFTER test: wait for processes to complete
         try {
             await waitForProcessInstances(page.request, 30);
         } catch (error: any) {
             console.log(`   ⚠️  Process instance check failed: ${error.message || error}`);
             // Non-critical - continue anyway
+        }
+
+        // AFTER test: Reset Unleash toggles (unless debugging locally)
+        // This ensures next test gets clean state without race conditions
+        const skipCleanupAfter = process.env.SKIP_UNLEASH_CLEANUP_AFTER === 'true';
+        if (!skipCleanupAfter) {
+            try {
+                const unleash = new UnleashHelper(request);
+                await unleash.resetToDefaults(true, false); // silent mode, check frontend API
+                console.log(`   ✅ Unleash: Toggles reset after test (cleanup for next test)`);
+            } catch (error: any) {
+                console.log(`   ⚠️  Unleash cleanup after test failed: ${error.message || error}`);
+            }
+        } else {
+            console.log(`   ⏭️  Unleash: Skipping cleanup after test (SKIP_UNLEASH_CLEANUP_AFTER=true)`);
         }
     }, {auto: true}]
 });

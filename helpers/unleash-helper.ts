@@ -1,4 +1,11 @@
 import { APIRequestContext } from '@playwright/test';
+import * as dotenv from 'dotenv';
+import * as path from 'node:path';
+
+// Load .env (required, checked in with dev config)
+dotenv.config({ path: path.resolve(__dirname, '../.env') });
+// Load .local.env (optional, for local overrides - not on CI/CD)
+dotenv.config({ path: path.resolve(__dirname, '../.local.env'), override: true });
 
 /**
  * UnleashHelper - Control feature toggles in Unleash server during E2E tests
@@ -25,6 +32,8 @@ export class UnleashHelper {
   private apiToken: string;
   private project: string;
   private environment: string;
+  private melosysApiBaseUrl: string;
+  private authToken: string;
 
   constructor(
     private request: APIRequestContext,
@@ -33,18 +42,31 @@ export class UnleashHelper {
       apiToken?: string;
       project?: string;
       environment?: string;
+      melosysApiBaseUrl?: string;
     }
   ) {
     this.baseUrl = config?.baseUrl || 'http://localhost:4242';
     this.apiToken = config?.apiToken || '*:*.unleash-insecure-api-token';
     this.project = config?.project || 'default';
     this.environment = config?.environment || 'development';
+
+    // Direct API access to melosys-api (without /melosys web app prefix)
+    // Set MELOSYS_API_BASE_URL in .env to override
+    this.melosysApiBaseUrl = config?.melosysApiBaseUrl ||
+                             process.env.MELOSYS_API_BASE_URL ||
+                             'http://localhost:8080/api';
+
+    // Get auth token from environment (required for authenticated endpoints)
+    this.authToken = process.env.LOCAL_AUTH_TOKEN || '';
   }
 
   /**
    * Enable a feature toggle for all services
+   * @param featureName - The name of the feature toggle
+   * @param silent - If true, suppresses logging (default: false)
+   * @param skipFrontendCheck - If true, only waits for Admin API (faster, for cleanup)
    */
-  async enableFeature(featureName: string): Promise<void> {
+  async enableFeature(featureName: string, silent: boolean = false, skipFrontendCheck: boolean = false): Promise<void> {
     const url = `${this.baseUrl}/api/admin/projects/${this.project}/features/${featureName}/environments/${this.environment}/on`;
 
     const response = await this.request.post(url, {
@@ -72,13 +94,21 @@ export class UnleashHelper {
       }
     }
 
-    console.log(`✅ Unleash: Enabled feature '${featureName}'`);
+    if (!silent) {
+      console.log(`✅ Unleash: Enabled feature '${featureName}'`);
+    }
+
+    // Wait for Unleash cache to propagate the change
+    await this.waitForToggleState(featureName, true, silent, skipFrontendCheck);
   }
 
   /**
    * Disable a feature toggle for all services
+   * @param featureName - The name of the feature toggle
+   * @param silent - If true, suppresses logging (default: false)
+   * @param skipFrontendCheck - If true, only waits for Admin API (faster, for cleanup)
    */
-  async disableFeature(featureName: string): Promise<void> {
+  async disableFeature(featureName: string, silent: boolean = false, skipFrontendCheck: boolean = false): Promise<void> {
     const url = `${this.baseUrl}/api/admin/projects/${this.project}/features/${featureName}/environments/${this.environment}/off`;
 
     const response = await this.request.post(url, {
@@ -91,11 +121,19 @@ export class UnleashHelper {
     if (!response.ok()) {
       // Feature might not exist, try to create it first (disabled)
       await this.createFeatureIfNotExists(featureName, false);
-      console.log(`✅ Unleash: Created and disabled feature '${featureName}'`);
+      if (!silent) {
+        console.log(`✅ Unleash: Created and disabled feature '${featureName}'`);
+      }
+      await this.waitForToggleState(featureName, false, silent, skipFrontendCheck);
       return;
     }
 
-    console.log(`✅ Unleash: Disabled feature '${featureName}'`);
+    if (!silent) {
+      console.log(`✅ Unleash: Disabled feature '${featureName}'`);
+    }
+
+    // Wait for Unleash cache to propagate the change
+    await this.waitForToggleState(featureName, false, silent, skipFrontendCheck);
   }
 
   /**
@@ -139,23 +177,141 @@ export class UnleashHelper {
    * Get the current state of a feature toggle
    */
   async isFeatureEnabled(featureName: string): Promise<boolean> {
-    const url = `${this.baseUrl}/api/admin/projects/${this.project}/features/${featureName}`;
+    try {
+      const url = `${this.baseUrl}/api/admin/projects/${this.project}/features/${featureName}`;
 
-    const response = await this.request.get(url, {
-      headers: {
-        Authorization: this.apiToken,
-      },
-    });
+      const response = await this.request.get(url, {
+        headers: {
+          Authorization: this.apiToken,
+        },
+      });
 
-    if (!response.ok()) {
-      return false;
+      if (!response.ok()) {
+        return false;
+      }
+
+      const data = await response.json();
+      const envConfig = data.environments?.find(
+        (env: any) => env.name === this.environment
+      );
+      return envConfig?.enabled || false;
+    } catch (error: any) {
+      // If browser/context is closed, return false to stop polling
+      if (error.message?.includes('closed') || error.message?.includes('disposed')) {
+        return false;
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Wait for a toggle to reach the expected state
+   * Polls the toggle state until it matches expectedState or timeout is reached
+   * This is necessary because Unleash has server-side caching (~10-15s refresh interval)
+   * and the frontend also caches toggle responses
+   *
+   * @param silent - If true, suppresses confirmation logging (default: false)
+   * @param skipFrontendCheck - If true, only checks Admin API (for cleanup before page exists)
+   */
+  private async waitForToggleState(
+    featureName: string,
+    expectedState: boolean,
+    silent: boolean = false,
+    skipFrontendCheck: boolean = false,
+    timeoutMs: number = 30000,
+    pollIntervalMs: number = 500
+  ): Promise<void> {
+    const startTime = Date.now();
+
+    // Give melosys-api cache a moment to start refreshing (it polls Unleash every 10s by default)
+    await new Promise(resolve => setTimeout(resolve, 100));
+
+    // Poll Admin API (always required)
+    let adminState = await this.isFeatureEnabled(featureName);
+
+    // If skipFrontendCheck is true, only wait for Admin API (for cleanup before test starts)
+    if (skipFrontendCheck) {
+      while (adminState !== expectedState) {
+        if (Date.now() - startTime > timeoutMs) {
+          console.log(
+            `   ⚠️  Unleash: Timeout waiting for '${featureName}' to be ${expectedState ? 'enabled' : 'disabled'} (Admin API only)`
+          );
+          console.log(`       Admin API state: ${adminState}`);
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+        adminState = await this.isFeatureEnabled(featureName);
+      }
+      return; // Exit early - don't check frontend
     }
 
-    const data = await response.json();
-    const envConfig = data.environments?.find(
-      (env: any) => env.name === this.environment
-    );
-    return envConfig?.enabled || false;
+    // Poll both Admin API and Frontend API to ensure both caches are updated
+    let frontendState = await this.getFrontendToggleState(featureName);
+
+    while (adminState !== expectedState || (frontendState !== null && frontendState !== expectedState)) {
+      if (Date.now() - startTime > timeoutMs) {
+        // Always log warnings, even in silent mode
+        console.log(
+          `   ⚠️  Unleash: Timeout waiting for '${featureName}' to be ${expectedState ? 'enabled' : 'disabled'}`
+        );
+        console.log(`       Admin API state: ${adminState}, Frontend API state: ${frontendState}`);
+        return; // Don't throw, just warn - the test might still work
+      }
+
+      await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+      adminState = await this.isFeatureEnabled(featureName);
+      frontendState = await this.getFrontendToggleState(featureName);
+
+      // If frontend API becomes unavailable (page closed), just check admin API
+      if (frontendState === null) {
+        if (adminState === expectedState) {
+          break;
+        }
+      }
+    }
+
+    if (!silent) {
+      console.log(
+        `   ✅ Unleash: Confirmed '${featureName}' is ${expectedState ? 'enabled' : 'disabled'} (took ${Date.now() - startTime}ms)`
+      );
+    }
+  }
+
+  /**
+   * Get toggle state from the frontend API endpoint (melosys-api/featuretoggle)
+   * This is what the frontend actually sees
+   *
+   * @param featureName - The name of the feature toggle to check
+   * @returns The toggle state (true/false) or null if unavailable
+   */
+  async getFrontendToggleState(featureName: string): Promise<boolean | null> {
+    try {
+      // Build URL with feature name and cache-busting parameter
+      const cacheBust = Date.now();
+      const url = `${this.melosysApiBaseUrl}/featuretoggle?features=${encodeURIComponent(featureName)}&_=${cacheBust}`;
+
+      const options: any = {};
+      if (this.authToken) {
+        options.headers = {
+          'Authorization': `Bearer ${this.authToken}`,
+        };
+      }
+
+      const response = await this.request.get(url, options);
+
+      if (!response.ok()) {
+        return null; // Return null to indicate we couldn't fetch (different from false)
+      }
+
+      const data = await response.json();
+      return data[featureName] === true;
+    } catch (error: any) {
+      // If browser/context is closed, skip frontend check
+      if (error.message?.includes('closed') || error.message?.includes('disposed')) {
+        return null;
+      }
+      return null;
+    }
   }
 
   /**
@@ -179,8 +335,11 @@ export class UnleashHelper {
   /**
    * Reset all toggles to their default state (from seed script)
    * Default state: all toggles enabled except 'melosys.arsavregning.uten.flyt'
+   *
+   * @param silent - If true, suppresses individual toggle logging (default: false)
+   * @param skipFrontendCheck - If true, only waits for Admin API (faster, for cleanup before test)
    */
-  async resetToDefaults(): Promise<void> {
+  async resetToDefaults(silent: boolean = false, skipFrontendCheck: boolean = false): Promise<void> {
     const defaultToggles = [
       { name: 'melosys.behandlingstype.klage', enabled: true },
       { name: 'melosys.send_melding_om_vedtak', enabled: true },
@@ -202,17 +361,13 @@ export class UnleashHelper {
       { name: 'melosys.send_popp_hendelse', enabled: true },
     ];
 
-    console.log('🔄 Unleash: Resetting all toggles to default state...');
-
     for (const toggle of defaultToggles) {
       if (toggle.enabled) {
-        await this.enableFeature(toggle.name);
+        await this.enableFeature(toggle.name, silent, skipFrontendCheck);
       } else {
-        await this.disableFeature(toggle.name);
+        await this.disableFeature(toggle.name, silent, skipFrontendCheck);
       }
     }
-
-    console.log('✅ Unleash: All toggles reset to defaults');
   }
 
   /**
@@ -235,5 +390,71 @@ export class UnleashHelper {
 
     const data = await response.json();
     return data.features?.map((f: any) => f.name) || [];
+  }
+
+  /**
+   * Log all feature toggles from the frontend API (what the web app sees)
+   * This is useful for debugging when the web app shows unexpected toggle states
+   *
+   * @param featureNames - Optional list of feature names to request. If not provided, uses default list.
+   * @returns The toggle states as returned by the API
+   */
+  async logFrontendToggleStates(featureNames?: string[]): Promise<Record<string, boolean>> {
+    try {
+      // Default feature names that melosys-web typically requests
+      const defaultFeatures = [
+        'melosys.faktureringskomponent.vis_referanse',
+        'melosys.ftrl.begrense_periode_vedtak',
+        'melosys.11_3_a_Norge_er_utpekt',
+        'melosys.pensjonist',
+        'melosys.pensjonist_eos',
+        'standardvedlegg_eget_vedlegg_avtaleland',
+        'melosys.arsavregning',
+        'melosys.arsavregning.uten.flyt',
+        'melosys.faktureringskomponenten.ikke-tidligere-perioder',
+        'melosys.eos_fakturering_av_trygdeavgift',
+      ];
+
+      const features = featureNames || defaultFeatures;
+
+      // Build query string: ?features=toggle1&features=toggle2&...
+      const queryParams = features.map(f => `features=${encodeURIComponent(f)}`).join('&');
+      const cacheBust = Date.now();
+      const url = `${this.melosysApiBaseUrl}/featuretoggle?${queryParams}&_=${cacheBust}`;
+
+      console.log(`🔍 Unleash: Fetching frontend toggle states for ${features.length} toggles...`);
+      console.log(`   URL: ${url}`);
+
+      const options: any = {};
+      if (this.authToken) {
+        options.headers = {
+          'Authorization': `Bearer ${this.authToken}`,
+        };
+        console.log(`   Using authentication: Bearer ${this.authToken.substring(0, 20)}...`);
+      } else {
+        console.log(`   ⚠️  No auth token found - request may fail if endpoint requires authentication`);
+      }
+
+      const response = await this.request.get(url, options);
+
+      if (!response.ok()) {
+        console.error(`❌ Unleash: Frontend API returned ${response.status()}`);
+        console.error(`   Response: ${await response.text()}`);
+        return {};
+      }
+
+      const data = await response.json();
+
+      console.log('🔧 Unleash: Frontend API response (what web app sees):');
+      for (const [key, value] of Object.entries(data)) {
+        const emoji = value ? '✅' : '❌';
+        console.log(`   ${emoji} ${key}: ${value}`);
+      }
+
+      return data;
+    } catch (error: any) {
+      console.error(`❌ Unleash: Error fetching frontend toggles: ${error.message}`);
+      return {};
+    }
   }
 }

@@ -75,6 +75,52 @@ cd ../melosys-docker-compose
 make start-all
 ```
 
+## Git Commit Rules
+
+**IMPORTANT: Always ask before amending or pushing commits!**
+
+### Never Do These Without Asking First:
+1. **Never amend commits** (`git commit --amend`) - This rewrites history and requires force push
+2. **Never force push** (`git push --force`) - Can overwrite remote history
+3. **Never push commits** (`git push`) - User should review commits first
+
+### Why Commit History Matters:
+- Debugging: Need to see what changed and when
+- Rollback: May need to revert specific changes
+- Understanding: History shows the evolution of fixes and features
+- Collaboration: Others may have pulled commits we're rewriting
+
+### Correct Workflow:
+1. **Make changes** - Edit files as needed
+2. **Stage changes** - `git add <files>`
+3. **Create new commit** - `git commit -m "message"` (NO --amend!)
+4. **Ask user** - "I've created a commit with X changes. Should I push it?"
+5. **Let user push** - They decide when to push
+
+### Commit Messages:
+- Clear, descriptive messages
+- No Claude footer unless user explicitly requests it
+- Focus on what and why, not how
+
+### Example Good Flow:
+```bash
+# ✅ CORRECT
+git add file1.ts file2.ts
+git commit -m "Add feature toggle logging"
+# Then tell user: "Created commit, ready for you to review and push"
+
+# ❌ WRONG
+git commit --amend  # Never without asking!
+git push --force    # Never without asking!
+git push           # Never without asking!
+```
+
+### Multiple Related Changes:
+If multiple changes are related to the same feature:
+- **Ask first**: "Should I create separate commits or one commit for all changes?"
+- **Default**: Create separate commits for better history
+- **User decides**: They know best how they want history organized
+
 ## Architecture
 
 ### Test Structure
@@ -88,8 +134,7 @@ make start-all
   - `auth-state-helper.ts` - Authentication state persistence
   - `unleash-helper.ts` - Feature toggle control for all services
 - **fixtures/** - Playwright test fixtures for automatic cleanup and logging
-  - `cleanup.ts` - Auto-cleanup database and mock data after each test
-  - `unleash-cleanup.ts` - Opt-in fixture for tests that use feature toggles (restores only changed toggles)
+  - `cleanup.ts` - Auto-cleanup database, mock data, and Unleash toggles before each test
   - `docker-logs.ts` - Check Docker logs for errors after tests
   - `index.ts` - Main test fixture (combines cleanup + docker-logs)
 
@@ -136,42 +181,32 @@ await clearMockData(page.request);
 **UnleashHelper** - Control feature toggles for all services during tests.
 
 ```typescript
-// IMPORTANT: Use the unleash-cleanup fixture for tests that use Unleash
-import { test, expect } from '../fixtures/unleash-cleanup'; // Opt-in fixture
+import { test, expect } from '../fixtures'; // Default fixture
 import { UnleashHelper } from '../helpers/unleash-helper';
 
 test('my test with unleash', async ({ page, request }) => {
+  // ALL toggles are reset to defaults BEFORE test runs (automatically)
+  // Default state: All toggles ON except 'melosys.arsavregning.uten.flyt' which is OFF
+
   const unleash = new UnleashHelper(request);
 
-  // Enable a feature toggle (affects ALL services)
-  await unleash.enableFeature('melosys.new-feature');
-
-  // Disable a feature toggle
-  await unleash.disableFeature('melosys.old-feature');
-
-  // Enable multiple features at once
-  await unleash.enableFeatures([
-    'melosys.pensjonist',
-    'melosys.arsavregning'
-  ]);
-
-  // Check if feature is enabled
-  const isEnabled = await unleash.isFeatureEnabled('melosys.pensjonist');
-
-  // List all feature toggles
-  const features = await unleash.listFeatures();
+  // Just disable the toggles you need for this specific test
+  await unleash.disableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
 
   // ... test logic ...
 
-  // Cleanup happens automatically - only changed toggles are restored
+  // NO cleanup after test - state is left for debugging
+  // Next test will reset all toggles to defaults anyway
 });
 ```
 
 **Key Points:**
+- **All tests start with consistent state**: Default fixture resets ALL toggles BEFORE each test
+- **Default state**: All toggles enabled except `melosys.arsavregning.uten.flyt` (disabled)
+- **Cleanup after test**: Toggles reset after test to ensure next test gets clean state (prevents race conditions on CI)
+- **Local debugging**: Set `SKIP_UNLEASH_CLEANUP_AFTER=true` in `.env` to preserve toggle state after failed tests
+- **Simple approach**: Just disable/enable the toggles you need - no need to track changes
 - Feature toggles affect **all services** (melosys-api, faktureringskomponenten, trygdeavgift-beregning)
-- **Opt-in cleanup**: Import from `fixtures/unleash-cleanup` for tests that use toggles
-- **Smart cleanup**: Only restores toggles that changed during the test (no unnecessary API calls)
-- **Default fixture**: Tests that don't use Unleash should import from `fixtures` (standard cleanup)
 - **melosys-api creates toggles**: No need to run seed script - toggles are created automatically
 - Unleash UI available at `http://localhost:4242` (admin/unleash4all)
 - See `tests/unleash-example.spec.ts` for complete examples

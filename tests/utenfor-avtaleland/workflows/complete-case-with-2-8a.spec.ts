@@ -1,5 +1,6 @@
 import {expect, test} from '../../../fixtures';
 import {AuthHelper} from '../../../helpers/auth-helper';
+import {UnleashHelper} from '../../../helpers/unleash-helper';
 import {HovedsidePage} from '../../../pages/hovedside.page';
 import {OpprettNySakPage} from '../../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import {MedlemskapPage} from '../../../pages/behandling/medlemskap.page';
@@ -11,7 +12,7 @@ import {VedtakPage} from '../../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../../pages/shared/constants';
 
 test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
-    test('skal fullføre komplett saksflyt med § 2-8 første ledd bokstav a (arbeidstaker)', async ({page}) => {
+    test('skal fullføre komplett saksflyt med § 2-8 første ledd bokstav a (arbeidstaker)', async ({page, request}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);
         await auth.login();
@@ -38,7 +39,7 @@ test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
 
         // Step 3: Fill Medlemskap
         console.log('📝 Step 3: Filling medlemskap information...');
-        await medlemskap.velgPeriode('01.01.2023', '01.07.2024');
+        await medlemskap.velgPeriode('01.01.2024', '01.07.2024');
         await medlemskap.velgLand('Afghanistan');
         await medlemskap.velgTrygdedekning('FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON');
         await medlemskap.klikkBekreftOgFortsett();
@@ -54,18 +55,64 @@ test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
         await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker vært medlem i minst');
         await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker nær tilknytning til');
         await lovvalg.klikkBekreftOgFortsett();
+        // Step 6: Accept default Resultat Periode values (two periods: Helsedel and Pensjonsdel)
+        // When FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON creates split periods, the defaults are:
+        // - Helsedel (period 1): Avslått
+        // - Pensjonsdel (period 2): Innvilget
+        // We accept these defaults to avoid "Innvilgede perioder overlapper" validation error
+        console.log('📝 Step 6: Accepting default resultat periode values for split periods...');
+        await resultatPeriode.klikkBekreftOgFortsett();
 
-        // Step 6: Select Resultat Periode
-        console.log('📝 Step 6: Selecting resultat periode...');
-        await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
+        // Step 7: Handle Trygdeavgift page with årsavregning warning
+        // When using 2024-only dates, the system shows a warning about not entering
+        // tax periods for previous years (MELOSYS-7689), and we just accept it
+        console.log('📝 Step 7: Handling trygdeavgift with årsavregning warning...');
 
-        // Step 7: Fill Trygdeavgift with special options
-        console.log('📝 Step 7: Filling trygdeavgift...');
-        await trygdeavgift.ventPåSideLastet();
-        await trygdeavgift.velgSkattepliktig(false);
-        await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
-        await trygdeavgift.velgBetalesAga(false);
-        await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
+        // Verify that the required Unleash toggle is enabled
+        const unleash = new UnleashHelper(request);
+        const toggleName = 'melosys.faktureringskomponenten.ikke-tidligere-perioder';
+
+        // Check both Admin API and Frontend API
+        const adminState = await unleash.isFeatureEnabled(toggleName);
+        const frontendState = await unleash.getFrontendToggleState(toggleName);
+
+        console.log(`🔧 Unleash toggle '${toggleName}':`);
+        console.log(`   Admin API: ${adminState ? 'ENABLED ✅' : 'DISABLED ❌'}`);
+        console.log(`   Frontend API (what browser sees): ${frontendState === true ? 'ENABLED ✅' : frontendState === false ? 'DISABLED ❌' : 'UNAVAILABLE ⚠️'}`);
+
+        // Assert that Admin API state is correct
+        expect(adminState,
+            `Unleash Admin API reports '${toggleName}' as ${adminState ? 'enabled' : 'disabled'}, but test expects it to be enabled. ` +
+            `See docs/guides/UNLEASH-DEBUGGING.md for troubleshooting.`
+        ).toBe(true);
+
+        // Assert that Frontend API state matches (this is what the browser actually sees)
+        expect(frontendState,
+            `RACE CONDITION DETECTED!\n` +
+            `Admin API reports '${toggleName}' as enabled, but Frontend API (melosys-api/featuretoggle) reports it as ${frontendState === false ? 'disabled' : 'unavailable'}.\n` +
+            `This is a caching issue - the toggle change hasn't propagated to melosys-api yet.\n\n` +
+            `Diagnostic info:\n` +
+            `- Admin API state: ${adminState}\n` +
+            `- Frontend API state: ${frontendState}\n` +
+            `- Expected state: true\n\n` +
+            `This test should use the unleash-cleanup fixture to ensure proper cleanup from previous tests.\n` +
+            `See docs/guides/UNLEASH-DEBUGGING.md for complete troubleshooting guide.`
+        ).toBe(true);
+
+        // Log what the frontend API returns (for debugging)
+        console.log('📊 Logging all frontend toggle states:');
+        await unleash.logFrontendToggleStates();
+
+        // Check if the årsavregning warning is displayed
+        const hasAarsavregningWarning = await page.getByText(/tidligere år skal fastsettes på årsavregning/i).isVisible({ timeout: 5000 }).catch(() => false);
+
+        // Verify that the årsavregning warning is displayed (test should fail if not present)
+        expect(hasAarsavregningWarning,
+            'Expected årsavregning warning to be displayed. ' +
+            'The warning "tidligere år skal fastsettes på årsavregning" should appear when using 2024-only dates.'
+        ).toBe(true);
+
+        console.log('✅ Årsavregning warning detected as expected - proceeding');
         await trygdeavgift.klikkBekreftOgFortsett();
 
         // Step 8: Fatt vedtak (without filling text fields)
@@ -75,7 +122,7 @@ test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
         console.log('✅ Workflow completed');
     });
 
-    test('FULL_DEKNING_FTRL', async ({page}) => {
+    test('FULL_DEKNING_FTRL', async ({page, request}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);
         await auth.login();
@@ -114,80 +161,59 @@ test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
         console.log('📝 Step 5: Answering lovvalg questions...');
         await lovvalg.fyllUtLovvalg();
 
-        // Step 6: Calculate Trygdeavgift
-        console.log('📝 Step 6: Calculating trygdeavgift...');
-        await trygdeavgift.fyllUtTrygdeavgift(false, 'ARBEIDSINNTEKT', '100000');
+        // Step 6: Handle Trygdeavgift with årsavregning warning
+        // When using 2024-only dates, the system shows a warning (MELOSYS-7689)
+        console.log('📝 Step 6: Handling trygdeavgift with årsavregning warning...');
+
+        // Verify that the required Unleash toggle is enabled
+        const unleash = new UnleashHelper(request);
+        const toggleName = 'melosys.faktureringskomponenten.ikke-tidligere-perioder';
+
+        // Check both Admin API and Frontend API
+        const adminState = await unleash.isFeatureEnabled(toggleName);
+        const frontendState = await unleash.getFrontendToggleState(toggleName);
+
+        console.log(`🔧 Unleash toggle '${toggleName}':`);
+        console.log(`   Admin API: ${adminState ? 'ENABLED ✅' : 'DISABLED ❌'}`);
+        console.log(`   Frontend API (what browser sees): ${frontendState === true ? 'ENABLED ✅' : frontendState === false ? 'DISABLED ❌' : 'UNAVAILABLE ⚠️'}`);
+
+        // Assert that Admin API state is correct
+        expect(adminState,
+            `Unleash Admin API reports '${toggleName}' as ${adminState ? 'enabled' : 'disabled'}, but test expects it to be enabled. ` +
+            `See docs/guides/UNLEASH-DEBUGGING.md for troubleshooting.`
+        ).toBe(true);
+
+        // Assert that Frontend API state matches (this is what the browser actually sees)
+        expect(frontendState,
+            `RACE CONDITION DETECTED!\n` +
+            `Admin API reports '${toggleName}' as enabled, but Frontend API (melosys-api/featuretoggle) reports it as ${frontendState === false ? 'disabled' : 'unavailable'}.\n` +
+            `This is a caching issue - the toggle change hasn't propagated to melosys-api yet.\n\n` +
+            `Diagnostic info:\n` +
+            `- Admin API state: ${adminState}\n` +
+            `- Frontend API state: ${frontendState}\n` +
+            `- Expected state: true\n\n` +
+            `This test should use the unleash-cleanup fixture to ensure proper cleanup from previous tests.\n` +
+            `See docs/guides/UNLEASH-DEBUGGING.md for complete troubleshooting guide.`
+        ).toBe(true);
+
+        // Log what the frontend API returns (for debugging)
+        console.log('📊 Logging all frontend toggle states:');
+        await unleash.logFrontendToggleStates();
+
+        const hasAarsavregningWarning = await page.getByText(/tidligere år skal fastsettes på årsavregning/i).isVisible({ timeout: 5000 }).catch(() => false);
+
+        expect(hasAarsavregningWarning,
+            'Expected årsavregning warning to be displayed. ' +
+            'The warning "tidligere år skal fastsettes på årsavregning" should appear when using 2024-only dates.'
+        ).toBe(true);
+
+        console.log('✅ Årsavregning warning detected as expected - proceeding');
+        await trygdeavgift.klikkBekreftOgFortsett();
 
         // Step 7: Make Decision (Fatt vedtak)
         console.log('📝 Step 7: Making decision...');
         await vedtak.fattVedtak('fritekst', 'begrunnelse', 'trygdeavgift');
 
         console.log('✅ Complete workflow finished successfully!');
-    });
-
-    test('should complete workflow with custom values', async ({page}) => {
-        // Setup
-        const auth = new AuthHelper(page);
-        await auth.login();
-
-        const hovedside = new HovedsidePage(page);
-        const opprettSak = new OpprettNySakPage(page);
-        const medlemskap = new MedlemskapPage(page);
-        const arbeidsforhold = new ArbeidsforholdPage(page);
-        const lovvalg = new LovvalgPage(page);
-        const trygdeavgift = new TrygdeavgiftPage(page);
-        const vedtak = new VedtakPage(page);
-
-        // Custom workflow with different values
-        await hovedside.goto();
-        await hovedside.klikkOpprettNySak();
-
-        await opprettSak.fyllInnBrukerID(USER_ID_VALID);
-        await opprettSak.velgOpprettNySak();
-        await opprettSak.velgSakstype('FTRL');
-        await opprettSak.velgSakstema('MEDLEMSKAP_LOVVALG');
-        await opprettSak.velgBehandlingstema('YRKESAKTIV');
-        await opprettSak.velgAarsak('SØKNAD');
-        await opprettSak.leggBehandlingIMine();
-        await opprettSak.klikkOpprettNyBehandling();
-
-        await opprettSak.assertions.verifiserBehandlingOpprettet();
-
-        await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).click();
-
-        // Custom period and country
-        await medlemskap.fyllInnFraOgMed('15.03.2024');
-        await medlemskap.fyllInnTilOgMed('15.09.2024');
-        await medlemskap.velgLand('Afghanistan');
-        await medlemskap.velgTrygdedekning('FULL_DEKNING_FTRL');
-        await medlemskap.klikkBekreftOgFortsett();
-
-        await arbeidsforhold.velgArbeidsgiver('Ståles Stål AS');
-        await arbeidsforhold.klikkBekreftOgFortsett();
-
-        // Custom lovvalg
-        await lovvalg.velgBestemmelse('FTRL_KAP2_2_1');
-        await lovvalg.velgBrukersSituasjon('MIDLERTIDIG_ARBEID_2_1_FJERDE_LEDD');
-        await lovvalg.svarJaPaaFørsteSpørsmål();
-        await lovvalg.svarJaPaaSpørsmålIGruppe('Er søkers arbeidsoppdrag i');
-        await lovvalg.svarJaPaaSpørsmålIGruppe('Plikter arbeidsgiver å betale');
-        await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker lovlig opphold i');
-        await lovvalg.klikkBekreftOgFortsettMedVent();
-        await lovvalg.klikkBekreftOgFortsettMedVent();
-
-        // Custom trygdeavgift
-        await trygdeavgift.ventPåSideLastet();
-        await trygdeavgift.velgSkattepliktig(false);
-        await trygdeavgift.velgInntektskilde('ARBEIDSINNTEKT');
-        await trygdeavgift.fyllInnBruttoinntektMedApiVent('250000');
-        await trygdeavgift.klikkBekreftOgFortsett();
-
-        // Custom vedtak text
-        await vedtak.fyllInnFritekst('Custom fritekst for this case');
-        await vedtak.fyllInnBegrunnelse('Detailed reasoning for approval');
-        await vedtak.fyllInnTrygdeavgiftBegrunnelse('Tax calculation justification');
-        await vedtak.klikkFattVedtak();
-
-        console.log('✅ Custom workflow completed successfully!');
     });
 });

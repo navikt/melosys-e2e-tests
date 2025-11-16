@@ -1,4 +1,4 @@
-import {test} from '../../../fixtures/unleash-cleanup';
+import {test} from '../../../fixtures';
 import {AuthHelper} from '../../../helpers/auth-helper';
 import {HovedsidePage} from '../../../pages/hovedside.page';
 import {OpprettNySakPage} from '../../../pages/opprett-ny-sak/opprett-ny-sak.page';
@@ -22,6 +22,10 @@ test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
         const unleash = new UnleashHelper(request);
         await unleash.disableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
 
+        // Log what the frontend API returns (for debugging)
+        console.log('📊 Logging frontend toggle states after disabling toggle:');
+        await unleash.logFrontendToggleStates();
+
         await auth.login();
 
         // Setup: Page Objects
@@ -31,7 +35,6 @@ test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
         const arbeidsforhold = new ArbeidsforholdPage(page);
         const lovvalg = new LovvalgPage(page);
         const resultatPeriode = new ResultatPeriodePage(page);
-        const behandling = new BehandlingPage(page);
         const trygdeavgift = new TrygdeavgiftPage(page);
         const vedtak = new VedtakPage(page);
         const adminApi = new AdminApiHelper();
@@ -77,6 +80,7 @@ test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
         console.log('📝 Step 7: Filling trygdeavgift...');
         await trygdeavgift.ventPåSideLastet();
         await trygdeavgift.velgSkattepliktig(false);
+        await trygdeavgift.velgSkattepliktig(false);
 
         await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
         await trygdeavgift.velgBetalesAga(false);
@@ -90,7 +94,9 @@ test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
         console.log('📝 Step 9: Wait for process instances after first vedtak...');
         await waitForProcessInstances(page.request, 30);
 
+        // Re-enable toggle for årsavregning job (was disabled at start of test)
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
+
         await adminApi.finnIkkeSkattepliktigeSaker(
             request,
             '2024-01-01',
