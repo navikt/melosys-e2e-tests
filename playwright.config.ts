@@ -35,6 +35,8 @@ export default defineConfig({
   reporter: [
     ['html'],
     ['list'],
+    // Custom summary reporter - creates markdown summary with error details
+    ['./reporters/test-summary.ts'],
     // GitHub Actions reporter - creates annotations and summary in CI
     ...(process.env.CI ? [['github']] : []),
   ],

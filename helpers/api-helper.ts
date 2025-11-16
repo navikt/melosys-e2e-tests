@@ -228,12 +228,22 @@ export async function waitForProcessInstances(request: APIRequestContext, timeou
 
     if (result.status === 'FAILED') {
       console.log(`   ❌ Process instances: ${result.failedInstances?.length || 0} FAILED`);
+      let errorDetails = '';
       if (result.failedInstances) {
         for (const failure of result.failedInstances) {
-          console.log(`      - ${failure.type}: ${failure.error?.melding || 'No error message'}`);
+          const errorMsg = failure.error?.melding || 'No error message';
+          const stackTrace = failure.error?.stackTrace || '';
+          console.log(`      - ${failure.type}: ${errorMsg}`);
+          errorDetails += `\n  - ${failure.type}: ${errorMsg}`;
+          if (stackTrace) {
+            // Show first few lines of stack trace
+            const stackLines = stackTrace.split('\n').slice(0, 5).join('\n');
+            console.log(`        ${stackLines.substring(0, 200)}...`);
+            errorDetails += `\n    ${stackLines}`;
+          }
         }
       }
-      throw new Error(`Process instances failed: ${result.message}`);
+      throw new Error(`Found ${result.failedInstances?.length || 0} failed process instance(s)${errorDetails}`);
     }
 
     if (result.status === 'TIMEOUT') {
