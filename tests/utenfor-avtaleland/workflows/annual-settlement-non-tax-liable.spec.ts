@@ -1,4 +1,4 @@
-import {test} from '../../../fixtures/unleash-cleanup';
+import {test} from '../../../fixtures';
 import {AuthHelper} from '../../../helpers/auth-helper';
 import {HovedsidePage} from '../../../pages/hovedside.page';
 import {OpprettNySakPage} from '../../../pages/opprett-ny-sak/opprett-ny-sak.page';
@@ -94,11 +94,7 @@ test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
         console.log('📝 Step 9: Wait for process instances after first vedtak...');
         await waitForProcessInstances(page.request, 30);
 
-        await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
-
-        // Log what the frontend API returns after enabling (for debugging)
-        console.log('📊 Logging frontend toggle states after enabling toggle:');
-        await unleash.logFrontendToggleStates();
+        // Note: Toggle will be reset to default (enabled) before next test runs
 
         await adminApi.finnIkkeSkattepliktigeSaker(
             request,

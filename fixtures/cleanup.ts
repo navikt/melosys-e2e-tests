@@ -2,10 +2,20 @@ import {test as base} from '@playwright/test';
 import {DatabaseHelper} from '../helpers/db-helper';
 import {clearMockDataSilent} from '../helpers/mock-helper';
 import {clearApiCaches, waitForProcessInstances} from '../helpers/api-helper';
+import {UnleashHelper} from '../helpers/unleash-helper';
 
 /**
- * Cleanup fixture - automatically cleans database and mock data before and after each test
+ * Cleanup fixture - automatically cleans database, mock data, and Unleash toggles before each test
  * This ensures test isolation and prevents leftover data from affecting other tests
+ *
+ * Before each test:
+ * - Cleans database (removes all test data)
+ * - Clears mock service data
+ * - Resets ALL Unleash feature toggles to default state
+ *
+ * After each test:
+ * - Waits for async processes to complete
+ * - Leaves data intact for debugging (no cleanup after test)
  */
 
 async function cleanupTestData(page: any, waitForProcesses: boolean = false): Promise<void> {
@@ -52,8 +62,15 @@ async function cleanupTestData(page: any, waitForProcesses: boolean = false): Pr
         console.log(`   ⚠️  Mock cleanup failed: ${error.message || error}`);
     }
 
-    // Note: Unleash cleanup is now opt-in via fixtures/unleash-cleanup.ts
-    // Only tests that use feature toggles should import from that fixture
+    // Reset Unleash feature toggles to default state
+    // This ensures all tests start with consistent toggle state
+    try {
+        const unleash = new UnleashHelper(page.request);
+        await unleash.resetToDefaults(true); // silent mode
+        console.log(`   ✅ Unleash: All toggles reset to defaults`);
+    } catch (error: any) {
+        console.log(`   ⚠️  Unleash reset failed: ${error.message || error}`);
+    }
 }
 
 export const cleanupFixture = base.extend<{ autoCleanup: void }>({

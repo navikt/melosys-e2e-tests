@@ -1,4 +1,4 @@
-import { test, expect } from '../fixtures/unleash-cleanup';
+import { test, expect } from '../fixtures';
 import { AuthHelper } from '../helpers/auth-helper';
 import { UnleashHelper } from '../helpers/unleash-helper';
 
@@ -8,7 +8,8 @@ import { UnleashHelper } from '../helpers/unleash-helper';
  * This test shows:
  * 1. How to enable/disable specific toggles
  * 2. How toggles affect all services (melosys-api, faktureringskomponenten, etc.)
- * 3. How cleanup fixture automatically resets toggles after each test
+ * 3. How cleanup fixture automatically resets toggles to defaults BEFORE each test
+ *    (No cleanup after test - leaves state for debugging)
  */
 
 test.describe('Unleash Feature Toggle Control', () => {

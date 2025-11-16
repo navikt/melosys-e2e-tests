@@ -1,4 +1,4 @@
-import {test} from '../../../fixtures/unleash-cleanup';
+import {test} from '../../../fixtures';
 import {AuthHelper} from '../../../helpers/auth-helper';
 import {HovedsidePage} from '../../../pages/hovedside.page';
 import {OpprettNySakPage} from '../../../pages/opprett-ny-sak/opprett-ny-sak.page';
@@ -142,7 +142,7 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         console.log('📝 Step 15: Submitting vedtak for ny vurdering...');
         await vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING');
 
-        await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
+        // Note: Toggle will be reset to default (enabled) before next test runs
 
         console.log('✅ Workflow completed successfully!');
     });

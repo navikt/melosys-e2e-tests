@@ -62,8 +62,10 @@ export class UnleashHelper {
 
   /**
    * Enable a feature toggle for all services
+   * @param featureName - The name of the feature toggle
+   * @param silent - If true, suppresses logging (default: false)
    */
-  async enableFeature(featureName: string): Promise<void> {
+  async enableFeature(featureName: string, silent: boolean = false): Promise<void> {
     const url = `${this.baseUrl}/api/admin/projects/${this.project}/features/${featureName}/environments/${this.environment}/on`;
 
     const response = await this.request.post(url, {
@@ -91,16 +93,20 @@ export class UnleashHelper {
       }
     }
 
-    console.log(`✅ Unleash: Enabled feature '${featureName}'`);
+    if (!silent) {
+      console.log(`✅ Unleash: Enabled feature '${featureName}'`);
+    }
 
     // Wait for Unleash cache to propagate the change
-    await this.waitForToggleState(featureName, true);
+    await this.waitForToggleState(featureName, true, silent);
   }
 
   /**
    * Disable a feature toggle for all services
+   * @param featureName - The name of the feature toggle
+   * @param silent - If true, suppresses logging (default: false)
    */
-  async disableFeature(featureName: string): Promise<void> {
+  async disableFeature(featureName: string, silent: boolean = false): Promise<void> {
     const url = `${this.baseUrl}/api/admin/projects/${this.project}/features/${featureName}/environments/${this.environment}/off`;
 
     const response = await this.request.post(url, {
@@ -113,15 +119,19 @@ export class UnleashHelper {
     if (!response.ok()) {
       // Feature might not exist, try to create it first (disabled)
       await this.createFeatureIfNotExists(featureName, false);
-      console.log(`✅ Unleash: Created and disabled feature '${featureName}'`);
-      await this.waitForToggleState(featureName, false);
+      if (!silent) {
+        console.log(`✅ Unleash: Created and disabled feature '${featureName}'`);
+      }
+      await this.waitForToggleState(featureName, false, silent);
       return;
     }
 
-    console.log(`✅ Unleash: Disabled feature '${featureName}'`);
+    if (!silent) {
+      console.log(`✅ Unleash: Disabled feature '${featureName}'`);
+    }
 
     // Wait for Unleash cache to propagate the change
-    await this.waitForToggleState(featureName, false);
+    await this.waitForToggleState(featureName, false, silent);
   }
 
   /**
@@ -197,10 +207,13 @@ export class UnleashHelper {
    * Polls the toggle state until it matches expectedState or timeout is reached
    * This is necessary because Unleash has server-side caching (~10-15s refresh interval)
    * and the frontend also caches toggle responses
+   *
+   * @param silent - If true, suppresses confirmation logging (default: false)
    */
   private async waitForToggleState(
     featureName: string,
     expectedState: boolean,
+    silent: boolean = false,
     timeoutMs: number = 30000,
     pollIntervalMs: number = 500
   ): Promise<void> {
@@ -215,6 +228,7 @@ export class UnleashHelper {
 
     while (adminState !== expectedState || (frontendState !== null && frontendState !== expectedState)) {
       if (Date.now() - startTime > timeoutMs) {
+        // Always log warnings, even in silent mode
         console.log(
           `   ⚠️  Unleash: Timeout waiting for '${featureName}' to be ${expectedState ? 'enabled' : 'disabled'}`
         );
@@ -234,9 +248,11 @@ export class UnleashHelper {
       }
     }
 
-    console.log(
-      `   ✅ Unleash: Confirmed '${featureName}' is ${expectedState ? 'enabled' : 'disabled'} (took ${Date.now() - startTime}ms)`
-    );
+    if (!silent) {
+      console.log(
+        `   ✅ Unleash: Confirmed '${featureName}' is ${expectedState ? 'enabled' : 'disabled'} (took ${Date.now() - startTime}ms)`
+      );
+    }
   }
 
   /**
@@ -297,8 +313,10 @@ export class UnleashHelper {
   /**
    * Reset all toggles to their default state (from seed script)
    * Default state: all toggles enabled except 'melosys.arsavregning.uten.flyt'
+   *
+   * @param silent - If true, suppresses individual toggle logging (default: false)
    */
-  async resetToDefaults(): Promise<void> {
+  async resetToDefaults(silent: boolean = false): Promise<void> {
     const defaultToggles = [
       { name: 'melosys.behandlingstype.klage', enabled: true },
       { name: 'melosys.send_melding_om_vedtak', enabled: true },
@@ -320,17 +338,13 @@ export class UnleashHelper {
       { name: 'melosys.send_popp_hendelse', enabled: true },
     ];
 
-    console.log('🔄 Unleash: Resetting all toggles to default state...');
-
     for (const toggle of defaultToggles) {
       if (toggle.enabled) {
-        await this.enableFeature(toggle.name);
+        await this.enableFeature(toggle.name, silent);
       } else {
-        await this.disableFeature(toggle.name);
+        await this.disableFeature(toggle.name, silent);
       }
     }
-
-    console.log('✅ Unleash: All toggles reset to defaults');
   }
 
   /**
