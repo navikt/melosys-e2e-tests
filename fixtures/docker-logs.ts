@@ -142,40 +142,66 @@ export const dockerLogsFixture = base.extend<{ dockerLogChecker: void }>({
       } else {
         console.log(`\n⚠️  Found ${totalErrors} error(s) across ${allErrors.length} service(s) during test:\n`);
 
+        // Build error summary
+        let errorSummary = `Docker Log Errors for test: ${testInfo.title}\n\n`;
+
         // Report errors by service
         for (const { service, errors } of allErrors) {
           console.log(`\n🐳 ${service} (${errors.length} error(s)):`);
+          errorSummary += `🐳 ${service} (${errors.length} error(s)):\n`;
 
           const categories = categorizeErrors(errors);
 
           if (categories.sqlErrors.length > 0) {
             console.log(`  📊 SQL Errors (${categories.sqlErrors.length}):`);
+            errorSummary += `  📊 SQL Errors (${categories.sqlErrors.length}):\n`;
             categories.sqlErrors.forEach(err => {
-              console.log(`    [${err.timestamp}] ${err.message.substring(0, 120)}`);
+              const msg = `    [${err.timestamp}] ${err.message.substring(0, 120)}`;
+              console.log(msg);
+              errorSummary += msg + '\n';
             });
           }
 
           if (categories.connectionErrors.length > 0) {
             console.log(`  🔌 Connection Errors (${categories.connectionErrors.length}):`);
+            errorSummary += `  🔌 Connection Errors (${categories.connectionErrors.length}):\n`;
             categories.connectionErrors.forEach(err => {
-              console.log(`    [${err.timestamp}] ${err.message.substring(0, 120)}`);
+              const msg = `    [${err.timestamp}] ${err.message.substring(0, 120)}`;
+              console.log(msg);
+              errorSummary += msg + '\n';
             });
           }
 
           if (categories.otherErrors.length > 0) {
             console.log(`  ❌ Other Errors (${categories.otherErrors.length}):`);
+            errorSummary += `  ❌ Other Errors (${categories.otherErrors.length}):\n`;
             categories.otherErrors.forEach(err => {
-              console.log(`    [${err.timestamp}] ${err.message.substring(0, 120)}`);
+              const msg = `    [${err.timestamp}] ${err.message.substring(0, 120)}`;
+              console.log(msg);
+              errorSummary += msg + '\n';
             });
           }
+          errorSummary += '\n';
         }
         console.log('');
 
-        // Attach all errors to the test report
+        // Attach detailed errors to the test report (JSON)
         await testInfo.attach('docker-logs-errors', {
           body: JSON.stringify(allErrors, null, 2),
           contentType: 'application/json'
         });
+
+        // Attach human-readable summary (Text)
+        await testInfo.attach('docker-logs-summary', {
+          body: errorSummary,
+          contentType: 'text/plain'
+        });
+
+        // FAIL THE TEST - Docker errors should not be ignored
+        throw new Error(
+          `Test failed due to ${totalErrors} Docker error(s) across ${allErrors.length} service(s). ` +
+          `See attached 'docker-logs-errors' for details.`
+        );
       }
     } catch (error) {
       console.error('Failed to check docker logs:', error);

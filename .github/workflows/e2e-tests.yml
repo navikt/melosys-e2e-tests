@@ -274,11 +274,16 @@ jobs:
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Count test results from Playwright's test-results directory structure
-          # Each test creates a directory like: test-name-browser/
-          # Failed tests have: test-name-browser-retry1/, test-name-browser-retry2/
+          # Use custom reporter summary if available
+          if [ -f "playwright-report/test-summary.md" ]; then
+            echo "📊 Using detailed test summary from custom reporter" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            cat playwright-report/test-summary.md >> $GITHUB_STEP_SUMMARY
+          elif [ -d "test-results" ]; then
+            # Fallback: Count test results from Playwright's test-results directory structure
+            # Each test creates a directory like: test-name-browser/
+            # Failed tests have: test-name-browser-retry1/, test-name-browser-retry2/
 
-          if [ -d "test-results" ]; then
             # Count total tests (unique test directories, excluding retry attempts)
             TOTAL=$(find test-results -mindepth 1 -maxdepth 1 -type d | grep -v "retry" | wc -l | tr -d ' ')
 
@@ -388,9 +393,9 @@ jobs:
           echo "📋 Per-test docker log files:"
           ls -lh playwright-report/docker-logs-* 2>/dev/null || echo "No per-test log files found"
 
-      - name: Upload test results
+      - name: Upload test results and reports
         uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: playwright-results
           path: |
@@ -398,9 +403,19 @@ jobs:
             playwright-report/
           retention-days: 7
 
+      - name: Upload test summary
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-summary
+          path: |
+            playwright-report/test-summary.md
+            playwright-report/test-summary.json
+          retention-days: 30
+
       - name: Upload test videos
         uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: playwright-videos
           path: test-results/**/video.webm
@@ -408,7 +423,7 @@ jobs:
 
       - name: Upload test traces
         uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: playwright-traces
           path: test-results/**/trace.zip

@@ -96,8 +96,13 @@ export const cleanupFixture = base.extend<{ autoCleanup: void }>({
         try {
             await waitForProcessInstances(page.request, 30);
         } catch (error: any) {
-            console.log(`   ⚠️  Process instance check failed: ${error.message || error}`);
-            // Non-critical - continue anyway
+            const errorMessage = error.message || String(error);
+            console.log(`   ⚠️  Process instance check failed: ${errorMessage}`);
+
+            // FAIL THE TEST - Process failures should not be ignored
+            throw new Error(
+                `Test failed due to process instance errors: ${errorMessage}`
+            );
         }
 
         // AFTER test: Reset Unleash toggles (unless debugging locally)

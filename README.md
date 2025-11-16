@@ -522,10 +522,16 @@ npm run codegen
 
 ## Resources
 
+### Documentation
+- **[Error Reporting Guide](docs/guides/ERROR-REPORTING.md)** - How tests detect and report failures
+- **[Fixtures Guide](docs/guides/FIXTURES.md)** - Auto-cleanup and Docker log checking
+- **[GitHub Actions Guide](docs/ci-cd/GITHUB-ACTIONS.md)** - CI/CD setup and usage
+- **[Helpers Guide](docs/guides/HELPERS.md)** - FormHelper, DatabaseHelper, AuthHelper
+
+### External Resources
 - [Playwright Documentation](https://playwright.dev)
 - [Playwright Best Practices](https://playwright.dev/docs/best-practices)
 - [Trace Viewer Guide](https://playwright.dev/docs/trace-viewer)
-- [HELPERS-GUIDE.md](reports/HELPERS-GUIDE.md) - Detailed helper usage
 
 ---
 
