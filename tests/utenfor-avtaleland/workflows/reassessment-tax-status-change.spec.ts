@@ -21,9 +21,6 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
             page,
             request
         }) => {
-        // This test does a lot: creates case, completes workflow, creates ny vurdering, so needs more time
-        test.setTimeout(60000); // 60 seconds
-
         // Setup: Authentication
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);
@@ -155,9 +152,6 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
             page,
             request
         }) => {
-        // This test does a lot: creates case, completes workflow, creates ny vurdering, so needs more time
-        test.setTimeout(60000); // 60 seconds
-
         // Setup: Authentication
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);
