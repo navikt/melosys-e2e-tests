@@ -66,8 +66,12 @@ async function cleanupTestData(page: any, waitForProcesses: boolean = false): Pr
     // This ensures all tests start with consistent toggle state
     try {
         const unleash = new UnleashHelper(page.request);
-        await unleash.resetToDefaults(true); // silent mode
+        await unleash.resetToDefaults(true, true); // silent mode, skip frontend check
         console.log(`   ✅ Unleash: All toggles reset to defaults`);
+
+        // Give melosys-api extra time to poll Unleash and update its cache
+        // melosys-api polls every ~10 seconds, so we wait a bit to ensure cache refresh
+        await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second safety buffer
     } catch (error: any) {
         console.log(`   ⚠️  Unleash reset failed: ${error.message || error}`);
     }

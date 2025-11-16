@@ -64,8 +64,9 @@ export class UnleashHelper {
    * Enable a feature toggle for all services
    * @param featureName - The name of the feature toggle
    * @param silent - If true, suppresses logging (default: false)
+   * @param skipFrontendCheck - If true, only waits for Admin API (faster, for cleanup)
    */
-  async enableFeature(featureName: string, silent: boolean = false): Promise<void> {
+  async enableFeature(featureName: string, silent: boolean = false, skipFrontendCheck: boolean = false): Promise<void> {
     const url = `${this.baseUrl}/api/admin/projects/${this.project}/features/${featureName}/environments/${this.environment}/on`;
 
     const response = await this.request.post(url, {
@@ -98,15 +99,16 @@ export class UnleashHelper {
     }
 
     // Wait for Unleash cache to propagate the change
-    await this.waitForToggleState(featureName, true, silent);
+    await this.waitForToggleState(featureName, true, silent, skipFrontendCheck);
   }
 
   /**
    * Disable a feature toggle for all services
    * @param featureName - The name of the feature toggle
    * @param silent - If true, suppresses logging (default: false)
+   * @param skipFrontendCheck - If true, only waits for Admin API (faster, for cleanup)
    */
-  async disableFeature(featureName: string, silent: boolean = false): Promise<void> {
+  async disableFeature(featureName: string, silent: boolean = false, skipFrontendCheck: boolean = false): Promise<void> {
     const url = `${this.baseUrl}/api/admin/projects/${this.project}/features/${featureName}/environments/${this.environment}/off`;
 
     const response = await this.request.post(url, {
@@ -122,7 +124,7 @@ export class UnleashHelper {
       if (!silent) {
         console.log(`✅ Unleash: Created and disabled feature '${featureName}'`);
       }
-      await this.waitForToggleState(featureName, false, silent);
+      await this.waitForToggleState(featureName, false, silent, skipFrontendCheck);
       return;
     }
 
@@ -131,7 +133,7 @@ export class UnleashHelper {
     }
 
     // Wait for Unleash cache to propagate the change
-    await this.waitForToggleState(featureName, false, silent);
+    await this.waitForToggleState(featureName, false, silent, skipFrontendCheck);
   }
 
   /**
@@ -209,11 +211,13 @@ export class UnleashHelper {
    * and the frontend also caches toggle responses
    *
    * @param silent - If true, suppresses confirmation logging (default: false)
+   * @param skipFrontendCheck - If true, only checks Admin API (for cleanup before page exists)
    */
   private async waitForToggleState(
     featureName: string,
     expectedState: boolean,
     silent: boolean = false,
+    skipFrontendCheck: boolean = false,
     timeoutMs: number = 30000,
     pollIntervalMs: number = 500
   ): Promise<void> {
@@ -222,8 +226,26 @@ export class UnleashHelper {
     // Give melosys-api cache a moment to start refreshing (it polls Unleash every 10s by default)
     await new Promise(resolve => setTimeout(resolve, 100));
 
-    // Poll both Admin API and Frontend API to ensure both caches are updated
+    // Poll Admin API (always required)
     let adminState = await this.isFeatureEnabled(featureName);
+
+    // If skipFrontendCheck is true, only wait for Admin API (for cleanup before test starts)
+    if (skipFrontendCheck) {
+      while (adminState !== expectedState) {
+        if (Date.now() - startTime > timeoutMs) {
+          console.log(
+            `   ⚠️  Unleash: Timeout waiting for '${featureName}' to be ${expectedState ? 'enabled' : 'disabled'} (Admin API only)`
+          );
+          console.log(`       Admin API state: ${adminState}`);
+          return;
+        }
+        await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+        adminState = await this.isFeatureEnabled(featureName);
+      }
+      return; // Exit early - don't check frontend
+    }
+
+    // Poll both Admin API and Frontend API to ensure both caches are updated
     let frontendState = await this.getFrontendToggleState(featureName);
 
     while (adminState !== expectedState || (frontendState !== null && frontendState !== expectedState)) {
@@ -315,8 +337,9 @@ export class UnleashHelper {
    * Default state: all toggles enabled except 'melosys.arsavregning.uten.flyt'
    *
    * @param silent - If true, suppresses individual toggle logging (default: false)
+   * @param skipFrontendCheck - If true, only waits for Admin API (faster, for cleanup before test)
    */
-  async resetToDefaults(silent: boolean = false): Promise<void> {
+  async resetToDefaults(silent: boolean = false, skipFrontendCheck: boolean = false): Promise<void> {
     const defaultToggles = [
       { name: 'melosys.behandlingstype.klage', enabled: true },
       { name: 'melosys.send_melding_om_vedtak', enabled: true },
@@ -340,9 +363,9 @@ export class UnleashHelper {
 
     for (const toggle of defaultToggles) {
       if (toggle.enabled) {
-        await this.enableFeature(toggle.name, silent);
+        await this.enableFeature(toggle.name, silent, skipFrontendCheck);
       } else {
-        await this.disableFeature(toggle.name, silent);
+        await this.disableFeature(toggle.name, silent, skipFrontendCheck);
       }
     }
   }
