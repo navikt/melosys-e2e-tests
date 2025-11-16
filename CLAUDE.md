@@ -203,7 +203,8 @@ test('my test with unleash', async ({ page, request }) => {
 **Key Points:**
 - **All tests start with consistent state**: Default fixture resets ALL toggles BEFORE each test
 - **Default state**: All toggles enabled except `melosys.arsavregning.uten.flyt` (disabled)
-- **No cleanup after test**: State is preserved for debugging failed tests
+- **Cleanup after test**: Toggles reset after test to ensure next test gets clean state (prevents race conditions on CI)
+- **Local debugging**: Set `SKIP_UNLEASH_CLEANUP_AFTER=true` in `.env` to preserve toggle state after failed tests
 - **Simple approach**: Just disable/enable the toggles you need - no need to track changes
 - Feature toggles affect **all services** (melosys-api, faktureringskomponenten, trygdeavgift-beregning)
 - **melosys-api creates toggles**: No need to run seed script - toggles are created automatically

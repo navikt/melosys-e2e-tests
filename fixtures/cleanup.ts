@@ -5,17 +5,22 @@ import {clearApiCaches, waitForProcessInstances} from '../helpers/api-helper';
 import {UnleashHelper} from '../helpers/unleash-helper';
 
 /**
- * Cleanup fixture - automatically cleans database, mock data, and Unleash toggles before each test
+ * Cleanup fixture - automatically cleans database, mock data, and Unleash toggles
  * This ensures test isolation and prevents leftover data from affecting other tests
  *
  * Before each test:
  * - Cleans database (removes all test data)
  * - Clears mock service data
  * - Resets ALL Unleash feature toggles to default state
+ * - Adds 2s delay for melosys-api cache propagation
  *
  * After each test:
  * - Waits for async processes to complete
- * - Leaves data intact for debugging (no cleanup after test)
+ * - Resets Unleash toggles (ensures next test gets clean state)
+ * - Leaves data intact for debugging
+ *
+ * Environment variables:
+ * - SKIP_UNLEASH_CLEANUP_AFTER=true - Skip Unleash cleanup after test (for local debugging)
  */
 
 async function cleanupTestData(page: any, waitForProcesses: boolean = false): Promise<void> {
@@ -78,7 +83,7 @@ async function cleanupTestData(page: any, waitForProcesses: boolean = false): Pr
 }
 
 export const cleanupFixture = base.extend<{ autoCleanup: void }>({
-    autoCleanup: [async ({page}, use) => {
+    autoCleanup: [async ({page, request}, use) => {
         // BEFORE test: clean for fresh start
         console.log('\n🧹 Cleaning test data before test...');
         await cleanupTestData(page, false); // Don't wait for processes
@@ -87,12 +92,27 @@ export const cleanupFixture = base.extend<{ autoCleanup: void }>({
         // Run the test
         await use();
 
-        // AFTER test: wait for processes to complete, but leave data so we can inspect it
+        // AFTER test: wait for processes to complete
         try {
             await waitForProcessInstances(page.request, 30);
         } catch (error: any) {
             console.log(`   ⚠️  Process instance check failed: ${error.message || error}`);
             // Non-critical - continue anyway
+        }
+
+        // AFTER test: Reset Unleash toggles (unless debugging locally)
+        // This ensures next test gets clean state without race conditions
+        const skipCleanupAfter = process.env.SKIP_UNLEASH_CLEANUP_AFTER === 'true';
+        if (!skipCleanupAfter) {
+            try {
+                const unleash = new UnleashHelper(request);
+                await unleash.resetToDefaults(true, false); // silent mode, check frontend API
+                console.log(`   ✅ Unleash: Toggles reset after test (cleanup for next test)`);
+            } catch (error: any) {
+                console.log(`   ⚠️  Unleash cleanup after test failed: ${error.message || error}`);
+            }
+        } else {
+            console.log(`   ⏭️  Unleash: Skipping cleanup after test (SKIP_UNLEASH_CLEANUP_AFTER=true)`);
         }
     }, {auto: true}]
 });
