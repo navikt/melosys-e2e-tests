@@ -22,6 +22,7 @@ export const SAKSTYPER = {
   FTRL: 'FTRL',
   AVTALELAND: 'AVTALELAND',
   TRYGDEAVTALE: 'TRYGDEAVTALE',
+  EU_EOS: 'EU_EOS',
 } as const;
 
 export const SAKSTEMA = {
@@ -31,6 +32,7 @@ export const SAKSTEMA = {
 export const BEHANDLINGSTEMA = {
   YRKESAKTIV: 'YRKESAKTIV',
   SELVSTENDIG: 'SELVSTENDIG',
+  UTSENDT_ARBEIDSTAKER: 'UTSENDT_ARBEIDSTAKER',
 } as const;
 
 export const AARSAK = {
@@ -52,4 +54,14 @@ export const BESTEMMELSER = {
   // Sweden
   SWE_ART10_1: 'SWE_ART10_1',
   // Add more as needed
+} as const;
+
+// EU/EØS constants
+export const EU_EOS_LAND = {
+  DANMARK: 'Danmark',
+  SVERIGE: 'Sverige',
+  FINLAND: 'Finland',
+  TYSKLAND: 'Tyskland',
+  FRANKRIKE: 'Frankrike',
+  NEDERLAND: 'Nederland',
 } as const;
