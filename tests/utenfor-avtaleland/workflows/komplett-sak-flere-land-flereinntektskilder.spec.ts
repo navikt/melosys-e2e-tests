@@ -26,7 +26,7 @@ import { USER_ID_VALID } from '../../../pages/shared/constants';
  */
 
 test.describe('Komplett saksflyt - FTRL flere land', () => {
-  test('skal fullføre komplett saksflyt med flere land og flere inntektskilder', async ({ page, request }) => {
+  test('skal fullføre komplett saksflyt - delevis skattepliktig - med flere inntektskilder', async ({ page, request }) => {
     // Setup: Autentisering
     const auth = new AuthHelper(page);
     await auth.login();
