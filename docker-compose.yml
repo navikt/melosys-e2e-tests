@@ -248,6 +248,7 @@ services:
       MEDLEMSKAP_REST_URL: http://melosys-mock.melosys.docker-internal:8083
       MELOSYSDOKGEN_V1_URL: http://melosys-dokgen.melosys.docker-internal:8080/api/v1
       MELOSYSTRYGDEAVGIFT_URL: http://melosys-trygdeavgift-beregning.melosys.docker-internal:8095/api
+      MELOSYSINNGANGSVILKAR_URL: http://melosys-inngangsvilkar.melosys.docker-internal:8089
       MICROSOFT_GRAPH_REST_URL: http://melosys-mock.melosys.docker-internal:8083/graph/v1.0
       TILGANGSMASKINEN_URL: http://melosys-mock.melosys.docker-internal:8083/tilgangsmaskinen
       UTBETALING_REST_URL: http://melosys-mock.melosys.docker-internal:8083/utbetaldata/api/v2/hent-utbetalingsinformasjon/intern
@@ -401,6 +402,28 @@ services:
       ABAC_PDP_ENDPOINT_URL: http://melosys-mock:8083/asm-pdp/authorize
     ports:
       - "8088:8088"
+
+  melosys-inngangsvilkar:
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-inngangsvilkar:${MELOSYS_INNGANGSVILKAR_TAG:-latest}
+    container_name: melosys-inngangsvilkar
+    depends_on:
+      - mock-oauth2-server
+      - postgres
+      - melosys-api
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - melosys-inngangsvilkar.melosys.docker-internal
+    environment:
+      SPRING_PROFILES_ACTIVE: local-docker
+      JDBC_URL: jdbc:postgresql://postgres:5432/postgres
+      SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/postgres?currentSchema=melosys-inngangsvilkar"
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: mysecretpassword
+      MELOSYS_API_URL: http://melosys-api.melosys.docker-internal:8080
+      ABAC_PDP_ENDPOINT_URL: http://melosys-mock:8083/asm-pdp/authorize
+    ports:
+      - "8089:8089"
 
 networks:
   melosys.docker-internal:

@@ -107,7 +107,8 @@ const MONITORED_SERVICES = [
   'faktureringskomponenten',
   'melosys-dokgen',
   'melosys-trygdeavgift-beregning',
-  'melosys-trygdeavtale'
+  'melosys-trygdeavtale',
+  'melosys-inngangsvilkar'
 ];
 
 export const dockerLogsFixture = base.extend<{ dockerLogChecker: void }>({

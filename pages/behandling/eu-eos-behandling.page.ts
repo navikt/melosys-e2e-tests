@@ -292,6 +292,7 @@ export class EuEosBehandlingPage extends BasePage {
    */
   async svarJaOgFortsett(): Promise<void> {
     await this.svarJa();
+    await this.svarJa();
     await this.klikkBekreftOgFortsett();
   }
 
