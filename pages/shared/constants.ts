@@ -21,6 +21,7 @@ export const TIMEOUT_API = 15000;
 export const SAKSTYPER = {
   FTRL: 'FTRL',
   AVTALELAND: 'AVTALELAND',
+  TRYGDEAVTALE: 'TRYGDEAVTALE',
 } as const;
 
 export const SAKSTEMA = {
@@ -34,4 +35,21 @@ export const BEHANDLINGSTEMA = {
 
 export const AARSAK = {
   SØKNAD: 'SØKNAD',
+} as const;
+
+// Trygdeavtale constants
+export const ARBEIDSLAND = {
+  AUSTRALIA: 'AU',
+  SWEDEN: 'SE',
+  DENMARK: 'DK',
+  FINLAND: 'FI',
+  ICELAND: 'IS',
+} as const;
+
+export const BESTEMMELSER = {
+  // Australia
+  AUS_ART9_3: 'AUS_ART9_3',
+  // Sweden
+  SWE_ART10_1: 'SWE_ART10_1',
+  // Add more as needed
 } as const;
