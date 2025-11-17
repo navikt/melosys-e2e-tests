@@ -4,8 +4,8 @@ import * as path from 'node:path';
 
 // Load .env (required, checked in with dev config)
 dotenv.config({ path: path.resolve(__dirname, '../.env') });
-// Load .local.env (optional, for local overrides - not on CI/CD)
-dotenv.config({ path: path.resolve(__dirname, '../.local.env'), override: true });
+// Load .env.local (optional, for local overrides - not on CI/CD)
+dotenv.config({ path: path.resolve(__dirname, '../.env.local'), override: true });
 
 /**
  * UnleashHelper - Control feature toggles in Unleash server during E2E tests

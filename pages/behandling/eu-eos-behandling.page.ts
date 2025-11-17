@@ -1,0 +1,322 @@
+import { Page } from '@playwright/test';
+import { BasePage } from '../shared/base.page';
+import { EuEosBehandlingAssertions } from './eu-eos-behandling.assertions';
+
+/**
+ * Page Object for EU/EØS behandling workflow
+ *
+ * Ansvar:
+ * - Fylle inn periode (med dateplukker)
+ * - Velge land (EU/EØS-land)
+ * - Bekrefte første steg
+ * - Velge yrkesaktiv/selvstendig
+ * - Velge arbeidsgiver(e)
+ * - Velge arbeidstype (lønnet arbeid)
+ * - Svare på spørsmål (Ja/Nei)
+ * - Innvilge/avslå søknad
+ * - Fatte vedtak
+ *
+ * Relaterte sider:
+ * - OpprettNySakPage (navigerer fra)
+ * - Komplett arbeidsflyt (siste steg)
+ *
+ * @example
+ * const behandling = new EuEosBehandlingPage(page);
+ * await behandling.velgPeriodeMedDatepicker('2024', '1');
+ * await behandling.fyllInnSluttdato('01.01.2026');
+ * await behandling.velgLand('Danmark');
+ * await behandling.klikkBekreftOgFortsett();
+ * await behandling.velgYrkesaktiv();
+ * await behandling.klikkBekreftOgFortsett();
+ */
+export class EuEosBehandlingPage extends BasePage {
+  readonly assertions: EuEosBehandlingAssertions;
+
+  // Locators - Periode
+  private readonly åpneDatepickerButton = this.page.getByRole('button', {
+    name: 'Åpne datovelger'
+  });
+
+  private readonly årDropdown = this.page.getByRole('dialog').getByLabel('År');
+
+  private readonly tilDatoField = this.page.getByRole('textbox', { name: 'Til' });
+
+  // Locators - Land
+  private readonly landDropdown = this.page.locator('.css-19bb58m');
+
+  // Locators - Yrkesaktiv/Selvstendig
+  private readonly yrkesaktivRadio = this.page.getByRole('radio', {
+    name: 'Yrkesaktiv',
+    exact: true
+  });
+
+  private readonly selvstendigRadio = this.page.getByRole('radio', {
+    name: 'Selvstendig',
+    exact: true
+  });
+
+  // Locators - Arbeidstype
+  private readonly lønnetArbeidRadio = this.page.getByRole('radio', {
+    name: 'Lønnet arbeid'
+  });
+
+  private readonly ulønnetArbeidRadio = this.page.getByRole('radio', {
+    name: 'Ulønnet arbeid'
+  });
+
+  // Locators - Søknadsresultat
+  private readonly innvilgeSøknadRadio = this.page.getByRole('radio', {
+    name: 'Ja, jeg vil innvilge søknaden'
+  });
+
+  private readonly avslåSøknadRadio = this.page.getByRole('radio', {
+    name: 'Nei, jeg vil avslå søknaden'
+  });
+
+  // Felles knapper
+  private readonly bekreftOgFortsettButton = this.page.getByRole('button', {
+    name: 'Bekreft og fortsett'
+  });
+
+  private readonly fattVedtakButton = this.page.getByRole('button', {
+    name: 'Fatt vedtak'
+  });
+
+  constructor(page: Page) {
+    super(page);
+    this.assertions = new EuEosBehandlingAssertions(page);
+  }
+
+  /**
+   * Åpne dateplukker og velg år og dag
+   * Brukes for startdato
+   *
+   * @param år - År (f.eks. '2024')
+   * @param dag - Dag som tekst (f.eks. 'fredag 1', 'lørdag 15')
+   */
+  async velgPeriodeMedDatepicker(år: string, dag: string): Promise<void> {
+    await this.åpneDatepickerButton.first().click();
+    console.log('✅ Åpnet dateplukker');
+
+    await this.årDropdown.selectOption(år);
+    console.log(`✅ Valgte år: ${år}`);
+
+    await this.page.getByRole('button', { name: dag, exact: true }).click();
+    console.log(`✅ Valgte dag: ${dag}`);
+  }
+
+  /**
+   * Fyll inn sluttdato i tekstfelt
+   *
+   * @param dato - Dato i format DD.MM.YYYY (f.eks. '01.01.2026')
+   */
+  async fyllInnSluttdato(dato: string): Promise<void> {
+    await this.tilDatoField.click();
+    await this.tilDatoField.fill(dato);
+    await this.tilDatoField.press('Enter');
+    console.log(`✅ Fylte inn sluttdato: ${dato}`);
+  }
+
+  /**
+   * Velg land fra dropdown
+   * Bruker CSS-locator da denne dropdown-komponenten ikke har god label
+   *
+   * @param landNavn - Navn på land (f.eks. 'Danmark', 'Sverige')
+   */
+  async velgLand(landNavn: string): Promise<void> {
+    await this.landDropdown.click();
+    await this.page.getByRole('option', { name: landNavn }).click();
+    console.log(`✅ Valgte land: ${landNavn}`);
+  }
+
+  /**
+   * Velg "Yrkesaktiv" radio-knapp
+   */
+  async velgYrkesaktiv(): Promise<void> {
+    await this.yrkesaktivRadio.check();
+    console.log('✅ Valgte: Yrkesaktiv');
+  }
+
+  /**
+   * Velg "Selvstendig" radio-knapp
+   */
+  async velgSelvstendig(): Promise<void> {
+    await this.selvstendigRadio.check();
+    console.log('✅ Valgte: Selvstendig');
+  }
+
+  /**
+   * Velg arbeidsgiver(e) med checkbox
+   *
+   * @param arbeidsgiverNavn - Navn på arbeidsgiver (f.eks. 'Ståles Stål AS')
+   */
+  async velgArbeidsgiver(arbeidsgiverNavn: string): Promise<void> {
+    const checkbox = this.page.getByRole('checkbox', { name: arbeidsgiverNavn });
+    await checkbox.check();
+    console.log(`✅ Valgte arbeidsgiver: ${arbeidsgiverNavn}`);
+  }
+
+  /**
+   * Velg "Lønnet arbeid" radio-knapp
+   */
+  async velgLønnetArbeid(): Promise<void> {
+    await this.lønnetArbeidRadio.check();
+    console.log('✅ Valgte: Lønnet arbeid');
+  }
+
+  /**
+   * Velg "Ulønnet arbeid" radio-knapp
+   */
+  async velgUlønnetArbeid(): Promise<void> {
+    await this.ulønnetArbeidRadio.check();
+    console.log('✅ Valgte: Ulønnet arbeid');
+  }
+
+  /**
+   * Svar "Ja" på første synlige spørsmål
+   * Brukes når det bare er ett spørsmål på siden
+   */
+  async svarJa(): Promise<void> {
+    const jaRadio = this.page.getByRole('radio', { name: 'Ja' });
+    await jaRadio.check();
+    console.log('✅ Svarte: Ja');
+  }
+
+  /**
+   * Svar "Nei" på første synlige spørsmål
+   */
+  async svarNei(): Promise<void> {
+    const neiRadio = this.page.getByRole('radio', { name: 'Nei' });
+    await neiRadio.check();
+    console.log('✅ Svarte: Nei');
+  }
+
+  /**
+   * Velg "Ja, jeg vil innvilge søknaden"
+   */
+  async innvilgeSøknad(): Promise<void> {
+    await this.innvilgeSøknadRadio.check();
+    console.log('✅ Valgte: Innvilge søknaden');
+  }
+
+  /**
+   * Velg "Nei, jeg vil avslå søknaden"
+   */
+  async avslåSøknad(): Promise<void> {
+    await this.avslåSøknadRadio.check();
+    console.log('✅ Valgte: Avslå søknaden');
+  }
+
+  /**
+   * Klikk "Bekreft og fortsett" knapp
+   */
+  async klikkBekreftOgFortsett(): Promise<void> {
+    await this.bekreftOgFortsettButton.click();
+    console.log('✅ Klikket Bekreft og fortsett');
+  }
+
+  /**
+   * Klikk "Fatt vedtak" knapp for å fullføre behandlingen
+   * EU/EØS fatter vedtak direkte uten egen vedtaksside
+   */
+  async fattVedtak(): Promise<void> {
+    await this.fattVedtakButton.click();
+    console.log('✅ Fattet vedtak');
+  }
+
+  /**
+   * Fullfør periode-seksjonen
+   * Hjelpemetode for første steg
+   *
+   * @param år - År (default: '2024')
+   * @param dag - Dag (default: 'fredag 1')
+   * @param sluttdato - Sluttdato (default: '01.01.2026')
+   * @param land - Land (default: 'Danmark')
+   */
+  async fyllUtPeriodeOgLand(
+    år: string = '2024',
+    dag: string = 'fredag 1',
+    sluttdato: string = '01.01.2026',
+    land: string = 'Danmark'
+  ): Promise<void> {
+    await this.velgPeriodeMedDatepicker(år, dag);
+    await this.fyllInnSluttdato(sluttdato);
+    await this.velgLand(land);
+    await this.klikkBekreftOgFortsett();
+  }
+
+  /**
+   * Fullfør yrkesaktiv/selvstendig-seksjonen
+   * Hjelpemetode for andre steg
+   *
+   * @param erYrkesaktiv - true for Yrkesaktiv, false for Selvstendig (default: true)
+   */
+  async velgYrkesaktivEllerSelvstendigOgFortsett(erYrkesaktiv: boolean = true): Promise<void> {
+    if (erYrkesaktiv) {
+      await this.velgYrkesaktiv();
+    } else {
+      await this.velgSelvstendig();
+    }
+    await this.klikkBekreftOgFortsett();
+  }
+
+  /**
+   * Fullfør arbeidsgiver-seksjonen
+   * Hjelpemetode for tredje steg
+   *
+   * @param arbeidsgiverNavn - Navn på arbeidsgiver (default: 'Ståles Stål AS')
+   */
+  async velgArbeidsgiverOgFortsett(arbeidsgiverNavn: string = 'Ståles Stål AS'): Promise<void> {
+    await this.velgArbeidsgiver(arbeidsgiverNavn);
+    await this.klikkBekreftOgFortsett();
+  }
+
+  /**
+   * Fullfør arbeidstype-seksjonen
+   * Hjelpemetode for fjerde steg
+   *
+   * @param erLønnetArbeid - true for Lønnet arbeid, false for Ulønnet arbeid (default: true)
+   */
+  async velgArbeidstype(erLønnetArbeid: boolean = true): Promise<void> {
+    if (erLønnetArbeid) {
+      await this.velgLønnetArbeid();
+    } else {
+      await this.velgUlønnetArbeid();
+    }
+    await this.klikkBekreftOgFortsett();
+  }
+
+  /**
+   * Svar "Ja" på et spørsmål og gå videre
+   * Hjelpemetode for spørsmålssteg
+   */
+  async svarJaOgFortsett(): Promise<void> {
+    await this.svarJa();
+    await this.svarJa();
+    await this.klikkBekreftOgFortsett();
+  }
+
+  /**
+   * Innvilg søknad og fatt vedtak
+   * Hjelpemetode for siste steg
+   */
+  async innvilgeOgFattVedtak(): Promise<void> {
+    await this.innvilgeSøknad();
+    await this.klikkBekreftOgFortsett();
+    await this.fattVedtak();
+  }
+
+  /**
+   * Fullfør hele EU/EØS behandlingsflyt med standardverdier
+   * Hjelpemetode for komplett arbeidsflyt
+   */
+  async fyllUtEuEosBehandling(): Promise<void> {
+    await this.fyllUtPeriodeOgLand();
+    await this.velgYrkesaktivEllerSelvstendigOgFortsett();
+    await this.velgArbeidsgiverOgFortsett();
+    await this.velgArbeidstype();
+    await this.svarJaOgFortsett(); // Første spørsmål
+    await this.svarJaOgFortsett(); // Andre spørsmål
+    await this.innvilgeOgFattVedtak();
+  }
+}

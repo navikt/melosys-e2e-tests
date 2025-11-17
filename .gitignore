@@ -103,4 +103,3 @@ debug-*.jpg
 
 # Serena (AI assistant files)
 .serena/
-.local.env

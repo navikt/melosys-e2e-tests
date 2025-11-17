@@ -16,6 +16,7 @@ on:
       - melosys-trygdeavgift-beregning-published
       - melosys-dokgen-published
       - melosys-trygdeavtale-published
+      - melosys-inngangsvilkar-published
 
 permissions:
   contents: read
@@ -87,6 +88,7 @@ jobs:
             MELOSYS_WEB_TAG="latest"
             MELOSYS_TRYGDEAVGIFT_TAG="latest"
             MELOSYS_TRYGDEAVTALE_TAG="latest"
+            MELOSYS_INNGANGSVILKAR_TAG="latest"
 
             # Override with specific tag based on which service triggered
             if [ "${{ github.event.action }}" = "melosys-api-published" ]; then
@@ -108,6 +110,10 @@ jobs:
             if [ "${{ github.event.action }}" = "melosys-trygdeavtale-published" ]; then
               MELOSYS_TRYGDEAVTALE_TAG="${{ github.event.client_payload.image_tag }}"
             fi
+
+            if [ "${{ github.event.action }}" = "melosys-inngangsvilkar-published" ]; then
+              MELOSYS_INNGANGSVILKAR_TAG="${{ github.event.client_payload.image_tag }}"
+            fi
           else
             # Manual trigger via workflow_dispatch
             echo "👆 Manually triggered via workflow_dispatch"
@@ -119,6 +125,7 @@ jobs:
             MELOSYS_WEB_TAG="latest"
             MELOSYS_TRYGDEAVGIFT_TAG="latest"
             MELOSYS_TRYGDEAVTALE_TAG="latest"
+            MELOSYS_INNGANGSVILKAR_TAG="latest"
           fi
 
           echo "melosys_api_tag=$MELOSYS_API_TAG" >> $GITHUB_OUTPUT
@@ -126,6 +133,7 @@ jobs:
           echo "melosys_web_tag=$MELOSYS_WEB_TAG" >> $GITHUB_OUTPUT
           echo "melosys_trygdeavgift_tag=$MELOSYS_TRYGDEAVGIFT_TAG" >> $GITHUB_OUTPUT
           echo "melosys_trygdeavtale_tag=$MELOSYS_TRYGDEAVTALE_TAG" >> $GITHUB_OUTPUT
+          echo "melosys_inngangsvilkar_tag=$MELOSYS_INNGANGSVILKAR_TAG" >> $GITHUB_OUTPUT
 
           echo ""
           echo "📋 Image tags to be used:"
@@ -134,6 +142,7 @@ jobs:
           echo "  faktureringskomponenten: $FAKTURERINGSKOMPONENTEN_TAG"
           echo "  melosys-trygdeavgift-beregning: $MELOSYS_TRYGDEAVGIFT_TAG"
           echo "  melosys-trygdeavtale: $MELOSYS_TRYGDEAVTALE_TAG"
+          echo "  melosys-inngangsvilkar: $MELOSYS_INNGANGSVILKAR_TAG"
 
       - name: Set environment variables for GitHub Actions
         run: |
@@ -144,6 +153,7 @@ jobs:
           echo "FAKTURERINGSKOMPONENTEN_TAG=${{ steps.image-tags.outputs.faktureringskomponenten_tag }}" >> $GITHUB_ENV
           echo "MELOSYS_TRYGDEAVGIFT_TAG=${{ steps.image-tags.outputs.melosys_trygdeavgift_tag }}" >> $GITHUB_ENV
           echo "MELOSYS_TRYGDEAVTALE_TAG=${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }}" >> $GITHUB_ENV
+          echo "MELOSYS_INNGANGSVILKAR_TAG=${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }}" >> $GITHUB_ENV
 
       - name: Pre-pull Docker images in parallel
         run: |
@@ -154,6 +164,7 @@ jobs:
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-dokgen:latest &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:${{ steps.image-tags.outputs.melosys_trygdeavgift_tag }} &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }} &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-inngangsvilkar:${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }} &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:latest &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/felles-kodeverk:latest &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-mock:latest &
@@ -176,6 +187,7 @@ jobs:
           FAKTURERINGSKOMPONENTEN_TAG: ${{ steps.image-tags.outputs.faktureringskomponenten_tag }}
           MELOSYS_TRYGDEAVGIFT_TAG: ${{ steps.image-tags.outputs.melosys_trygdeavgift_tag }}
           MELOSYS_TRYGDEAVTALE_TAG: ${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }}
+          MELOSYS_INNGANGSVILKAR_TAG: ${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }}
 
       - name: Wait for services to be healthy
         run: |
@@ -378,6 +390,7 @@ jobs:
             "melosys-dokgen"
             "melosys-trygdeavgift-beregning"
             "melosys-trygdeavtale"
+            "melosys-inngangsvilkar"
           )
 
           for service in "${services[@]}"; do
