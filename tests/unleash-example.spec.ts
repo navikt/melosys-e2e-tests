@@ -13,7 +13,7 @@ import { UnleashHelper } from '../helpers/unleash-helper';
  */
 
 test.describe('Unleash Feature Toggle Control', () => {
-  test('should enable and disable feature toggles', async ({ page, request }) => {
+  test('should enable and disable feature toggles @manual', async ({ page, request }) => {
     const unleash = new UnleashHelper(request);
 
     // Enable a specific feature

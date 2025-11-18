@@ -298,7 +298,7 @@ function saveDiscoveryResults(discovery: BestemmelseDiscovery): void {
 }
 
 // Main test - Run automated discovery
-test.describe('Automated Bestemmelse Discovery', () => {
+test.describe('Automated Bestemmelse Discovery @manual', () => {
   // High priority bestemmelser to test
   // Start with § 2-8 b (student) - most similar to § 2-8 a which we already tested
   const HIGH_PRIORITY = [

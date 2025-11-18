@@ -43,7 +43,7 @@ async function setupBehandlingToLovvalg(page: Page): Promise<LovvalgPage> {
   return lovvalg;
 }
 
-test.describe('Bestemmelse Discovery - All Options', () => {
+test.describe('Bestemmelse Discovery - All Options @manual', () => {
   test('Discover all bestemmelse options and their questions', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 

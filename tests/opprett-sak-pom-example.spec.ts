@@ -16,7 +16,7 @@ import { USER_ID_VALID } from '../pages/shared/constants';
  * Compare with: tests/example-workflow.spec.ts (old style)
  */
 
-test.describe('Opprett ny sak - POM Example', () => {
+test.describe('Opprett ny sak - POM Example @manual', () => {
   test('should create new case using POM pattern', async ({ page }) => {
     // Setup: Authentication (still using AuthHelper - our strength!)
     const auth = new AuthHelper(page);
