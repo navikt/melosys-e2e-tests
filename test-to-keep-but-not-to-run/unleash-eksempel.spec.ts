@@ -3,17 +3,17 @@ import { AuthHelper } from '../helpers/auth-helper';
 import { UnleashHelper } from '../helpers/unleash-helper';
 
 /**
- * Example test demonstrating how to control feature toggles during E2E tests
+ * Eksempel test som demonstrerer hvordan man kontrollerer feature toggles i E2E tester
  *
- * This test shows:
- * 1. How to enable/disable specific toggles
- * 2. How toggles affect all services (melosys-api, faktureringskomponenten, etc.)
- * 3. How cleanup fixture automatically resets toggles to defaults BEFORE each test
- *    (No cleanup after test - leaves state for debugging)
+ * Denne testen viser:
+ * 1. Hvordan man aktiverer/deaktiverer spesifikke toggles
+ * 2. Hvordan toggles påvirker alle tjenester (melosys-api, faktureringskomponenten, etc.)
+ * 3. Hvordan cleanup fixture automatisk tilbakestiller toggles til defaults FØR hver test
+ *    (Ingen opprydding etter test - beholder state for debugging)
  */
 
-test.describe('Unleash Feature Toggle Control', () => {
-  test('should enable and disable feature toggles', async ({ page, request }) => {
+test.describe('Unleash Feature Toggle Kontroll', () => {
+  test('skal aktivere og deaktivere feature toggles @manual', async ({ page, request }) => {
     const unleash = new UnleashHelper(request);
 
     // Enable a specific feature
@@ -31,7 +31,7 @@ test.describe('Unleash Feature Toggle Control', () => {
     expect(isDisabled).toBe(false);
   });
 
-  test('should test workflow with feature toggle enabled', async ({ page, request }) => {
+  test('skal teste arbeidsflyt med feature toggle aktivert', async ({ page, request }) => {
     const auth = new AuthHelper(page);
     const unleash = new UnleashHelper(request);
 
@@ -54,7 +54,7 @@ test.describe('Unleash Feature Toggle Control', () => {
     // Verify some UI behavior based on the toggle...
   });
 
-  test('should test workflow with feature toggle disabled', async ({ page, request }) => {
+  test('skal teste arbeidsflyt med feature toggle deaktivert', async ({ page, request }) => {
     const auth = new AuthHelper(page);
     const unleash = new UnleashHelper(request);
 
@@ -71,7 +71,7 @@ test.describe('Unleash Feature Toggle Control', () => {
     // Verify different UI behavior when toggle is off
   });
 
-  test('should enable multiple toggles at once', async ({ request }) => {
+  test('skal aktivere flere toggles samtidig', async ({ request }) => {
     const unleash = new UnleashHelper(request);
 
     // Enable multiple features
@@ -87,7 +87,7 @@ test.describe('Unleash Feature Toggle Control', () => {
     expect(await unleash.isFeatureEnabled('melosys.arsavregning')).toBe(true);
   });
 
-  test('should list all feature toggles', async ({ request }) => {
+  test('skal liste alle feature toggles', async ({ request }) => {
     const unleash = new UnleashHelper(request);
 
     const features = await unleash.listFeatures();
@@ -100,7 +100,7 @@ test.describe('Unleash Feature Toggle Control', () => {
     console.log('📋 All feature toggles:', features);
   });
 
-  test('cleanup fixture resets toggles automatically', async ({ request }) => {
+  test('cleanup fixture tilbakestiller toggles automatisk', async ({ request }) => {
     const unleash = new UnleashHelper(request);
 
     // Change a toggle
@@ -114,8 +114,8 @@ test.describe('Unleash Feature Toggle Control', () => {
   });
 });
 
-test.describe('Unleash Integration with Workflows', () => {
-  test.skip('example: test pension workflow with pension toggle enabled', async ({
+test.describe('Unleash Integrasjon med Arbeidsflyten', () => {
+  test.skip('eksempel: test pensjon arbeidsflyt med pensjon toggle aktivert', async ({
     page,
     request,
   }) => {
@@ -133,7 +133,7 @@ test.describe('Unleash Integration with Workflows', () => {
     // This workflow will now have pension features enabled
   });
 
-  test.skip('example: test årsvgregning without flyt', async ({ page, request }) => {
+  test.skip('eksempel: test årsavregning uten flyt', async ({ page, request }) => {
     const auth = new AuthHelper(page);
     const unleash = new UnleashHelper(request);
 

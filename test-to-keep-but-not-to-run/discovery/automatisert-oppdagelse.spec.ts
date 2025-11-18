@@ -1,26 +1,26 @@
-import { test } from '../../../fixtures';
-import { AuthHelper } from '../../../helpers/auth-helper';
-import { HovedsidePage } from '../../../pages/hovedside.page';
-import { OpprettNySakPage } from '../../../pages/opprett-ny-sak/opprett-ny-sak.page';
-import { MedlemskapPage } from '../../../pages/behandling/medlemskap.page';
-import { ArbeidsforholdPage } from '../../../pages/behandling/arbeidsforhold.page';
-import { LovvalgPage } from '../../../pages/behandling/lovvalg.page';
-import { USER_ID_VALID } from '../../../pages/shared/constants';
-import { waitForProcessInstances } from '../../../helpers/api-helper';
+import { test } from '../../fixtures';
+import { AuthHelper } from '../../helpers/auth-helper';
+import { HovedsidePage } from '../../pages/hovedside.page';
+import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
+import { MedlemskapPage } from '../../pages/behandling/medlemskap.page';
+import { ArbeidsforholdPage } from '../../pages/behandling/arbeidsforhold.page';
+import { LovvalgPage } from '../../pages/behandling/lovvalg.page';
+import { USER_ID_VALID } from '../../pages/shared/constants';
+import { waitForProcessInstances } from '../../helpers/api-helper';
 import { Page } from '@playwright/test';
 import * as fs from 'fs';
 import * as path from 'path';
 
 /**
- * Automated Discovery Script for All Bestemmelser
+ * Automatisert Oppdagelse Script for Alle Bestemmelser
  *
- * This script systematically tests each bestemmelse to discover:
- * 1. What questions appear
- * 2. Which Ja/Nei combinations block progression
- * 3. Which combinations allow proceeding
- * 4. Exact warning messages
+ * Dette scriptet tester systematisk hver bestemmelse for å oppdage:
+ * 1. Hvilke spørsmål som vises
+ * 2. Hvilke Ja/Nei kombinasjoner som blokkerer progresjon
+ * 3. Hvilke kombinasjoner som tillater fortsettelse
+ * 4. Eksakte advarselsmeldinger
  *
- * Output: JSON and Markdown reports for each bestemmelse
+ * Output: JSON og Markdown rapporter for hver bestemmelse
  */
 
 interface Question {
@@ -297,10 +297,10 @@ function saveDiscoveryResults(discovery: BestemmelseDiscovery): void {
   console.log(`💾 Saved Markdown: ${mdFile}`);
 }
 
-// Main test - Run automated discovery
-test.describe('Automated Bestemmelse Discovery', () => {
-  // High priority bestemmelser to test
-  // Start with § 2-8 b (student) - most similar to § 2-8 a which we already tested
+// Hovedtest - Kjør automatisert oppdagelse
+test.describe('Automatisert Bestemmelse Oppdagelse @manual', () => {
+  // Høy prioritet bestemmelser å teste
+  // Start med § 2-8 b (student) - mest lik § 2-8 a som vi allerede har testet
   const HIGH_PRIORITY = [
     { code: 'FTRL_KAP2_2_8_FØRSTE_LEDD_B', name: '§ 2-8 første ledd bokstav b (student)' }
     // Uncomment to test more:
@@ -311,10 +311,10 @@ test.describe('Automated Bestemmelse Discovery', () => {
     // { code: 'FTRL_KAP2_2_8_ANDRE_LEDD', name: '§ 2-8 andre ledd (særlig grunn)' }
   ];
 
-  // Test each bestemmelse
+  // Test hver bestemmelse
   HIGH_PRIORITY.forEach(({ code, name }) => {
-    test(`Discover: ${name}`, async ({ page }) => {
-      test.setTimeout(120000); // 2 minutes for discovery
+    test(`Oppdag: ${name}`, async ({ page }) => {
+      test.setTimeout(120000); // 2 minutter for oppdagelse
 
       const lovvalg = await setupBehandlingToLovvalg(page);
 

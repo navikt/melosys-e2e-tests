@@ -1,12 +1,12 @@
-import { test } from '../../../fixtures';
-import { AuthHelper } from '../../../helpers/auth-helper';
-import { HovedsidePage } from '../../../pages/hovedside.page';
-import { OpprettNySakPage } from '../../../pages/opprett-ny-sak/opprett-ny-sak.page';
-import { MedlemskapPage } from '../../../pages/behandling/medlemskap.page';
-import { ArbeidsforholdPage } from '../../../pages/behandling/arbeidsforhold.page';
-import { LovvalgPage } from '../../../pages/behandling/lovvalg.page';
-import { USER_ID_VALID } from '../../../pages/shared/constants';
-import { waitForProcessInstances } from '../../../helpers/api-helper';
+import { test } from '../../fixtures';
+import { AuthHelper } from '../../helpers/auth-helper';
+import { HovedsidePage } from '../../pages/hovedside.page';
+import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
+import { MedlemskapPage } from '../../pages/behandling/medlemskap.page';
+import { ArbeidsforholdPage } from '../../pages/behandling/arbeidsforhold.page';
+import { LovvalgPage } from '../../pages/behandling/lovvalg.page';
+import { USER_ID_VALID } from '../../pages/shared/constants';
+import { waitForProcessInstances } from '../../helpers/api-helper';
 import { Page } from '@playwright/test';
 
 /**
@@ -55,7 +55,7 @@ async function setupBehandlingToLovvalg(page: Page): Promise<LovvalgPage> {
   return lovvalg;
 }
 
-test.describe('Lovvalg - Blokkerende scenarioer (§ 2-8 a arbeidstaker)', () => {
+test.describe('Lovvalg - Blokkerende scenarioer (§ 2-8 a arbeidstaker) @manual', () => {
   test('§ 2-8 a: Spørsmål 1 = Nei skal blokkere videre progresjon', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 

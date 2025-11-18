@@ -16,7 +16,7 @@ This document tracks the day-by-day implementation progress.
 - ✅ Created `pages/hovedside.page.ts` - First POM (proof of concept)
 - ✅ Created `pages/opprett-ny-sak/opprett-ny-sak.page.ts` - Actions class
 - ✅ Created `pages/opprett-ny-sak/opprett-ny-sak.assertions.ts` - Assertions class
-- ✅ Created `specs/2-opprett-sak/opprett-sak-pom-example.spec.ts` - Example test
+- ✅ Created `tests/opprett-sak-pom-eksempel.spec.ts` - Example test
 - ✅ Created `docs/POM-MIGRATION-PLAN.md` - Comprehensive migration plan
 - ✅ Created `docs/IMPLEMENTATION-LOG.md` - This file
 
@@ -84,9 +84,8 @@ melosys-e2e-tests/
 │   └── opprett-ny-sak/
 │       ├── opprett-ny-sak.page.ts
 │       └── opprett-ny-sak.assertions.ts
-├── specs/                           # NEW
-│   └── 2-opprett-sak/
-│       └── opprett-sak-pom-example.spec.ts
+├── tests/                           # Tests (renamed file)
+│   └── opprett-sak-pom-eksempel.spec.ts
 ├── utils/                           # NEW
 │   └── assertions.ts
 └── docs/                            # NEW
@@ -104,7 +103,7 @@ melosys-e2e-tests/
 | pages/hovedside.page.ts | 60 | Main page POM |
 | pages/opprett-ny-sak/opprett-ny-sak.page.ts | 150 | Create case actions |
 | pages/opprett-ny-sak/opprett-ny-sak.assertions.ts | 130 | Create case assertions |
-| specs/2-opprett-sak/opprett-sak-pom-example.spec.ts | 90 | Example test |
+| tests/opprett-sak-pom-eksempel.spec.ts | 90 | Example test |
 | docs/POM-MIGRATION-PLAN.md | 1500 | Comprehensive migration plan |
 | docs/IMPLEMENTATION-LOG.md | (this file) | Implementation log |
 

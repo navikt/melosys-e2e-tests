@@ -133,8 +133,8 @@ Look for Unleash confirmation messages:
 
 ```bash
 # In CI logs, look for test execution order
-✓ Test 1: annual-settlement-non-tax-liable
-✓ Test 2: complete-case-with-2-8a
+✓ Test 1: arsavregning-ikke-skattepliktig
+✓ Test 2: komplett-sak-2-8a
 ```
 
 If Test 1 uses Unleash but Test 2 doesn't, and Test 2 fails with wrong toggle state, cleanup didn't propagate.
@@ -443,7 +443,7 @@ When debugging Unleash-related test failures:
 
 - `helpers/unleash-helper.ts` - Toggle manipulation with polling
 - `fixtures/unleash-cleanup.ts` - Automatic cleanup fixture
-- `tests/unleash-example.spec.ts` - Example usage
+- `tests/unleash-eksempel.spec.ts` - Example usage
 - `docs/guides/HELPERS.md` - UnleashHelper documentation
 
 ## Further Reading

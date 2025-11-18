@@ -1,5 +1,5 @@
 import { test, expect } from '@playwright/test';
-import { AdminApiHelper } from '../../../helpers/api-helper';
+import { AdminApiHelper } from '../../helpers/api-helper';
 
 test.describe('Melosys Admin API @manual', () => {
   test('skal finne ikke-skattepliktige saker via admin API', async ({ request }) => {

@@ -31,9 +31,8 @@ pages/                           # NEW - Page Object Models
     ├── opprett-ny-sak.page.ts  # Create case actions
     └── opprett-ny-sak.assertions.ts  # Create case verifications
 
-specs/                           # NEW - Tests using POMs
-└── 2-opprett-sak/
-    └── opprett-sak-pom-example.spec.ts
+tests/                           # Tests (renamed file)
+└── opprett-sak-pom-eksempel.spec.ts
 
 utils/                           # NEW - Shared utilities
 └── assertions.ts               # Error assertion framework
@@ -261,10 +260,10 @@ await opprettSak.assertions.verifiserSakIDatabase('30056928150');
 
 ```bash
 # Run the example test
-npm test specs/2-opprett-sak/opprett-sak-pom-example.spec.ts
+npm test tests/opprett-sak-pom-eksempel.spec.ts
 
 # Run in UI mode
-npm run test:ui specs/2-opprett-sak/opprett-sak-pom-example.spec.ts
+npm run test:ui tests/opprett-sak-pom-eksempel.spec.ts
 ```
 
 ### Run All Tests (Old + New)
@@ -287,7 +286,7 @@ npm test
 
 ### Code Examples
 
-- `specs/2-opprett-sak/opprett-sak-pom-example.spec.ts` - Example test
+- `tests/opprett-sak-pom-eksempel.spec.ts` - Example test
 - `pages/hovedside.page.ts` - Simple POM example
 - `pages/opprett-ny-sak/opprett-ny-sak.page.ts` - Complex POM with assertions
 
@@ -311,7 +310,7 @@ When starting a new session:
 3. **Check `docs/POM-MIGRATION-PLAN.md`** - Full roadmap
 4. **Look at examples:**
    - `pages/opprett-ny-sak/opprett-ny-sak.page.ts`
-   - `specs/2-opprett-sak/opprett-sak-pom-example.spec.ts`
+   - `tests/opprett-sak-pom-eksempel.spec.ts`
 
 ---
 

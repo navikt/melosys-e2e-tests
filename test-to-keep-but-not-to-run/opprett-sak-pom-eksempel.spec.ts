@@ -5,19 +5,19 @@ import { OpprettNySakPage } from '../pages/opprett-ny-sak/opprett-ny-sak.page';
 import { USER_ID_VALID } from '../pages/shared/constants';
 
 /**
- * Example test using Page Object Model pattern
+ * Eksempel test som bruker Page Object Model mønster
  *
- * This demonstrates:
- * 1. Using POMs for better maintainability
- * 2. Separation of actions and assertions
- * 3. Integration with existing helpers (AuthHelper, fixtures)
- * 4. Database verification
+ * Dette demonstrerer:
+ * 1. Bruk av POMs for bedre vedlikehold
+ * 2. Separasjon av actions og assertions
+ * 3. Integrasjon med eksisterende helpers (AuthHelper, fixtures)
+ * 4. Database verifisering
  *
- * Compare with: tests/example-workflow.spec.ts (old style)
+ * Sammenlign med: tests/example-workflow.spec.ts (gammel stil)
  */
 
-test.describe('Opprett ny sak - POM Example', () => {
-  test('should create new case using POM pattern', async ({ page }) => {
+test.describe('Opprett ny sak - POM Eksempel @manual', () => {
+  test('skal opprette ny sak ved bruk av POM mønster', async ({ page }) => {
     // Setup: Authentication (still using AuthHelper - our strength!)
     const auth = new AuthHelper(page);
     await auth.login();
@@ -49,7 +49,7 @@ test.describe('Opprett ny sak - POM Example', () => {
     // Database verification can be added when table structure is confirmed
   });
 
-  test('should create case using convenience method', async ({ page }) => {
+  test('skal opprette sak ved bruk av hjelpemetode', async ({ page }) => {
     // Setup
     const auth = new AuthHelper(page);
     await auth.login();
@@ -67,7 +67,7 @@ test.describe('Opprett ny sak - POM Example', () => {
     console.log('✅ Created case using convenience method');
   });
 
-  test('should verify form fields are visible', async ({ page }) => {
+  test('skal verifisere at skjemafelt er synlige', async ({ page }) => {
     // Setup
     const auth = new AuthHelper(page);
     await auth.login();

@@ -209,7 +209,7 @@ test('my test with unleash', async ({ page, request }) => {
 - Feature toggles affect **all services** (melosys-api, faktureringskomponenten, trygdeavgift-beregning)
 - **melosys-api creates toggles**: No need to run seed script - toggles are created automatically
 - Unleash UI available at `http://localhost:4242` (admin/unleash4all)
-- See `tests/unleash-example.spec.ts` for complete examples
+- See `tests/unleash-eksempel.spec.ts` for complete examples
 
 ### Docker Services Architecture
 
@@ -501,7 +501,7 @@ await assertErrors(page, [/påkrevd/i, "Ugyldig format"]);
 - 🔄 `VedtakPage` - Decision making
 
 **Example Test:**
-See `specs/2-opprett-sak/opprett-sak-pom-example.spec.ts` for complete example.
+See `tests/opprett-sak-pom-eksempel.spec.ts` for complete example.
 
 ## Common Patterns
 

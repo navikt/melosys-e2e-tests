@@ -1,14 +1,14 @@
-import {test} from '../../../fixtures';
-import {AuthHelper} from '../../../helpers/auth-helper';
-import {HovedsidePage} from '../../../pages/hovedside.page';
-import {OpprettNySakPage} from '../../../pages/opprett-ny-sak/opprett-ny-sak.page';
-import {MedlemskapPage} from '../../../pages/behandling/medlemskap.page';
-import {ArbeidsforholdPage} from '../../../pages/behandling/arbeidsforhold.page';
-import {LovvalgPage} from '../../../pages/behandling/lovvalg.page';
-import {ResultatPeriodePage} from '../../../pages/behandling/resultat-periode.page';
-import {TrygdeavgiftPage} from '../../../pages/trygdeavgift/trygdeavgift.page';
-import {USER_ID_VALID} from '../../../pages/shared/constants';
-import {waitForProcessInstances} from '../../../helpers/api-helper';
+import {test} from '../../fixtures';
+import {AuthHelper} from '../../helpers/auth-helper';
+import {HovedsidePage} from '../../pages/hovedside.page';
+import {OpprettNySakPage} from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
+import {MedlemskapPage} from '../../pages/behandling/medlemskap.page';
+import {ArbeidsforholdPage} from '../../pages/behandling/arbeidsforhold.page';
+import {LovvalgPage} from '../../pages/behandling/lovvalg.page';
+import {ResultatPeriodePage} from '../../pages/behandling/resultat-periode.page';
+import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
+import {USER_ID_VALID} from '../../pages/shared/constants';
+import {waitForProcessInstances} from '../../helpers/api-helper';
 import {Page} from '@playwright/test';
 
 /**
@@ -71,7 +71,7 @@ async function setupBehandlingToTrygdeavgift(page: Page) {
     return trygdeavgift;
 }
 
-// forrandering etter https://jira.adeo.no/browse/MELOSYS-7689 krever oppdatering på alle disse
+// forandring etter https://jira.adeo.no/browse/MELOSYS-7689 krever oppdatering på alle disse
 test.describe('Trygdeavgift - Valideringsfeil @manual', () => {
 
     test('FEIL: Skattepliktig=Ja + Pensjon/uføretrygd det betales kildeskatt av', async ({page}) => {

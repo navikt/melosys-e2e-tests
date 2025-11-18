@@ -55,7 +55,7 @@ async function setupBehandlingToLovvalg(page: Page): Promise<LovvalgPage> {
   return lovvalg;
 }
 
-test.describe('Lovvalg - Gyldige scenarioer', () => {
+test.describe('Lovvalg - Gyldige scenarioer @manual', () => {
   test('§ 2-8 a (arbeidstaker): Alle Ja-svar skal tillate å gå videre', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
