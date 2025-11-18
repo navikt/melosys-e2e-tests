@@ -46,6 +46,11 @@ export class TrygdeavgiftPage extends BasePage {
     name: 'Betales aga.?'
   });
 
+  // Locator for "Legg til inntekt" button
+  private readonly leggTilInntektButton = this.page.getByRole('button', {
+    name: 'Legg til inntekt'
+  });
+
   constructor(page: Page) {
     super(page);
     this.assertions = new TrygdeavgiftAssertions(page);
@@ -274,6 +279,78 @@ export class TrygdeavgiftPage extends BasePage {
     // Wait for button to be enabled (validation completes after API)
     await expect(this.bekreftButton).toBeEnabled({ timeout: 15000 });
     console.log('✅ Bekreft og fortsett button is enabled');
+  }
+
+  /**
+   * Click "Legg til inntekt" button to add another income source
+   * This creates a new income source field (inntektskilder[1], [2], etc.)
+   */
+  async klikkLeggTilInntekt(): Promise<void> {
+    await this.leggTilInntektButton.click();
+    console.log('✅ Added new income source field');
+  }
+
+  /**
+   * Select Inntektskilde for a specific index
+   *
+   * @param indeks - Index of income source (0 for first, 1 for second, etc.)
+   * @param inntektskilde - Income source code (e.g., 'ARBEIDSINNTEKT_FRA_NORGE', 'NÆRINGSINNTEKT_FRA_NORGE')
+   *
+   * Available codes:
+   * - 'ARBEIDSINNTEKT_FRA_NORGE'
+   * - 'NÆRINGSINNTEKT_FRA_NORGE'
+   * - 'INNTEKT_FRA_UTLANDET'
+   * - 'FN_SKATTEFRITAK'
+   * - 'MISJONÆR'
+   * - 'PENSJON'
+   * - 'PENSJON_KILDESKATT'
+   */
+  async velgInntektskildeForIndeks(indeks: number, inntektskilde: string): Promise<void> {
+    const selector = `select[name="inntektskilder[${indeks}].kildetype"]`;
+    await this.page.locator(selector).selectOption(inntektskilde);
+    console.log(`✅ Selected income source [${indeks}] = ${inntektskilde}`);
+  }
+
+  /**
+   * Fill Bruttoinntekt field for a specific index WITHOUT API wait
+   *
+   * @param indeks - Index of income source (0 for first, 1 for second, etc.)
+   * @param beløp - Amount as string (e.g., '100000')
+   */
+  async fyllInnBruttoinntektForIndeks(indeks: number, beløp: string): Promise<void> {
+    const selector = `input[name="inntektskilder[${indeks}].bruttoInntekt"]`;
+    const field = this.page.locator(selector);
+    await field.waitFor({ state: 'visible', timeout: 5000 });
+    await field.fill(beløp);
+    console.log(`✅ Filled bruttoinntekt [${indeks}] = ${beløp}`);
+  }
+
+  /**
+   * Fill Bruttoinntekt field for a specific index WITH API wait (RECOMMENDED)
+   *
+   * @param indeks - Index of income source (0 for first, 1 for second, etc.)
+   * @param beløp - Amount as string (e.g., '100000')
+   */
+  async fyllInnBruttoinntektForIndeksMedApiVent(indeks: number, beløp: string): Promise<void> {
+    const selector = `input[name="inntektskilder[${indeks}].bruttoInntekt"]`;
+    const field = this.page.locator(selector);
+
+    // Wait for field to be visible
+    await field.waitFor({ state: 'visible', timeout: 5000 });
+
+    // Create response promise BEFORE action
+    const responsePromise = this.page.waitForResponse(
+      response => response.url().includes('/trygdeavgift/beregning') && response.status() === 200,
+      { timeout: 30000 }
+    );
+
+    // Fill and blur to trigger API
+    await field.fill(beløp);
+    await field.press('Tab');
+
+    // Wait for API
+    await responsePromise;
+    console.log(`✅ Filled bruttoinntekt [${indeks}] = ${beløp} and API completed`);
   }
 
   /**

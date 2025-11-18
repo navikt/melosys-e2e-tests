@@ -66,4 +66,62 @@ export class BehandlingPage extends BasePage {
   async gåTilVedtak(): Promise<void> {
     await this.vedtakButton.click();
   }
+
+  /**
+   * Click the "Endre" (Edit) button to edit case details
+   * This typically appears on the case summary page
+   */
+  async klikkEndre(): Promise<void> {
+    await this.page.getByRole('button', { name: 'Endre' }).click();
+  }
+
+  /**
+   * Open date picker for "oppsummeringer" section
+   */
+  async åpneDatovelger(): Promise<void> {
+    await this.page
+      .getByLabel('oppsummeringer')
+      .getByRole('button', { name: 'Åpne datovelger' })
+      .click();
+  }
+
+  /**
+   * Select year in date picker dialog
+   *
+   * @param år - Year to select (e.g., '2024')
+   */
+  async velgÅrIDatovelger(år: string): Promise<void> {
+    await this.page.getByRole('dialog', { name: 'Velg dato' }).getByLabel('År').selectOption(år);
+  }
+
+  /**
+   * Select a specific date in the date picker
+   *
+   * @param datoNavn - Date button name (e.g., 'fredag 1', 'mandag 15')
+   */
+  async velgDatoIDatovelger(datoNavn: string): Promise<void> {
+    await this.page.getByRole('button', { name: datoNavn, exact: true }).click();
+  }
+
+  /**
+   * Click "Lagre endringene" button to save changes
+   */
+  async klikkLagreEndringene(): Promise<void> {
+    await this.page.getByRole('button', { name: 'Lagre endringene' }).click();
+  }
+
+  /**
+   * Complete date editing workflow
+   * Convenience method for editing date using date picker
+   *
+   * @param år - Year to select (e.g., '2024')
+   * @param datoNavn - Date button name (e.g., 'fredag 1')
+   */
+  async endreDatoMedDatovelger(år: string, datoNavn: string): Promise<void> {
+    await this.klikkEndre();
+    await this.åpneDatovelger();
+    await this.velgÅrIDatovelger(år);
+    await this.velgDatoIDatovelger(datoNavn);
+    await this.klikkLagreEndringene();
+  }
 }

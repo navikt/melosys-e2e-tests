@@ -36,6 +36,10 @@ export class MedlemskapPage extends BasePage {
     name: 'Velg land fra liste'
   });
 
+  private readonly flereLandRadio = this.page.getByRole('radio', {
+    name: 'Flere land, ikke kjent hvilke'
+  });
+
   // React Select dropdown - uses CSS class
   private readonly landDropdown = this.page.locator('.css-19bb58m');
 
@@ -85,6 +89,14 @@ export class MedlemskapPage extends BasePage {
    */
   async velgLandFraListe(): Promise<void> {
     await this.velgLandRadio.check();
+  }
+
+  /**
+   * Select "Flere land, ikke kjent hvilke" radio button
+   * Use this when the person works in multiple countries but exact countries are unknown
+   */
+  async velgFlereLandIkkeKjentHvilke(): Promise<void> {
+    await this.flereLandRadio.check();
   }
 
   /**
