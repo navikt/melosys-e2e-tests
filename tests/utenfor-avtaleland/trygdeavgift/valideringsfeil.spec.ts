@@ -71,7 +71,7 @@ async function setupBehandlingToTrygdeavgift(page: Page) {
     return trygdeavgift;
 }
 
-// forrandering etter https://jira.adeo.no/browse/MELOSYS-7689 krever oppdatering på alle disse
+// forandring etter https://jira.adeo.no/browse/MELOSYS-7689 krever oppdatering på alle disse
 test.describe('Trygdeavgift - Valideringsfeil @manual', () => {
 
     test('FEIL: Skattepliktig=Ja + Pensjon/uføretrygd det betales kildeskatt av', async ({page}) => {

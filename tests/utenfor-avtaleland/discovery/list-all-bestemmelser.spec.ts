@@ -10,9 +10,9 @@ import { waitForProcessInstances } from '../../../helpers/api-helper';
 import { Page } from '@playwright/test';
 
 /**
- * Discovery script to systematically test all bestemmelse options
- * This will help us understand which questions appear for each bestemmelse
- * and which combinations block progression
+ * Oppdagelse script for å systematisk teste alle bestemmelse alternativer
+ * Dette hjelper oss å forstå hvilke spørsmål som vises for hver bestemmelse
+ * og hvilke kombinasjoner som blokkerer progresjon
  */
 
 async function setupBehandlingToLovvalg(page: Page): Promise<LovvalgPage> {
@@ -43,8 +43,8 @@ async function setupBehandlingToLovvalg(page: Page): Promise<LovvalgPage> {
   return lovvalg;
 }
 
-test.describe('Bestemmelse Discovery - All Options @manual', () => {
-  test('Discover all bestemmelse options and their questions', async ({ page }) => {
+test.describe('Bestemmelse Oppdagelse - Alle Alternativer @manual', () => {
+  test('Oppdag alle bestemmelse alternativer og deres spørsmål', async ({ page }) => {
     const lovvalg = await setupBehandlingToLovvalg(page);
 
     // Get all bestemmelse options
