@@ -147,49 +147,139 @@ class TestSummaryReporter implements Reporter {
     md += `- **Duration:** ${Math.round(result.duration / 1000)}s\n`;
     md += `- **Status:** ${result.status}\n\n`;
 
-    // Test summary table
+    // Test summary in one big table
     if (totalTests > 0) {
-      md += `## 📊 Test Summary by File\n\n`;
+      md += `## 📊 Test Results\n\n`;
 
-      // Group by file
-      const byFile = new Map<string, TestInfo[]>();
+      // Group by folder and file
+      const byFolder = new Map<string, Map<string, TestInfo[]>>();
+
       for (const test of tests) {
-        const file = path.basename(test.test.location.file);
-        if (!byFile.has(file)) {
-          byFile.set(file, []);
+        const filePath = test.test.location.file;
+        const parts = filePath.split('/');
+        const fileName = parts[parts.length - 1];
+
+        // Find "tests" directory index and extract complete path after it
+        const testsIndex = parts.indexOf('tests');
+        let folderPath = 'root';
+
+        if (testsIndex !== -1 && testsIndex < parts.length - 1) {
+          // Get all folders between 'tests' and the filename
+          const foldersAfterTests = parts.slice(testsIndex + 1, parts.length - 1);
+          folderPath = foldersAfterTests.length > 0 ? foldersAfterTests.join('/') : 'root';
         }
-        byFile.get(file)!.push(test);
+
+        if (!byFolder.has(folderPath)) {
+          byFolder.set(folderPath, new Map());
+        }
+
+        const folder = byFolder.get(folderPath)!;
+        if (!folder.has(fileName)) {
+          folder.set(fileName, []);
+        }
+
+        folder.get(fileName)!.push(test);
       }
 
-      md += `| File | Test | Status | Attempts | Playwright | Docker Logs |\n`;
-      md += `|------|------|--------|----------|------------|-------------|\n`;
+      // HTML table with proper colspan
+      md += '<table>\n';
+      md += '<thead>\n';
+      md += '<tr>\n';
+      md += '<th>Test</th>\n';
+      md += '<th>Status</th>\n';
+      md += '<th>Attempts</th>\n';
+      md += '<th>Playwright</th>\n';
+      md += '<th>Docker Logs</th>\n';
+      md += '<th>Duration</th>\n';
+      md += '</tr>\n';
+      md += '</thead>\n';
+      md += '<tbody>\n';
 
-      // Sort by file name
-      const sortedFiles = Array.from(byFile.entries()).sort((a, b) => a[0].localeCompare(b[0]));
-
-      for (const [file, fileTests] of sortedFiles) {
-        for (const testInfo of fileTests) {
-          const statusEmoji = testInfo.finalStatus === 'passed' ? '✅' :
-                             testInfo.finalStatus === 'failed' ? '❌' :
-                             testInfo.finalStatus === 'flaky' ? '🔄' : '⏭️';
-
-          const attempts = testInfo.totalAttempts > 1
-            ? `${testInfo.totalAttempts} (${testInfo.failedAttempts} failed)`
-            : '1';
-
-          // Get Playwright error info
-          const hasPlaywrightError = testInfo.results.some(r =>
-            r.status === 'failed' && r.error && !r.error.message.includes('Docker error') && !r.error.message.includes('process instance')
-          );
-          const playwrightCell = hasPlaywrightError ? '❌ Failed' : testInfo.finalStatus === 'failed' ? '✅ Passed' : '-';
-
-          // Get Docker log errors by service
-          const dockerServices = this.getDockerErrorServices(testInfo);
-          const dockerCell = dockerServices.length > 0 ? dockerServices.join(', ') : testInfo.finalStatus === 'failed' ? '✅ No errors' : '-';
-
-          md += `| \`${file}\` | ${testInfo.test.title} | ${statusEmoji} ${testInfo.finalStatus} | ${attempts} | ${playwrightCell} | ${dockerCell} |\n`;
-        }
+      // Flatten all files with their folder info
+      interface FileWithFolder {
+        folderName: string;
+        fileName: string;
+        tests: TestInfo[];
       }
+      const allFiles: FileWithFolder[] = [];
+      byFolder.forEach((files, folderName) => {
+        files.forEach((tests, fileName) => {
+          allFiles.push({ folderName, fileName, tests });
+        });
+      });
+
+      // Sort ALL files: files with failures first, then alphabetically
+      const sortedAllFiles = allFiles.sort((a, b) => {
+        const aHasFailures = a.tests.some(test => test.finalStatus === 'failed');
+        const bHasFailures = b.tests.some(test => test.finalStatus === 'failed');
+
+        if (aHasFailures && !bHasFailures) return -1;
+        if (!aHasFailures && bHasFailures) return 1;
+        return `${a.folderName}/${a.fileName}`.localeCompare(`${b.folderName}/${b.fileName}`);
+      });
+
+      for (const { folderName, fileName, tests: fileTests } of sortedAllFiles) {
+          // Sort tests: failed first, then passed
+          const sortedTests = fileTests.sort((a, b) => {
+            if (a.finalStatus === 'failed' && b.finalStatus !== 'failed') return -1;
+            if (a.finalStatus !== 'failed' && b.finalStatus === 'failed') return 1;
+            return 0;
+          });
+
+          // Count failures
+          const failedCount = fileTests.filter(t => t.finalStatus === 'failed').length;
+          const totalCount = fileTests.length;
+          const failureInfo = failedCount > 0 ? ` (${failedCount}/${totalCount} failed)` : '';
+
+          // Folder/File header row (TRUE colspan spanning all 6 columns, left-aligned)
+          md += '<tr>\n';
+          md += `<td colspan="6"><strong>📁 ${folderName} / <code>${fileName}</code>${failureInfo}</strong></td>\n`;
+          md += '</tr>\n';
+
+          // Test rows
+          for (const testInfo of sortedTests) {
+            const statusEmoji = testInfo.finalStatus === 'passed' ? '✅' :
+                               testInfo.finalStatus === 'failed' ? '❌' :
+                               testInfo.finalStatus === 'flaky' ? '🔄' : '⏭️';
+
+            const attempts = testInfo.totalAttempts > 1
+              ? `${testInfo.totalAttempts} (${testInfo.failedAttempts} failed)`
+              : '1';
+
+            const duration = Math.round(testInfo.results[testInfo.results.length - 1].duration / 1000) + 's';
+
+            // Playwright status (check if error is playwright-related vs process/docker)
+            let playwrightStatus = '✅';
+            if (testInfo.finalStatus === 'failed') {
+              const hasPlaywrightError = testInfo.results.some(r =>
+                r.status === 'failed' && r.error && !r.error.message.includes('Docker error') && !r.error.message.includes('process instance')
+              );
+              playwrightStatus = hasPlaywrightError ? '❌' : '✅';
+            }
+
+            // Docker logs status
+            let dockerStatus = '✅';
+            if (testInfo.finalStatus === 'failed') {
+              if (testInfo.dockerErrors && Array.isArray(testInfo.dockerErrors) && testInfo.dockerErrors.length > 0) {
+                const services = testInfo.dockerErrors.map((de: any) => `${de.service} (${de.errors.length})`).join(', ');
+                dockerStatus = `❌ ${services}`;
+              }
+            }
+
+            md += '<tr>\n';
+            md += `<td>${testInfo.test.title}</td>\n`;
+            md += `<td>${statusEmoji}</td>\n`;
+            md += `<td>${attempts}</td>\n`;
+            md += `<td>${playwrightStatus}</td>\n`;
+            md += `<td>${dockerStatus}</td>\n`;
+            md += `<td>${duration}</td>\n`;
+            md += '</tr>\n';
+          }
+      }
+
+      md += '</tbody>\n';
+      md += '</table>\n\n';
+
       md += '\n';
     }
 
@@ -202,9 +292,24 @@ class TestSummaryReporter implements Reporter {
       for (const testInfo of failedTests) {
         const { test, dockerErrors, processErrors, totalAttempts, failedAttempts } = testInfo;
 
+        const filePath = test.location.file;
+        const parts = filePath.split('/');
+        const fileName = parts[parts.length - 1];
+
+        // Find "tests" directory index and extract complete path after it
+        const testsIndex = parts.indexOf('tests');
+        let folderPath = 'root';
+
+        if (testsIndex !== -1 && testsIndex < parts.length - 1) {
+          // Get all folders between 'tests' and the filename
+          const foldersAfterTests = parts.slice(testsIndex + 1, parts.length - 1);
+          folderPath = foldersAfterTests.length > 0 ? foldersAfterTests.join('/') : 'root';
+        }
+
         md += `### ${test.title}\n\n`;
-        md += `**File:** \`${path.basename(test.location.file)}\`\n`;
-        md += `**Attempts:** ${totalAttempts} (${failedAttempts} failed)\n`;
+        md += `**Folder:** \`${folderPath}\`  \n`;
+        md += `**File:** \`${fileName}\`  \n`;
+        md += `**Attempts:** ${totalAttempts} (${failedAttempts} failed)  \n`;
         md += `**Duration:** ${Math.round(testInfo.results[testInfo.results.length - 1].duration / 1000)}s\n\n`;
 
         // Get the last error (most recent failure)
