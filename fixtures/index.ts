@@ -1,6 +1,7 @@
 import { mergeTests } from '@playwright/test';
 import { cleanupFixture } from './cleanup';
 import { dockerLogsFixture } from './docker-logs';
+import { test as knownErrorFixture } from './known-error';
 
 /**
  * Main test fixture - combines all fixtures for E2E tests
@@ -9,6 +10,7 @@ import { dockerLogsFixture } from './docker-logs';
  * - Automatic database cleanup before and after each test
  * - Automatic mock service cleanup before and after each test
  * - Docker log error checking after each test
+ * - Automatic detection of @known-error tagged tests (expected failures)
  *
  * Usage in tests:
  *   import { test, expect } from '../fixtures';
@@ -18,9 +20,10 @@ import { dockerLogsFixture } from './docker-logs';
  * - Clean mock data before test starts
  * - Automatic cleanup after test completes
  * - Docker log error reporting
+ * - Known error handling (@known-error tag support)
  */
 
-export const test = mergeTests(cleanupFixture, dockerLogsFixture);
+export const test = mergeTests(cleanupFixture, dockerLogsFixture, knownErrorFixture);
 export { expect } from '@playwright/test';
 
 /**
@@ -28,3 +31,4 @@ export { expect } from '@playwright/test';
  */
 export { cleanupFixture } from './cleanup';
 export { dockerLogsFixture } from './docker-logs';
+export { test as knownErrorFixture } from './known-error';

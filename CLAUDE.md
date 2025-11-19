@@ -136,7 +136,8 @@ If multiple changes are related to the same feature:
 - **fixtures/** - Playwright test fixtures for automatic cleanup and logging
   - `cleanup.ts` - Auto-cleanup database, mock data, and Unleash toggles before each test
   - `docker-logs.ts` - Check Docker logs for errors after tests
-  - `index.ts` - Main test fixture (combines cleanup + docker-logs)
+  - `known-error.ts` - Auto-detect and handle `@known-error` tagged tests (expected failures)
+  - `index.ts` - Main test fixture (combines cleanup + docker-logs + known-error)
 
 ### Helper Classes
 
@@ -503,6 +504,75 @@ await assertErrors(page, [/påkrevd/i, "Ugyldig format"]);
 **Example Test:**
 See `tests/opprett-sak-pom-eksempel.spec.ts` for complete example.
 
+## Test Tags
+
+Tests can be tagged to control their execution behavior. Tags are added to the test name.
+
+### @manual - Manual-only Tests
+
+Tests tagged with `@manual` are skipped by default and only run when explicitly requested:
+
+```typescript
+test('should perform manual verification @manual', async ({ page }) => {
+  // This test requires manual steps or verification
+  // Skipped during normal test runs
+  // Run with: MANUAL_TESTS=true npm test
+});
+```
+
+**When to use:**
+- Tests requiring manual verification or interaction
+- Tests that can't be fully automated
+- Tests for exploratory testing scenarios
+
+**Running manual tests:**
+```bash
+MANUAL_TESTS=true npm test
+```
+
+### @known-error - Expected Failures
+
+Tests tagged with `@known-error` run normally but don't fail CI when they fail:
+
+```typescript
+test('should calculate tax correctly @known-error #MELOSYS-1234', async ({ page }) => {
+  // This test tracks a known bug (JIRA ticket MELOSYS-1234)
+  // Test will run and show results
+  // If it fails (expected), shows as PASSED
+  // If it succeeds (bug fixed!), shows as FAILED - time to remove the tag!
+  // CI pipeline won't fail due to this test
+});
+```
+
+**When to use:**
+- Known bugs that won't be fixed immediately
+- Tests that document known issues
+- Tracking regressions you want to monitor
+
+**Behavior:**
+- ✅ Test runs during normal test execution
+- ✅ Results shown in reports
+- ✅ If test fails → marked as PASSED (expected)
+- ⚠️ If test succeeds → marked as FAILED (bug is fixed!)
+- ✅ CI pipeline doesn't fail
+
+**Best practices:**
+- Always include issue tracker reference (#JIRA-123, GitHub issue URL)
+- Review periodically to check if bugs are fixed
+- Remove tag once bug is fixed
+
+**See:** `docs/guides/KNOWN-ERRORS.md` for complete guide and examples.
+
+### Comparison
+
+| Feature | @manual | @known-error |
+|---------|---------|--------------|
+| Runs by default | ❌ No (skipped) | ✅ Yes |
+| Runs in CI | ❌ No | ✅ Yes |
+| Can fail CI | ❌ N/A | ❌ No |
+| Use case | Manual-only tests | Known bugs |
+| Run command | `MANUAL_TESTS=true npm test` | `npm test` |
+
 ## Common Patterns
 
 ### Test Template
@@ -662,6 +732,7 @@ Key steps:
 - **Troubleshooting**: `docs/guides/TROUBLESHOOTING.md` - Common issues and solutions
 - **Helpers**: `docs/guides/HELPERS.md` - FormHelper, DatabaseHelper, AuthHelper
 - **Fixtures**: `docs/guides/FIXTURES.md` - Auto-cleanup and Docker log checking
+- **Known Errors**: `docs/guides/KNOWN-ERRORS.md` - Using @known-error tag for expected failures
 - **POM Guide**: `docs/pom/QUICK-START.md` - Page Object Model quick reference
 - **POM Migration**: `docs/pom/MIGRATION-PLAN.md` - Complete POM strategy
 - **GitHub Actions**: `docs/ci-cd/GITHUB-ACTIONS.md` - CI/CD setup and usage
