@@ -68,15 +68,16 @@ test.describe('EU/EØS Skip - Komplett arbeidsflyt', () => {
     await skipBehandling.klikkBekreftOgFortsett();
 
     // Steg 3: Legg til skip med detaljer
+    // VIKTIG: Rekkefølgen er kritisk - enkelte felt aktiveres først etter tidligere valg
     await skipBehandling.klikkArbeidssted();
     await skipBehandling.leggTilNyttSkip();
     await skipBehandling.fyllInnSkipNavn('Hilda');
     await skipBehandling.velgFartsomrade('UTENRIKS');
     await skipBehandling.velgFlaggstat('Frankrike (FR)');
-    await skipBehandling.velgNorskSokkel();
-    await skipBehandling.velgSkipRegistrertIEttLand();
-    await skipBehandling.velgFlagglandSomArbeidsland('Frankrike');
+    // Velg "Skip" først - dette aktiverer de andre valgene
     await skipBehandling.velgSkip();
+    await skipBehandling.velgFlagglandSomArbeidsland('Frankrike');
+    await skipBehandling.velgSkipRegistrertIEttLand();
     await skipBehandling.klikkBekreftOgFortsett();
 
     // Steg 4: Velg arbeidsgiver

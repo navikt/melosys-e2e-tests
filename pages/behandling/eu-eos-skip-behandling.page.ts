@@ -195,6 +195,8 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
    * Hjelpemetode: Legg til skip og fyll ut alle detaljer
    * Kombinerer flere steg i én metode
    *
+   * VIKTIG: Rekkefølgen er kritisk! Enkelte felt blir først aktivert etter tidligere valg.
+   *
    * @param skipNavn - Navn på skipet (f.eks. 'Hilda')
    * @param fartsomrade - 'UTENRIKS' eller 'INNENRIKS'
    * @param flaggstat - Flaggland med format "Land (Kode)" (f.eks. 'Frankrike (FR)')
@@ -211,10 +213,10 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
     await this.fyllInnSkipNavn(skipNavn);
     await this.velgFartsomrade(fartsomrade);
     await this.velgFlaggstat(flaggstat);
-    await this.velgNorskSokkel();
-    await this.velgSkipRegistrertIEttLand();
-    await this.velgFlagglandSomArbeidsland(flagglandNavn);
+    // VIKTIG: Må velge "Skip" først for å aktivere de andre valgene
     await this.velgSkip();
+    await this.velgFlagglandSomArbeidsland(flagglandNavn);
+    await this.velgSkipRegistrertIEttLand();
     console.log('✅ Fullførte skipdetaljer');
   }
 
