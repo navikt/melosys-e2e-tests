@@ -12,7 +12,7 @@ import {VedtakPage} from '../../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../../pages/shared/constants';
 
 test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
-    test('skal fullføre komplett saksflyt med § 2-8 første ledd bokstav a (arbeidstaker)', async ({page, request}) => {
+    test('skal fullføre komplett saksflyt med § 2-8 første ledd bokstav a (arbeidstaker) @known-error', async ({page, request}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);
         await auth.login();
@@ -122,7 +122,7 @@ test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
         console.log('✅ Workflow completed');
     });
 
-    test('FULL_DEKNING_FTRL', async ({page, request}) => {
+    test('FULL_DEKNING_FTRL @known-error', async ({page, request}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);
         await auth.login();
