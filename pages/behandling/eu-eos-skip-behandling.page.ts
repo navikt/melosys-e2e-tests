@@ -82,6 +82,8 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
    * Brukes for skip/sokkel-arbeidsforhold
    */
   async velgYrkesaktivPaSokkel(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.yrkesaktivPaSokkelRadio.waitFor({ state: 'visible' });
     await this.yrkesaktivPaSokkelRadio.check();
     console.log('✅ Valgte: Yrkesaktiv på sokkel eller');
   }
@@ -141,6 +143,8 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
    * Velg "På norsk sokkel eller" radio-knapp
    */
   async velgNorskSokkel(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.norskSokkelRadio.waitFor({ state: 'visible' });
     await this.norskSokkelRadio.check();
     console.log('✅ Valgte: På norsk sokkel eller');
   }
@@ -149,6 +153,8 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
    * Velg "På skip registrert i ett land" radio-knapp
    */
   async velgSkipRegistrertIEttLand(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.skipRegistrertIEttLandRadio.waitFor({ state: 'visible' });
     await this.skipRegistrertIEttLandRadio.check();
     console.log('✅ Valgte: På skip registrert i ett land');
   }
@@ -163,6 +169,8 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
     const flagglandRadio = this.page.getByRole('radio', {
       name: `${land} - Flaggland`
     });
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await flagglandRadio.waitFor({ state: 'visible' });
     await flagglandRadio.check();
     console.log(`✅ Valgte: ${land} - Flaggland`);
   }
@@ -171,6 +179,8 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
    * Velg "Skip" som arbeidssted
    */
   async velgSkip(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.skipRadio.waitFor({ state: 'visible' });
     await this.skipRadio.check();
     console.log('✅ Valgte: Skip');
   }
@@ -179,6 +189,8 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
    * Velg "Arbeider på norsk skip" spørsmål
    */
   async velgArbeiderPaNorskSkip(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.arbeiderPaNorskSkipRadio.waitFor({ state: 'visible' });
     await this.arbeiderPaNorskSkipRadio.check();
     console.log('✅ Valgte: Arbeider på norsk skip');
   }
@@ -187,6 +199,8 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
    * Velg "Arbeider på utenlandsk skip" spørsmål
    */
   async velgArbeiderPaUtenlandskSkip(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.arbeiderPaUtenlandskSkipRadio.waitFor({ state: 'visible' });
     await this.arbeiderPaUtenlandskSkipRadio.check();
     console.log('✅ Valgte: Arbeider på utenlandsk skip');
   }
@@ -253,6 +267,8 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
 
     // Steg 5: Velg land (Norge)
     const norgeRadio = this.page.getByRole('radio', { name: 'Norge' });
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await norgeRadio.waitFor({ state: 'visible' });
     await norgeRadio.check();
     await this.klikkBekreftOgFortsett();
 

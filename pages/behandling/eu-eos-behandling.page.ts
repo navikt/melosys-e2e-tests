@@ -155,9 +155,32 @@ export class EuEosBehandlingPage extends BasePage {
   }
 
   /**
+   * Velg andre land fra dropdown (for "Arbeid i flere land")
+   * Brukes når det er to land-dropdowns (arbeidsland og hjemland)
+   * Dette er den ANDRE land-dropdown som vises etter første landvalg
+   *
+   * @param landNavn - Navn på land (f.eks. 'Norge')
+   */
+  async velgAndreLand(landNavn: string): Promise<void> {
+    // For "Arbeid i flere land" er det to dropdowns med samme CSS-klasse
+    // Vi velger den andre (nth(1))
+    await this.page.locator('.css-19bb58m').nth(1).click();
+
+    // Type inn første bokstaver for å filtrere (raskere enn å scrolle)
+    const searchInput = this.page.locator('#react-select-2-input');
+    await searchInput.fill(landNavn.substring(0, 2).toLowerCase());
+
+    // Velg landet fra filtrerte resultater
+    await this.page.getByRole('option', { name: landNavn, exact: true }).click();
+    console.log(`✅ Valgte andre land: ${landNavn}`);
+  }
+
+  /**
    * Velg "Yrkesaktiv" radio-knapp
    */
   async velgYrkesaktiv(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.yrkesaktivRadio.waitFor({ state: 'visible' });
     await this.yrkesaktivRadio.check();
     console.log('✅ Valgte: Yrkesaktiv');
   }
@@ -166,6 +189,8 @@ export class EuEosBehandlingPage extends BasePage {
    * Velg "Selvstendig" radio-knapp
    */
   async velgSelvstendig(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.selvstendigRadio.waitFor({ state: 'visible' });
     await this.selvstendigRadio.check();
     console.log('✅ Valgte: Selvstendig');
   }
@@ -187,6 +212,8 @@ export class EuEosBehandlingPage extends BasePage {
    * Velg "Lønnet arbeid" radio-knapp
    */
   async velgLønnetArbeid(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.lønnetArbeidRadio.waitFor({ state: 'visible' });
     await this.lønnetArbeidRadio.check();
     console.log('✅ Valgte: Lønnet arbeid');
   }
@@ -195,6 +222,8 @@ export class EuEosBehandlingPage extends BasePage {
    * Velg "Ulønnet arbeid" radio-knapp
    */
   async velgUlønnetArbeid(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.ulønnetArbeidRadio.waitFor({ state: 'visible' });
     await this.ulønnetArbeidRadio.check();
     console.log('✅ Valgte: Ulønnet arbeid');
   }
@@ -205,6 +234,8 @@ export class EuEosBehandlingPage extends BasePage {
    */
   async svarJa(): Promise<void> {
     const jaRadio = this.page.getByRole('radio', { name: 'Ja' });
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await jaRadio.waitFor({ state: 'visible' });
     await jaRadio.check();
     console.log('✅ Svarte: Ja');
   }
@@ -214,6 +245,8 @@ export class EuEosBehandlingPage extends BasePage {
    */
   async svarNei(): Promise<void> {
     const neiRadio = this.page.getByRole('radio', { name: 'Nei' });
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await neiRadio.waitFor({ state: 'visible' });
     await neiRadio.check();
     console.log('✅ Svarte: Nei');
   }
@@ -222,6 +255,8 @@ export class EuEosBehandlingPage extends BasePage {
    * Velg "Ja, jeg vil innvilge søknaden"
    */
   async innvilgeSøknad(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.innvilgeSøknadRadio.waitFor({ state: 'visible' });
     await this.innvilgeSøknadRadio.check();
     console.log('✅ Valgte: Innvilge søknaden');
   }
@@ -230,15 +265,20 @@ export class EuEosBehandlingPage extends BasePage {
    * Velg "Nei, jeg vil avslå søknaden"
    */
   async avslåSøknad(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.avslåSøknadRadio.waitFor({ state: 'visible' });
     await this.avslåSøknadRadio.check();
     console.log('✅ Valgte: Avslå søknaden');
   }
 
   /**
    * Klikk "Bekreft og fortsett" knapp
+   * Venter på at siden er klar etter navigasjon
    */
   async klikkBekreftOgFortsett(): Promise<void> {
     await this.bekreftOgFortsettButton.click();
+    // Vent litt for at React state skal oppdatere seg (knappen trigger state change, ikke full page reload)
+    await this.page.waitForTimeout(500);
     console.log('✅ Klikket Bekreft og fortsett');
   }
 

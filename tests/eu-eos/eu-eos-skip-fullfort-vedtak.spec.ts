@@ -123,7 +123,7 @@ test.describe('EU/EØS Skip - Komplett arbeidsflyt', () => {
     await opprettSak.velgBehandlingstema('UTSENDT_ARBEIDSTAKER');
 
     // Fyll periode og land
-    await skipBehandling.fyllInnFraTilDato('01.01.2024', '01.01.2026');
+    await skipBehandling.fyllInnFraTilDato('01.01.2024', '31.12.2025');
     await skipBehandling.velgLand('Danmark');
     await opprettSak.velgAarsak('SØKNAD');
     await opprettSak.leggBehandlingIMine();

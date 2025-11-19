@@ -343,6 +343,22 @@ Track recent MEL-IDs from test runs - increment for each new test.
 2. ✅ **Skip field order** - Fixed velgSkip() → velgFlaggland → velgSkipRegistrert
 3. ✅ **Multiple radio selection** - Only select one radio button in skip vurdering
 4. ✅ **Checkbox race condition** - Added `waitFor({ state: 'visible' })` in velgArbeidsgiver()
+5. ✅ **Radio button race conditions** - Added `waitFor({ state: 'visible' })` to ALL radio button methods:
+   - `eu-eos-behandling.page.ts`: velgYrkesaktiv, velgSelvstendig, velgLønnetArbeid, velgUlønnetArbeid, svarJa, svarNei, innvilgeSøknad, avslåSøknad
+   - `eu-eos-skip-behandling.page.ts`: velgYrkesaktivPaSokkel, velgNorskSokkel, velgSkipRegistrertIEttLand, velgFlagglandSomArbeidsland, velgSkip, velgArbeiderPaNorskSkip, velgArbeiderPaUtenlandskSkip
+
+**Pattern Applied:**
+All radio button and checkbox methods now follow this pattern:
+```typescript
+async velgElement(): Promise<void> {
+  // Vent på at element er synlig og stabil før sjekking (unngår race condition)
+  await this.element.waitFor({ state: 'visible' });
+  await this.element.check();
+  console.log('✅ ...');
+}
+```
+
+This ensures tests wait for DOM updates before interacting with elements, preventing race conditions where the test runs faster than the browser can render.
 
 ---
 
