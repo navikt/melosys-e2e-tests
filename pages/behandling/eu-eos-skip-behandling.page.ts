@@ -256,8 +256,8 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
     await norgeRadio.check();
     await this.klikkBekreftOgFortsett();
 
-    // Steg 6: Spørsmål om skip
-    await this.velgArbeiderPaNorskSkip();
+    // Steg 6: Vurdering skip - velg EN situasjon (radio buttons)
+    // For utenlandsk skip med norsk arbeidsgiver:
     await this.velgArbeiderPaUtenlandskSkip();
     await this.klikkBekreftOgFortsett();
 

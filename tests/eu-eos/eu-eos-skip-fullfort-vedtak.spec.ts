@@ -89,8 +89,9 @@ test.describe('EU/EØS Skip - Komplett arbeidsflyt', () => {
     await norgeRadio.check();
     await skipBehandling.klikkBekreftOgFortsett();
 
-    // Steg 6: Spørsmål om skip
-    await skipBehandling.velgArbeiderPaNorskSkip();
+    // Steg 6: Vurdering skip - velg situasjon (radio button group - kun EN)
+    // "Arbeider på norsk skip" er disabled fordi skipet er utenlandsk (Frankrike)
+    // Velger derfor: "Arbeider på utenlandsk skip, er bosatt i Norge og har norsk arbeidsgiver"
     await skipBehandling.velgArbeiderPaUtenlandskSkip();
     await skipBehandling.klikkBekreftOgFortsett();
 
