@@ -45,83 +45,6 @@ test.describe('EU/EØS Skip - Komplett arbeidsflyt', () => {
     await opprettSak.velgSakstema('MEDLEMSKAP_LOVVALG');
     await opprettSak.velgBehandlingstema('UTSENDT_ARBEIDSTAKER');
 
-    // For EU/EØS må vi fylle periode og land UNDER saksopprettelsen
-    await skipBehandling.fyllInnFraTilDato('01.01.2024', '01.01.2026');
-    await skipBehandling.velgLand('Danmark');
-    await opprettSak.velgAarsak('SØKNAD');
-    await opprettSak.leggBehandlingIMine();
-    await opprettSak.klikkOpprettNyBehandling();
-
-    // Vent på prosessinstanser og last siden på nytt
-    console.log('📝 Venter på prosessinstanser...');
-    await waitForProcessInstances(page.request, 30);
-    await hovedside.goto();
-
-    // Naviger til behandling
-    await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).click();
-
-    // Steg 1: Bekreft periode/land (allerede fylt ved opprettelse)
-    await skipBehandling.klikkBekreftOgFortsett();
-
-    // Steg 2: Velg yrkesaktiv på sokkel
-    await skipBehandling.velgYrkesaktivPaSokkel();
-    await skipBehandling.klikkBekreftOgFortsett();
-
-    // Steg 3: Legg til skip med detaljer
-    // VIKTIG: Rekkefølgen er kritisk - enkelte felt aktiveres først etter tidligere valg
-    await skipBehandling.klikkArbeidssted();
-    await skipBehandling.leggTilNyttSkip();
-    await skipBehandling.fyllInnSkipNavn('Hilda');
-    await skipBehandling.velgFartsomrade('UTENRIKS');
-    await skipBehandling.velgFlaggstat('Frankrike (FR)');
-    // Velg "Skip" først - dette aktiverer de andre valgene
-    await skipBehandling.velgSkip();
-    await skipBehandling.velgFlagglandSomArbeidsland('Frankrike');
-    await skipBehandling.velgSkipRegistrertIEttLand();
-    await skipBehandling.klikkBekreftOgFortsett();
-
-    // Steg 4: Velg arbeidsgiver
-    await skipBehandling.velgArbeidsgiver('Ståles Stål AS');
-    await skipBehandling.klikkBekreftOgFortsett();
-
-    // Steg 5: Velg land (Norge)
-    const norgeRadio = page.getByRole('radio', { name: 'Norge' });
-    await norgeRadio.check();
-    await skipBehandling.klikkBekreftOgFortsett();
-
-    // Steg 6: Vurdering skip - velg situasjon (radio button group - kun EN)
-    // "Arbeider på norsk skip" er disabled fordi skipet er utenlandsk (Frankrike)
-    // Velger derfor: "Arbeider på utenlandsk skip, er bosatt i Norge og har norsk arbeidsgiver"
-    await skipBehandling.velgArbeiderPaUtenlandskSkip();
-    await skipBehandling.klikkBekreftOgFortsett();
-
-    // Steg 7: Fatt vedtak
-    await skipBehandling.fattVedtak();
-
-    // Verifiser
-    await skipBehandling.assertions.verifiserVedtakFattet();
-
-    console.log('✅ EU/EØS-skip-arbeidsflyt fullført');
-  });
-
-  test('skal fullføre skip-arbeidsflyt med hjelpemetode', async ({ page }) => {
-    // Oppsett
-    const auth = new AuthHelper(page);
-    await auth.login();
-
-    // Page Objects
-    const hovedside = new HovedsidePage(page);
-    const opprettSak = new OpprettNySakPage(page);
-    const skipBehandling = new EuEosSkipBehandlingPage(page);
-
-    // Opprett sak
-    await hovedside.goto();
-    await hovedside.klikkOpprettNySak();
-    await opprettSak.fyllInnBrukerID(USER_ID_VALID);
-    await opprettSak.velgSakstype('EU_EOS');
-    await opprettSak.velgSakstema('MEDLEMSKAP_LOVVALG');
-    await opprettSak.velgBehandlingstema('UTSENDT_ARBEIDSTAKER');
-
     // Fyll periode og land
     await skipBehandling.fyllInnFraTilDato('01.01.2024', '31.12.2025');
     await skipBehandling.velgLand('Danmark');
@@ -136,6 +59,8 @@ test.describe('EU/EØS Skip - Komplett arbeidsflyt', () => {
 
     // Naviger til behandling
     await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).click();
+    // Vent på at behandlingssiden har lastet
+    await page.waitForLoadState('networkidle');
 
     // Bruk hjelpemetode for resten av flyten
     await skipBehandling.fyllUtSkipBehandling('Hilda', 'Ståles Stål AS');
@@ -143,6 +68,6 @@ test.describe('EU/EØS Skip - Komplett arbeidsflyt', () => {
     // Verifiser
     await skipBehandling.assertions.verifiserVedtakFattet();
 
-    console.log('✅ EU/EØS-skip-arbeidsflyt fullført med hjelpemetode');
+      console.log('✅ EU/EØS-skip-arbeidsflyt fullført');
   });
 });

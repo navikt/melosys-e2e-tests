@@ -151,26 +151,23 @@ export class EuEosBehandlingPage extends BasePage {
   async velgLand(landNavn: string): Promise<void> {
     await this.landDropdown.click();
     await this.page.getByRole('option', { name: landNavn }).click();
+    // Vent litt for at siden skal oppdatere seg (kan trigge visning av andre felter)
+    await this.page.waitForTimeout(500);
     console.log(`✅ Valgte land: ${landNavn}`);
   }
 
   /**
    * Velg andre land fra dropdown (for "Arbeid i flere land")
-   * Brukes når det er to land-dropdowns (arbeidsland og hjemland)
-   * Dette er den ANDRE land-dropdown som vises etter første landvalg
+   * Dette er en multi-select dropdown - klikk samme dropdown igjen for å legge til flere land
    *
    * @param landNavn - Navn på land (f.eks. 'Norge')
    */
   async velgAndreLand(landNavn: string): Promise<void> {
-    // For "Arbeid i flere land" er det to dropdowns med samme CSS-klasse
-    // Vi velger den andre (nth(1))
-    await this.page.locator('.css-19bb58m').nth(1).click();
+    // For "Arbeid i flere land" er det en multi-select dropdown
+    // Klikk samme dropdown igjen for å legge til flere land
+    await this.landDropdown.click();
 
-    // Type inn første bokstaver for å filtrere (raskere enn å scrolle)
-    const searchInput = this.page.locator('#react-select-2-input');
-    await searchInput.fill(landNavn.substring(0, 2).toLowerCase());
-
-    // Velg landet fra filtrerte resultater
+    // Velg landet fra listen
     await this.page.getByRole('option', { name: landNavn, exact: true }).click();
     console.log(`✅ Valgte andre land: ${landNavn}`);
   }

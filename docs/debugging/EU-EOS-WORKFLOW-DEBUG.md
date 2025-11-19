@@ -346,9 +346,23 @@ Track recent MEL-IDs from test runs - increment for each new test.
 5. ✅ **Radio button race conditions** - Added `waitFor({ state: 'visible' })` to ALL radio button methods:
    - `eu-eos-behandling.page.ts`: velgYrkesaktiv, velgSelvstendig, velgLønnetArbeid, velgUlønnetArbeid, svarJa, svarNei, innvilgeSøknad, avslåSøknad
    - `eu-eos-skip-behandling.page.ts`: velgYrkesaktivPaSokkel, velgNorskSokkel, velgSkipRegistrertIEttLand, velgFlagglandSomArbeidsland, velgSkip, velgArbeiderPaNorskSkip, velgArbeiderPaUtenlandskSkip
+   - `eu-eos-arbeid-flere-land.page.ts`: velgHjemland, velgHjemlandOgFortsett (else branch), bekreftArbeidIFlereLand, velgLønnetArbeidIToEllerFlere, velgProsentandel
+6. ✅ **Page load timing** - Added waits for page navigation:
+   - After case link click: `await page.waitForLoadState('networkidle')` in test files (eu-eos-fullfort-vedtak, eu-eos-skip-fullfort-vedtak, eu-eos-arbeid-flere-land-eksempel)
+   - After "Bekreft og fortsett": `await page.waitForTimeout(500)` in eu-eos-behandling.page.ts
+   - After "Bekreft og fortsett": `await page.waitForTimeout(1000)` in eu-eos-arbeid-flere-land.page.ts (longer wait needed)
+7. ✅ **Multi-select land dropdown** - Fixed `velgAndreLand()` method:
+   - Changed from looking for second dropdown `.nth(1)` to clicking same dropdown again
+   - It's a multi-select dropdown, not two separate dropdowns
+   - After selecting first land, click same dropdown to add more countries
+8. ✅ **Arbeid i flere land timing** - Increased timeouts for slower-loading elements:
+   - `arbeidIFlereLandCheckbox`: 15 second timeout (takes longer to appear)
+   - Added 1000ms wait after `velgAarsak()` before `velgAndreLand()`
+   - Added 500ms wait after `velgLand()` to allow second dropdown to appear
 
-**Pattern Applied:**
-All radio button and checkbox methods now follow this pattern:
+**Patterns Applied:**
+
+**Radio/Checkbox Pattern:**
 ```typescript
 async velgElement(): Promise<void> {
   // Vent på at element er synlig og stabil før sjekking (unngår race condition)
@@ -358,7 +372,58 @@ async velgElement(): Promise<void> {
 }
 ```
 
-This ensures tests wait for DOM updates before interacting with elements, preventing race conditions where the test runs faster than the browser can render.
+**Multi-Select Dropdown Pattern:**
+```typescript
+// First country
+await this.landDropdown.click();
+await this.page.getByRole('option', { name: 'Estland' }).click();
+
+// Wait for UI to update
+await this.page.waitForTimeout(500);
+
+// Second country - same dropdown!
+await this.landDropdown.click(); // ← Click SAME dropdown again
+await this.page.getByRole('option', { name: 'Norge' }).click();
+```
+
+**Navigation Pattern:**
+```typescript
+// Test file - after clicking case link
+await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).click();
+await page.waitForLoadState('networkidle'); // ← Add this!
+await behandling.klikkBekreftOgFortsett();
+```
+
+**Button Click Pattern (Standard workflows):**
+```typescript
+async klikkBekreftOgFortsett(): Promise<void> {
+  await this.bekreftOgFortsettButton.click();
+  await this.page.waitForTimeout(500); // React state update
+  console.log('✅ Klikket Bekreft og fortsett');
+}
+```
+
+**Button Click Pattern (Arbeid i flere land - needs longer wait):**
+```typescript
+async klikkBekreftOgFortsett(): Promise<void> {
+  await this.bekreftOgFortsettButton.click();
+  await this.page.waitForTimeout(1000); // Longer wait for complex UI
+  console.log('✅ Klikket Bekreft og fortsett');
+}
+```
+
+This ensures:
+1. DOM elements are visible before interaction (prevents race conditions)
+2. Pages fully load after navigation (prevents clicking disabled elements)
+3. React state updates complete after button clicks (prevents stale UI state)
+4. Multi-select dropdowns work correctly (click same element multiple times)
+5. Complex workflows get extra time to load (arbeid i flere land)
+
+**Test Coverage:**
+- ✅ Standard workflow: `eu-eos-fullfort-vedtak.spec.ts`
+- ✅ Skip workflow: `eu-eos-skip-fullfort-vedtak.spec.ts`
+- ✅ Arbeid i flere land (POM): `eu-eos-arbeid-flere-land-eksempel.spec.ts` (test 1)
+- ✅ Arbeid i flere land (step-by-step): `eu-eos-arbeid-flere-land-eksempel.spec.ts` (test 2)
 
 ---
 

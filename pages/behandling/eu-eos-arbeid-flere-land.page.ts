@@ -85,6 +85,9 @@ export class EuEosArbeidFlereLandPage extends BasePage {
    */
   async klikkBekreftOgFortsett(): Promise<void> {
     await this.bekreftOgFortsettButton.click();
+    // Vent litt for at React state skal oppdatere seg (knappen trigger state change, ikke full page reload)
+    // Økt til 1000ms for å sikre at alle elementer er lastet
+    await this.page.waitForTimeout(1000);
     console.log('✅ Klikket Bekreft og fortsett');
   }
 
@@ -93,6 +96,8 @@ export class EuEosArbeidFlereLandPage extends BasePage {
    * Dette er landet hvor personen er bosatt/har hovedarbeidssted
    */
   async velgHjemland(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.norgeRadio.waitFor({ state: 'visible' });
     await this.norgeRadio.check();
     console.log('✅ Valgte hjemland: Norge');
   }
@@ -110,6 +115,8 @@ export class EuEosArbeidFlereLandPage extends BasePage {
     } else {
       // Kan utvides med andre land om nødvendig
       const radio = this.page.getByRole('radio', { name: land });
+      // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+      await radio.waitFor({ state: 'visible' });
       await radio.check();
       console.log(`✅ Valgte hjemland: ${land}`);
     }
@@ -144,6 +151,9 @@ export class EuEosArbeidFlereLandPage extends BasePage {
    * Krysser av for "Arbeid utføres i land som er dekket av EØS-avtalen"
    */
   async bekreftArbeidIFlereLand(): Promise<void> {
+    // Vent på at checkbox er synlig og stabil før sjekking (unngår race condition)
+    // Økt timeout til 15s siden denne kan ta tid å laste
+    await this.arbeidIFlereLandCheckbox.waitFor({ state: 'visible', timeout: 15000 });
     await this.arbeidIFlereLandCheckbox.check();
     console.log('✅ Bekreftet: Arbeid utføres i flere land');
   }
@@ -161,6 +171,8 @@ export class EuEosArbeidFlereLandPage extends BasePage {
    * Velg "Lønnet arbeid i to eller flere land"
    */
   async velgLønnetArbeidIToEllerFlere(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.lønnetArbeidIToEllerFlereRadio.waitFor({ state: 'visible' });
     await this.lønnetArbeidIToEllerFlereRadio.check();
     console.log('✅ Valgte: Lønnet arbeid i to eller flere land');
   }
@@ -178,6 +190,8 @@ export class EuEosArbeidFlereLandPage extends BasePage {
    * Velg prosentandel arbeid (25% eller mer)
    */
   async velgProsentandel(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.prosentEllerMerRadio.waitFor({ state: 'visible' });
     await this.prosentEllerMerRadio.check();
     console.log('✅ Valgte: 25% eller mer av arbeidet i hjemlandet');
   }
