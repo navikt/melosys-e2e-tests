@@ -22,8 +22,7 @@ import { EuEosBehandlingAssertions } from './eu-eos-behandling.assertions';
  *
  * @example
  * const behandling = new EuEosBehandlingPage(page);
- * await behandling.velgPeriodeMedDatepicker('2024', '1');
- * await behandling.fyllInnSluttdato('01.01.2026');
+ * await behandling.fyllInnFraTilDato('01.01.2024', '01.01.2026');
  * await behandling.velgLand('Danmark');
  * await behandling.klikkBekreftOgFortsett();
  * await behandling.velgYrkesaktiv();
@@ -39,6 +38,7 @@ export class EuEosBehandlingPage extends BasePage {
 
   private readonly årDropdown = this.page.getByRole('dialog').getByLabel('År');
 
+  private readonly fraDatoField = this.page.getByRole('textbox', { name: 'Fra' });
   private readonly tilDatoField = this.page.getByRole('textbox', { name: 'Til' });
 
   // Locators - Land
@@ -106,6 +106,18 @@ export class EuEosBehandlingPage extends BasePage {
   }
 
   /**
+   * Fyll inn startdato i tekstfelt
+   *
+   * @param dato - Dato i format DD.MM.YYYY (f.eks. '01.01.2024')
+   */
+  async fyllInnStartdato(dato: string): Promise<void> {
+    await this.fraDatoField.click();
+    await this.fraDatoField.fill(dato);
+    await this.fraDatoField.press('Enter');
+    console.log(`✅ Fylte inn startdato: ${dato}`);
+  }
+
+  /**
    * Fyll inn sluttdato i tekstfelt
    *
    * @param dato - Dato i format DD.MM.YYYY (f.eks. '01.01.2026')
@@ -115,6 +127,19 @@ export class EuEosBehandlingPage extends BasePage {
     await this.tilDatoField.fill(dato);
     await this.tilDatoField.press('Enter');
     console.log(`✅ Fylte inn sluttdato: ${dato}`);
+  }
+
+  /**
+   * Fyll inn både startdato og sluttdato
+   * Hjelpemetode som kombinerer startdato og sluttdato
+   *
+   * @param fraDato - Startdato i format DD.MM.YYYY (f.eks. '01.01.2024')
+   * @param tilDato - Sluttdato i format DD.MM.YYYY (f.eks. '01.01.2026')
+   */
+  async fyllInnFraTilDato(fraDato: string, tilDato: string): Promise<void> {
+    await this.fyllInnStartdato(fraDato);
+    await this.fyllInnSluttdato(tilDato);
+    console.log(`✅ Fylte inn periode: ${fraDato} - ${tilDato}`);
   }
 
   /**

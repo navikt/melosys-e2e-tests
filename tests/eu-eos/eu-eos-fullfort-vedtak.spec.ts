@@ -42,10 +42,8 @@ test.describe('EU/EØS - Komplett arbeidsflyt', () => {
     await opprettSak.velgBehandlingstema('UTSENDT_ARBEIDSTAKER');
 
     // For EU/EØS må vi fylle periode og land UNDER saksopprettelsen
-    await behandling.velgPeriodeMedDatepicker('2024', 'fredag 1');
-    await behandling.fyllInnSluttdato('01.01.2026');
+    await behandling.fyllInnFraTilDato('01.01.2024', '01.01.2026');
     await behandling.velgLand('Danmark');
-
     await opprettSak.velgAarsak('SØKNAD');
     await opprettSak.leggBehandlingIMine();
     await opprettSak.klikkOpprettNyBehandling();
