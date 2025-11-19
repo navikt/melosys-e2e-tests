@@ -177,6 +177,8 @@ export class EuEosBehandlingPage extends BasePage {
    */
   async velgArbeidsgiver(arbeidsgiverNavn: string): Promise<void> {
     const checkbox = this.page.getByRole('checkbox', { name: arbeidsgiverNavn });
+    // Vent på at checkbox er synlig og stabil før sjekking (unngår race condition)
+    await checkbox.waitFor({ state: 'visible' });
     await checkbox.check();
     console.log(`✅ Valgte arbeidsgiver: ${arbeidsgiverNavn}`);
   }
