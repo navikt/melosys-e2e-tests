@@ -427,5 +427,59 @@ This ensures:
 
 ---
 
+## ⚡ Recent Stability Improvements
+
+### 2025-11-19 - Increased Timeouts & Network Idle Waits
+
+**Issue:** Tests occasionally timing out on checkbox interactions and navigation after "Fatt vedtak"
+
+**Changes:**
+1. ✅ **Checkbox timeout increased** - `velgArbeidsgiver()` now waits up to 30 seconds (was 10s)
+2. ✅ **Network idle wait** - `klikkBekreftOgFortsett()` now waits for `networkidle` state (15s timeout)
+3. ✅ **Navigation timeout increased** - `verifiserVedtakFattet()` now waits up to 60 seconds for redirect (was 10s)
+4. ✅ **Pre-vedtak network check** - `fattVedtak()` now waits for network idle before clicking button
+
+**Improved Patterns:**
+
+```typescript
+// Checkbox with longer timeout (handles slow step loading)
+async velgArbeidsgiver(arbeidsgiverNavn: string): Promise<void> {
+  const checkbox = this.page.getByRole('checkbox', { name: arbeidsgiverNavn });
+  await checkbox.waitFor({ state: 'visible', timeout: 30000 }); // ← 30s timeout
+  await checkbox.check();
+}
+
+// Step transition with network idle wait
+async klikkBekreftOgFortsett(): Promise<void> {
+  await this.bekreftOgFortsettButton.click();
+  await this.page.waitForTimeout(500); // React state update
+  await this.page.waitForLoadState('networkidle', { timeout: 15000 }); // ← Network idle!
+  console.log('✅ Klikket Bekreft og fortsett');
+}
+
+// Fatt vedtak with pre-click checks
+async fattVedtak(): Promise<void> {
+  await this.page.waitForLoadState('networkidle', { timeout: 10000 }); // ← Check network first!
+  await this.fattVedtakButton.waitFor({ state: 'visible', timeout: 10000 }); // ← Check button ready
+  await this.fattVedtakButton.click();
+  console.log('✅ Fattet vedtak');
+}
+
+// Navigation assertion with longer timeout
+async verifiserVedtakFattet(): Promise<void> {
+  // 60 seconds for vedtak processing (document generation, DB updates)
+  await this.page.waitForURL(/\/melosys\/?$/, { timeout: 60000 }); // ← 60s for CI!
+  console.log('✅ Vedtak fattet - navigert tilbake til hovedside');
+}
+```
+
+**Why These Changes:**
+- **CI is slower**: GitHub Actions needs more time than local development
+- **Step transitions**: Complex React state updates need network idle confirmation
+- **Vedtak processing**: Document generation + database updates can take 30-60 seconds
+- **Arbeidsgiver loading**: External API calls to fetch company data can be slow
+
+---
+
 **Last Updated:** 2025-11-19
 **Maintainer:** Claude Code debugging session

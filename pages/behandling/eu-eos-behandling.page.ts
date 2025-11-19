@@ -198,11 +198,43 @@ export class EuEosBehandlingPage extends BasePage {
    * @param arbeidsgiverNavn - Navn på arbeidsgiver (f.eks. 'Ståles Stål AS')
    */
   async velgArbeidsgiver(arbeidsgiverNavn: string): Promise<void> {
+    console.log(`🔍 Leter etter arbeidsgiver checkbox: "${arbeidsgiverNavn}"`);
+
+    // Debug: Se hva som finnes på siden
+    const pageContent = await this.page.content();
+    console.log(`📄 Sidelengde: ${pageContent.length} bytes`);
+
+    // Debug: Tell hvor mange checkboxer som finnes
+    const allCheckboxes = await this.page.getByRole('checkbox').count();
+    console.log(`✓ Fant ${allCheckboxes} checkboxer totalt på siden`);
+
+    // Debug: Vis URL for å bekrefte hvilket steg vi er på
+    console.log(`🔗 Nåværende URL: ${this.page.url()}`);
+
     const checkbox = this.page.getByRole('checkbox', { name: arbeidsgiverNavn });
+
     // Vent på at checkbox er synlig og stabil før sjekking (unngår race condition)
-    await checkbox.waitFor({ state: 'visible' });
-    await checkbox.check();
-    console.log(`✅ Valgte arbeidsgiver: ${arbeidsgiverNavn}`);
+    // Økt timeout til 30 sekunder for å håndtere treg lasting på Virksomhet-steget
+    try {
+      await checkbox.waitFor({ state: 'visible', timeout: 30000 });
+      await checkbox.check();
+      console.log(`✅ Valgte arbeidsgiver: ${arbeidsgiverNavn}`);
+    } catch (error) {
+      // Debug: Hvis det feiler, vis hva som faktisk finnes på siden
+      console.error(`❌ Kunne ikke finne checkbox "${arbeidsgiverNavn}"`);
+      console.error(`📸 Tar screenshot for debugging...`);
+      await this.page.screenshot({ path: 'debug-missing-checkbox.png', fullPage: true });
+
+      // List alle checkboxer som finnes
+      const checkboxes = await this.page.getByRole('checkbox').all();
+      console.error(`📋 Tilgjengelige checkboxer (${checkboxes.length}):`);
+      for (const cb of checkboxes) {
+        const label = await cb.getAttribute('aria-label') || await cb.getAttribute('name') || 'ingen label';
+        console.error(`   - ${label}`);
+      }
+
+      throw error;
+    }
   }
 
   /**
@@ -273,10 +305,25 @@ export class EuEosBehandlingPage extends BasePage {
    * Venter på at siden er klar etter navigasjon
    */
   async klikkBekreftOgFortsett(): Promise<void> {
+    console.log('🔄 Klikker "Bekreft og fortsett"...');
+    const urlBefore = this.page.url();
+
+    // Check if button is enabled before clicking
+    const isEnabled = await this.bekreftOgFortsettButton.isEnabled();
+    console.log(`  Knapp aktivert: ${isEnabled}`);
+
     await this.bekreftOgFortsettButton.click();
-    // Vent litt for at React state skal oppdatere seg (knappen trigger state change, ikke full page reload)
+
+    // Vent på at React state oppdaterer og nettverket blir stille
+    // Dette sikrer at neste steg er helt ferdig lastet før vi fortsetter
     await this.page.waitForTimeout(500);
-    console.log('✅ Klikket Bekreft og fortsett');
+    await this.page.waitForLoadState('networkidle', { timeout: 15000 });
+
+    const urlAfter = this.page.url();
+    console.log(`✅ Klikket Bekreft og fortsett`);
+    console.log(`  URL før:  ${urlBefore}`);
+    console.log(`  URL etter: ${urlAfter}`);
+    console.log(`  URL endret: ${urlBefore !== urlAfter}`);
   }
 
   /**
@@ -284,6 +331,13 @@ export class EuEosBehandlingPage extends BasePage {
    * EU/EØS fatter vedtak direkte uten egen vedtaksside
    */
   async fattVedtak(): Promise<void> {
+    // Vent på at nettverket er stille før vi fatter vedtak
+    // Dette sikrer at alle tidligere API-kall er fullført
+    await this.page.waitForLoadState('networkidle', { timeout: 10000 });
+
+    // Vent på at "Fatt vedtak"-knappen er synlig og aktivert
+    await this.fattVedtakButton.waitFor({ state: 'visible', timeout: 10000 });
+
     await this.fattVedtakButton.click();
     console.log('✅ Fattet vedtak');
   }

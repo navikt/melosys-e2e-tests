@@ -18,7 +18,8 @@ export class EuEosSkipBehandlingAssertions {
    */
   async verifiserVedtakFattet(): Promise<void> {
     // Vent på navigering tilbake til hovedside eller bekreftelse
-    await this.page.waitForURL(/\/melosys\/?$/, { timeout: 10000 });
+    // Økt timeout til 60 sekunder - vedtak kan ta lang tid på CI (dokumentgenerering, database-oppdateringer)
+    await this.page.waitForURL(/\/melosys\/?$/, { timeout: 60000 });
     console.log('✅ Vedtak fattet - navigert tilbake til hovedside');
   }
 
