@@ -152,27 +152,33 @@ class TestSummaryReporter implements Reporter {
       md += `## 📊 Test Results\n\n`;
 
       // Group by folder and file
-      interface FolderInfo {
-        files: Map<string, TestInfo[]>;
-      }
-      const byFolder = new Map<string, FolderInfo>();
+      const byFolder = new Map<string, Map<string, TestInfo[]>>();
 
       for (const test of tests) {
         const filePath = test.test.location.file;
         const parts = filePath.split('/');
         const fileName = parts[parts.length - 1];
-        const folderName = parts[parts.length - 2] || 'root';
 
-        if (!byFolder.has(folderName)) {
-          byFolder.set(folderName, { files: new Map() });
+        // Find "tests" directory index and extract complete path after it
+        const testsIndex = parts.indexOf('tests');
+        let folderPath = 'root';
+
+        if (testsIndex !== -1 && testsIndex < parts.length - 1) {
+          // Get all folders between 'tests' and the filename
+          const foldersAfterTests = parts.slice(testsIndex + 1, parts.length - 1);
+          folderPath = foldersAfterTests.length > 0 ? foldersAfterTests.join('/') : 'root';
         }
 
-        const folder = byFolder.get(folderName)!;
-        if (!folder.files.has(fileName)) {
-          folder.files.set(fileName, []);
+        if (!byFolder.has(folderPath)) {
+          byFolder.set(folderPath, new Map());
         }
 
-        folder.files.get(fileName)!.push(test);
+        const folder = byFolder.get(folderPath)!;
+        if (!folder.has(fileName)) {
+          folder.set(fileName, []);
+        }
+
+        folder.get(fileName)!.push(test);
       }
 
       // HTML table with proper colspan
@@ -289,10 +295,19 @@ class TestSummaryReporter implements Reporter {
         const filePath = test.location.file;
         const parts = filePath.split('/');
         const fileName = parts[parts.length - 1];
-        const folderName = parts[parts.length - 2] || 'root';
+
+        // Find "tests" directory index and extract complete path after it
+        const testsIndex = parts.indexOf('tests');
+        let folderPath = 'root';
+
+        if (testsIndex !== -1 && testsIndex < parts.length - 1) {
+          // Get all folders between 'tests' and the filename
+          const foldersAfterTests = parts.slice(testsIndex + 1, parts.length - 1);
+          folderPath = foldersAfterTests.length > 0 ? foldersAfterTests.join('/') : 'root';
+        }
 
         md += `### ${test.title}\n\n`;
-        md += `**Folder:** \`${folderName}\`  \n`;
+        md += `**Folder:** \`${folderPath}\`  \n`;
         md += `**File:** \`${fileName}\`  \n`;
         md += `**Attempts:** ${totalAttempts} (${failedAttempts} failed)  \n`;
         md += `**Duration:** ${Math.round(testInfo.results[testInfo.results.length - 1].duration / 1000)}s\n\n`;

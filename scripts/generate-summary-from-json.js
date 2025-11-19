@@ -37,13 +37,22 @@ const byFolder = new Map();
 data.tests.forEach(test => {
   const parts = test.file.split('/');
   const fileName = parts[parts.length - 1];
-  const folderName = parts[parts.length - 2] || 'root';
 
-  if (!byFolder.has(folderName)) {
-    byFolder.set(folderName, new Map());
+  // Find "tests" directory index and extract complete path after it
+  const testsIndex = parts.indexOf('tests');
+  let folderPath = 'root';
+
+  if (testsIndex !== -1 && testsIndex < parts.length - 1) {
+    // Get all folders between 'tests' and the filename
+    const foldersAfterTests = parts.slice(testsIndex + 1, parts.length - 1);
+    folderPath = foldersAfterTests.length > 0 ? foldersAfterTests.join('/') : 'root';
   }
 
-  const folder = byFolder.get(folderName);
+  if (!byFolder.has(folderPath)) {
+    byFolder.set(folderPath, new Map());
+  }
+
+  const folder = byFolder.get(folderPath);
   if (!folder.has(fileName)) {
     folder.set(fileName, []);
   }
@@ -158,10 +167,19 @@ if (failedTests.length > 0) {
   failedTests.forEach(test => {
     const parts = test.file.split('/');
     const fileName = parts[parts.length - 1];
-    const folderName = parts[parts.length - 2] || 'root';
+
+    // Find "tests" directory index and extract complete path after it
+    const testsIndex = parts.indexOf('tests');
+    let folderPath = 'root';
+
+    if (testsIndex !== -1 && testsIndex < parts.length - 1) {
+      // Get all folders between 'tests' and the filename
+      const foldersAfterTests = parts.slice(testsIndex + 1, parts.length - 1);
+      folderPath = foldersAfterTests.length > 0 ? foldersAfterTests.join('/') : 'root';
+    }
 
     md += `### ${test.title}\n\n`;
-    md += `**Folder:** \`${folderName}\`  \n`;
+    md += `**Folder:** \`${folderPath}\`  \n`;
     md += `**File:** \`${fileName}\`  \n`;
     md += `**Attempts:** ${test.totalAttempts} (${test.failedAttempts} failed)  \n`;
     md += `**Duration:** ${Math.round(test.duration / 1000)}s\n\n`;
