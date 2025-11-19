@@ -17,10 +17,34 @@ export class EuEosSkipBehandlingAssertions {
    * Sjekker at vi er tilbake på hovedsiden med melding om fullført behandling
    */
   async verifiserVedtakFattet(): Promise<void> {
-    // Vent på navigering tilbake til hovedside eller bekreftelse
-    // Økt timeout til 60 sekunder - vedtak kan ta lang tid på CI (dokumentgenerering, database-oppdateringer)
-    await this.page.waitForURL(/\/melosys\/?$/, { timeout: 60000 });
-    console.log('✅ Vedtak fattet - navigert tilbake til hovedside');
+    console.log('⏳ Venter på navigering tilbake til hovedside...');
+    console.log(`   Nåværende URL: ${this.page.url()}`);
+
+    try {
+      // Vent på navigering tilbake til hovedside eller bekreftelse
+      // Økt timeout til 90 sekunder - vedtak kan ta lang tid på CI (dokumentgenerering, database-oppdateringer)
+      await this.page.waitForURL(/\/melosys\/?$/, { timeout: 90000 });
+      console.log('✅ Vedtak fattet - navigert tilbake til hovedside');
+    } catch (error) {
+      // Debug: Hvis navigering feiler, ta screenshot og logg tilstand
+      console.error('❌ Navigering tilbake til hovedside feilet');
+      console.error(`   Gjeldende URL: ${this.page.url()}`);
+      console.error(`   Forventet URL: /melosys/ eller /melosys`);
+
+      // Ta screenshot for debugging
+      await this.page.screenshot({ path: 'debug-vedtak-navigation-failed.png', fullPage: true });
+      console.error('📸 Screenshot lagret: debug-vedtak-navigation-failed.png');
+
+      // Sjekk om det er feilmeldinger på siden
+      const errors = await this.page.locator('.navds-alert--error, .navds-error-message').count();
+      if (errors > 0) {
+        console.error(`   Fant ${errors} feilmelding(er) på siden`);
+        const errorTexts = await this.page.locator('.navds-alert--error, .navds-error-message').allTextContents();
+        errorTexts.forEach((text, i) => console.error(`   Feil ${i + 1}: ${text}`));
+      }
+
+      throw error;
+    }
   }
 
   /**
