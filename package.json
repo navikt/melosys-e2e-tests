@@ -12,6 +12,7 @@
     "test:unit:ui": "vitest --ui",
     "test:unit:run": "vitest run",
     "test:all": "npm run test:unit:run && npm test",
+    "generate-summary": "ts-node scripts/generate-summary-from-json.ts",
     "codegen": "playwright codegen http://localhost:3000/melosys/",
     "show-report": "playwright show-report",
     "show-trace": "playwright show-trace",
