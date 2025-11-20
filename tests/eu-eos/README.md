@@ -22,6 +22,25 @@ EU/EØS-saker håndterer tilfeller hvor arbeidstakere sendes ut til EU/EØS-land
 
 **Testresultater:** ✅ Test passerer
 
+### `eu-eos-13.1-arbeid-flere-land-fullfort-vedtak.spec.ts`
+
+**Komplett arbeidsflyt test for "Arbeid i flere land"** som dekker:
+1. Opprett ny EU/EØS-sak (ARBEID_FLERE_LAND)
+2. Fyll inn periode (Fra og Til dato)
+3. Velg to land (Estland og Norge)
+4. Velg årsak (SØKNAD)
+5. Opprett behandling
+6. Bekreft første steg
+7. Velg hovedland (Norge) via radio-knapp
+8. Velg arbeidsgiver (Ståles Stål AS) via checkbox
+9. Svar på spørsmål om arbeidslokasjon (checkbox)
+10. Velg arbeidstype (Lønnet arbeid i to eller flere land)
+11. Velg prosentandel (% eller mer)
+12. Fyll inn fritekst-felter (begrunnelse og ytterligere informasjon)
+13. Fatt vedtak direkte
+
+**Testresultater:** 🔄 Ny test - under testing
+
 ## Page Objects
 
 ### `EuEosBehandlingPage`
@@ -60,14 +79,50 @@ Verifiseringsmetoder for database og UI:
 - `verifiserVedtakIDatabase(fnr)` - Verifiser vedtak i DB
 - `verifiserKomplettBehandling(fnr, land)` - Komplett verifisering
 
+### `ArbeidFlereLandBehandlingPage`
+**Lokasjon:** `pages/behandling/arbeid-flere-land-behandling.page.ts`
+
+Håndterer "Arbeid i flere land" behandlingsflyten:
+- Velg hovedland (radio-knapp)
+- Velg arbeidsgiver (checkbox)
+- Svar på arbeidslokasjon-spørsmål (checkbox)
+- Velg arbeidstype (Lønnet arbeid i to eller flere land)
+- Velg prosentandel (% eller mer)
+- Fyll inn fritekst-felter (begrunnelse og ytterligere informasjon)
+- Fatte vedtak direkte
+
+**Nøkkelmetoder:**
+- `velgLandRadio(landNavn)` - Velg hovedland via radio-knapp
+- `velgArbeidsgiver(navn)` - Velg arbeidsgiver (med API-venting)
+- `velgArbeidUtføresILandSomEr()` - Velg arbeidslokasjon-checkbox
+- `velgLønnetArbeidIToEllerFlereLand()` - Velg arbeidstype
+- `velgProsentEllerMer()` - Velg prosentandel
+- `fyllInnFritekstTilBegrunnelse(tekst)` - Fyll inn begrunnelse
+- `fyllInnYtterligereInformasjon(tekst)` - Fyll inn ytterligere info
+- `fattVedtak()` - Fatt vedtak direkte
+- `klikkBekreftOgFortsett()` - Gå til neste steg
+- `fyllUtArbeidFlereLandBehandling()` - **Hjelpemetode** for komplett flyt
+
+### `ArbeidFlereLandBehandlingAssertions`
+**Lokasjon:** `pages/behandling/arbeid-flere-land-behandling.assertions.ts`
+
+Verifiseringsmetoder for "Arbeid i flere land" workflow:
+- `verifiserIngenFeil()` - Ingen feil på siden
+- `verifiserBehandlingIDatabase(fnr)` - Verifiser behandling (ARBEID_FLERE_LAND)
+- `verifiserLovvalgsperiodeIDatabase(fnr, land)` - Verifiser lovvalgsperiode
+- `verifiserPeriodeIDatabase(fnr, fraOgMed, tilOgMed)` - Verifiser periode
+- `verifiserVedtakIDatabase(fnr)` - Verifiser vedtak
+- `verifiserKomplettBehandling(fnr, land)` - Komplett verifisering
+
 ## Konstanter
 
 ### Sakstype
 ```typescript
 import { SAKSTYPER, BEHANDLINGSTEMA } from '../../pages/shared/constants';
 
-SAKSTYPER.EU_EOS              // 'EU_EOS'
+SAKSTYPER.EU_EOS                      // 'EU_EOS'
 BEHANDLINGSTEMA.UTSENDT_ARBEIDSTAKER  // 'UTSENDT_ARBEIDSTAKER'
+BEHANDLINGSTEMA.ARBEID_FLERE_LAND     // 'ARBEID_FLERE_LAND'
 ```
 
 ### EU/EØS Land
@@ -80,6 +135,8 @@ EU_EOS_LAND.FINLAND      // 'Finland'
 EU_EOS_LAND.TYSKLAND     // 'Tyskland'
 EU_EOS_LAND.FRANKRIKE    // 'Frankrike'
 EU_EOS_LAND.NEDERLAND    // 'Nederland'
+EU_EOS_LAND.ESTLAND      // 'Estland'
+EU_EOS_LAND.NORGE        // 'Norge'
 ```
 
 ## Brukseksempler
@@ -131,7 +188,41 @@ await behandling.innvilgeOgFattVedtak();
 await behandling.fyllUtEuEosBehandling();
 ```
 
-## Viktige forskjeller fra FTRL og Trygdeavtale
+### "Arbeid i flere land" workflow
+```typescript
+import { ArbeidFlereLandBehandlingPage } from '../../pages/behandling/arbeid-flere-land-behandling.page';
+import { EuEosBehandlingPage } from '../../pages/behandling/eu-eos-behandling.page';
+
+const euEosBehandling = new EuEosBehandlingPage(page);
+const behandling = new ArbeidFlereLandBehandlingPage(page);
+
+// Under saksopprettelse: Velg to land (bruk EuEosBehandlingPage)
+await euEosBehandling.velgLand('Estland');
+await euEosBehandling.velgAndreLand('Norge');
+
+// Behandlingsflyt: Steg-for-steg kontroll
+await behandling.klikkBekreftOgFortsett(); // Første steg
+await behandling.velgLandRadio('Norge');
+await behandling.klikkBekreftOgFortsett();
+await behandling.velgArbeidsgiver('Ståles Stål AS');
+await behandling.klikkBekreftOgFortsett();
+await behandling.velgArbeidUtføresILandSomEr();
+await behandling.klikkBekreftOgFortsett();
+await behandling.velgLønnetArbeidIToEllerFlereLand();
+await behandling.klikkBekreftOgFortsett();
+await behandling.velgProsentEllerMer();
+await behandling.klikkBekreftOgFortsett();
+await behandling.fyllInnFritekstTilBegrunnelse('Lorem ipsum');
+await behandling.fyllInnYtterligereInformasjon('Dodatkowo');
+await behandling.fattVedtak();
+
+// Eller bruk hjelpemetode (anbefalt)
+await behandling.fyllUtArbeidFlereLandBehandling('Norge', 'Ståles Stål AS', 'Lorem ipsum', 'Dodatkowo');
+```
+
+## Viktige forskjeller mellom EU/EØS workflows
+
+### EU/EØS vs FTRL og Trygdeavtale (generelt)
 
 1. **Dateplukker** - Bruker år-velger og dag-velger (ikke bare tekstfelt)
 2. **Land-dropdown** - Bruker CSS-locator (`.css-19bb58m`) i stedet for label
@@ -140,7 +231,22 @@ await behandling.fyllUtEuEosBehandling();
 5. **Arbeidstype** - Lønnet arbeid vs Ulønnet arbeid
 6. **Spørsmål** - To separate Ja/Nei-spørsmål
 7. **Ingen egen vedtaksside** - Fatter vedtak direkte fra behandlingssiden (som Trygdeavtale)
-8. **Behandlingstema** - UTSENDT_ARBEIDSTAKER (ikke YRKESAKTIV)
+8. **Behandlingstema** - UTSENDT_ARBEIDSTAKER eller ARBEID_FLERE_LAND (ikke YRKESAKTIV)
+
+### "Utsendt arbeidstaker" vs "Arbeid i flere land"
+
+**Utsendt arbeidstaker (12.1):**
+- Behandlingstema: `UTSENDT_ARBEIDSTAKER`
+- Ett land valgt under opprettelse
+- Workflow: Yrkesaktiv/Selvstendig → Arbeidsgiver → Arbeidstype → Ja/Nei-spørsmål → Innvilg/avslå → Vedtak
+- POM: `EuEosBehandlingPage`
+
+**Arbeid i flere land (13.1):**
+- Behandlingstema: `ARBEID_FLERE_LAND`
+- **To land** valgt under opprettelse (f.eks. Estland + Norge)
+- Workflow: Velg hovedland → Arbeidsgiver → Arbeidslokasjon-checkbox → Arbeidstype → Prosentandel → Fritekst-felter → Vedtak
+- Ulike spørsmål og felter
+- POM: `ArbeidFlereLandBehandlingPage`
 
 ## Database-verifisering
 
