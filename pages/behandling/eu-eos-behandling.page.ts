@@ -22,8 +22,7 @@ import { EuEosBehandlingAssertions } from './eu-eos-behandling.assertions';
  *
  * @example
  * const behandling = new EuEosBehandlingPage(page);
- * await behandling.velgPeriodeMedDatepicker('2024', '1');
- * await behandling.fyllInnSluttdato('01.01.2026');
+ * await behandling.fyllInnFraTilDato('01.01.2024', '01.01.2026');
  * await behandling.velgLand('Danmark');
  * await behandling.klikkBekreftOgFortsett();
  * await behandling.velgYrkesaktiv();
@@ -39,6 +38,7 @@ export class EuEosBehandlingPage extends BasePage {
 
   private readonly årDropdown = this.page.getByRole('dialog').getByLabel('År');
 
+  private readonly fraDatoField = this.page.getByRole('textbox', { name: 'Fra' });
   private readonly tilDatoField = this.page.getByRole('textbox', { name: 'Til' });
 
   // Locators - Land
@@ -106,6 +106,18 @@ export class EuEosBehandlingPage extends BasePage {
   }
 
   /**
+   * Fyll inn startdato i tekstfelt
+   *
+   * @param dato - Dato i format DD.MM.YYYY (f.eks. '01.01.2024')
+   */
+  async fyllInnStartdato(dato: string): Promise<void> {
+    await this.fraDatoField.click();
+    await this.fraDatoField.fill(dato);
+    await this.fraDatoField.press('Enter');
+    console.log(`✅ Fylte inn startdato: ${dato}`);
+  }
+
+  /**
    * Fyll inn sluttdato i tekstfelt
    *
    * @param dato - Dato i format DD.MM.YYYY (f.eks. '01.01.2026')
@@ -118,6 +130,19 @@ export class EuEosBehandlingPage extends BasePage {
   }
 
   /**
+   * Fyll inn både startdato og sluttdato
+   * Hjelpemetode som kombinerer startdato og sluttdato
+   *
+   * @param fraDato - Startdato i format DD.MM.YYYY (f.eks. '01.01.2024')
+   * @param tilDato - Sluttdato i format DD.MM.YYYY (f.eks. '01.01.2026')
+   */
+  async fyllInnFraTilDato(fraDato: string, tilDato: string): Promise<void> {
+    await this.fyllInnStartdato(fraDato);
+    await this.fyllInnSluttdato(tilDato);
+    console.log(`✅ Fylte inn periode: ${fraDato} - ${tilDato}`);
+  }
+
+  /**
    * Velg land fra dropdown
    * Bruker CSS-locator da denne dropdown-komponenten ikke har god label
    *
@@ -126,13 +151,33 @@ export class EuEosBehandlingPage extends BasePage {
   async velgLand(landNavn: string): Promise<void> {
     await this.landDropdown.click();
     await this.page.getByRole('option', { name: landNavn }).click();
+    // Vent litt for at siden skal oppdatere seg (kan trigge visning av andre felter)
+    await this.page.waitForTimeout(500);
     console.log(`✅ Valgte land: ${landNavn}`);
+  }
+
+  /**
+   * Velg andre land fra dropdown (for "Arbeid i flere land")
+   * Dette er en multi-select dropdown - klikk samme dropdown igjen for å legge til flere land
+   *
+   * @param landNavn - Navn på land (f.eks. 'Norge')
+   */
+  async velgAndreLand(landNavn: string): Promise<void> {
+    // For "Arbeid i flere land" er det en multi-select dropdown
+    // Klikk samme dropdown igjen for å legge til flere land
+    await this.landDropdown.click();
+
+    // Velg landet fra listen
+    await this.page.getByRole('option', { name: landNavn, exact: true }).click();
+    console.log(`✅ Valgte andre land: ${landNavn}`);
   }
 
   /**
    * Velg "Yrkesaktiv" radio-knapp
    */
   async velgYrkesaktiv(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.yrkesaktivRadio.waitFor({ state: 'visible' });
     await this.yrkesaktivRadio.check();
     console.log('✅ Valgte: Yrkesaktiv');
   }
@@ -141,6 +186,8 @@ export class EuEosBehandlingPage extends BasePage {
    * Velg "Selvstendig" radio-knapp
    */
   async velgSelvstendig(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.selvstendigRadio.waitFor({ state: 'visible' });
     await this.selvstendigRadio.check();
     console.log('✅ Valgte: Selvstendig');
   }
@@ -148,18 +195,77 @@ export class EuEosBehandlingPage extends BasePage {
   /**
    * Velg arbeidsgiver(e) med checkbox
    *
+   * IMPORTANT: Checkbox triggers immediate API save when checked!
+   * Investigation showed: POST /api/mottatteopplysninger/{id} -> 200
+   * This method now waits for that API call to complete.
+   *
    * @param arbeidsgiverNavn - Navn på arbeidsgiver (f.eks. 'Ståles Stål AS')
    */
   async velgArbeidsgiver(arbeidsgiverNavn: string): Promise<void> {
+    console.log(`🔍 Leter etter arbeidsgiver checkbox: "${arbeidsgiverNavn}"`);
+
+    // Debug: Se hva som finnes på siden
+    const pageContent = await this.page.content();
+    console.log(`📄 Sidelengde: ${pageContent.length} bytes`);
+
+    // Debug: Tell hvor mange checkboxer som finnes
+    const allCheckboxes = await this.page.getByRole('checkbox').count();
+    console.log(`✓ Fant ${allCheckboxes} checkboxer totalt på siden`);
+
+    // Debug: Vis URL for å bekrefte hvilket steg vi er på
+    console.log(`🔗 Nåværende URL: ${this.page.url()}`);
+
     const checkbox = this.page.getByRole('checkbox', { name: arbeidsgiverNavn });
-    await checkbox.check();
-    console.log(`✅ Valgte arbeidsgiver: ${arbeidsgiverNavn}`);
+
+    // Vent på at checkbox er synlig og stabil før sjekking (unngår race condition)
+    // Økt timeout til 30 sekunder for å håndtere treg lasting på Virksomhet-steget
+    try {
+      await checkbox.waitFor({ state: 'visible', timeout: 30000 });
+
+      // CRITICAL: Set up response listener BEFORE checking
+      // Checkbox triggers immediate API save: POST /api/mottatteopplysninger/{id}
+      const responsePromise = this.page.waitForResponse(
+        response => response.url().includes('/api/mottatteopplysninger/') &&
+                    response.request().method() === 'POST' &&
+                    response.status() === 200,
+        { timeout: 5000 }
+      ).catch(() => null); // Don't fail if API doesn't fire
+
+      await checkbox.check();
+
+      // Wait for immediate API save
+      const response = await responsePromise;
+      if (response) {
+        console.log(`✅ Arbeidsgiver selection saved: ${response.url()} -> ${response.status()}`);
+      } else {
+        console.log('⚠️  No immediate API save detected (checkbox might already be checked)');
+      }
+
+      console.log(`✅ Valgte arbeidsgiver: ${arbeidsgiverNavn}`);
+    } catch (error) {
+      // Debug: Hvis det feiler, vis hva som faktisk finnes på siden
+      console.error(`❌ Kunne ikke finne checkbox "${arbeidsgiverNavn}"`);
+      console.error(`📸 Tar screenshot for debugging...`);
+      await this.page.screenshot({ path: 'debug-missing-checkbox.png', fullPage: true });
+
+      // List alle checkboxer som finnes
+      const checkboxes = await this.page.getByRole('checkbox').all();
+      console.error(`📋 Tilgjengelige checkboxer (${checkboxes.length}):`);
+      for (const cb of checkboxes) {
+        const label = await cb.getAttribute('aria-label') || await cb.getAttribute('name') || 'ingen label';
+        console.error(`   - ${label}`);
+      }
+
+      throw error;
+    }
   }
 
   /**
    * Velg "Lønnet arbeid" radio-knapp
    */
   async velgLønnetArbeid(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.lønnetArbeidRadio.waitFor({ state: 'visible' });
     await this.lønnetArbeidRadio.check();
     console.log('✅ Valgte: Lønnet arbeid');
   }
@@ -168,6 +274,8 @@ export class EuEosBehandlingPage extends BasePage {
    * Velg "Ulønnet arbeid" radio-knapp
    */
   async velgUlønnetArbeid(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.ulønnetArbeidRadio.waitFor({ state: 'visible' });
     await this.ulønnetArbeidRadio.check();
     console.log('✅ Valgte: Ulønnet arbeid');
   }
@@ -178,6 +286,8 @@ export class EuEosBehandlingPage extends BasePage {
    */
   async svarJa(): Promise<void> {
     const jaRadio = this.page.getByRole('radio', { name: 'Ja' });
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await jaRadio.waitFor({ state: 'visible' });
     await jaRadio.check();
     console.log('✅ Svarte: Ja');
   }
@@ -187,6 +297,8 @@ export class EuEosBehandlingPage extends BasePage {
    */
   async svarNei(): Promise<void> {
     const neiRadio = this.page.getByRole('radio', { name: 'Nei' });
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await neiRadio.waitFor({ state: 'visible' });
     await neiRadio.check();
     console.log('✅ Svarte: Nei');
   }
@@ -195,6 +307,8 @@ export class EuEosBehandlingPage extends BasePage {
    * Velg "Ja, jeg vil innvilge søknaden"
    */
   async innvilgeSøknad(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.innvilgeSøknadRadio.waitFor({ state: 'visible' });
     await this.innvilgeSøknadRadio.check();
     console.log('✅ Valgte: Innvilge søknaden');
   }
@@ -203,25 +317,117 @@ export class EuEosBehandlingPage extends BasePage {
    * Velg "Nei, jeg vil avslå søknaden"
    */
   async avslåSøknad(): Promise<void> {
+    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
+    await this.avslåSøknadRadio.waitFor({ state: 'visible' });
     await this.avslåSøknadRadio.check();
     console.log('✅ Valgte: Avslå søknaden');
   }
 
   /**
    * Klikk "Bekreft og fortsett" knapp
+   * Venter på at siden er klar etter navigasjon
+   *
+   * IMPORTANT: This method waits for specific step transition API calls.
+   * Each step transition triggers 5-6 POST requests to save all form data:
+   * - POST /api/avklartefakta/{id} -> 200 (clarified facts)
+   * - POST /api/vilkaar/{id} -> 200 (conditions)
+   * - POST /api/anmodningsperioder/{id} -> 200 (request periods)
+   * - POST /api/utpekingsperioder/{id} -> 200 (designation periods)
+   * - POST /api/mottatteopplysninger/{id} -> 200 (received info, often 2x)
+   *
+   * We wait for the two most critical endpoints (avklartefakta and vilkaar)
+   * which are always present in step transitions.
    */
   async klikkBekreftOgFortsett(): Promise<void> {
+    console.log('🔄 Klikker "Bekreft og fortsett"...');
+    const urlBefore = this.page.url();
+
+    // Check if button is enabled before clicking
+    const isEnabled = await this.bekreftOgFortsettButton.isEnabled();
+    console.log(`  Knapp aktivert: ${isEnabled}`);
+
+    // CRITICAL: Set up response listeners BEFORE clicking
+    // Wait for the two most important step transition APIs
+    const avklartefaktaPromise = this.page.waitForResponse(
+      response => response.url().includes('/api/avklartefakta/') &&
+                  response.request().method() === 'POST' &&
+                  response.status() === 200,
+      { timeout: 10000 }
+    ).catch(() => null); // Don't fail if not present in this step
+
+    const vilkaarPromise = this.page.waitForResponse(
+      response => response.url().includes('/api/vilkaar/') &&
+                  response.request().method() === 'POST' &&
+                  response.status() === 200,
+      { timeout: 10000 }
+    ).catch(() => null); // Don't fail if not present in this step
+
     await this.bekreftOgFortsettButton.click();
-    console.log('✅ Klikket Bekreft og fortsett');
+
+    // Wait for critical APIs to complete (if they fire)
+    const [avklartefaktaResponse, vilkaarResponse] = await Promise.all([
+      avklartefaktaPromise,
+      vilkaarPromise
+    ]);
+
+    if (avklartefaktaResponse || vilkaarResponse) {
+      console.log('✅ Step transition APIs completed:');
+      if (avklartefaktaResponse) console.log(`   - avklartefakta: ${avklartefaktaResponse.status()}`);
+      if (vilkaarResponse) console.log(`   - vilkaar: ${vilkaarResponse.status()}`);
+    } else {
+      console.log('⚠️  No step transition APIs detected, waiting for React state update');
+    }
+
+    // Still wait for React state update
+    await this.page.waitForTimeout(500);
+
+    // Optional: Wait for network idle as fallback (shorter timeout now)
+    await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
+      console.log('⚠️  Network idle timeout (non-critical)');
+    });
+
+    const urlAfter = this.page.url();
+    console.log(`✅ Klikket Bekreft og fortsett`);
+    console.log(`  URL før:  ${urlBefore}`);
+    console.log(`  URL etter: ${urlAfter}`);
+    console.log(`  URL endret: ${urlBefore !== urlAfter}`);
   }
 
   /**
    * Klikk "Fatt vedtak" knapp for å fullføre behandlingen
    * EU/EØS fatter vedtak direkte uten egen vedtaksside
+   *
+   * IMPORTANT: This method waits for the critical vedtak creation API call.
+   * The endpoint POST /api/saksflyt/vedtak/{id}/fatt creates the vedtak document
+   * and can take 30-60 seconds on CI.
+   *
+   * Network pattern:
+   * - POST /api/saksflyt/vedtak/{id}/fatt -> 204 (vedtak creation)
+   * - POST /api/kontroll/ferdigbehandling -> 400 (completion check, may fail)
    */
   async fattVedtak(): Promise<void> {
+    // Vent på at nettverket er stille før vi fatter vedtak
+    // Dette sikrer at alle tidligere API-kall er fullført
+    await this.page.waitForLoadState('networkidle', { timeout: 10000 });
+
+    // Vent på at "Fatt vedtak"-knappen er synlig og aktivert
+    await this.fattVedtakButton.waitFor({ state: 'visible', timeout: 10000 });
+
+    // CRITICAL: Set up response listener BEFORE clicking
+    // Wait for the vedtak creation API - this is the MOST IMPORTANT endpoint!
+    const responsePromise = this.page.waitForResponse(
+      response => response.url().includes('/api/saksflyt/vedtak/') &&
+                  response.url().includes('/fatt') &&
+                  response.request().method() === 'POST' &&
+                  (response.status() === 200 || response.status() === 204),
+      { timeout: 60000 } // Long timeout - vedtak creation can take 30-60 seconds on CI
+    );
+
     await this.fattVedtakButton.click();
-    console.log('✅ Fattet vedtak');
+
+    // Wait for vedtak creation to complete
+    const response = await responsePromise;
+    console.log(`✅ Vedtak fattet - API completed: ${response.url()} -> ${response.status()}`);
   }
 
   /**
