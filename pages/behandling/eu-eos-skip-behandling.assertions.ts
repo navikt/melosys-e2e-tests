@@ -1,28 +1,33 @@
 import { Page, expect } from '@playwright/test';
 import { withDatabase } from '../../helpers/db-helper';
+import { EuEosBehandlingAssertions } from './eu-eos-behandling.assertions';
 
 /**
  * Assertions for EU/EØS Skip behandling
  *
- * Verifiserer:
+ * Arver fra EuEosBehandlingAssertions og legger til skip-spesifikk verifisering:
  * - Skip er lagt til i behandlingen
  * - Skipdetaljer er korrekt lagret
- * - Vedtak er fattet
+ * - Vedtak er fattet (extended timeout for skip workflow)
  */
-export class EuEosSkipBehandlingAssertions {
-  constructor(private readonly page: Page) {}
+export class EuEosSkipBehandlingAssertions extends EuEosBehandlingAssertions {
+  constructor(page: Page) {
+    super(page);
+  }
 
   /**
-   * Verifiser at vedtak er fattet
+   * Verifiser at vedtak er fattet (Skip workflow specific)
+   * Skip workflow tar lengre tid enn standard workflow
    * Sjekker at vi er tilbake på hovedsiden med melding om fullført behandling
    */
   async verifiserVedtakFattet(): Promise<void> {
-    console.log('⏳ Venter på navigering tilbake til hovedside...');
+    console.log('⏳ Venter på navigering tilbake til hovedside (Skip workflow)...');
     console.log(`   Nåværende URL: ${this.page.url()}`);
 
     try {
       // Vent på navigering tilbake til hovedside eller bekreftelse
-      // Økt timeout til 90 sekunder - vedtak kan ta lang tid på CI (dokumentgenerering, database-oppdateringer)
+      // Økt timeout til 90 sekunder - skip workflow kan ta lang tid på CI
+      // (dokumentgenerering, skip-detaljer lagring, database-oppdateringer)
       await this.page.waitForURL(/\/melosys\/?$/, { timeout: 90000 });
       console.log('✅ Vedtak fattet - navigert tilbake til hovedside');
     } catch (error) {
@@ -60,12 +65,13 @@ export class EuEosSkipBehandlingAssertions {
   }
 
   /**
-   * Verifiser at behandling med skip finnes i database
+   * Override: Verifiser at behandling med skip finnes i database
+   * Skip-specific implementation that verifies skip-related data
    *
    * @param fnr - Fødselsnummer for personen
    * @returns Behandling ID
    */
-  async verifiserBehandlingIDatabase(fnr: string): Promise<string> {
+  override async verifiserBehandlingIDatabase(fnr: string): Promise<string> {
     return await withDatabase(async (db) => {
       const sak = await db.queryOne(
         'SELECT * FROM SAK WHERE personnummer = :pnr ORDER BY SAK_ID DESC',
