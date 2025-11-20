@@ -33,6 +33,7 @@ export const BEHANDLINGSTEMA = {
   YRKESAKTIV: 'YRKESAKTIV',
   SELVSTENDIG: 'SELVSTENDIG',
   UTSENDT_ARBEIDSTAKER: 'UTSENDT_ARBEIDSTAKER',
+  ARBEID_FLERE_LAND: 'ARBEID_FLERE_LAND',
 } as const;
 
 export const AARSAK = {
@@ -64,4 +65,6 @@ export const EU_EOS_LAND = {
   TYSKLAND: 'Tyskland',
   FRANKRIKE: 'Frankrike',
   NEDERLAND: 'Nederland',
+  ESTLAND: 'Estland',
+  NORGE: 'Norge',
 } as const;
