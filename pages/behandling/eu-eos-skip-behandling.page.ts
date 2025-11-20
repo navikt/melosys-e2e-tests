@@ -23,7 +23,7 @@ import { EuEosSkipBehandlingAssertions } from './eu-eos-skip-behandling.assertio
  * await skipBehandling.klikkBekreftOgFortsett();
  */
 export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
-  readonly assertions: EuEosSkipBehandlingAssertions;
+  override readonly assertions: EuEosSkipBehandlingAssertions;
 
   // Locators - Yrkesaktiv på sokkel
   private readonly yrkesaktivPaSokkelRadio = this.page.getByRole('radio', {
@@ -114,6 +114,9 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
   async fyllInnSkipNavn(navn: string): Promise<void> {
     await this.skipNavnField.click();
     await this.skipNavnField.fill(navn);
+    // Trigger blur to ensure any API saves complete
+    await this.skipNavnField.blur();
+    await this.page.waitForTimeout(300);
     console.log(`✅ Fylte inn skipnavn: ${navn}`);
   }
 
@@ -124,6 +127,8 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
    */
   async velgFartsomrade(fartsomrade: 'UTENRIKS' | 'INNENRIKS'): Promise<void> {
     await this.fartsomradeDropdown.selectOption(fartsomrade);
+    // Allow time for any triggered API calls or field enabling
+    await this.page.waitForTimeout(300);
     console.log(`✅ Valgte fartsområde: ${fartsomrade}`);
   }
 
@@ -136,11 +141,19 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
   async velgFlaggstat(land: string): Promise<void> {
     await this.flaggstatCombobox.click();
     await this.flaggstatCombobox.fill(land);
+    // Press Enter to confirm selection and trigger any API calls
+    await this.flaggstatCombobox.press('Enter');
+    await this.page.waitForTimeout(300);
     console.log(`✅ Valgte flaggstat: ${land}`);
   }
 
   /**
    * Velg "På norsk sokkel eller" radio-knapp
+   *
+   * @remarks
+   * Alternative scenario method - not used in current test flow.
+   * Current test uses foreign ship scenario with `velgFlagglandSomArbeidsland()`.
+   * Keep for future Norwegian continental shelf test scenarios.
    */
   async velgNorskSokkel(): Promise<void> {
     // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
@@ -187,6 +200,11 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
 
   /**
    * Velg "Arbeider på norsk skip" spørsmål
+   *
+   * @remarks
+   * Alternative scenario method - not used in current test flow.
+   * Current test uses foreign ship scenario with `velgArbeiderPaUtenlandskSkip()`.
+   * Keep for future Norwegian ship employment test scenarios.
    */
   async velgArbeiderPaNorskSkip(): Promise<void> {
     // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
@@ -229,6 +247,8 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
     await this.velgFlaggstat(flaggstat);
     // VIKTIG: Må velge "Skip" først for å aktivere de andre valgene
     await this.velgSkip();
+    // Wait for dependent fields to become enabled after Skip selection
+    await this.page.waitForTimeout(300);
     await this.velgFlagglandSomArbeidsland(flagglandNavn);
     await this.velgSkipRegistrertIEttLand();
     console.log('✅ Fullførte skipdetaljer');
