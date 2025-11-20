@@ -41,6 +41,31 @@ EU/EØS-saker håndterer tilfeller hvor arbeidstakere sendes ut til EU/EØS-land
 
 **Testresultater:** 🔄 Ny test - under testing
 
+### `eu-eos-13.1-arbeid-flere-land-selvstendig-fullfort-vedtak.spec.ts`
+
+**Variant av "Arbeid i flere land" med selvstendig næringsvirksomhet** som dekker:
+1. Opprett ny EU/EØS-sak (ARBEID_FLERE_LAND)
+2. Fyll inn periode (Fra og Til dato)
+3. Velg to land (Sverige og Norge)
+4. Velg årsak (SØKNAD)
+5. Opprett behandling
+6. Bekreft første steg
+7. Velg hovedland (Norge) via radio-knapp
+8. Velg arbeidsgiver (Ståles Stål AS) via checkbox
+9. Svar på spørsmål om arbeidslokasjon (checkbox)
+10. Velg arbeidstype (Selvstendig næringsvirksomhet i to eller flere land)
+11. Velg prosentandel (% eller mer)
+12. Fyll inn fritekst-felter (begrunnelse og ytterligere informasjon)
+13. Velg SED-dokument (SED A003) via popup
+14. Fatt vedtak direkte
+
+**Testresultater:** 🔄 Ny test - under testing
+
+**Forskjeller fra basis-testen:**
+- Bruker **Sverige + Norge** (i stedet for Estland + Norge)
+- Velger **Selvstendig næringsvirksomhet** (i stedet for Lønnet arbeid)
+- Håndterer **SED-dokument popup** før vedtak
+
 ## Page Objects
 
 ### `EuEosBehandlingPage`
@@ -95,10 +120,12 @@ Håndterer "Arbeid i flere land" behandlingsflyten:
 - `velgLandRadio(landNavn)` - Velg hovedland via radio-knapp
 - `velgArbeidsgiver(navn)` - Velg arbeidsgiver (med API-venting)
 - `velgArbeidUtføresILandSomEr()` - Velg arbeidslokasjon-checkbox
-- `velgLønnetArbeidIToEllerFlereLand()` - Velg arbeidstype
+- `velgLønnetArbeidIToEllerFlereLand()` - Velg arbeidstype (lønnet arbeid)
+- `velgSelvstendigNæringsvirksomhetIToEllerFlereLand()` - Velg arbeidstype (selvstendig)
 - `velgProsentEllerMer()` - Velg prosentandel
 - `fyllInnFritekstTilBegrunnelse(tekst)` - Fyll inn begrunnelse
 - `fyllInnYtterligereInformasjon(tekst)` - Fyll inn ytterligere info
+- `velgSedDokument(sedType)` - Velg SED-dokument via popup (f.eks. 'SED A003')
 - `fattVedtak()` - Fatt vedtak direkte
 - `klikkBekreftOgFortsett()` - Gå til neste steg
 - `fyllUtArbeidFlereLandBehandling()` - **Hjelpemetode** for komplett flyt
@@ -218,6 +245,37 @@ await behandling.fattVedtak();
 
 // Eller bruk hjelpemetode (anbefalt)
 await behandling.fyllUtArbeidFlereLandBehandling('Norge', 'Ståles Stål AS', 'Lorem ipsum', 'Dodatkowo');
+```
+
+### "Arbeid i flere land" - Selvstendig variant med SED-dokument
+```typescript
+import { ArbeidFlereLandBehandlingPage } from '../../pages/behandling/arbeid-flere-land-behandling.page';
+
+const behandling = new ArbeidFlereLandBehandlingPage(page);
+
+// Samme steg som før, men med selvstendig næringsvirksomhet
+await behandling.klikkBekreftOgFortsett();
+await behandling.velgLandRadio('Norge');
+await behandling.klikkBekreftOgFortsett();
+await behandling.velgArbeidsgiver('Ståles Stål AS');
+await behandling.klikkBekreftOgFortsett();
+await behandling.velgArbeidUtføresILandSomEr();
+await behandling.klikkBekreftOgFortsett();
+
+// Forskjell: Velg selvstendig næringsvirksomhet
+await behandling.velgSelvstendigNæringsvirksomhetIToEllerFlereLand();
+await behandling.klikkBekreftOgFortsett();
+
+await behandling.velgProsentEllerMer();
+await behandling.klikkBekreftOgFortsett();
+await behandling.fyllInnFritekstTilBegrunnelse('Begrunnelse tekst');
+await behandling.fyllInnYtterligereInformasjon('Ytterligere informasjon');
+
+// Forskjell: Håndter SED-dokument popup før vedtak
+await behandling.velgSedDokument('SED A003');
+
+// Fatt vedtak
+await behandling.fattVedtak();
 ```
 
 ## Viktige forskjeller mellom EU/EØS workflows

@@ -129,6 +129,19 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
   }
 
   /**
+   * Velg "Selvstendig næringsvirksomhet i to eller flere land" radio-knapp
+   */
+  async velgSelvstendigNæringsvirksomhetIToEllerFlereLand(): Promise<void> {
+    const radio = this.page.getByRole('radio', {
+      name: 'Selvstendig næringsvirksomhet i to eller flere land',
+      exact: true
+    });
+    await radio.waitFor({ state: 'visible' });
+    await radio.check();
+    console.log('✅ Valgte: Selvstendig næringsvirksomhet i to eller flere land');
+  }
+
+  /**
    * Velg "% eller mer" radio-knapp
    * Dette spørsmålet handler om prosentandel av arbeid
    */
@@ -223,6 +236,33 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     console.log(`  URL før:  ${urlBefore}`);
     console.log(`  URL etter: ${urlAfter}`);
     console.log(`  URL endret: ${urlBefore !== urlAfter}`);
+  }
+
+  /**
+   * Håndter SED-dokument popup og velg SED-type
+   * Denne metoden åpner popup med SED-dokumenter og velger riktig type
+   *
+   * IMPORTANT: This opens a popup window! Use with page.waitForEvent('popup')
+   *
+   * @param sedType - Type SED-dokument å velge (f.eks. 'SED A003')
+   */
+  async velgSedDokument(sedType: string = 'SED A003'): Promise<void> {
+    console.log(`🔍 Åpner SED-dokument popup og velger: ${sedType}`);
+
+    // Click to open popup (this triggers "Innvilgelse yrkesaktiv i" text)
+    const popupPromise = this.page.waitForEvent('popup');
+    await this.page.getByText('Innvilgelse yrkesaktiv i').click();
+
+    // Wait for popup to open
+    const popup = await popupPromise;
+    console.log('✅ Popup åpnet');
+
+    // Click on the SED type in the popup
+    await popup.getByText(sedType).click();
+    console.log(`✅ Valgte SED-type: ${sedType} i popup`);
+
+    // Popup should close automatically, return to main page
+    await this.page.waitForTimeout(500);
   }
 
   /**
