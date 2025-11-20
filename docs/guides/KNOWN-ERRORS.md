@@ -8,16 +8,17 @@ The `@known-error` tag allows you to:
 - **Keep failing tests in the test suite** - Don't delete or skip tests for known bugs
 - **Track known issues** - Tests serve as documentation of known problems
 - **Prevent CI failures** - Known failing tests won't break the build
-- **Get notified when bugs are fixed** - Test will fail if it unexpectedly passes (indicating the bug is fixed!)
+- **Get notified when bugs are fixed** - Test report will show when @known-error tests start passing
 
 ## How It Works
 
 When a test is tagged with `@known-error`:
 - ✅ Test **RUNS** during test execution
 - ✅ Test results are **SHOWN** in the report
-- ✅ If test **FAILS**, it's marked as **PASSED** (expected behavior)
-- ⚠️ If test **SUCCEEDS**, it's marked as **FAILED** (bug is fixed - time to update!)
-- ✅ CI pipeline **DOESN'T FAIL** due to this test
+- ⚠️ If test **FAILS**, it's marked as **⚠️ Known Error (Failed)** - expected behavior, doesn't fail CI
+- ✨ If test **SUCCEEDS**, it's marked as **✨ Known Error (Passed)** - bug might be fixed, but doesn't fail CI
+- ✅ CI pipeline **DOESN'T FAIL** regardless of test outcome
+- ✅ No unnecessary retries (test runs once only)
 
 ## Usage
 
@@ -120,11 +121,12 @@ test('should handle edge case @known-error #MELOSYS-1234', async ({ page }) => {
 ## Workflow for Bug Fixes
 
 1. **Bug found** - Create test with `@known-error` tag
-2. **Test runs** - Fails as expected, doesn't block CI
+2. **Test runs** - Fails as expected (⚠️), doesn't block CI
 3. **Bug fixed** - Developer fixes the bug in application code
-4. **Test passes** - Test now passes unexpectedly
-5. **Test fails!** - Playwright marks it as failed (bug is fixed!)
-6. **Update test** - Remove `@known-error` tag, test is now a regular passing test
+4. **Test passes** - Test now passes (✨ Known Error - Passed)
+5. **Review report** - Test summary shows: "Bug might be fixed - consider removing @known-error tag"
+6. **Verify fix** - Confirm bug is actually fixed (not just flaky)
+7. **Update test** - Remove `@known-error` tag, test becomes regular passing test
 
 ## Examples
 

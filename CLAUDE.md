@@ -12,8 +12,10 @@ This is an E2E testing project for Melosys using Playwright and TypeScript. The 
 
 ### Running Tests
 
+#### E2E Tests (Playwright)
+
 ```bash
-# Run all tests
+# Run all E2E tests
 npm test
 
 # Run specific test file
@@ -31,6 +33,25 @@ npm run test:debug
 # Interactive UI mode (best for development)
 npm run test:ui
 ```
+
+#### Unit Tests (Vitest)
+
+```bash
+# Run unit tests (watch mode)
+npm run test:unit
+
+# Run unit tests once (for CI)
+npm run test:unit:run
+
+# Run unit tests with UI
+npm run test:unit:ui
+
+# Run all tests (unit + E2E)
+npm run test:all
+```
+
+**What are unit tests?**
+Unit tests verify the test reporter and summary generation logic without running actual E2E tests. They're fast (milliseconds) and test edge cases that would be hard to reproduce in E2E tests.
 
 ### Recording Workflows
 
@@ -138,6 +159,14 @@ If multiple changes are related to the same feature:
   - `docker-logs.ts` - Check Docker logs for errors after tests
   - `known-error.ts` - Auto-detect and handle `@known-error` tagged tests (expected failures)
   - `index.ts` - Main test fixture (combines cleanup + docker-logs + known-error)
+- **lib/** - Shared, testable modules
+  - `summary-generator.ts` - Markdown summary generation logic (shared by reporter and script)
+  - `summary-generator.test.ts` - Unit tests for summary generator (25+ test scenarios)
+  - `types.ts` - Shared TypeScript types for test data
+- **reporters/** - Custom Playwright reporters
+  - `test-summary.ts` - Generates markdown and JSON test summaries using shared module
+- **scripts/** - Utility scripts
+  - `generate-summary-from-json.ts` - Regenerate markdown from JSON using shared module
 
 ### Helper Classes
 
@@ -532,14 +561,14 @@ MANUAL_TESTS=true npm test
 
 ### @known-error - Expected Failures
 
-Tests tagged with `@known-error` run normally but don't fail CI when they fail:
+Tests tagged with `@known-error` run normally but don't fail CI regardless of outcome:
 
 ```typescript
 test('should calculate tax correctly @known-error #MELOSYS-1234', async ({ page }) => {
   // This test tracks a known bug (JIRA ticket MELOSYS-1234)
   // Test will run and show results
-  // If it fails (expected), shows as PASSED
-  // If it succeeds (bug fixed!), shows as FAILED - time to remove the tag!
+  // If it fails: marked as ⚠️ Known Error (Failed) - expected, doesn't fail CI
+  // If it passes: marked as ✨ Known Error (Passed) - bug might be fixed!
   // CI pipeline won't fail due to this test
 });
 ```
@@ -552,9 +581,10 @@ test('should calculate tax correctly @known-error #MELOSYS-1234', async ({ page 
 **Behavior:**
 - ✅ Test runs during normal test execution
 - ✅ Results shown in reports
-- ✅ If test fails → marked as PASSED (expected)
-- ⚠️ If test succeeds → marked as FAILED (bug is fixed!)
-- ✅ CI pipeline doesn't fail
+- ⚠️ If test fails → marked as ⚠️ Known Error (Failed), doesn't fail CI
+- ✨ If test succeeds → marked as ✨ Known Error (Passed), doesn't fail CI
+- ✅ CI pipeline doesn't fail regardless of outcome
+- ✅ No unnecessary retries
 
 **Best practices:**
 - Always include issue tracker reference (#JIRA-123, GitHub issue URL)
