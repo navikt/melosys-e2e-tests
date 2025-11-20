@@ -138,6 +138,11 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
         await trygdeavgift.klikkBekreftOgFortsett();
 
+        // Wait for navigation to vedtak page and all API calls to complete
+        // This ensures behandlingsresultat.type is properly set before submitting vedtak
+        console.log('📝 Waiting for vedtak page to load and API calls to complete...');
+        await page.waitForLoadState('networkidle');
+
         // Step 15: Submit vedtak for ny vurdering
         console.log('📝 Step 15: Submitting vedtak for ny vurdering...');
         await vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING');
@@ -266,6 +271,11 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         await trygdeavgift.velgBetalesAga(false);
         await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
         await trygdeavgift.klikkBekreftOgFortsett();
+
+        // Wait for navigation to vedtak page and all API calls to complete
+        // This ensures behandlingsresultat.type is properly set before submitting vedtak
+        console.log('📝 Waiting for vedtak page to load and API calls to complete...');
+        await page.waitForLoadState('networkidle');
 
         // Step 15: Submit vedtak for ny vurdering
         console.log('📝 Step 15: Submitting vedtak for ny vurdering...');
