@@ -152,29 +152,34 @@ POST /api/mottatteopplysninger/133 -> 200
 
 **Purpose:** Save arbeidsgiver selection
 
-**⚠️ IMPORTANT:** Checkbox selection itself **might** trigger a debounced PUT before "Bekreft og fortsett"!
+**✅ CONFIRMED:** Checkbox selection **DOES** trigger immediate API save!
 
-**Recommended Pattern:**
+**Investigation Result (2025-11-20):**
+- Checkbox triggers: `POST /api/mottatteopplysninger/{id} -> 200`
+- No debounce (immediate save when checked)
+- Happens BEFORE "Bekreft og fortsett" is clicked
+
+**Implemented Pattern:**
 ```typescript
 async velgArbeidsgiver(arbeidsgiverNavn: string): Promise<void> {
   const checkbox = this.page.getByRole('checkbox', { name: arbeidsgiverNavn });
   await checkbox.waitFor({ state: 'visible', timeout: 30000 });
 
-  // Listen for potential debounced save when checkbox is checked
+  // CRITICAL: Set up response listener BEFORE checking
+  // Checkbox triggers immediate API save: POST /api/mottatteopplysninger/{id}
   const responsePromise = this.page.waitForResponse(
-    response => (response.url().includes('/api/mottatteopplysninger/') ||
-                 response.url().includes('/api/avklartefakta/')) &&
+    response => response.url().includes('/api/mottatteopplysninger/') &&
                 response.request().method() === 'POST' &&
                 response.status() === 200,
-    { timeout: 3000 }
-  ).catch(() => null); // Don't fail if no immediate save
+    { timeout: 5000 }
+  ).catch(() => null); // Don't fail if API doesn't fire
 
   await checkbox.check();
 
-  // Wait for potential immediate save
+  // Wait for immediate API save
   const response = await responsePromise;
   if (response) {
-    console.log('✅ Arbeidsgiver selection auto-saved');
+    console.log(`✅ Arbeidsgiver selection saved: ${response.url()} -> ${response.status()}`);
   }
 
   console.log(`✅ Valgte arbeidsgiver: ${arbeidsgiverNavn}`);
@@ -410,10 +415,11 @@ POST /api/saksflyt/vedtak/{id}/fatt -> 204
    - Can cause race conditions
    - More reliable than `networkidle`
 
-### Priority 3: MEDIUM
-3. **`velgArbeidsgiver()`** - Check for debounced save
-   - Might have auto-save on checkbox check
-   - Needs investigation
+### Priority 3: MEDIUM ✅ **IMPLEMENTED**
+3. **`velgArbeidsgiver()`** - ~~Check for~~ **HAS immediate API save!**
+   - ✅ **Investigation complete:** Checkbox DOES trigger immediate save
+   - ✅ Endpoint: `POST /api/mottatteopplysninger/{id} -> 200`
+   - ✅ **Implementation added:** Now waits for API before continuing
 
 ### Priority 4: LOW
 4. **`fyllInnBrukerID()`** - Wait for `/api/fagsaker/sok`

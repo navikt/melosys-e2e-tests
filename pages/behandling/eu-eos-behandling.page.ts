@@ -195,6 +195,10 @@ export class EuEosBehandlingPage extends BasePage {
   /**
    * Velg arbeidsgiver(e) med checkbox
    *
+   * IMPORTANT: Checkbox triggers immediate API save when checked!
+   * Investigation showed: POST /api/mottatteopplysninger/{id} -> 200
+   * This method now waits for that API call to complete.
+   *
    * @param arbeidsgiverNavn - Navn på arbeidsgiver (f.eks. 'Ståles Stål AS')
    */
   async velgArbeidsgiver(arbeidsgiverNavn: string): Promise<void> {
@@ -217,7 +221,26 @@ export class EuEosBehandlingPage extends BasePage {
     // Økt timeout til 30 sekunder for å håndtere treg lasting på Virksomhet-steget
     try {
       await checkbox.waitFor({ state: 'visible', timeout: 30000 });
+
+      // CRITICAL: Set up response listener BEFORE checking
+      // Checkbox triggers immediate API save: POST /api/mottatteopplysninger/{id}
+      const responsePromise = this.page.waitForResponse(
+        response => response.url().includes('/api/mottatteopplysninger/') &&
+                    response.request().method() === 'POST' &&
+                    response.status() === 200,
+        { timeout: 5000 }
+      ).catch(() => null); // Don't fail if API doesn't fire
+
       await checkbox.check();
+
+      // Wait for immediate API save
+      const response = await responsePromise;
+      if (response) {
+        console.log(`✅ Arbeidsgiver selection saved: ${response.url()} -> ${response.status()}`);
+      } else {
+        console.log('⚠️  No immediate API save detected (checkbox might already be checked)');
+      }
+
       console.log(`✅ Valgte arbeidsgiver: ${arbeidsgiverNavn}`);
     } catch (error) {
       // Debug: Hvis det feiler, vis hva som faktisk finnes på siden
