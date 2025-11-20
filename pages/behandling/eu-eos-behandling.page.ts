@@ -303,6 +303,17 @@ export class EuEosBehandlingPage extends BasePage {
   /**
    * Klikk "Bekreft og fortsett" knapp
    * Venter på at siden er klar etter navigasjon
+   *
+   * IMPORTANT: This method waits for specific step transition API calls.
+   * Each step transition triggers 5-6 POST requests to save all form data:
+   * - POST /api/avklartefakta/{id} -> 200 (clarified facts)
+   * - POST /api/vilkaar/{id} -> 200 (conditions)
+   * - POST /api/anmodningsperioder/{id} -> 200 (request periods)
+   * - POST /api/utpekingsperioder/{id} -> 200 (designation periods)
+   * - POST /api/mottatteopplysninger/{id} -> 200 (received info, often 2x)
+   *
+   * We wait for the two most critical endpoints (avklartefakta and vilkaar)
+   * which are always present in step transitions.
    */
   async klikkBekreftOgFortsett(): Promise<void> {
     console.log('🔄 Klikker "Bekreft og fortsett"...');
@@ -312,12 +323,45 @@ export class EuEosBehandlingPage extends BasePage {
     const isEnabled = await this.bekreftOgFortsettButton.isEnabled();
     console.log(`  Knapp aktivert: ${isEnabled}`);
 
+    // CRITICAL: Set up response listeners BEFORE clicking
+    // Wait for the two most important step transition APIs
+    const avklartefaktaPromise = this.page.waitForResponse(
+      response => response.url().includes('/api/avklartefakta/') &&
+                  response.request().method() === 'POST' &&
+                  response.status() === 200,
+      { timeout: 10000 }
+    ).catch(() => null); // Don't fail if not present in this step
+
+    const vilkaarPromise = this.page.waitForResponse(
+      response => response.url().includes('/api/vilkaar/') &&
+                  response.request().method() === 'POST' &&
+                  response.status() === 200,
+      { timeout: 10000 }
+    ).catch(() => null); // Don't fail if not present in this step
+
     await this.bekreftOgFortsettButton.click();
 
-    // Vent på at React state oppdaterer og nettverket blir stille
-    // Dette sikrer at neste steg er helt ferdig lastet før vi fortsetter
+    // Wait for critical APIs to complete (if they fire)
+    const [avklartefaktaResponse, vilkaarResponse] = await Promise.all([
+      avklartefaktaPromise,
+      vilkaarPromise
+    ]);
+
+    if (avklartefaktaResponse || vilkaarResponse) {
+      console.log('✅ Step transition APIs completed:');
+      if (avklartefaktaResponse) console.log(`   - avklartefakta: ${avklartefaktaResponse.status()}`);
+      if (vilkaarResponse) console.log(`   - vilkaar: ${vilkaarResponse.status()}`);
+    } else {
+      console.log('⚠️  No step transition APIs detected, waiting for React state update');
+    }
+
+    // Still wait for React state update
     await this.page.waitForTimeout(500);
-    await this.page.waitForLoadState('networkidle', { timeout: 15000 });
+
+    // Optional: Wait for network idle as fallback (shorter timeout now)
+    await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
+      console.log('⚠️  Network idle timeout (non-critical)');
+    });
 
     const urlAfter = this.page.url();
     console.log(`✅ Klikket Bekreft og fortsett`);
@@ -329,6 +373,14 @@ export class EuEosBehandlingPage extends BasePage {
   /**
    * Klikk "Fatt vedtak" knapp for å fullføre behandlingen
    * EU/EØS fatter vedtak direkte uten egen vedtaksside
+   *
+   * IMPORTANT: This method waits for the critical vedtak creation API call.
+   * The endpoint POST /api/saksflyt/vedtak/{id}/fatt creates the vedtak document
+   * and can take 30-60 seconds on CI.
+   *
+   * Network pattern:
+   * - POST /api/saksflyt/vedtak/{id}/fatt -> 204 (vedtak creation)
+   * - POST /api/kontroll/ferdigbehandling -> 400 (completion check, may fail)
    */
   async fattVedtak(): Promise<void> {
     // Vent på at nettverket er stille før vi fatter vedtak
@@ -338,8 +390,21 @@ export class EuEosBehandlingPage extends BasePage {
     // Vent på at "Fatt vedtak"-knappen er synlig og aktivert
     await this.fattVedtakButton.waitFor({ state: 'visible', timeout: 10000 });
 
+    // CRITICAL: Set up response listener BEFORE clicking
+    // Wait for the vedtak creation API - this is the MOST IMPORTANT endpoint!
+    const responsePromise = this.page.waitForResponse(
+      response => response.url().includes('/api/saksflyt/vedtak/') &&
+                  response.url().includes('/fatt') &&
+                  response.request().method() === 'POST' &&
+                  (response.status() === 200 || response.status() === 204),
+      { timeout: 60000 } // Long timeout - vedtak creation can take 30-60 seconds on CI
+    );
+
     await this.fattVedtakButton.click();
-    console.log('✅ Fattet vedtak');
+
+    // Wait for vedtak creation to complete
+    const response = await responsePromise;
+    console.log(`✅ Vedtak fattet - API completed: ${response.url()} -> ${response.status()}`);
   }
 
   /**
