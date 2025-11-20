@@ -271,6 +271,11 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         console.log('📝 Step 15: Submitting vedtak for ny vurdering...');
         await vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING');
 
+        // Step 16: Wait for IVERKSETT_VEDTAK_FTRL process to complete and commit to database
+        // This ensures behandling.status = 'AVSLUTTET' is committed before the job queries
+        console.log('📝 Step 16: Wait for vedtak process to complete...');
+        await waitForProcessInstances(page.request, 30);
+
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
 
         await adminApi.finnIkkeSkattepliktigeSaker(
@@ -286,8 +291,6 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         );
 
         expect(response.antallProsessert).toBe(1);
-
-        await waitForProcessInstances(page.request, 30);
 
         console.log('✅ Workflow completed successfully!');
     });
