@@ -20,37 +20,25 @@ network-check: ## Check/create Docker network
 # Service Management
 # ==============================================================================
 
-.PHONY: start
-start: network-check ## Start all services (Mac ARM)
+.PHONY: start-all
+start-all: network-check ## Start all services (Mac ARM)
 	@echo "🚀 Starting all services..."
-	@echo "   Platform: Mac ARM (Oracle: freepdb1)"
-	@MELOSYS_ORACLE_DB_NAME=freepdb1 MELOSYS_API_TAG=latest docker compose up -d
-	@echo ""
-	@echo "ℹ️  Note: Feature toggles are automatically created by melosys-api on startup"
-	@echo ""
+	MELOSYS_API_TAG=latest docker compose up -d --pull always
 	@echo "✅ All services started!"
 	@echo ""
 	@$(MAKE) urls
 
-.PHONY: start-intel
-start-intel: network-check ## Start all services (Intel/Linux)
+.PHONY: start-api-and-web
+start-api-and-web: network-check ## Start all services (Mac ARM)
 	@echo "🚀 Starting all services..."
-	@echo "   Platform: Intel/Linux (Oracle: XEPDB1)"
-	@MELOSYS_ORACLE_DB_NAME=XEPDB1 ORACLE_IMAGE=gvenzl/oracle-xe:18.4.0-slim MELOSYS_API_TAG=latest docker compose up -d
-	@echo ""
-	@echo "ℹ️  Note: Feature toggles are automatically created by melosys-api on startup"
-	@echo ""
+	MELOSYS_API_TAG=latest docker compose up -d melosys-api melosys-web --pull always
 	@echo "✅ All services started!"
 	@echo ""
 	@$(MAKE) urls
 
-.PHONY: start-detached
-start-detached: network-check ## Start services in detached mode (no logs)
-	@MELOSYS_ORACLE_DB_NAME=freepdb1 MELOSYS_API_TAG=latest docker compose up -d
-	@echo "ℹ️  Note: Feature toggles are automatically created by melosys-api on startup"
 
-.PHONY: stop
-stop: ## Stop all services
+.PHONY: stop-all
+stop-all: ## Stop all services
 	@echo "🛑 Stopping all services..."
 	@docker compose stop
 	@echo "✅ Services stopped"
@@ -67,10 +55,11 @@ down: ## Stop and remove all services
 	@docker compose down -v
 	@echo "✅ Services removed"
 
-.PHONY: clean
-clean: down ## Stop services and clean up
+.PHONY: clean-all
+clean-all: down ## Stop services and clean up
 	@echo "🧹 Cleaning up..."
-	@docker network rm melosys.docker-internal || true
+	@docker compose rm -f -v
+	#@docker network rm melosys.docker-internal || true
 	@echo "✅ Cleanup complete"
 
 # ==============================================================================
@@ -139,18 +128,6 @@ wait-healthy: ## Wait for all services to be healthy
 		fi; \
 		sleep 10; \
 	done
-
-# ==============================================================================
-# Unleash Management
-# ==============================================================================
-
-.PHONY: unleash-ui
-unleash-ui: ## Open Unleash UI in browser
-	@echo "🌐 Opening Unleash UI..."
-	@echo "   URL: http://localhost:4242"
-	@echo "   Username: admin"
-	@echo "   Password: unleash4all"
-	@open http://localhost:4242 || xdg-open http://localhost:4242 || echo "Please open http://localhost:4242 manually"
 
 # ==============================================================================
 # Testing
