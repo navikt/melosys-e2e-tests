@@ -179,6 +179,9 @@ jobs:
           echo "🔨 Building melosys-api to get compiled classes for coverage report..."
           mvn clean package -DskipTests -B --settings .github/settings.xml
           echo "✅ melosys-api compiled"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PASSWORD: ${{ secrets.READER_TOKEN }}
 
       - name: Pre-pull Docker images in parallel
         run: |
