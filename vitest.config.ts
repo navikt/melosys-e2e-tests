@@ -15,7 +15,13 @@ export default defineConfig({
   test: {
     // Test file patterns
     include: ['**/*.test.ts'],
-    exclude: ['node_modules', 'test-results', 'playwright-report'],
+    exclude: [
+      'node_modules',
+      'test-results',
+      'playwright-report',
+      '**/*.spec.ts', // Playwright E2E tests - DO NOT run with Vitest
+      'tests/**/*', // All E2E tests directory
+    ],
 
     // Environment
     environment: 'node',

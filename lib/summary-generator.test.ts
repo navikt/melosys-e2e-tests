@@ -6,10 +6,10 @@
  *
  * Run tests:
  *   npm run test:unit
- *   npm run test:unit:ui
  */
 
-import { describe, test, expect } from 'vitest';
+import { describe, test } from 'node:test';
+import assert from 'node:assert';
 import { generateMarkdownSummary } from './summary-generator';
 import { TestSummaryData, TestData } from './types';
 
@@ -29,9 +29,9 @@ describe('Summary Generator', () => {
 
       const result = generateMarkdownSummary(data);
 
-      expect(result).toContain('**Status:** passed');
-      expect(result).toContain('✅ Passed: 2');
-      expect(result).toContain('❌ Failed: 0');
+      assert(result.includes('**Status:** passed'));
+      assert(result.includes('✅ Passed: 2'));
+      assert(result.includes('❌ Failed: 0'));
     });
 
     test('should mark CI as failed when regular test fails', () => {
@@ -46,9 +46,9 @@ describe('Summary Generator', () => {
 
       const result = generateMarkdownSummary(data);
 
-      expect(result).toContain('**Status:** failed');
-      expect(result).toContain('✅ Passed: 1');
-      expect(result).toContain('❌ Failed: 1');
+      assert(result.includes('**Status:** failed'));
+      assert(result.includes('✅ Passed: 1'));
+      assert(result.includes('❌ Failed: 1'));
     });
 
     test('should mark CI as passed when only known-error test fails', () => {
@@ -68,10 +68,10 @@ describe('Summary Generator', () => {
       const result = generateMarkdownSummary(data);
 
       // CI should pass because only known-error failed
-      expect(result).toContain('**Status:** passed');
-      expect(result).toContain('✅ Passed: 1');
-      expect(result).toContain('⚠️ Known Error (Failed): 1');
-      expect(result).toContain('❌ Failed: 0');
+      assert(result.includes('**Status:** passed'));
+      assert(result.includes('✅ Passed: 1'));
+      assert(result.includes('⚠️ Known Error (Failed): 1'));
+      assert(result.includes('❌ Failed: 0'));
     });
 
     test('should mark CI as failed when both regular and known-error tests fail', () => {
@@ -91,9 +91,9 @@ describe('Summary Generator', () => {
       const result = generateMarkdownSummary(data);
 
       // CI should fail because of regular failure
-      expect(result).toContain('**Status:** failed');
-      expect(result).toContain('❌ Failed: 1');
-      expect(result).toContain('⚠️ Known Error (Failed): 1');
+      assert(result.includes('**Status:** failed'));
+      assert(result.includes('❌ Failed: 1'));
+      assert(result.includes('⚠️ Known Error (Failed): 1'));
     });
 
   });
@@ -115,11 +115,11 @@ describe('Summary Generator', () => {
 
       const result = generateMarkdownSummary(data);
 
-      expect(result).toContain('⚠️ Known Error (Failed): 1');
-      expect(result).toContain('⚠️'); // Emoji in table
-      expect(result).toContain('## ⚠️ Known Error Tests (Failed)');
-      expect(result).toContain('Failed as expected');
-      expect(result).toContain('do not affect CI status');
+      assert(result.includes('⚠️ Known Error (Failed): 1'));
+      assert(result.includes('⚠️')); // Emoji in table
+      assert(result.includes('## ⚠️ Known Error Tests (Failed)'));
+      assert(result.includes('Failed as expected'));
+      assert(result.includes('do not affect CI status'));
     });
 
     test('should show known-error-passed test with sparkle emoji and warning', () => {
@@ -137,12 +137,12 @@ describe('Summary Generator', () => {
 
       const result = generateMarkdownSummary(data);
 
-      expect(result).toContain('✨ Known Error (Passed): 1');
-      expect(result).toContain('✨'); // Emoji in table
-      expect(result).toContain('## ✨ Known Error Tests (Passed)');
-      expect(result).toContain('bug might be fixed');
-      expect(result).toContain('Unexpectedly passing');
-      expect(result).toContain('consider removing @known-error tag');
+      assert(result.includes('✨ Known Error (Passed): 1'));
+      assert(result.includes('✨')); // Emoji in table
+      assert(result.includes('## ✨ Known Error Tests (Passed)'));
+      assert(result.includes('bug might be fixed'));
+      assert(result.includes('Unexpectedly passing'));
+      assert(result.includes('consider removing @known-error tag'));
     });
 
     test('should show note about known-error tests not affecting CI', () => {
@@ -165,7 +165,7 @@ describe('Summary Generator', () => {
 
       const result = generateMarkdownSummary(data);
 
-      expect(result).toContain('> **Note:** 2 test(s) marked as @known-error do not affect CI status');
+      assert(result.includes('> **Note:** 2 test(s) marked as @known-error do not affect CI status'));
     });
 
   });
@@ -189,12 +189,12 @@ describe('Summary Generator', () => {
       const result = generateMarkdownSummary(data);
 
       // Check that all emojis are present
-      expect(result).toContain('✅'); // passed
-      expect(result).toContain('❌'); // failed
-      expect(result).toContain('⏭️'); // skipped
-      expect(result).toContain('🔄'); // flaky
-      expect(result).toContain('⚠️'); // known-error-failed
-      expect(result).toContain('✨'); // known-error-passed
+      assert(result.includes('✅')); // passed
+      assert(result.includes('❌')); // failed
+      assert(result.includes('⏭️')); // skipped
+      assert(result.includes('🔄')); // flaky
+      assert(result.includes('⚠️')); // known-error-failed
+      assert(result.includes('✨')); // known-error-passed
     });
 
   });
@@ -217,7 +217,7 @@ describe('Summary Generator', () => {
 
       const result = generateMarkdownSummary(data);
 
-      expect(result).toContain('<td>1</td>'); // Should show "1", not "1 (0 failed)"
+      assert(result.includes('<td>1</td>')); // Should show "1", not "1 (0 failed)"
     });
 
     test('should show multiple attempts with failure count', () => {
@@ -236,8 +236,8 @@ describe('Summary Generator', () => {
 
       const result = generateMarkdownSummary(data);
 
-      expect(result).toContain('3 (2 failed)');
-      expect(result).toContain('**Total Attempts:** 3 (including 2 retries)');
+      assert(result.includes('3 (2 failed)'));
+      assert(result.includes('**Total Attempts:** 3 (including 2 retries)'));
     });
 
     test('should calculate total attempts correctly', () => {
@@ -255,7 +255,7 @@ describe('Summary Generator', () => {
 
       // Total attempts: 1 + 3 + 2 = 6
       // Retries: 6 - 3 tests = 3
-      expect(result).toContain('**Total Attempts:** 6 (including 3 retries)');
+      assert(result.includes('**Total Attempts:** 6 (including 3 retries)'));
     });
 
   });
@@ -277,10 +277,10 @@ describe('Summary Generator', () => {
 
       const result = generateMarkdownSummary(data);
 
-      expect(result).toContain('## ❌ Failed Tests (1)');
-      expect(result).toContain('### my failing test');
-      expect(result).toContain('**Error:**');
-      expect(result).toContain('Timeout 10000ms exceeded');
+      assert(result.includes('## ❌ Failed Tests (1)'));
+      assert(result.includes('### my failing test'));
+      assert(result.includes('**Error:**'));
+      assert(result.includes('Timeout 10000ms exceeded'));
     });
 
     test('should not include known-error-failed tests in failed section', () => {
@@ -300,13 +300,13 @@ describe('Summary Generator', () => {
       const result = generateMarkdownSummary(data);
 
       // Failed section should only have 1 test (not 2)
-      expect(result).toContain('## ❌ Failed Tests (1)');
-      expect(result).toContain('real failure');
-      expect(result).not.toContain('## ❌ Failed Tests (2)');
+      assert(result.includes('## ❌ Failed Tests (1)'));
+      assert(result.includes('real failure'));
+      assert(!result.includes('## ❌ Failed Tests (2)'));
 
       // Known error should be in separate section
-      expect(result).toContain('## ⚠️ Known Error Tests (Failed) (1)');
-      expect(result).toContain('known bug @known-error');
+      assert(result.includes('## ⚠️ Known Error Tests (Failed) (1)'));
+      assert(result.includes('known bug @known-error'));
     });
 
   });
@@ -329,9 +329,9 @@ describe('Summary Generator', () => {
 
       const result = generateMarkdownSummary(data);
 
-      expect(result).toContain('## 🔄 Flaky Tests (1)');
-      expect(result).toContain('unstable test');
-      expect(result).toContain('Attempts: 3 (2 failed, 1 passed)');
+      assert(result.includes('## 🔄 Flaky Tests (1)'));
+      assert(result.includes('unstable test'));
+      assert(result.includes('Attempts: 3 (2 failed, 1 passed)'));
     });
 
   });
@@ -359,9 +359,9 @@ describe('Summary Generator', () => {
 
       const result = generateMarkdownSummary(data);
 
-      expect(result).toContain('**Docker Log Errors:**');
-      expect(result).toContain('🐳 **melosys-api** (2 error(s))');
-      expect(result).toContain('SQL Error: ORA-00001');
+      assert(result.includes('**Docker Log Errors:**'));
+      assert(result.includes('🐳 **melosys-api** (2 error(s))'));
+      assert(result.includes('SQL Error: ORA-00001'));
     });
 
     test('should show Docker errors summary by service', () => {
@@ -388,9 +388,9 @@ describe('Summary Generator', () => {
 
       const result = generateMarkdownSummary(data);
 
-      expect(result).toContain('## 🐳 Docker Log Errors by Service');
-      expect(result).toContain('**melosys-api:** 2 error(s)');
-      expect(result).toContain('**melosys-web:** 1 error(s)');
+      assert(result.includes('## 🐳 Docker Log Errors by Service'));
+      assert(result.includes('**melosys-api:** 2 error(s)'));
+      assert(result.includes('**melosys-web:** 1 error(s)'));
     });
 
     test('should show process errors summary', () => {
@@ -413,10 +413,10 @@ describe('Summary Generator', () => {
 
       const result = generateMarkdownSummary(data);
 
-      expect(result).toContain('## ⚙️ Process Instance Failures');
-      expect(result).toContain('**Tests with process failures:** 2');
-      expect(result).toContain('test1');
-      expect(result).toContain('test2');
+      assert(result.includes('## ⚙️ Process Instance Failures'));
+      assert(result.includes('**Tests with process failures:** 2'));
+      assert(result.includes('test1'));
+      assert(result.includes('test2'));
     });
 
   });
@@ -445,8 +445,8 @@ describe('Summary Generator', () => {
 
       const result = generateMarkdownSummary(data);
 
-      expect(result).toContain('📁 eu-eos / <code>scenario1.spec.ts</code>');
-      expect(result).toContain('📁 trygdeavgift / <code>calculation.spec.ts</code>');
+      assert(result.includes('📁 eu-eos / <code>scenario1.spec.ts</code>'));
+      assert(result.includes('📁 trygdeavgift / <code>calculation.spec.ts</code>'));
     });
 
     test('should sort files with failures first', () => {
@@ -474,7 +474,7 @@ describe('Summary Generator', () => {
       const zzzIndex = result.indexOf('zzz / <code>fail.spec.ts</code>');
       const aaaIndex = result.indexOf('aaa / <code>pass.spec.ts</code>');
 
-      expect(zzzIndex).toBeLessThan(aaaIndex);
+      assert(zzzIndex < aaaIndex);
     });
 
   });
@@ -490,7 +490,7 @@ describe('Summary Generator', () => {
 
       const result = generateMarkdownSummary(data, { includeArtifactsSection: false });
 
-      expect(result).not.toContain('## 📎 Artifacts');
+      assert(!result.includes('## 📎 Artifacts'));
     });
 
     test('should exclude timestamp when option is false', () => {
@@ -502,7 +502,7 @@ describe('Summary Generator', () => {
 
       const result = generateMarkdownSummary(data, { includeTimestamp: false });
 
-      expect(result).not.toContain('**Generated:**');
+      assert(!result.includes('**Generated:**'));
     });
 
   });
@@ -518,8 +518,8 @@ describe('Summary Generator', () => {
 
       const result = generateMarkdownSummary(data);
 
-      expect(result).toContain('**Total Tests:** 0');
-      expect(result).toContain('**Status:** passed');
+      assert(result.includes('**Total Tests:** 0'));
+      assert(result.includes('**Status:** passed'));
     });
 
     test('should handle test with very long title', () => {
@@ -534,7 +534,7 @@ describe('Summary Generator', () => {
 
       const result = generateMarkdownSummary(data);
 
-      expect(result).toContain(longTitle);
+      assert(result.includes(longTitle));
     });
 
     test('should handle special characters in test title', () => {
@@ -548,7 +548,7 @@ describe('Summary Generator', () => {
 
       const result = generateMarkdownSummary(data);
 
-      expect(result).toContain('test with <html> & "quotes"');
+      assert(result.includes('test with <html> & "quotes"'));
     });
 
   });
@@ -565,7 +565,7 @@ describe('Summary Generator', () => {
       const result = generateMarkdownSummary(data);
 
       // 45678ms = 45.678s ≈ 46s
-      expect(result).toContain('**Duration:** 46s');
+      assert(result.includes('**Duration:** 46s'));
     });
 
   });
