@@ -229,10 +229,28 @@ export class EuEosArbeidFlereLandPage extends BasePage {
 
   /**
    * Klikk "Fatt vedtak" knapp for å fullføre behandlingen
+   *
+   * IMPORTANT: This method waits for the critical vedtak creation API call.
+   * The endpoint POST /api/saksflyt/vedtak/{id}/fatt creates the vedtak document
+   * and can take 30-60 seconds on CI due to backend race conditions.
+   *
+   * @see docs/debugging/EU-EOS-SKIP-BACKEND-RACE-CONDITION.md
    */
   async klikkFattVedtak(): Promise<void> {
+    // CRITICAL: Set up response listener BEFORE clicking
+    // Wait for the vedtak creation API - same pattern as eu-eos-behandling.page.ts
+    const responsePromise = this.page.waitForResponse(
+      response => response.url().includes('/api/saksflyt/vedtak/') &&
+                  response.url().includes('/fatt') &&
+                  response.request().method() === 'POST' &&
+                  (response.status() === 200 || response.status() === 204),
+      { timeout: 60000 } // Long timeout - backend race condition can cause delays
+    );
+
     await this.fattVedtakButton.click();
-    console.log('✅ Fattet vedtak - Arbeid i flere land behandling fullført');
+
+    const response = await responsePromise;
+    console.log(`✅ Fattet vedtak - API completed: ${response.url()} -> ${response.status()}`);
   }
 
   /**
