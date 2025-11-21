@@ -155,6 +155,31 @@ jobs:
           echo "MELOSYS_TRYGDEAVTALE_TAG=${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }}" >> $GITHUB_ENV
           echo "MELOSYS_INNGANGSVILKAR_TAG=${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }}" >> $GITHUB_ENV
 
+      - name: Download JaCoCo agent for E2E coverage
+        run: |
+          echo "📊 Downloading JaCoCo agent for E2E coverage collection..."
+          mkdir -p jacoco
+          curl -L https://repo1.maven.org/maven2/org/jacoco/jacoco/0.8.14/jacoco-0.8.14.zip -o jacoco.zip
+          unzip -q jacoco.zip -d jacoco-temp
+          cp jacoco-temp/lib/jacocoagent.jar jacoco/
+          cp jacoco-temp/lib/jacococli.jar jacoco/
+          rm -rf jacoco-temp jacoco.zip
+          echo "✅ JaCoCo agent downloaded to ./jacoco/"
+
+      - name: Checkout melosys-api for coverage report generation
+        uses: actions/checkout@v4
+        with:
+          repository: navikt/melosys-api
+          path: melosys-api
+          token: ${{ secrets.READER_TOKEN }}
+
+      - name: Build melosys-api for coverage class files
+        run: |
+          cd melosys-api
+          echo "🔨 Building melosys-api to get compiled classes for coverage report..."
+          mvn clean compile -DskipTests -B -q --settings ../.github/settings.xml
+          echo "✅ melosys-api compiled"
+
       - name: Pre-pull Docker images in parallel
         run: |
           echo "🐳 Pre-pulling Docker images to avoid timeout during compose up..."
@@ -188,6 +213,7 @@ jobs:
           MELOSYS_TRYGDEAVGIFT_TAG: ${{ steps.image-tags.outputs.melosys_trygdeavgift_tag }}
           MELOSYS_TRYGDEAVTALE_TAG: ${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }}
           MELOSYS_INNGANGSVILKAR_TAG: ${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }}
+          JACOCO_AGENT_OPTS: "-javaagent:/jacoco/jacocoagent.jar=output=tcpserver,address=*,port=6300"
 
       - name: Wait for services to be healthy
         run: |
@@ -263,6 +289,104 @@ jobs:
         run: npx playwright test --project=chromium
         env:
           CI: true
+
+      - name: Dump JaCoCo coverage from melosys-api
+        if: always()
+        run: |
+          echo "📊 Dumping E2E coverage data from melosys-api..."
+          java -jar jacoco/jacococli.jar dump \
+            --address localhost \
+            --port 6300 \
+            --destfile e2e-coverage.exec
+          echo "✅ Coverage data dumped to e2e-coverage.exec"
+          ls -lh e2e-coverage.exec
+
+      - name: Generate E2E coverage reports
+        if: always()
+        run: |
+          echo "📈 Generating E2E coverage reports..."
+          cd melosys-api
+
+          # Generate reports using Maven JaCoCo plugin
+          mvn jacoco:report -Djacoco.dataFile=../e2e-coverage.exec -B -q
+
+          echo "✅ Coverage reports generated"
+          echo "📋 Report locations:"
+          find . -path "*/target/site/jacoco/index.html" -type f
+
+      - name: E2E Coverage Report
+        uses: madrapps/jacoco-report@v1.7.2
+        if: always()
+        with:
+          paths: 'melosys-api/**/target/site/jacoco/jacoco.xml'
+          token: ${{ secrets.GITHUB_TOKEN }}
+          min-coverage-overall: 0
+          min-coverage-changed-files: 0
+          title: '🎭 E2E Code Coverage'
+          update-comment: true
+
+      - name: E2E Module Coverage Summary
+        if: always()
+        run: |
+          echo "## 📊 E2E Coverage per Module" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "_Coverage collected from E2E tests exercising melosys-api_" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "| Module | Lines | Branches | Methods |" >> $GITHUB_STEP_SUMMARY
+          echo "|--------|-------|----------|---------|" >> $GITHUB_STEP_SUMMARY
+
+          total_line_covered=0
+          total_line_missed=0
+          total_branch_covered=0
+          total_branch_missed=0
+          total_method_covered=0
+          total_method_missed=0
+
+          for csv_file in melosys-api/*/target/site/jacoco/jacoco.csv; do
+            if [ -f "$csv_file" ]; then
+              module=$(basename $(dirname $(dirname $(dirname "$csv_file"))))
+
+              line_covered=$(awk -F',' 'NR>1 {sum+=$9} END {print sum+0}' "$csv_file")
+              line_missed=$(awk -F',' 'NR>1 {sum+=$8} END {print sum+0}' "$csv_file")
+              branch_covered=$(awk -F',' 'NR>1 {sum+=$7} END {print sum+0}' "$csv_file")
+              branch_missed=$(awk -F',' 'NR>1 {sum+=$6} END {print sum+0}' "$csv_file")
+              method_covered=$(awk -F',' 'NR>1 {sum+=$13} END {print sum+0}' "$csv_file")
+              method_missed=$(awk -F',' 'NR>1 {sum+=$12} END {print sum+0}' "$csv_file")
+
+              if [ $((line_covered + line_missed)) -gt 0 ]; then
+                line_pct=$(awk "BEGIN {printf \"%.1f\", ($line_covered / ($line_covered + $line_missed)) * 100}")
+                branch_pct=$(awk "BEGIN {printf \"%.1f\", ($branch_covered / ($branch_covered + $branch_missed)) * 100}")
+                method_pct=$(awk "BEGIN {printf \"%.1f\", ($method_covered / ($method_covered + $method_missed)) * 100}")
+
+                echo "| $module | ${line_pct}% | ${branch_pct}% | ${method_pct}% |" >> $GITHUB_STEP_SUMMARY
+
+                total_line_covered=$((total_line_covered + line_covered))
+                total_line_missed=$((total_line_missed + line_missed))
+                total_branch_covered=$((total_branch_covered + branch_covered))
+                total_branch_missed=$((total_branch_missed + branch_missed))
+                total_method_covered=$((total_method_covered + method_covered))
+                total_method_missed=$((total_method_missed + method_missed))
+              fi
+            fi
+          done
+
+          if [ $((total_line_covered + total_line_missed)) -gt 0 ]; then
+            total_line_pct=$(awk "BEGIN {printf \"%.1f\", ($total_line_covered / ($total_line_covered + $total_line_missed)) * 100}")
+            total_branch_pct=$(awk "BEGIN {printf \"%.1f\", ($total_branch_covered / ($total_branch_covered + $total_branch_missed)) * 100}")
+            total_method_pct=$(awk "BEGIN {printf \"%.1f\", ($total_method_covered / ($total_method_covered + $total_method_missed)) * 100}")
+            echo "| **TOTAL** | **${total_line_pct}%** | **${total_branch_pct}%** | **${total_method_pct}%** |" >> $GITHUB_STEP_SUMMARY
+          fi
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+      - name: Upload E2E coverage reports
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: e2e-coverage-report
+          path: |
+            e2e-coverage.exec
+            melosys-api/**/target/site/jacoco/
+          retention-days: 30
 
       - name: Generate test summary
         if: always()

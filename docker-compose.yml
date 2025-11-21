@@ -215,6 +215,9 @@ services:
           - melosys-api.melosys.docker-internal
     ports:
       - "8080:8080"
+      - "6300:6300"  # JaCoCo coverage port
+    volumes:
+      - ./jacoco:/jacoco:ro  # Mount JaCoCo agent (optional, for E2E coverage)
     depends_on:
       - kafka
       - mock-oauth2-server
@@ -225,6 +228,8 @@ services:
       - melosys-trygdeavgift-beregning
     environment:
       SPRING_PROFILES_ACTIVE: local-mock
+      # JaCoCo coverage agent (optional - only set in CI for E2E coverage)
+      JAVA_TOOL_OPTIONS: ${JACOCO_AGENT_OPTS:-}
       # Kafka configuration
       KAFKA_BROKERS: kafka.melosys.docker-internal:9092
       # Oracle database configuration (override localhost with docker service name)
