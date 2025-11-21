@@ -177,7 +177,7 @@ jobs:
         run: |
           cd melosys-api
           echo "🔨 Building melosys-api to get compiled classes for coverage report..."
-          mvn clean compile -DskipTests -B -q --settings .github/settings.xml
+          mvn clean package -DskipTests -B --settings .github/settings.xml
           echo "✅ melosys-api compiled"
 
       - name: Pre-pull Docker images in parallel
