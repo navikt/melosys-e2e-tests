@@ -229,16 +229,44 @@ This builds on earlier improvements:
 
 ---
 
+## ⚠️ Side Effect: Test Timeout Increase Required
+
+After adding network idle waits to all step transitions, the overall test execution time increased significantly on CI:
+
+**Calculation:**
+- ~7 steps in "arbeid flere land" workflow
+- Each step waits 10-15s for network idle
+- Total wait time: ~84 seconds (7 × 12s)
+- Plus actual test execution: ~20-30s
+- **Total test time on slow CI: ~100-120 seconds**
+
+**Solution:** Increased test timeout from default 60s to 120s:
+
+```typescript
+test('skal fullføre arbeid i flere land-arbeidsflyt', async ({page}) => {
+  test.setTimeout(120000); // 120 seconds (was 60s default)
+  // ... test code
+});
+```
+
+**Affected test:**
+- `tests/eu-eos/eu-eos-arbeid-flere-land.spec.ts` ✅ Fixed
+
+**Note:** This is the expected trade-off for stability. Network idle waits prevent race conditions but add execution time. The alternative (faster but flaky tests) is unacceptable.
+
+---
+
 ## ✅ Acceptance Criteria
 
 Fix is complete when:
 
 1. ✅ All three page objects updated with network idle wait
-2. ✅ Timeout increased to 45 seconds
+2. ✅ Timeout increased to 45 seconds for element visibility
 3. ✅ React render wait added (1 second)
-4. ⏳ Test passes 10 out of 10 times locally
-5. ⏳ Test passes consistently on CI (GitHub Actions)
-6. ⏳ No regression in other tests
+4. ✅ Test timeout increased to 120s where needed
+5. ⏳ Test passes 10 out of 10 times locally
+6. ⏳ Test passes consistently on CI (GitHub Actions)
+7. ⏳ No regression in other tests
 
 ---
 
