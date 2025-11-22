@@ -308,18 +308,31 @@ jobs:
         if: always()
         run: |
           echo "📈 Generating E2E coverage reports..."
+
+          # Copy exec file to melosys-api root for Maven to find
+          cp e2e-coverage.exec melosys-api/jacoco.exec
+
           cd melosys-api
 
-          # Generate reports using Maven JaCoCo plugin
-          mvn jacoco:report -Djacoco.dataFile=../e2e-coverage.exec -B -q
+          # Generate reports using Maven JaCoCo plugin for each module
+          for module in */pom.xml; do
+            module_dir=$(dirname "$module")
+            if [ -d "$module_dir/src" ]; then
+              echo "📊 Generating report for $module_dir..."
+              (cd "$module_dir" && mvn jacoco:report -Djacoco.dataFile=../jacoco.exec -B) || echo "⚠️  Report generation failed for $module_dir"
+            fi
+          done
 
           echo "✅ Coverage reports generated"
           echo "📋 Report locations:"
-          find . -path "*/target/site/jacoco/index.html" -type f
+          find . -path "*/target/site/jacoco/index.html" -type f || echo "No reports found"
+
+          # Show CSV files for summary
+          find . -path "*/target/site/jacoco/jacoco.csv" -type f | head -5 || echo "No CSV files found"
 
       - name: E2E Coverage Report
         uses: madrapps/jacoco-report@v1.7.2
-        if: always()
+        if: github.event_name == 'pull_request'
         with:
           paths: 'melosys-api/**/target/site/jacoco/jacoco.xml'
           token: ${{ secrets.GITHUB_TOKEN }}
