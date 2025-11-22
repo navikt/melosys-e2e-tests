@@ -10,10 +10,35 @@ import { TIMEOUT_MEDIUM } from './constants';
  * - Provides polling strategies for dynamic dropdowns
  * - Offers fallback selector patterns for robustness
  * - Includes common navigation and wait utilities
+ * - Monitors browser console for errors (diagnostic mode)
  */
 export abstract class BasePage {
 
   protected constructor(readonly page: Page) {
+    // DIAGNOSTIC: Monitor browser console for errors
+    // This helps identify frontend bugs that prevent rendering
+    this.setupConsoleMonitoring();
+  }
+
+  /**
+   * Set up browser console monitoring for diagnostics
+   * Logs all browser console errors and page errors to help debug rendering issues
+   */
+  private setupConsoleMonitoring(): void {
+    // Monitor browser console messages (console.error calls)
+    this.page.on('console', msg => {
+      if (msg.type() === 'error') {
+        console.error(`🔴 Browser console error: ${msg.text()}`);
+      }
+    });
+
+    // Monitor uncaught page errors (JavaScript exceptions)
+    this.page.on('pageerror', err => {
+      console.error(`🔴 Page error: ${err.message}`);
+      if (err.stack) {
+        console.error(`   Stack: ${err.stack.split('\n')[0]}`); // First line of stack
+      }
+    });
   }
 
   /**
