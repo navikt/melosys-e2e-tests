@@ -55,13 +55,10 @@ Updated multiple methods across **3 page objects**:
 **Primary fixes (arbeidsgiver checkbox):**
 1. `pages/behandling/arbeid-flere-land-behandling.page.ts` ✅
    - `velgArbeidsgiver()`
-2. `pages/behandling/eu-eos-arbeid-flere-land.page.ts` ✅
-   - `velgArbeidsgiver()`
-   - `bekreftArbeidIFlereLand()` (additional fix after CI failure)
-   - `velgHjemland()` (preventive fix)
-   - `velgHjemlandOgFortsett()` (preventive fix)
-   - `velgLønnetArbeidIToEllerFlere()` (preventive fix)
-   - `velgProsentandel()` (preventive fix)
+2. ~~`pages/behandling/eu-eos-arbeid-flere-land.page.ts`~~ ❌ **REMOVED** (obsolete, unused)
+   - This was an older/alternative implementation that was less robust
+   - All tests now use `arbeid-flere-land-behandling.page.ts` instead
+   - File removed to prevent confusion and ensure consistency
 3. `pages/behandling/eu-eos-behandling.page.ts` ✅
    - `velgArbeidsgiver()`
 
