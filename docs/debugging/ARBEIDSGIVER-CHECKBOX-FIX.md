@@ -50,11 +50,20 @@ Added **network idle wait** and **React render wait** BEFORE looking for the che
 
 ### Changes Made
 
-Updated `velgArbeidsgiver()` method in **3 page objects**:
+Updated multiple methods across **3 page objects**:
 
+**Primary fixes (arbeidsgiver checkbox):**
 1. `pages/behandling/arbeid-flere-land-behandling.page.ts` ✅
+   - `velgArbeidsgiver()`
 2. `pages/behandling/eu-eos-arbeid-flere-land.page.ts` ✅
+   - `velgArbeidsgiver()`
+   - `bekreftArbeidIFlereLand()` (additional fix after CI failure)
+   - `velgHjemland()` (preventive fix)
+   - `velgHjemlandOgFortsett()` (preventive fix)
+   - `velgLønnetArbeidIToEllerFlere()` (preventive fix)
+   - `velgProsentandel()` (preventive fix)
 3. `pages/behandling/eu-eos-behandling.page.ts` ✅
+   - `velgArbeidsgiver()`
 
 ### New Implementation
 

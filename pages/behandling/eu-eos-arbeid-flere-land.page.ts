@@ -96,8 +96,13 @@ export class EuEosArbeidFlereLandPage extends BasePage {
    * Dette er landet hvor personen er bosatt/har hovedarbeidssted
    */
   async velgHjemland(): Promise<void> {
+    // Wait for network idle to ensure page has loaded after step transition
+    await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
+      console.log('⚠️  Network idle timeout, continuing anyway');
+    });
+
     // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
-    await this.norgeRadio.waitFor({ state: 'visible' });
+    await this.norgeRadio.waitFor({ state: 'visible', timeout: 30000 });
     await this.norgeRadio.check();
     console.log('✅ Valgte hjemland: Norge');
   }
@@ -113,10 +118,15 @@ export class EuEosArbeidFlereLandPage extends BasePage {
     if (land === 'Norge') {
       await this.velgHjemland();
     } else {
+      // Wait for network idle to ensure page has loaded
+      await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
+        console.log('⚠️  Network idle timeout, continuing anyway');
+      });
+
       // Kan utvides med andre land om nødvendig
       const radio = this.page.getByRole('radio', { name: land });
       // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
-      await radio.waitFor({ state: 'visible' });
+      await radio.waitFor({ state: 'visible', timeout: 30000 });
       await radio.check();
       console.log(`✅ Valgte hjemland: ${land}`);
     }
@@ -164,9 +174,20 @@ export class EuEosArbeidFlereLandPage extends BasePage {
    * Krysser av for "Arbeid utføres i land som er dekket av EØS-avtalen"
    */
   async bekreftArbeidIFlereLand(): Promise<void> {
+    console.log('🔍 Leter etter "Arbeid utføres i land som er" checkbox...');
+
+    // CRITICAL: Wait for network to be idle FIRST to ensure page has fully loaded
+    // The checkbox won't exist until the backend provides the step data
+    await this.page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {
+      console.log('⚠️  Network idle timeout, continuing anyway');
+    });
+
+    // Extra wait to ensure React has rendered the checkbox
+    await this.page.waitForTimeout(1000);
+
     // Vent på at checkbox er synlig og stabil før sjekking (unngår race condition)
-    // Økt timeout til 15s siden denne kan ta tid å laste
-    await this.arbeidIFlereLandCheckbox.waitFor({ state: 'visible', timeout: 15000 });
+    // Increased timeout to 45s for slow CI environments
+    await this.arbeidIFlereLandCheckbox.waitFor({ state: 'visible', timeout: 45000 });
     await this.arbeidIFlereLandCheckbox.check();
     console.log('✅ Bekreftet: Arbeid utføres i flere land');
   }
@@ -184,8 +205,13 @@ export class EuEosArbeidFlereLandPage extends BasePage {
    * Velg "Lønnet arbeid i to eller flere land"
    */
   async velgLønnetArbeidIToEllerFlere(): Promise<void> {
+    // Wait for network idle to ensure page has loaded after step transition
+    await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
+      console.log('⚠️  Network idle timeout, continuing anyway');
+    });
+
     // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
-    await this.lønnetArbeidIToEllerFlereRadio.waitFor({ state: 'visible' });
+    await this.lønnetArbeidIToEllerFlereRadio.waitFor({ state: 'visible', timeout: 30000 });
     await this.lønnetArbeidIToEllerFlereRadio.check();
     console.log('✅ Valgte: Lønnet arbeid i to eller flere land');
   }
@@ -203,8 +229,13 @@ export class EuEosArbeidFlereLandPage extends BasePage {
    * Velg prosentandel arbeid (25% eller mer)
    */
   async velgProsentandel(): Promise<void> {
+    // Wait for network idle to ensure page has loaded after step transition
+    await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
+      console.log('⚠️  Network idle timeout, continuing anyway');
+    });
+
     // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
-    await this.prosentEllerMerRadio.waitFor({ state: 'visible' });
+    await this.prosentEllerMerRadio.waitFor({ state: 'visible', timeout: 30000 });
     await this.prosentEllerMerRadio.check();
     console.log('✅ Valgte: 25% eller mer av arbeidet i hjemlandet');
   }
