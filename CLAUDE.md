@@ -91,10 +91,12 @@ npm install
 # Install Playwright browsers
 npx playwright install
 
-# Start required services (must be running before tests)
+# Start required services (LOCAL development only)
 cd ../melosys-docker-compose
 make start-all
 ```
+
+**Note:** Local development uses `melosys-docker-compose` repo. GitHub Actions CI uses its own `docker-compose.yml` in this repo with pre-built images from NAIS registry.
 
 ## Git Commit Rules
 
@@ -243,7 +245,7 @@ test('my test with unleash', async ({ page, request }) => {
 
 ### Docker Services Architecture
 
-The test suite depends on a full Docker Compose stack running in `../melosys-docker-compose`. Key services:
+The test suite depends on a full Docker Compose stack. **Locally**, use `../melosys-docker-compose`. **CI** uses `docker-compose.yml` in this repo. Key services:
 
 - **melosys-web** (port 3000) - Frontend application
 - **melosys-api** (port 8080) - Backend API
@@ -737,7 +739,7 @@ Key steps:
 
 ## Recording New Workflows
 
-1. Start services: `cd ../melosys-docker-compose && make start-all`
+1. Start services (local): `cd ../melosys-docker-compose && make start-all`
 2. Run codegen: `npm run codegen`
 3. Perform workflow in opened browser
 4. Copy generated code from Playwright Inspector
@@ -766,6 +768,7 @@ Key steps:
 - **POM Guide**: `docs/pom/QUICK-START.md` - Page Object Model quick reference
 - **POM Migration**: `docs/pom/MIGRATION-PLAN.md` - Complete POM strategy
 - **GitHub Actions**: `docs/ci-cd/GITHUB-ACTIONS.md` - CI/CD setup and usage
+- **E2E Coverage**: `docs/ci-cd/E2E-COVERAGE.md` - E2E code coverage collection for melosys-api
 - [Playwright Documentation](https://playwright.dev) - Official Playwright docs
 - [Playwright Best Practices](https://playwright.dev/docs/best-practices)
 - [Trace Viewer Guide](https://playwright.dev/docs/trace-viewer)
