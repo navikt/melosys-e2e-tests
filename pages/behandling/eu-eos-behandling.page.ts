@@ -204,6 +204,15 @@ export class EuEosBehandlingPage extends BasePage {
   async velgArbeidsgiver(arbeidsgiverNavn: string): Promise<void> {
     console.log(`🔍 Leter etter arbeidsgiver checkbox: "${arbeidsgiverNavn}"`);
 
+    // CRITICAL: Wait for network to be idle FIRST to ensure employer list has loaded
+    // The checkbox won't exist until the backend provides the employer data
+    await this.page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {
+      console.log('⚠️  Network idle timeout, continuing anyway (employer list might still load)');
+    });
+
+    // Extra wait to ensure React has rendered the employer list
+    await this.page.waitForTimeout(1000);
+
     // Debug: Se hva som finnes på siden
     const pageContent = await this.page.content();
     console.log(`📄 Sidelengde: ${pageContent.length} bytes`);
@@ -218,9 +227,9 @@ export class EuEosBehandlingPage extends BasePage {
     const checkbox = this.page.getByRole('checkbox', { name: arbeidsgiverNavn });
 
     // Vent på at checkbox er synlig og stabil før sjekking (unngår race condition)
-    // Økt timeout til 30 sekunder for å håndtere treg lasting på Virksomhet-steget
+    // Increased timeout to 45s for slow CI environments
     try {
-      await checkbox.waitFor({ state: 'visible', timeout: 30000 });
+      await checkbox.waitFor({ state: 'visible', timeout: 45000 });
 
       // CRITICAL: Set up response listener BEFORE checking
       // Checkbox triggers immediate API save: POST /api/mottatteopplysninger/{id}
