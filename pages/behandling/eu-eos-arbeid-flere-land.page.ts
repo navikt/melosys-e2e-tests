@@ -129,8 +129,21 @@ export class EuEosArbeidFlereLandPage extends BasePage {
    * @param arbeidsgiverNavn - Navn på arbeidsgiver (f.eks. 'Ståles Stål AS')
    */
   async velgArbeidsgiver(arbeidsgiverNavn: string): Promise<void> {
+    console.log(`🔍 Leter etter arbeidsgiver checkbox: "${arbeidsgiverNavn}"`);
+
+    // CRITICAL: Wait for network to be idle FIRST to ensure employer list has loaded
+    // The checkbox won't exist until the backend provides the employer data
+    await this.page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {
+      console.log('⚠️  Network idle timeout, continuing anyway (employer list might still load)');
+    });
+
+    // Extra wait to ensure React has rendered the employer list
+    await this.page.waitForTimeout(1000);
+
     const checkbox = this.page.getByRole('checkbox', { name: arbeidsgiverNavn });
-    await checkbox.waitFor({ state: 'visible' });
+
+    // Increased timeout to 45s for slow CI environments
+    await checkbox.waitFor({ state: 'visible', timeout: 45000 });
     await checkbox.check();
     console.log(`✅ Valgte arbeidsgiver: ${arbeidsgiverNavn}`);
   }
