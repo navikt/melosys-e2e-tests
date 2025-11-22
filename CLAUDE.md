@@ -768,6 +768,7 @@ Key steps:
 - **POM Guide**: `docs/pom/QUICK-START.md` - Page Object Model quick reference
 - **POM Migration**: `docs/pom/MIGRATION-PLAN.md` - Complete POM strategy
 - **GitHub Actions**: `docs/ci-cd/GITHUB-ACTIONS.md` - CI/CD setup and usage
+- **E2E Coverage**: `docs/ci-cd/E2E-COVERAGE.md` - E2E code coverage collection for melosys-api
 - [Playwright Documentation](https://playwright.dev) - Official Playwright docs
 - [Playwright Best Practices](https://playwright.dev/docs/best-practices)
 - [Trace Viewer Guide](https://playwright.dev/docs/trace-viewer)
