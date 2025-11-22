@@ -3,7 +3,7 @@ import {AuthHelper} from '../../helpers/auth-helper';
 import {HovedsidePage} from '../../pages/hovedside.page';
 import {OpprettNySakPage} from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import {EuEosBehandlingPage} from '../../pages/behandling/eu-eos-behandling.page';
-import {EuEosArbeidFlereLandPage} from '../../pages/behandling/eu-eos-arbeid-flere-land.page';
+import {ArbeidFlereLandBehandlingPage} from '../../pages/behandling/arbeid-flere-land-behandling.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
 import {waitForProcessInstances} from '../../helpers/api-helper';
 
@@ -38,7 +38,7 @@ test.describe('EU/EØS - Arbeid i flere land (artikkel 13.1)', () => {
         const hovedside = new HovedsidePage(page);
         const opprettSak = new OpprettNySakPage(page);
         const euEosBehandling = new EuEosBehandlingPage(page);
-        const behandling = new EuEosArbeidFlereLandPage(page);
+        const behandling = new ArbeidFlereLandBehandlingPage(page);
 
         // Opprett sak med to land
         await hovedside.goto();
@@ -75,11 +75,11 @@ test.describe('EU/EØS - Arbeid i flere land (artikkel 13.1)', () => {
         await page.waitForLoadState('networkidle');
 
         // Fullfør behandling med POM
-        await behandling.fyllUtKomplettBehandling(
-            'Norge',              // hjemland
+        await behandling.fyllUtArbeidFlereLandBehandling(
+            'Norge',              // land (hjemland)
             'Ståles Stål AS',     // arbeidsgiver
             'Test begrunnelse',   // begrunnelse
-            'Test informasjon'    // ytterligere informasjon
+            'Test informasjon'    // informasjon (ytterligere informasjon)
         );
 
         console.log('✅ EU/EØS "Arbeid i flere land" arbeidsflyt fullført');
