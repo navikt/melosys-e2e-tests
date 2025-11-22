@@ -7,6 +7,11 @@ on:
         description: 'Image tag for melosys-api (other services use latest)'
         required: true
         default: 'latest'
+      collect_coverage:
+        description: 'Collect E2E code coverage (adds ~4 min)'
+        required: false
+        type: boolean
+        default: false
 
   repository_dispatch:
     types:
@@ -156,7 +161,7 @@ jobs:
           echo "MELOSYS_INNGANGSVILKAR_TAG=${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }}" >> $GITHUB_ENV
 
       - name: Download JaCoCo agent for E2E coverage
-        if: github.event_name == 'workflow_dispatch'
+        if: inputs.collect_coverage
         run: |
           echo "📊 Downloading JaCoCo agent for E2E coverage collection..."
           mkdir -p jacoco
@@ -168,7 +173,7 @@ jobs:
           echo "✅ JaCoCo agent downloaded to ./jacoco/"
 
       - name: Checkout melosys-api for coverage report generation
-        if: github.event_name == 'workflow_dispatch'
+        if: inputs.collect_coverage
         uses: actions/checkout@v4
         with:
           repository: navikt/melosys-api
@@ -176,7 +181,7 @@ jobs:
           token: ${{ secrets.READER_TOKEN }}
 
       - name: Build melosys-api for coverage class files
-        if: github.event_name == 'workflow_dispatch'
+        if: inputs.collect_coverage
         run: |
           cd melosys-api
           echo "🔨 Building melosys-api to get compiled classes for coverage report..."
@@ -219,7 +224,7 @@ jobs:
           MELOSYS_TRYGDEAVGIFT_TAG: ${{ steps.image-tags.outputs.melosys_trygdeavgift_tag }}
           MELOSYS_TRYGDEAVTALE_TAG: ${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }}
           MELOSYS_INNGANGSVILKAR_TAG: ${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }}
-          JACOCO_AGENT_OPTS: ${{ github.event_name == 'workflow_dispatch' && '-javaagent:/jacoco/jacocoagent.jar=output=tcpserver,address=*,port=6300' || '' }}
+          JACOCO_AGENT_OPTS: ${{ inputs.collect_coverage && '-javaagent:/jacoco/jacocoagent.jar=output=tcpserver,address=*,port=6300' || '' }}
 
       - name: Wait for services to be healthy
         run: |
@@ -297,7 +302,7 @@ jobs:
           CI: true
 
       - name: Dump JaCoCo coverage from melosys-api
-        if: always() && github.event_name == 'workflow_dispatch'
+        if: always() && inputs.collect_coverage
         run: |
           echo "📊 Dumping E2E coverage data from melosys-api..."
           java -jar jacoco/jacococli.jar dump \
@@ -308,7 +313,7 @@ jobs:
           ls -lh e2e-coverage.exec
 
       - name: Generate E2E coverage reports
-        if: always() && github.event_name == 'workflow_dispatch'
+        if: always() && inputs.collect_coverage
         run: |
           echo "📈 Generating E2E coverage reports..."
 
@@ -347,7 +352,7 @@ jobs:
 
       - name: Upload E2E coverage reports
         uses: actions/upload-artifact@v4
-        if: always() && github.event_name == 'workflow_dispatch'
+        if: always() && inputs.collect_coverage
         with:
           name: e2e-coverage-report
           path: |
@@ -466,8 +471,8 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "🎬 Videos, traces, and screenshots are available in the artifacts." >> $GITHUB_STEP_SUMMARY
 
-          # Add E2E coverage summary if this was a manual run
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+          # Add E2E coverage summary if coverage collection was enabled
+          if [ "${{ inputs.collect_coverage }}" = "true" ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "## 📊 E2E Coverage per Module" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
