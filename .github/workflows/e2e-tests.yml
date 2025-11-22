@@ -360,7 +360,8 @@ jobs:
 
           for csv_file in melosys-api/*/target/site/jacoco/jacoco.csv; do
             if [ -f "$csv_file" ]; then
-              module=$(basename $(dirname $(dirname $(dirname "$csv_file"))))
+              # Extract module name from path: melosys-api/{module}/target/site/jacoco/jacoco.csv
+              module=$(echo "$csv_file" | cut -d'/' -f2)
 
               line_covered=$(awk -F',' 'NR>1 {sum+=$9} END {print sum+0}' "$csv_file")
               line_missed=$(awk -F',' 'NR>1 {sum+=$8} END {print sum+0}' "$csv_file")
