@@ -309,14 +309,16 @@ jobs:
         run: |
           echo "📈 Generating E2E coverage reports..."
 
-          # Copy exec file to melosys-api root for Maven to find
-          cp e2e-coverage.exec melosys-api/jacoco.exec
+          # Get absolute path to exec file
+          EXEC_FILE="$(pwd)/e2e-coverage.exec"
+          echo "📊 Using coverage file: $EXEC_FILE"
+          ls -lh "$EXEC_FILE"
 
           cd melosys-api
 
-          # Generate reports for ALL modules using Maven from root
+          # Generate reports for ALL modules using Maven from root with absolute path
           echo "📊 Generating reports for all modules..."
-          mvn jacoco:report -Djacoco.dataFile=jacoco.exec -B
+          mvn jacoco:report -Djacoco.dataFile="$EXEC_FILE" -B
 
           echo "✅ Coverage reports generated"
           echo "📋 Modules with reports:"
