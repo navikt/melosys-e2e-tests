@@ -85,8 +85,9 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     console.log(`📄 Page title: ${pageTitle}`);
 
     // DIAGNOSTIC 2: Verify we're on behandling page
-    if (!url.includes('/behandling/')) {
-      throw new Error(`NOT on behandling page! Current URL: ${url}`);
+    // EU/EØS uses /saksbehandling/, other flows use /behandling/
+    if (!url.includes('/behandling/') && !url.includes('/saksbehandling/')) {
+      throw new Error(`NOT on behandling/saksbehandling page! Current URL: ${url}`);
     }
 
     // DIAGNOSTIC 3: Count checkboxes BEFORE waits
