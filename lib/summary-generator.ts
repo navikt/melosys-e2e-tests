@@ -55,6 +55,19 @@ export function generateMarkdownSummary(
     md += `**Generated:** ${new Date().toISOString()}\n\n`;
   }
 
+  // Display Docker image tags if available
+  if (data.tags && Object.keys(data.tags).length > 0) {
+    md += `## 🏷️ Docker Image Tags\n\n`;
+    const tags = data.tags;
+
+    // Sort tags alphabetically for consistent display
+    const sortedKeys = Object.keys(tags).sort();
+    for (const key of sortedKeys) {
+      md += `- **${key}:** \`${tags[key]}\`\n`;
+    }
+    md += '\n';
+  }
+
   md += `## Overall Results\n\n`;
   md += `- ✅ Passed: ${passed}\n`;
   md += `- ❌ Failed: ${failed}\n`;

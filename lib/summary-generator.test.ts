@@ -570,6 +570,79 @@ describe('Summary Generator', () => {
 
   });
 
+  describe('Docker Image Tags', () => {
+
+    test('should display tags section when tags are provided', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [],
+        tags: {
+          'melosys-api': 'v1.2.3',
+          'melosys-web': 'latest',
+          'faktureringskomponenten': 'dev-branch-abc123'
+        }
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      assert(result.includes('## 🏷️ Docker Image Tags'));
+      assert(result.includes('**melosys-api:** `v1.2.3`'));
+      assert(result.includes('**melosys-web:** `latest`'));
+      assert(result.includes('**faktureringskomponenten:** `dev-branch-abc123`'));
+    });
+
+    test('should sort tags alphabetically', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [],
+        tags: {
+          'zzz-service': 'latest',
+          'aaa-service': 'v1.0.0',
+          'mmm-service': 'dev'
+        }
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      // Find indices to ensure alphabetical order
+      const aaaIndex = result.indexOf('**aaa-service:**');
+      const mmmIndex = result.indexOf('**mmm-service:**');
+      const zzzIndex = result.indexOf('**zzz-service:**');
+
+      assert(aaaIndex < mmmIndex);
+      assert(mmmIndex < zzzIndex);
+    });
+
+    test('should not display tags section when no tags provided', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: []
+        // No tags field
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      assert(!result.includes('## 🏷️ Docker Image Tags'));
+    });
+
+    test('should not display tags section when tags object is empty', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [],
+        tags: {}
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      assert(!result.includes('## 🏷️ Docker Image Tags'));
+    });
+
+  });
+
 });
 
 /**

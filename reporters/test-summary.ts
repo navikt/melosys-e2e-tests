@@ -121,11 +121,30 @@ class TestSummaryReporter implements Reporter {
       processErrors: ti.processErrors
     }));
 
+    // Collect Docker image tags from environment variables
+    const tags: Record<string, string> = {};
+    const tagEnvVars = [
+      { key: 'melosys-api', envVar: 'MELOSYS_API_TAG' },
+      { key: 'melosys-web', envVar: 'MELOSYS_WEB_TAG' },
+      { key: 'faktureringskomponenten', envVar: 'FAKTURERINGSKOMPONENTEN_TAG' },
+      { key: 'melosys-trygdeavgift-beregning', envVar: 'MELOSYS_TRYGDEAVGIFT_TAG' },
+      { key: 'melosys-trygdeavtale', envVar: 'MELOSYS_TRYGDEAVTALE_TAG' },
+      { key: 'melosys-inngangsvilkar', envVar: 'MELOSYS_INNGANGSVILKAR_TAG' },
+    ];
+
+    for (const { key, envVar } of tagEnvVars) {
+      const value = process.env[envVar];
+      if (value) {
+        tags[key] = value;
+      }
+    }
+
     const summaryData: TestSummaryData = {
       status: ciStatus,
       startTime: result.startTime,
       duration: result.duration,
-      tests: testData
+      tests: testData,
+      tags: Object.keys(tags).length > 0 ? tags : undefined
     };
 
     // Generate summary using shared module

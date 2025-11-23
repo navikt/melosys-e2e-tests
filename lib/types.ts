@@ -42,6 +42,7 @@ export interface TestSummaryData {
   startTime?: Date;
   duration: number;
   tests: TestData[];
+  tags?: Record<string, string>; // Docker image tags used in the test run
 }
 
 /**
