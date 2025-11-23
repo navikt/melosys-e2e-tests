@@ -71,46 +71,161 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
    * IMPORTANT: Checkbox triggers immediate API save when checked!
    * This method waits for that API call to complete.
    *
+   * Enhanced with comprehensive diagnostics to identify why checkbox doesn't appear.
+   *
    * @param arbeidsgiverNavn - Navn på arbeidsgiver (f.eks. 'Ståles Stål AS')
    */
   async velgArbeidsgiver(arbeidsgiverNavn: string): Promise<void> {
-    console.log(`🔍 Leter etter arbeidsgiver checkbox: "${arbeidsgiverNavn}"`);
+    console.log(`\n🔍 === DIAGNOSTICS: velgArbeidsgiver("${arbeidsgiverNavn}") ===`);
 
-    // CRITICAL: Wait for network to be idle FIRST to ensure employer list has loaded
-    // The checkbox won't exist until the backend provides the employer data
-    await this.page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {
-      console.log('⚠️  Network idle timeout, continuing anyway (employer list might still load)');
-    });
+    // DIAGNOSTIC 1: Current page state
+    const url = this.page.url();
+    const pageTitle = await this.page.title().catch(() => 'unknown');
+    console.log(`📍 Current URL: ${url}`);
+    console.log(`📄 Page title: ${pageTitle}`);
 
-    // Extra wait to ensure React has rendered the employer list
-    await this.page.waitForTimeout(1000);
-
-    const checkbox = this.page.getByRole('checkbox', { name: arbeidsgiverNavn });
-
-    // Vent på at checkbox er synlig og stabil før sjekking (unngår race condition)
-    // Increased timeout to 45s for slow CI environments
-    await checkbox.waitFor({ state: 'visible', timeout: 45000 });
-
-    // CRITICAL: Set up response listener BEFORE checking
-    // Checkbox triggers immediate API save: POST /api/mottatteopplysninger/{id}
-    const responsePromise = this.page.waitForResponse(
-      response => response.url().includes('/api/mottatteopplysninger/') &&
-                  response.request().method() === 'POST' &&
-                  response.status() === 200,
-      { timeout: 5000 }
-    ).catch(() => null); // Don't fail if API doesn't fire
-
-    await checkbox.check();
-
-    // Wait for immediate API save
-    const response = await responsePromise;
-    if (response) {
-      console.log(`✅ Arbeidsgiver selection saved: ${response.url()} -> ${response.status()}`);
-    } else {
-      console.log('⚠️  No immediate API save detected (checkbox might already be checked)');
+    // DIAGNOSTIC 2: Verify we're on behandling page
+    // EU/EØS uses /saksbehandling/, other flows use /behandling/
+    if (!url.includes('/behandling/') && !url.includes('/saksbehandling/')) {
+      throw new Error(`NOT on behandling/saksbehandling page! Current URL: ${url}`);
     }
 
-    console.log(`✅ Valgte arbeidsgiver: ${arbeidsgiverNavn}`);
+    // DIAGNOSTIC 3: Count checkboxes BEFORE waits
+    const checkboxCountBefore = await this.page.getByRole('checkbox').count();
+    console.log(`✓ Checkboxes before waits: ${checkboxCountBefore}`);
+
+    // DIAGNOSTIC 4: Monitor employer-related API calls
+    let employerApiCalled = false;
+    const employerApis: string[] = [];
+
+    const apiListener = (response: Response) => {
+      const responseUrl = response.url();
+      // Monitor for potential employer list endpoints
+      if (responseUrl.includes('/arbeidsforhold') ||
+          responseUrl.includes('/virksomheter') ||
+          responseUrl.includes('/registeropplysninger') ||
+          responseUrl.includes('/mottatteopplysninger')) {
+        employerApiCalled = true;
+        employerApis.push(`${responseUrl} → ${response.status()}`);
+        console.log(`📡 Employer-related API: ${responseUrl} → ${response.status()}`);
+      }
+    };
+
+    this.page.on('response', apiListener);
+
+    try {
+      // CRITICAL: Wait for network to be idle FIRST
+      console.log(`⏳ Waiting for network idle (15s timeout)...`);
+      const networkStart = Date.now();
+      await this.page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {
+        console.log('⚠️  Network idle timeout (15s exceeded)');
+      });
+      console.log(`✅ Network idle completed (${Date.now() - networkStart}ms)`);
+
+      // Extra wait to ensure React has rendered the employer list
+      console.log(`⏳ Waiting for React render (1000ms)...`);
+      await this.page.waitForTimeout(1000);
+
+      // DIAGNOSTIC 5: Count checkboxes AFTER waits
+      const checkboxCountAfter = await this.page.getByRole('checkbox').count();
+      console.log(`✓ Checkboxes after waits: ${checkboxCountAfter}`);
+
+      if (checkboxCountAfter !== checkboxCountBefore) {
+        console.log(`📊 Checkbox count changed: ${checkboxCountBefore} → ${checkboxCountAfter}`);
+      }
+
+      // DIAGNOSTIC 6: Report on employer API calls
+      if (!employerApiCalled) {
+        console.warn('⚠️  WARNING: No employer API calls detected!');
+        console.warn('   Monitored for: /arbeidsforhold, /virksomheter, /registeropplysninger, /mottatteopplysninger');
+      } else {
+        console.log(`✅ Employer APIs called: ${employerApis.length}`);
+        employerApis.forEach(api => console.log(`   - ${api}`));
+      }
+
+      // DIAGNOSTIC 7: Check if target checkbox exists
+      const checkbox = this.page.getByRole('checkbox', { name: arbeidsgiverNavn });
+      const isVisible = await checkbox.isVisible().catch(() => false);
+
+      if (!isVisible) {
+        console.error(`\n❌ === FAILURE DIAGNOSTICS ===`);
+        console.error(`Target checkbox "${arbeidsgiverNavn}" NOT visible!`);
+        console.error(`Current URL: ${url}`);
+
+        // List ALL checkboxes
+        console.error(`\n📋 Available checkboxes on page:`);
+        const allCheckboxes = await this.page.getByRole('checkbox').all();
+
+        if (allCheckboxes.length === 0) {
+          console.error(`   ⚠️  NO CHECKBOXES FOUND AT ALL!`);
+          console.error(`   → This means the employer list component hasn't rendered.`);
+          console.error(`   → Possible causes:`);
+          console.error(`      1. Not on the right step yet`);
+          console.error(`      2. Employer data not loaded from backend`);
+          console.error(`      3. Frontend error preventing render`);
+        } else {
+          for (let i = 0; i < allCheckboxes.length; i++) {
+            const box = allCheckboxes[i];
+            const label = await box.getAttribute('aria-label') ||
+                          await box.getAttribute('name') ||
+                          await box.textContent() ||
+                          'unknown';
+            const isChecked = await box.isChecked().catch(() => false);
+            console.error(`   ${i + 1}. "${label}" ${isChecked ? '[checked]' : ''}`);
+          }
+        }
+
+        // Take screenshot
+        const timestamp = new Date().toISOString().replace(/[:.]/g, '-');
+        const screenshotPath = `playwright-report/debug-arbeidsgiver-${timestamp}.png`;
+        await this.page.screenshot({
+          path: screenshotPath,
+          fullPage: true
+        });
+        console.error(`\n📸 Screenshot saved: ${screenshotPath}`);
+
+        // Get page content snippet
+        const bodyText = await this.page.textContent('body').catch(() => '');
+        const snippet = bodyText?.substring(0, 500) || '';
+        console.error(`\n📄 Page content (first 500 chars):`);
+        console.error(snippet);
+
+        console.error(`\n=== END FAILURE DIAGNOSTICS ===\n`);
+      }
+
+      // Wait for checkbox visibility (will fail with comprehensive diagnostics above)
+      console.log(`⏳ Waiting for checkbox "${arbeidsgiverNavn}" to be visible (45s timeout)...`);
+      const visibilityStart = Date.now();
+
+      await checkbox.waitFor({ state: 'visible', timeout: 45000 });
+      console.log(`✅ Checkbox visible (${Date.now() - visibilityStart}ms)`);
+
+      // CRITICAL: Set up response listener BEFORE checking
+      // Checkbox triggers immediate API save: POST /api/mottatteopplysninger/{id}
+      const responsePromise = this.page.waitForResponse(
+        response => response.url().includes('/api/mottatteopplysninger/') &&
+                    response.request().method() === 'POST' &&
+                    response.status() === 200,
+        { timeout: 5000 }
+      ).catch(() => null); // Don't fail if API doesn't fire
+
+      await checkbox.check();
+
+      // Wait for immediate API save
+      const response = await responsePromise;
+      if (response) {
+        console.log(`✅ Arbeidsgiver selection saved: ${response.url()} -> ${response.status()}`);
+      } else {
+        console.log('⚠️  No immediate API save detected (checkbox might already be checked)');
+      }
+
+      console.log(`✅ Valgte arbeidsgiver: ${arbeidsgiverNavn}`);
+      console.log(`✅ === velgArbeidsgiver completed ===\n`);
+
+    } finally {
+      // Clean up API listener
+      this.page.off('response', apiListener);
+    }
   }
 
   /**
@@ -192,6 +307,8 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
    *
    * IMPORTANT: This method waits for specific step transition API calls.
    * Each step transition triggers 5-6 POST requests to save all form data.
+   *
+   * Enhanced with URL change detection to identify navigation race conditions.
    */
   async klikkBekreftOgFortsett(): Promise<void> {
     console.log('🔄 Klikker "Bekreft og fortsett"...');
@@ -241,11 +358,32 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
       console.log('⚠️  Network idle timeout (non-critical)');
     });
 
+    // ENHANCED: Verify URL change and report detailed navigation status
     const urlAfter = this.page.url();
+    const urlChanged = urlBefore !== urlAfter;
+
     console.log(`✅ Klikket Bekreft og fortsett`);
     console.log(`  URL før:  ${urlBefore}`);
     console.log(`  URL etter: ${urlAfter}`);
-    console.log(`  URL endret: ${urlBefore !== urlAfter}`);
+    console.log(`  URL endret: ${urlChanged}`);
+
+    // DIAGNOSTIC: If URL didn't change, log warning
+    if (!urlChanged) {
+      console.warn('⚠️  URL did not change after step transition!');
+      console.warn('   This could indicate:');
+      console.warn('   1. Same-page navigation (step change without URL change)');
+      console.warn('   2. Navigation race condition (next step not initialized yet)');
+      console.warn('   Adding extra wait for page state update...');
+      await this.page.waitForTimeout(1000);
+
+      // Double-check URL after extra wait
+      const urlAfterExtraWait = this.page.url();
+      if (urlAfterExtraWait !== urlBefore) {
+        console.log(`✅ URL changed after extra wait: ${urlAfterExtraWait}`);
+      } else {
+        console.log(`ℹ️  URL still unchanged - this might be normal for same-page navigation`);
+      }
+    }
   }
 
   /**
