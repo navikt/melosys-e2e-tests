@@ -297,7 +297,58 @@ jobs:
           echo "ℹ️  Note: Feature toggles are automatically created by melosys-api on startup"
 
       - name: Run Playwright tests
-        run: npx playwright test --project=chromium
+        run: |
+          # TEMPORARY: Run only the flaky test multiple times to reproduce the bug
+          echo "🔁 Running flaky test 20 times to reproduce behandlingsresultat.type bug..."
+          echo "=================================================="
+
+          passed=0
+          failed=0
+
+          for i in {1..20}; do
+            echo ""
+            echo "════════════════════════════════════════════════"
+            echo "🔄 RUN $i/20 - $(date +%H:%M:%S)"
+            echo "════════════════════════════════════════════════"
+
+            # Run the specific flaky test
+            if npx playwright test tests/utenfor-avtaleland/workflows/nyvurdering-endring-skattestatus.spec.ts -g "skattestatus.*nyvurdering" --project=chromium --reporter=list --workers=1; then
+              echo "✅ Run $i: PASSED"
+              passed=$((passed + 1))
+            else
+              echo "❌ Run $i: FAILED"
+              failed=$((failed + 1))
+            fi
+
+            # Small delay between runs
+            sleep 2
+          done
+
+          echo ""
+          echo "════════════════════════════════════════════════"
+          echo "📊 FINAL SUMMARY"
+          echo "════════════════════════════════════════════════"
+          echo "✅ Passed: $passed/20"
+          echo "❌ Failed: $failed/20"
+          echo "📈 Success rate: $(awk "BEGIN {printf \"%.1f\", ($passed / 20) * 100}")%"
+          echo ""
+
+          # Save summary to file for artifact
+          echo "## 🔁 Flaky Test Results (20 runs)" > playwright-report/flaky-test-summary.md
+          echo "" >> playwright-report/flaky-test-summary.md
+          echo "| Metric | Value |" >> playwright-report/flaky-test-summary.md
+          echo "|--------|-------|" >> playwright-report/flaky-test-summary.md
+          echo "| ✅ Passed | $passed/20 |" >> playwright-report/flaky-test-summary.md
+          echo "| ❌ Failed | $failed/20 |" >> playwright-report/flaky-test-summary.md
+          echo "| 📈 Success rate | $(awk "BEGIN {printf \"%.1f\", ($passed / 20) * 100}")% |" >> playwright-report/flaky-test-summary.md
+          echo "" >> playwright-report/flaky-test-summary.md
+          echo "**Test:** \`skal endre skattestatus fra skattepliktig til ikke-skattepliktig via nyvurdering\`" >> playwright-report/flaky-test-summary.md
+
+          # Fail the job if any run failed
+          if [ $failed -gt 0 ]; then
+            echo "❌ $failed out of 20 runs failed - marking job as failed"
+            exit 1
+          fi
         env:
           CI: true
 
@@ -586,7 +637,7 @@ jobs:
 
       - name: Upload test results and reports
         uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: playwright-results
           path: |
@@ -606,7 +657,7 @@ jobs:
 
       - name: Upload test videos
         uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: playwright-videos
           path: test-results/**/video.webm
@@ -614,7 +665,7 @@ jobs:
 
       - name: Upload test traces
         uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: playwright-traces
           path: test-results/**/trace.zip
