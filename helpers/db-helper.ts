@@ -190,6 +190,43 @@ export class DatabaseHelper {
   }
 
   /**
+   * Get behandlingsresultat.type for a specific behandling
+   * Used to verify if the type is correctly saved to database
+   */
+  async getBehandlingsresultatType(behandlingId: number): Promise<string | null> {
+    const result = await this.queryOne<{TYPE: string}>(`
+      SELECT br.TYPE
+      FROM BEHANDLINGSRESULTAT br
+      WHERE br.BEHANDLING_ID = :behandlingId
+    `, { behandlingId });
+
+    return result?.TYPE || null;
+  }
+
+  /**
+   * Get detailed behandlingsresultat info for debugging
+   */
+  async getBehandlingsresultatDebugInfo(behandlingId: number): Promise<any> {
+    const result = await this.queryOne(`
+      SELECT
+        b.ID as behandling_id,
+        b.STATUS as behandling_status,
+        br.ID as behandlingsresultat_id,
+        br.TYPE as behandlingsresultat_type,
+        br.REGISTRERT_DATO,
+        COUNT(mp.ID) as medlemskapsperioder_count
+      FROM BEHANDLING b
+      LEFT JOIN BEHANDLINGSRESULTAT br ON br.BEHANDLING_ID = b.ID
+      LEFT JOIN BEHANDLINGSRESULTAT_MEDLEMSKAPSPERIODE brmp ON brmp.BEHANDLINGSRESULTAT_ID = br.ID
+      LEFT JOIN MEDLEMSKAPSPERIODE mp ON mp.ID = brmp.MEDLEMSKAPSPERIODE_ID
+      WHERE b.ID = :behandlingId
+      GROUP BY b.ID, b.STATUS, br.ID, br.TYPE, br.REGISTRERT_DATO
+    `, { behandlingId });
+
+    return result;
+  }
+
+  /**
    * Show all database tables with their data
    * Useful for debugging - shows what data exists in the database
    * @param skipLookupTables - If true, skip tables ending with _TYPE, _TEMA, _STATUS (default: true)

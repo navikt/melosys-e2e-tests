@@ -12,6 +12,7 @@ import {VedtakPage} from '../../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../../pages/shared/constants';
 import {UnleashHelper} from "../../../helpers/unleash-helper";
 import {AdminApiHelper, waitForProcessInstances} from '../../../helpers/api-helper';
+import {withDatabase} from '../../../helpers/db-helper';
 import {expect} from "@playwright/test";
 
 
@@ -285,6 +286,91 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         // This ensures behandling.status = 'AVSLUTTET' is committed before the job queries
         console.log('📝 Step 16: Wait for vedtak process to complete...');
         await waitForProcessInstances(page.request, 30);
+
+        // 🔍 DEBUG: Check what's actually in the database
+        console.log('🔍 DEBUG: Checking database for behandlingsresultat.type...');
+        await withDatabase(async (db) => {
+            // Query tables separately (like showAllData does)
+            console.log('   🔍 Getting behandlinger...');
+            const behandlinger = await db.query(`SELECT * FROM BEHANDLING ORDER BY ID`);
+            console.log(`   📊 Found ${behandlinger.length} behandlinger`);
+
+            console.log('   🔍 Getting behandlingsresultater...');
+            const behandlingsresultater = await db.query(`SELECT * FROM BEHANDLINGSRESULTAT`);
+            console.log(`   📊 Found ${behandlingsresultater.length} behandlingsresultater`);
+
+            if (behandlingsresultater.length > 0) {
+                console.log('   📋 BEHANDLINGSRESULTAT columns:', Object.keys(behandlingsresultater[0]).join(', '));
+            }
+
+            // Find the foreign key column (linking behandlingsresultat to behandling)
+            const behandlingIdCol = Object.keys(behandlingsresultater[0] || {}).find(col =>
+                col.toUpperCase().includes('BEHANDLING') && col.toUpperCase().includes('ID') && col !== 'ID'
+            ) || 'BEHANDLING_ID';
+
+            console.log(`   🔗 Foreign key column: ${behandlingIdCol}`);
+
+            // Match up behandlinger with their behandlingsresultat
+            console.log(`\n   📊 Behandlinger with their behandlingsresultat:`);
+            behandlinger.forEach((b: any, idx: number) => {
+                const resultat = behandlingsresultater.find((br: any) => br[behandlingIdCol] === b.ID);
+
+                console.log(`   ${idx + 1}. Behandling ID: ${b.ID}`);
+                console.log(`      Status: ${b.STATUS}`);
+
+                if (resultat) {
+                    // Find the type column
+                    const typeColumn = Object.keys(resultat).find(col =>
+                        col.toUpperCase().includes('TYPE') && !col.toUpperCase().includes('TEMA') && col !== 'ID'
+                    );
+
+                    if (typeColumn) {
+                        console.log(`      Behandlingsresultat type (${typeColumn}): ${resultat[typeColumn]}`);
+                    } else {
+                        console.log(`      Behandlingsresultat: ${JSON.stringify(resultat)}`);
+                    }
+                } else {
+                    console.log(`      ⚠️  No behandlingsresultat found!`);
+                }
+                console.log('');
+            });
+
+            // Compare first vedtak and ny vurdering
+            if (behandlinger.length >= 2 && behandlingsresultater.length >= 2) {
+                const firstBehandling = behandlinger[0];
+                const nyVurderingBehandling = behandlinger[behandlinger.length - 1];
+
+                const firstResultat = behandlingsresultater.find((br: any) => br[behandlingIdCol] === firstBehandling.ID);
+                const nyVurderingResultat = behandlingsresultater.find((br: any) => br[behandlingIdCol] === nyVurderingBehandling.ID);
+
+                console.log(`\n   ═══════════════════════════════════════`);
+                console.log(`   COMPARISON:`);
+                console.log(`   ═══════════════════════════════════════`);
+
+                if (firstResultat && nyVurderingResultat) {
+                    const typeColumn = Object.keys(firstResultat).find(col =>
+                        col.toUpperCase().includes('TYPE') && !col.toUpperCase().includes('TEMA') && col !== 'ID'
+                    );
+
+                    if (typeColumn) {
+                        const firstType = firstResultat[typeColumn];
+                        const nyType = nyVurderingResultat[typeColumn];
+
+                        console.log(`\n   Type column: ${typeColumn}`);
+                        console.log(`   ✅ First vedtak (behandling ${firstBehandling.ID}): ${firstType}`);
+                        console.log(`   ❓ Ny vurdering (behandling ${nyVurderingBehandling.ID}): ${nyType}`);
+
+                        if (nyType === 'IKKE_FASTSATT') {
+                            console.log(`\n   ❌ BUG CONFIRMED: Ny vurdering has type=IKKE_FASTSATT instead of MEDLEM_I_FOLKETRYGDEN!`);
+                        } else if (nyType === 'MEDLEM_I_FOLKETRYGDEN') {
+                            console.log(`\n   ✅ CORRECT: Ny vurdering has type=MEDLEM_I_FOLKETRYGDEN`);
+                        } else {
+                            console.log(`\n   ⚠️  UNEXPECTED: Ny vurdering has type=${nyType}`);
+                        }
+                    }
+                }
+            }
+        });
 
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
 

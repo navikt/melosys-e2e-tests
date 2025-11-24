@@ -37,4 +37,77 @@ test.describe('Rengjør database', () => {
             await db.showAllData();
         });
     });
+
+    // Create test here
+
+    test('skal lese behandlingsresultat.type fra database', async () => {
+        await withDatabase(async (db) => {
+            console.log('\n🔍 DEBUG: Leser behandlingsresultat.type fra database...\n');
+
+            // Get all behandlinger
+            console.log('   🔍 Henter behandlinger...');
+            const behandlinger = await db.query('SELECT * FROM BEHANDLING');
+            console.log(`   📊 Fant ${behandlinger.length} behandlinger\n`);
+
+            // Get all behandlingsresultater
+            console.log('   🔍 Henter behandlingsresultater...');
+            const behandlingsresultater = await db.query('SELECT * FROM BEHANDLINGSRESULTAT');
+            console.log(`   📊 Fant ${behandlingsresultater.length} behandlingsresultater\n`);
+
+            if (behandlingsresultater.length === 0) {
+                console.log('   ⚠️  Ingen behandlingsresultater funnet i database');
+                console.log('   💡 Kjør en test først for å lage data, deretter kjør denne testen igjen\n');
+                return;
+            }
+
+            // Show all columns in BEHANDLINGSRESULTAT table
+            const firstRow = behandlingsresultater[0];
+            const columnNames = Object.keys(firstRow);
+            console.log(`   📋 BEHANDLINGSRESULTAT kolonner: ${columnNames.join(', ')}\n`);
+
+            // Find the foreign key column (likely BEHANDLING_ID or BEHANDLINGID)
+            const fkColumn = columnNames.find(col =>
+                col === 'BEHANDLING_ID' || col === 'BEHANDLINGID'
+            );
+            console.log(`   🔗 Foreign key kolonne: ${fkColumn}\n`);
+
+            // Find the type column (could be TYPE, BEHANDLINGSRESULTATTYPE, etc.)
+            const typeColumn = columnNames.find(col =>
+                col === 'TYPE' ||
+                col === 'BEHANDLINGSRESULTATTYPE' ||
+                col.includes('TYPE')
+            );
+            console.log(`   📝 Type kolonne: ${typeColumn}\n`);
+
+            if (!fkColumn || !typeColumn) {
+                console.log('   ❌ Kunne ikke finne foreign key eller type kolonne');
+                console.log(`   📋 Tilgjengelige kolonner: ${columnNames.join(', ')}\n`);
+                throw new Error('Kunne ikke finne nødvendige kolonner');
+            }
+
+            // Match behandlinger with their behandlingsresultat
+            console.log('   📊 Behandlinger med deres behandlingsresultat:\n');
+
+            for (const behandling of behandlinger) {
+                const behandlingId = behandling.ID;
+                const status = behandling.STATUS;
+
+                const behandlingsresultat = behandlingsresultater.find(
+                    br => br[fkColumn] === behandlingId
+                );
+
+                if (behandlingsresultat) {
+                    const type = behandlingsresultat[typeColumn];
+                    console.log(`   ${behandlingId}. Behandling ID: ${behandlingId}`);
+                    console.log(`      Status: ${status}`);
+                    console.log(`      Behandlingsresultat type (${typeColumn}): ${type}\n`);
+                }
+            }
+
+            // Verify we found at least one behandlingsresultat
+            expect(behandlingsresultater.length).toBeGreaterThan(0);
+            console.log('   ✅ Database lesing fungerer!\n');
+        });
+    });
+
 });
