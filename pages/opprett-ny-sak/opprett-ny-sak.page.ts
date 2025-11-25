@@ -80,8 +80,10 @@ export class OpprettNySakPage extends BasePage {
   /**
    * Select "Ny vurdering" radio button
    * Used for creating a reassessment of an existing case
+   * Waits for the radio button to be visible (it appears after selecting existing case)
    */
   async velgNyVurdering(): Promise<void> {
+    await this.nyVurderingRadio.waitFor({ state: 'visible', timeout: 30000 });
     await this.nyVurderingRadio.check();
   }
 
@@ -165,8 +167,18 @@ export class OpprettNySakPage extends BasePage {
    */
   async opprettNyVurdering(fnr: string, aarsak: string = AARSAK.SØKNAD): Promise<void> {
     await this.fyllInnBrukerID(fnr);
+
     // The checkbox for selecting existing case (unnamed label)
-    await this.page.getByLabel('', { exact: true }).check();
+    // After checking, wait for API to load case details and render radio buttons
+    const existingCaseCheckbox = this.page.getByLabel('', { exact: true });
+    await Promise.all([
+      this.page.waitForResponse(
+        (response) => response.url().includes('/api/') && response.status() === 200,
+        { timeout: 30000 }
+      ),
+      existingCaseCheckbox.check(),
+    ]);
+
     await this.velgNyVurdering();
     await this.velgAarsak(aarsak);
     await this.leggBehandlingIMine();
