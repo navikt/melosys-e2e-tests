@@ -31,7 +31,7 @@ permissions:
 jobs:
   e2e-tests:
     runs-on: ubuntu-latest-8-cores
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout code
@@ -344,10 +344,13 @@ jobs:
           echo "" >> playwright-report/flaky-test-summary.md
           echo "**Test:** \`skal endre skattestatus fra skattepliktig til ikke-skattepliktig via nyvurdering\`" >> playwright-report/flaky-test-summary.md
 
-          # Fail the job if any run failed
+          # Report results but don't fail the job - we want artifacts uploaded
           if [ $failed -gt 0 ]; then
-            echo "❌ $failed out of 20 runs failed - marking job as failed"
-            exit 1
+            echo "⚠️ $failed out of 20 runs failed - but allowing job to complete for artifact capture"
+            echo "FLAKY_TEST_FAILURES=$failed" >> $GITHUB_ENV
+          else
+            echo "✅ All 20 runs passed!"
+            echo "FLAKY_TEST_FAILURES=0" >> $GITHUB_ENV
           fi
         env:
           CI: true
@@ -682,3 +685,10 @@ jobs:
         run: |
           docker compose down -v
           docker network rm melosys.docker-internal || true
+
+      - name: Fail job if flaky tests had failures
+        if: always() && env.FLAKY_TEST_FAILURES != '0' && env.FLAKY_TEST_FAILURES != ''
+        run: |
+          echo "❌ Flaky test debugging: $FLAKY_TEST_FAILURES out of 20 runs failed"
+          echo "📦 All artifacts have been uploaded - check the results above"
+          exit 1
