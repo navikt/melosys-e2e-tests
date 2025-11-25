@@ -312,7 +312,7 @@ jobs:
             echo "════════════════════════════════════════════════"
 
             # Run the specific flaky test
-            if npx playwright test tests/utenfor-avtaleland/workflows/nyvurdering-endring-skattestatus.spec.ts -g "skattestatus.*nyvurdering" --project=chromium --reporter=list --workers=1; then
+            if npx playwright test tests/utenfor-avtaleland/workflows/nyvurdering-endring-skattestatus.spec.ts -g "skattestatus.*nyvurdering" --project=chromium --workers=1; then
               echo "✅ Run $i: PASSED"
               passed=$((passed + 1))
             else
