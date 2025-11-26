@@ -40,6 +40,31 @@ test.describe('Rengjør database', () => {
 
     // Create test here
 
+    test('skal vise VEDTAK_METADATA kolonner', async () => {
+        await withDatabase(async (db) => {
+            console.log('\n🔍 Discovering VEDTAK_METADATA columns...\n');
+
+            const vmSample = await db.query(`SELECT * FROM VEDTAK_METADATA WHERE ROWNUM <= 1`);
+            if (vmSample.length > 0) {
+                console.log(`   📋 VEDTAK_METADATA columns: ${Object.keys(vmSample[0]).join(', ')}`);
+                console.log('\n   📊 Sample row:');
+                Object.entries(vmSample[0]).forEach(([key, value]) => {
+                    console.log(`      ${key}: ${value}`);
+                });
+            } else {
+                console.log('   ⚠️  No VEDTAK_METADATA rows found');
+            }
+
+            console.log('\n🔍 Discovering MEDLEMSKAPSPERIODE columns...\n');
+            const mpSample = await db.query(`SELECT * FROM MEDLEMSKAPSPERIODE WHERE ROWNUM <= 1`);
+            if (mpSample.length > 0) {
+                console.log(`   📋 MEDLEMSKAPSPERIODE columns: ${Object.keys(mpSample[0]).join(', ')}`);
+            } else {
+                console.log('   ⚠️  No MEDLEMSKAPSPERIODE rows found');
+            }
+        });
+    });
+
     test('skal lese behandlingsresultat.type fra database', async () => {
         await withDatabase(async (db) => {
             console.log('\n🔍 DEBUG: Leser behandlingsresultat.type fra database...\n');

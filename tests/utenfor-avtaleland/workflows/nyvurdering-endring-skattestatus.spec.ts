@@ -158,6 +158,21 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
             page,
             request
         }) => {
+        // 🔍 DEBUG: Log environment info
+        console.log('═══════════════════════════════════════════════════════════════');
+        console.log('🔍 DEBUG: ENVIRONMENT INFO');
+        console.log('═══════════════════════════════════════════════════════════════');
+        console.log(`   CI: ${process.env.CI || 'false'}`);
+        console.log(`   MELOSYS_API_TAG: ${process.env.MELOSYS_API_TAG || 'not set'}`);
+
+        // Check melosys-api health endpoint for version info
+        try {
+            const healthResponse = await request.get('http://localhost:8080/internal/health');
+            console.log(`   melosys-api health status: ${healthResponse.status()}`);
+        } catch (e) {
+            console.log(`   melosys-api health check failed: ${e}`);
+        }
+
         // Setup: Authentication
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);
@@ -262,10 +277,61 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         // Navigate to Trygdeavgift immediately
         await behandling.gåTilTrygdeavgift();
 
+        // 🔍 DEBUG: Check behandlingsresultat BEFORE changing skattepliktig
+        console.log('🔍 DEBUG: Checking behandlingsresultat BEFORE changing skattepliktig...');
+        await withDatabase(async (db) => {
+            const result = await db.query(`
+                SELECT br.BEHANDLING_ID, br.RESULTAT_TYPE, b.STATUS
+                FROM BEHANDLINGSRESULTAT br
+                JOIN BEHANDLING b ON br.BEHANDLING_ID = b.ID
+                ORDER BY b.ID DESC
+            `);
+            console.log('   📊 Current behandlingsresultater:');
+            result.forEach((r: any) => {
+                console.log(`      Behandling ${r.BEHANDLING_ID}: type=${r.RESULTAT_TYPE}, status=${r.STATUS}`);
+            });
+        });
+
         // Step 14: Update Skattepliktig to 'Nei' and complete the form
         // The velgSkattepliktig method now waits for the PUT API call to complete
         console.log('📝 Step 14: Updating Skattepliktig to Nei...');
-        await trygdeavgift.velgSkattepliktig(false);
+
+        // 🔍 DEBUG: Capture the API response when changing skattepliktig
+        const [apiResponse] = await Promise.all([
+            page.waitForResponse(resp =>
+                resp.url().includes('/api/') &&
+                resp.url().includes('trygdeavgift') &&
+                resp.request().method() === 'PUT'
+            ).catch(() => null),
+            trygdeavgift.velgSkattepliktig(false)
+        ]);
+
+        if (apiResponse) {
+            console.log(`🔍 DEBUG: Trygdeavgift API response status: ${apiResponse.status()}`);
+            try {
+                const responseBody = await apiResponse.json();
+                console.log(`🔍 DEBUG: Trygdeavgift API response body: ${JSON.stringify(responseBody, null, 2)}`);
+            } catch (e) {
+                console.log(`🔍 DEBUG: Could not parse API response as JSON`);
+            }
+        } else {
+            console.log('⚠️  DEBUG: No trygdeavgift API response captured');
+        }
+
+        // 🔍 DEBUG: Check behandlingsresultat AFTER changing skattepliktig
+        console.log('🔍 DEBUG: Checking behandlingsresultat AFTER changing skattepliktig...');
+        await withDatabase(async (db) => {
+            const result = await db.query(`
+                SELECT br.BEHANDLING_ID, br.RESULTAT_TYPE, b.STATUS
+                FROM BEHANDLINGSRESULTAT br
+                JOIN BEHANDLING b ON br.BEHANDLING_ID = b.ID
+                ORDER BY b.ID DESC
+            `);
+            console.log('   📊 Current behandlingsresultater:');
+            result.forEach((r: any) => {
+                console.log(`      Behandling ${r.BEHANDLING_ID}: type=${r.RESULTAT_TYPE}, status=${r.STATUS}`);
+            });
+        });
 
         // For ny vurdering, we need to fill in ALL required fields even when skattepliktig=false
         await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
@@ -278,9 +344,39 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         console.log('📝 Waiting for vedtak page to load and API calls to complete...');
         await page.waitForLoadState('networkidle');
 
+        // 🔍 DEBUG: Check behandlingsresultat BEFORE submitting vedtak
+        console.log('🔍 DEBUG: Checking behandlingsresultat BEFORE submitting vedtak...');
+        await withDatabase(async (db) => {
+            const result = await db.query(`
+                SELECT br.BEHANDLING_ID, br.RESULTAT_TYPE, b.STATUS
+                FROM BEHANDLINGSRESULTAT br
+                JOIN BEHANDLING b ON br.BEHANDLING_ID = b.ID
+                ORDER BY b.ID DESC
+            `);
+            console.log('   📊 Current behandlingsresultater:');
+            result.forEach((r: any) => {
+                console.log(`      Behandling ${r.BEHANDLING_ID}: type=${r.RESULTAT_TYPE}, status=${r.STATUS}`);
+            });
+        });
+
         // Step 15: Submit vedtak for ny vurdering
         console.log('📝 Step 15: Submitting vedtak for ny vurdering...');
         await vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING');
+
+        // 🔍 DEBUG: Check behandlingsresultat IMMEDIATELY after submitting vedtak (before waiting)
+        console.log('🔍 DEBUG: Checking behandlingsresultat IMMEDIATELY after vedtak...');
+        await withDatabase(async (db) => {
+            const result = await db.query(`
+                SELECT br.BEHANDLING_ID, br.RESULTAT_TYPE, b.STATUS
+                FROM BEHANDLINGSRESULTAT br
+                JOIN BEHANDLING b ON br.BEHANDLING_ID = b.ID
+                ORDER BY b.ID DESC
+            `);
+            console.log('   📊 Current behandlingsresultater:');
+            result.forEach((r: any) => {
+                console.log(`      Behandling ${r.BEHANDLING_ID}: type=${r.RESULTAT_TYPE}, status=${r.STATUS}`);
+            });
+        });
 
         // Step 16: Wait for IVERKSETT_VEDTAK_FTRL process to complete and commit to database
         // This ensures behandling.status = 'AVSLUTTET' is committed before the job queries
@@ -290,86 +386,101 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         // 🔍 DEBUG: Check what's actually in the database
         console.log('🔍 DEBUG: Checking database for behandlingsresultat.type...');
         await withDatabase(async (db) => {
-            // Query tables separately (like showAllData does)
-            console.log('   🔍 Getting behandlinger...');
-            const behandlinger = await db.query(`SELECT * FROM BEHANDLING ORDER BY ID`);
-            console.log(`   📊 Found ${behandlinger.length} behandlinger`);
+            // Query with proper column names
+            const result = await db.query(`
+                SELECT
+                    b.ID as BEHANDLING_ID,
+                    b.STATUS,
+                    br.RESULTAT_TYPE
+                FROM BEHANDLING b
+                JOIN BEHANDLINGSRESULTAT br ON br.BEHANDLING_ID = b.ID
+                ORDER BY b.ID
+            `);
 
-            console.log('   🔍 Getting behandlingsresultater...');
-            const behandlingsresultater = await db.query(`SELECT * FROM BEHANDLINGSRESULTAT`);
-            console.log(`   📊 Found ${behandlingsresultater.length} behandlingsresultater`);
-
-            if (behandlingsresultater.length > 0) {
-                console.log('   📋 BEHANDLINGSRESULTAT columns:', Object.keys(behandlingsresultater[0]).join(', '));
-            }
-
-            // Find the foreign key column (linking behandlingsresultat to behandling)
-            const behandlingIdCol = Object.keys(behandlingsresultater[0] || {}).find(col =>
-                col.toUpperCase().includes('BEHANDLING') && col.toUpperCase().includes('ID') && col !== 'ID'
-            ) || 'BEHANDLING_ID';
-
-            console.log(`   🔗 Foreign key column: ${behandlingIdCol}`);
-
-            // Match up behandlinger with their behandlingsresultat
+            console.log(`   📊 Found ${result.length} behandlinger with behandlingsresultat`);
             console.log(`\n   📊 Behandlinger with their behandlingsresultat:`);
-            behandlinger.forEach((b: any, idx: number) => {
-                const resultat = behandlingsresultater.find((br: any) => br[behandlingIdCol] === b.ID);
 
-                console.log(`   ${idx + 1}. Behandling ID: ${b.ID}`);
-                console.log(`      Status: ${b.STATUS}`);
-
-                if (resultat) {
-                    // Find the type column
-                    const typeColumn = Object.keys(resultat).find(col =>
-                        col.toUpperCase().includes('TYPE') && !col.toUpperCase().includes('TEMA') && col !== 'ID'
-                    );
-
-                    if (typeColumn) {
-                        console.log(`      Behandlingsresultat type (${typeColumn}): ${resultat[typeColumn]}`);
-                    } else {
-                        console.log(`      Behandlingsresultat: ${JSON.stringify(resultat)}`);
-                    }
-                } else {
-                    console.log(`      ⚠️  No behandlingsresultat found!`);
-                }
+            result.forEach((r: any, idx: number) => {
+                console.log(`   ${idx + 1}. Behandling ID: ${r.BEHANDLING_ID}`);
+                console.log(`      Status: ${r.STATUS}`);
+                console.log(`      Behandlingsresultat RESULTAT_TYPE: ${r.RESULTAT_TYPE}`);
                 console.log('');
             });
 
             // Compare first vedtak and ny vurdering
-            if (behandlinger.length >= 2 && behandlingsresultater.length >= 2) {
-                const firstBehandling = behandlinger[0];
-                const nyVurderingBehandling = behandlinger[behandlinger.length - 1];
-
-                const firstResultat = behandlingsresultater.find((br: any) => br[behandlingIdCol] === firstBehandling.ID);
-                const nyVurderingResultat = behandlingsresultater.find((br: any) => br[behandlingIdCol] === nyVurderingBehandling.ID);
+            if (result.length >= 2) {
+                const firstBehandling = result[0];
+                const nyVurderingBehandling = result[result.length - 1];
 
                 console.log(`\n   ═══════════════════════════════════════`);
                 console.log(`   COMPARISON:`);
                 console.log(`   ═══════════════════════════════════════`);
 
-                if (firstResultat && nyVurderingResultat) {
-                    const typeColumn = Object.keys(firstResultat).find(col =>
-                        col.toUpperCase().includes('TYPE') && !col.toUpperCase().includes('TEMA') && col !== 'ID'
-                    );
+                const firstType = firstBehandling.RESULTAT_TYPE;
+                const nyType = nyVurderingBehandling.RESULTAT_TYPE;
 
-                    if (typeColumn) {
-                        const firstType = firstResultat[typeColumn];
-                        const nyType = nyVurderingResultat[typeColumn];
+                console.log(`\n   ✅ First vedtak (behandling ${firstBehandling.BEHANDLING_ID}): ${firstType}`);
+                console.log(`   ❓ Ny vurdering (behandling ${nyVurderingBehandling.BEHANDLING_ID}): ${nyType}`);
 
-                        console.log(`\n   Type column: ${typeColumn}`);
-                        console.log(`   ✅ First vedtak (behandling ${firstBehandling.ID}): ${firstType}`);
-                        console.log(`   ❓ Ny vurdering (behandling ${nyVurderingBehandling.ID}): ${nyType}`);
-
-                        if (nyType === 'IKKE_FASTSATT') {
-                            console.log(`\n   ❌ BUG CONFIRMED: Ny vurdering has type=IKKE_FASTSATT instead of MEDLEM_I_FOLKETRYGDEN!`);
-                        } else if (nyType === 'MEDLEM_I_FOLKETRYGDEN') {
-                            console.log(`\n   ✅ CORRECT: Ny vurdering has type=MEDLEM_I_FOLKETRYGDEN`);
-                        } else {
-                            console.log(`\n   ⚠️  UNEXPECTED: Ny vurdering has type=${nyType}`);
-                        }
-                    }
+                if (nyType === 'IKKE_FASTSATT') {
+                    console.log(`\n   ❌ BUG CONFIRMED: Ny vurdering has RESULTAT_TYPE=IKKE_FASTSATT instead of MEDLEM_I_FOLKETRYGDEN!`);
+                } else if (nyType === 'MEDLEM_I_FOLKETRYGDEN') {
+                    console.log(`\n   ✅ CORRECT: Ny vurdering has RESULTAT_TYPE=MEDLEM_I_FOLKETRYGDEN`);
+                } else {
+                    console.log(`\n   ⚠️  UNEXPECTED: Ny vurdering has RESULTAT_TYPE=${nyType}`);
                 }
             }
+        });
+
+        // 🔍 DEBUG: Check the full database state that the årsavregning job will see
+        console.log('🔍 DEBUG: Checking FULL database state for årsavregning query...');
+        await withDatabase(async (db) => {
+            // Check behandlingsresultat with vedtakMetadata using correct column names
+            const resultatMedVedtak = await db.query(`
+                SELECT
+                    br.BEHANDLING_ID,
+                    br.RESULTAT_TYPE,
+                    b.STATUS,
+                    vm.BEHANDLINGSRESULTAT_ID as VM_BR_ID,
+                    vm.VEDTAK_TYPE
+                FROM BEHANDLINGSRESULTAT br
+                JOIN BEHANDLING b ON br.BEHANDLING_ID = b.ID
+                LEFT JOIN VEDTAK_METADATA vm ON vm.BEHANDLINGSRESULTAT_ID = br.BEHANDLING_ID
+                ORDER BY b.ID DESC
+            `);
+
+            console.log('   📊 Behandlingsresultat with VedtakMetadata:');
+            resultatMedVedtak.forEach((r: any) => {
+                const hasVedtakMetadata = r.VM_BR_ID ? '✅' : '❌ NULL';
+                console.log(`      Behandling ${r.BEHANDLING_ID}: RESULTAT_TYPE=${r.RESULTAT_TYPE}, status=${r.STATUS}`);
+                console.log(`         VedtakMetadata: ${hasVedtakMetadata}, vedtak_type=${r.VEDTAK_TYPE}`);
+            });
+
+            // Check medlemskapsperioder
+            const medlemskapsPerioder = await db.query(`
+                SELECT
+                    mp.ID,
+                    mp.BEHANDLINGSRESULTAT_ID,
+                    mp.INNVILGELSE_RESULTAT,
+                    br.RESULTAT_TYPE as BR_TYPE,
+                    b.ID as BEHANDLING_ID
+                FROM MEDLEMSKAPSPERIODE mp
+                JOIN BEHANDLINGSRESULTAT br ON mp.BEHANDLINGSRESULTAT_ID = br.BEHANDLING_ID
+                JOIN BEHANDLING b ON br.BEHANDLING_ID = b.ID
+                ORDER BY b.ID DESC, mp.ID DESC
+            `);
+
+            console.log('\n   📊 Medlemskapsperioder:');
+            medlemskapsPerioder.forEach((mp: any) => {
+                console.log(`      Behandling ${mp.BEHANDLING_ID}: resultat=${mp.INNVILGELSE_RESULTAT}, br_type=${mp.BR_TYPE}`);
+            });
+
+            // The actual query criteria for årsavregning ikke-skattepliktig
+            console.log('\n   📊 Checking årsavregning query criteria:');
+            console.log('   Query requires:');
+            console.log('   - behandlingsresultat.RESULTAT_TYPE = MEDLEM_I_FOLKETRYGDEN');
+            console.log('   - behandling.status = AVSLUTTET');
+            console.log('   - medlemskapsperiode exists with relevant period');
         });
 
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
