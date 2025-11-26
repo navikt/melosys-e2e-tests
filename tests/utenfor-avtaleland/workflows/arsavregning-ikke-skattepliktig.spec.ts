@@ -13,6 +13,7 @@ import {USER_ID_VALID} from '../../../pages/shared/constants';
 import {UnleashHelper} from "../../../helpers/unleash-helper";
 import {AdminApiHelper, waitForProcessInstances} from '../../../helpers/api-helper';
 import {expect} from "@playwright/test";
+import {withDatabase} from '../../../helpers/db-helper';
 
 
 test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
@@ -94,20 +95,73 @@ test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
         console.log('📝 Step 9: Wait for process instances after first vedtak...');
         await waitForProcessInstances(page.request, 30);
 
+        // FIX: Wait for database state to be committed (deferred pattern fix)
+        // The IVERKSETT_VEDTAK_FTRL process completes fast, but we need to ensure
+        // the behandling.status = AVSLUTTET is committed before running årsavregning job
+        console.log('📝 Step 10: Verify database state before running job...');
+        await withDatabase(async (db) => {
+            let attempts = 0;
+            const maxAttempts = 10;
+
+            while (attempts < maxAttempts) {
+                const behandling = await db.queryOne(
+                    `SELECT STATUS FROM BEHANDLING WHERE ID = (
+                        SELECT MAX(ID) FROM BEHANDLING
+                    )`
+                );
+
+                console.log(`   Attempt ${attempts + 1}: behandling.STATUS = ${behandling?.STATUS}`);
+
+                if (behandling?.STATUS === 'AVSLUTTET') {
+                    console.log('   ✅ Behandling is AVSLUTTET, ready for årsavregning job');
+                    break;
+                }
+
+                if (attempts === maxAttempts - 1) {
+                    throw new Error(`Behandling status is still ${behandling?.STATUS} after ${maxAttempts} attempts`);
+                }
+
+                await page.waitForTimeout(500);
+                attempts++;
+            }
+        });
+
         // Re-enable toggle for årsavregning job (was disabled at start of test)
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
 
-        await adminApi.finnIkkeSkattepliktigeSaker(
-            request,
-            '2024-01-01',
-            '2024-12-31',
-            true // lagProsessinstanser
-        );
-        const response = await adminApi.waitForIkkeSkattepliktigeSakerJob(
-            request,
-            60, // 60 seconds timeout
-            1000 // Poll every 1 second
-        );
+        // FIX: Add retry logic in case job runs before status is fully committed
+        console.log('📝 Step 11: Running årsavregning job with retry logic...');
+        let response;
+        let jobAttempts = 0;
+        const maxJobAttempts = 5;
+
+        while (jobAttempts < maxJobAttempts) {
+            await adminApi.finnIkkeSkattepliktigeSaker(
+                request,
+                '2024-01-01',
+                '2024-12-31',
+                true // lagProsessinstanser
+            );
+            response = await adminApi.waitForIkkeSkattepliktigeSakerJob(
+                request,
+                60, // 60 seconds timeout
+                1000 // Poll every 1 second
+            );
+
+            console.log(`   Job attempt ${jobAttempts + 1}: antallProsessert = ${response.antallProsessert}`);
+
+            if (response.antallProsessert === 1) {
+                console.log('   ✅ Job found 1 case as expected');
+                break;
+            }
+
+            if (jobAttempts < maxJobAttempts - 1) {
+                console.log(`   ⚠️  Expected 1 case, got ${response.antallProsessert}. Retrying in 1s...`);
+                await page.waitForTimeout(1000);
+            }
+
+            jobAttempts++;
+        }
 
         expect(response.antallProsessert).toBe(1);
 

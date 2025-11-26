@@ -115,11 +115,10 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         await hovedside.klikkOpprettNySak();
         await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
 
-        console.log('📝 Step 12: Wait for behandling creation...');
-        await waitForProcessInstances(page.request, 30);
-
-        // Step 13: Open the NEW active behandling immediately (before it auto-completes)
-        console.log('📝 Step 13: Opening active behandling BEFORE it completes...');
+        // FIX: Navigate IMMEDIATELY without waiting for processes to complete
+        // With deferred pattern, ny vurdering processes complete in ~0s
+        // We must navigate before auto-completion happens
+        console.log('📝 Step 12: Navigate to behandling IMMEDIATELY (no wait)...');
         await hovedside.goto();
         // Click on the FIRST link (the new active behandling)
         await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).first().click();
@@ -249,11 +248,10 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         await hovedside.klikkOpprettNySak();
         await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
 
-        console.log('📝 Step 12: Wait for behandling creation...');
-        await waitForProcessInstances(page.request, 30);
-
-        // Step 13: Open the NEW active behandling immediately (before it auto-completes)
-        console.log('📝 Step 13: Opening active behandling BEFORE it completes...');
+        // FIX: Navigate IMMEDIATELY without waiting for processes to complete
+        // With deferred pattern, ny vurdering processes complete in ~0s
+        // We must navigate before auto-completion happens
+        console.log('📝 Step 12: Navigate to behandling IMMEDIATELY (no wait)...');
         await hovedside.goto();
         // Click on the FIRST link (the new active behandling)
         await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).first().click();
