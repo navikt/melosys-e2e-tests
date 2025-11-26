@@ -304,6 +304,8 @@ jobs:
 
           passed=0
           failed=0
+          declare -a run_results
+          declare -a run_durations
 
           for i in {1..5}; do
             echo ""
@@ -311,14 +313,21 @@ jobs:
             echo "🔄 RUN $i/5 - $(date +%H:%M:%S)"
             echo "════════════════════════════════════════════════"
 
+            start_time=$(date +%s)
+
             # Run the specific flaky test
-            if npx playwright test tests/utenfor-avtaleland/workflows/nyvurdering-endring-skattestatus.spec.ts -g "skattestatus.*nyvurdering" --project=chromium --workers=1; then
+            if npx playwright test tests/utenfor-avtaleland/workflows/nyvurdering-endring-skattestatus.spec.ts -g "skattepliktig til ikke-skattepliktig" --project=chromium --workers=1; then
               echo "✅ Run $i: PASSED"
               passed=$((passed + 1))
+              run_results[$i]="✅"
             else
               echo "❌ Run $i: FAILED"
               failed=$((failed + 1))
+              run_results[$i]="❌"
             fi
+
+            end_time=$(date +%s)
+            run_durations[$i]=$((end_time - start_time))
 
             # Small delay between runs
             sleep 2
@@ -333,7 +342,43 @@ jobs:
           echo "📈 Success rate: $(awk "BEGIN {printf \"%.1f\", ($passed / 5) * 100}")%"
           echo ""
 
-          # Save summary to file for artifact
+          # Generate test-summary.md with per-run results
+          cat > playwright-report/test-summary.md << EOF
+          # E2E Test Summary
+
+          **Generated:** $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          ## 🔁 Flaky Test Stability Check (5 runs)
+
+          **Test:** \`skal endre skattestatus fra skattepliktig til ikke-skattepliktig via nyvurdering\`
+
+          ## Overall Results
+
+          - ✅ Passed: $passed/5
+          - ❌ Failed: $failed/5
+          - 📈 Success rate: $(awk "BEGIN {printf \"%.1f\", ($passed / 5) * 100}")%
+          - **Status:** $([ $failed -eq 0 ] && echo "passed" || echo "failed")
+
+          ## 📊 Test Results
+
+          | Run | Status | Duration |
+          |-----|--------|----------|
+          | 1 | ${run_results[1]} | ${run_durations[1]}s |
+          | 2 | ${run_results[2]} | ${run_durations[2]}s |
+          | 3 | ${run_results[3]} | ${run_durations[3]}s |
+          | 4 | ${run_results[4]} | ${run_durations[4]}s |
+          | 5 | ${run_results[5]} | ${run_durations[5]}s |
+
+          ## 📎 Artifacts
+
+          The following artifacts are available for download:
+
+          - \`playwright-report/\` - HTML test report
+          - \`test-results/\` - Individual test results, traces, videos, screenshots
+          - \`playwright-report/*-complete.log\` - Complete Docker logs for each service
+          EOF
+
+          # Also save flaky summary for backward compatibility
           echo "## 🔁 Flaky Test Results (5 runs)" > playwright-report/flaky-test-summary.md
           echo "" >> playwright-report/flaky-test-summary.md
           echo "| Metric | Value |" >> playwright-report/flaky-test-summary.md
