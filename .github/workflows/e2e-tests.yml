@@ -299,7 +299,7 @@ jobs:
       - name: Run Playwright tests
         run: |
           # TEMPORARY: Run only the flaky test multiple times to reproduce the bug
-          echo "🔁 Running flaky test 5 times to check stability..."
+          echo "🔁 Running flaky test 10 times to check stability..."
           echo "=================================================="
 
           passed=0
@@ -307,10 +307,10 @@ jobs:
           declare -a run_results
           declare -a run_durations
 
-          for i in {1..5}; do
+          for i in {1..10}; do
             echo ""
             echo "════════════════════════════════════════════════"
-            echo "🔄 RUN $i/5 - $(date +%H:%M:%S)"
+            echo "🔄 RUN $i/10 - $(date +%H:%M:%S)"
             echo "════════════════════════════════════════════════"
 
             start_time=$(date +%s)
@@ -337,9 +337,9 @@ jobs:
           echo "════════════════════════════════════════════════"
           echo "📊 FINAL SUMMARY"
           echo "════════════════════════════════════════════════"
-          echo "✅ Passed: $passed/5"
-          echo "❌ Failed: $failed/5"
-          echo "📈 Success rate: $(awk "BEGIN {printf \"%.1f\", ($passed / 5) * 100}")%"
+          echo "✅ Passed: $passed/10"
+          echo "❌ Failed: $failed/10"
+          echo "📈 Success rate: $(awk "BEGIN {printf \"%.1f\", ($passed / 10) * 100}")%"
           echo ""
 
           # Generate test-summary.md with per-run results
@@ -348,15 +348,15 @@ jobs:
 
           **Generated:** $(date -u +"%Y-%m-%dT%H:%M:%SZ")
 
-          ## 🔁 Flaky Test Stability Check (5 runs)
+          ## 🔁 Flaky Test Stability Check (10 runs)
 
           **Test:** \`skal endre skattestatus fra skattepliktig til ikke-skattepliktig via nyvurdering\`
 
           ## Overall Results
 
-          - ✅ Passed: $passed/5
-          - ❌ Failed: $failed/5
-          - 📈 Success rate: $(awk "BEGIN {printf \"%.1f\", ($passed / 5) * 100}")%
+          - ✅ Passed: $passed/10
+          - ❌ Failed: $failed/10
+          - 📈 Success rate: $(awk "BEGIN {printf \"%.1f\", ($passed / 10) * 100}")%
           - **Status:** $([ $failed -eq 0 ] && echo "passed" || echo "failed")
 
           ## 📊 Test Results
@@ -368,6 +368,11 @@ jobs:
           | 3 | ${run_results[3]} | ${run_durations[3]}s |
           | 4 | ${run_results[4]} | ${run_durations[4]}s |
           | 5 | ${run_results[5]} | ${run_durations[5]}s |
+          | 6 | ${run_results[6]} | ${run_durations[6]}s |
+          | 7 | ${run_results[7]} | ${run_durations[7]}s |
+          | 8 | ${run_results[8]} | ${run_durations[8]}s |
+          | 9 | ${run_results[9]} | ${run_durations[9]}s |
+          | 10 | ${run_results[10]} | ${run_durations[10]}s |
 
           ## 📎 Artifacts
 
@@ -379,22 +384,22 @@ jobs:
           EOF
 
           # Also save flaky summary for backward compatibility
-          echo "## 🔁 Flaky Test Results (5 runs)" > playwright-report/flaky-test-summary.md
+          echo "## 🔁 Flaky Test Results (10 runs)" > playwright-report/flaky-test-summary.md
           echo "" >> playwright-report/flaky-test-summary.md
           echo "| Metric | Value |" >> playwright-report/flaky-test-summary.md
           echo "|--------|-------|" >> playwright-report/flaky-test-summary.md
-          echo "| ✅ Passed | $passed/5 |" >> playwright-report/flaky-test-summary.md
-          echo "| ❌ Failed | $failed/5 |" >> playwright-report/flaky-test-summary.md
-          echo "| 📈 Success rate | $(awk "BEGIN {printf \"%.1f\", ($passed / 5) * 100}")% |" >> playwright-report/flaky-test-summary.md
+          echo "| ✅ Passed | $passed/10 |" >> playwright-report/flaky-test-summary.md
+          echo "| ❌ Failed | $failed/10 |" >> playwright-report/flaky-test-summary.md
+          echo "| 📈 Success rate | $(awk "BEGIN {printf \"%.1f\", ($passed / 10) * 100}")% |" >> playwright-report/flaky-test-summary.md
           echo "" >> playwright-report/flaky-test-summary.md
           echo "**Test:** \`skal endre skattestatus fra skattepliktig til ikke-skattepliktig via nyvurdering\`" >> playwright-report/flaky-test-summary.md
 
           # Report results but don't fail the job - we want artifacts uploaded
           if [ $failed -gt 0 ]; then
-            echo "⚠️ $failed out of 5 runs failed - but allowing job to complete for artifact capture"
+            echo "⚠️ $failed out of 10 runs failed - but allowing job to complete for artifact capture"
             echo "FLAKY_TEST_FAILURES=$failed" >> $GITHUB_ENV
           else
-            echo "✅ All 5 runs passed!"
+            echo "✅ All 10 runs passed!"
             echo "FLAKY_TEST_FAILURES=0" >> $GITHUB_ENV
           fi
         env:
@@ -734,6 +739,6 @@ jobs:
       - name: Fail job if flaky tests had failures
         if: always() && env.FLAKY_TEST_FAILURES != '0' && env.FLAKY_TEST_FAILURES != ''
         run: |
-          echo "❌ Flaky test debugging: $FLAKY_TEST_FAILURES out of 5 runs failed"
+          echo "❌ Flaky test debugging: $FLAKY_TEST_FAILURES out of 10 runs failed"
           echo "📦 All artifacts have been uploaded - check the results above"
           exit 1
