@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
     inputs:
       environment:
-        description: 'Image tag for melosys-api (other services use latest)'
+        description: 'Image tags. Format: "tag" (melosys-api only) or "service1:tag1,service2:tag2" (e.g., melosys-api:e2e-logging,melosys-web:e2e-fix-1)'
         required: true
         default: 'latest'
       collect_coverage:
@@ -122,15 +122,59 @@ jobs:
           else
             # Manual trigger via workflow_dispatch
             echo "👆 Manually triggered via workflow_dispatch"
-            echo "🏷️  Using tag for melosys-api: ${{ inputs.environment }}"
-            echo "🏷️  Using tag for other services: latest"
+            INPUT_ENV="${{ inputs.environment }}"
 
-            MELOSYS_API_TAG="${{ inputs.environment }}"
+            # Default all services to latest
+            MELOSYS_API_TAG="latest"
             FAKTURERINGSKOMPONENTEN_TAG="latest"
             MELOSYS_WEB_TAG="latest"
             MELOSYS_TRYGDEAVGIFT_TAG="latest"
             MELOSYS_TRYGDEAVTALE_TAG="latest"
             MELOSYS_INNGANGSVILKAR_TAG="latest"
+
+            # Check if input contains service:tag format (has colon)
+            if [[ "$INPUT_ENV" == *":"* ]]; then
+              echo "🏷️  Parsing multi-service tag format: $INPUT_ENV"
+              # Split by comma and process each service:tag pair
+              IFS=',' read -ra PAIRS <<< "$INPUT_ENV"
+              for pair in "${PAIRS[@]}"; do
+                # Trim whitespace
+                pair=$(echo "$pair" | xargs)
+                # Split by colon
+                service="${pair%%:*}"
+                tag="${pair#*:}"
+                echo "  📦 $service -> $tag"
+
+                case "$service" in
+                  melosys-api)
+                    MELOSYS_API_TAG="$tag"
+                    ;;
+                  melosys-web)
+                    MELOSYS_WEB_TAG="$tag"
+                    ;;
+                  faktureringskomponenten)
+                    FAKTURERINGSKOMPONENTEN_TAG="$tag"
+                    ;;
+                  melosys-trygdeavgift-beregning)
+                    MELOSYS_TRYGDEAVGIFT_TAG="$tag"
+                    ;;
+                  melosys-trygdeavtale)
+                    MELOSYS_TRYGDEAVTALE_TAG="$tag"
+                    ;;
+                  melosys-inngangsvilkar)
+                    MELOSYS_INNGANGSVILKAR_TAG="$tag"
+                    ;;
+                  *)
+                    echo "  ⚠️  Unknown service: $service (ignored)"
+                    ;;
+                esac
+              done
+            else
+              # Simple format: just a tag for melosys-api (backwards compatible)
+              echo "🏷️  Using tag for melosys-api: $INPUT_ENV"
+              echo "🏷️  Using tag for other services: latest"
+              MELOSYS_API_TAG="$INPUT_ENV"
+            fi
           fi
 
           echo "melosys_api_tag=$MELOSYS_API_TAG" >> $GITHUB_OUTPUT
