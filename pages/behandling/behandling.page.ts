@@ -95,12 +95,21 @@ export class BehandlingPage extends BasePage {
   }
 
   /**
+   * Select month in date picker dialog
+   *
+   * @param måned - Month to select in Norwegian (e.g., 'november', 'desember')
+   */
+  async velgMånedIDatovelger(måned: string): Promise<void> {
+    await this.page.getByRole('dialog', { name: 'Velg dato' }).getByLabel('Måned', { exact: true }).selectOption(måned);
+  }
+
+  /**
    * Select a specific date in the date picker
    *
    * @param datoNavn - Date button name (e.g., 'fredag 1', 'mandag 15')
    */
   async velgDatoIDatovelger(datoNavn: string): Promise<void> {
-    await this.page.getByRole('button', { name: datoNavn, exact: true }).click();
+    await this.page.getByRole('dialog', { name: 'Velg dato' }).getByRole('button', { name: datoNavn, exact: true }).click();
   }
 
   /**
@@ -115,12 +124,18 @@ export class BehandlingPage extends BasePage {
    * Convenience method for editing date using date picker
    *
    * @param år - Year to select (e.g., '2024')
-   * @param datoNavn - Date button name (e.g., 'fredag 1')
+   * @param måned - Month to select in Norwegian (e.g., 'november')
+   * @param datoNavn - Date button name matching the day of week (e.g., 'fredag 1')
+   *
+   * @example
+   * // Select November 1st 2024 (which is a Friday)
+   * await behandling.endreDatoMedDatovelger('2024', 'november', 'fredag 1');
    */
-  async endreDatoMedDatovelger(år: string, datoNavn: string): Promise<void> {
+  async endreDatoMedDatovelger(år: string, måned: string, datoNavn: string): Promise<void> {
     await this.klikkEndre();
     await this.åpneDatovelger();
     await this.velgÅrIDatovelger(år);
+    await this.velgMånedIDatovelger(måned);
     await this.velgDatoIDatovelger(datoNavn);
     await this.klikkLagreEndringene();
   }
