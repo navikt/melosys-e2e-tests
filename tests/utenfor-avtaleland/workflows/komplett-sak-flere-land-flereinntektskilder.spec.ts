@@ -47,9 +47,9 @@ test.describe('Komplett saksflyt - FTRL flere land', () => {
     await hovedside.gotoOgOpprettNySak();
     await opprettSak.opprettStandardSak(USER_ID_VALID);
 
-    // Steg 2: Rediger dato
+    // Steg 2: Rediger dato (November 1, 2024 is a Friday)
     await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).click();
-    await behandling.endreDatoMedDatovelger('2024', 'fredag 1');
+    await behandling.endreDatoMedDatovelger('2024', 'november', 'fredag 1');
 
     // Steg 3: Medlemskap
     await medlemskap.velgPeriode('01.11.2024', '14.11.2024');
