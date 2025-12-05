@@ -152,7 +152,7 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         console.log('✅ Workflow completed successfully!');
     });
 
-    test('skal endre skattestatus fra skattepliktig til ikke-skattepliktig via nyvurdering', async (
+    test('skal endre skattestatus fra skattepliktig til ikke-skattepliktig via nyvurdering @known-error #MELOSYS-7718', async (
         {
             page,
             request

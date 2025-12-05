@@ -25,18 +25,9 @@ import { waitForProcessInstances } from '../../helpers/api-helper';
  *
  * Denne testen dekker hele flyten for skip/sokkel-arbeidsforhold i EU/EØS.
  * Merk: Dette er et spesialtilfelle av EU/EØS med maritime elementer.
- *
- * ⚠️ KNOWN BACKEND ISSUE:
- * Test may fail 2/3 times due to backend race condition in melosys-api:
- * - Error: "Row was updated or deleted by another transaction [SaksopplysningKilde]"
- * - Occurs during vedtak creation at POST /api/saksflyt/vedtak/{id}/fatt
- * - Root cause: Duplicate RegisteropplysningerService calls in EosVedtakService
- * - Status: Backend bug - not a test issue
- * - Workaround: Playwright retry mechanism (test passes on retry)
- * - See: docs/debugging/EU-EOS-SKIP-BACKEND-RACE-CONDITION.md for full analysis
  */
 test.describe('EU/EØS Skip - Komplett arbeidsflyt', () => {
-  test('skal fullføre EU/EØS-skip-arbeidsflyt med vedtak @known-error #BACKEND-RACE', async ({ page }) => {
+  test('skal fullføre EU/EØS-skip-arbeidsflyt med vedtak', async ({ page }) => {
     // Øk test timeout til 120 sekunder (vedtak kan ta lang tid på CI)
     test.setTimeout(120000);
 
