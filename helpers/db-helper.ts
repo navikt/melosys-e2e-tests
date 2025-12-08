@@ -172,7 +172,12 @@ export class DatabaseHelper {
 
       if (!silent) {
         console.log('\n🔒 Re-enabled foreign key constraints');
+      }
 
+      // Reset sequences
+      await this.resetSequences(silent);
+
+      if (!silent) {
         console.log('\n' + '─'.repeat(60));
         console.log(`\n✨ Database cleanup complete!`);
         console.log(`   Tables cleaned: ${cleanedCount}`);
@@ -186,6 +191,55 @@ export class DatabaseHelper {
         console.error('❌ Database cleanup failed:', error);
       }
       throw error;
+    }
+  }
+
+  /**
+   * Reset sequences for fagsak (saksnummer_seq) and behandling (identity column)
+   * @param silent - If true, suppress console output
+   */
+  private async resetSequences(silent = false): Promise<void> {
+    if (!this.connection) {
+      throw new Error('Database not connected. Call connect() first.');
+    }
+
+    if (!silent) {
+      console.log('\n🔄 Resetting sequences...');
+    }
+
+    // Reset saksnummer_seq (explicit sequence for fagsak)
+    try {
+      // Drop and recreate the sequence to reset it to 1
+      await this.connection.execute('DROP SEQUENCE saksnummer_seq');
+      await this.connection.execute(`
+        CREATE SEQUENCE saksnummer_seq
+        MINVALUE 1
+        NOMAXVALUE
+        INCREMENT BY 1
+        START WITH 1
+      `);
+      if (!silent) {
+        console.log('   ✅ Reset saksnummer_seq to 1');
+      }
+    } catch (error) {
+      if (!silent) {
+        console.log(`   ⚠️  Could not reset saksnummer_seq: ${error.message || error}`);
+      }
+    }
+
+    // Reset behandling identity column
+    try {
+      // For identity columns, we need to modify the column to reset the start value
+      await this.connection.execute(`
+        ALTER TABLE behandling MODIFY id GENERATED ALWAYS AS IDENTITY (START WITH 1)
+      `);
+      if (!silent) {
+        console.log('   ✅ Reset behandling.id identity to 1');
+      }
+    } catch (error) {
+      if (!silent) {
+        console.log(`   ⚠️  Could not reset behandling.id identity: ${error.message || error}`);
+      }
     }
   }
 
