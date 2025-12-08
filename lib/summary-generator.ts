@@ -239,13 +239,11 @@ function generateTestRow(testInfo: TestData): string {
     playwrightStatus = hasPlaywrightError ? '❌' : '✅';
   }
 
-  // Docker logs status
+  // Docker logs status - show errors regardless of test status (flaky tests can have errors too)
   let dockerStatus = '✅';
-  if (testInfo.status === 'failed' || testInfo.status === 'known-error-failed') {
-    if (testInfo.dockerErrors && testInfo.dockerErrors.length > 0) {
-      const services = testInfo.dockerErrors.map(de => `${de.service} (${de.errors.length})`).join(', ');
-      dockerStatus = `❌ ${services}`;
-    }
+  if (testInfo.dockerErrors && testInfo.dockerErrors.length > 0) {
+    const services = testInfo.dockerErrors.map(de => `${de.service} (${de.errors.length})`).join(', ');
+    dockerStatus = `⚠️ ${services}`;
   }
 
   let row = '<tr>\n';
@@ -425,20 +423,39 @@ function generateKnownErrorPassedSection(tests: TestData[]): string {
 function generateDockerErrorsSummary(dockerErrors: DockerError[]): string {
   let md = `## 🐳 Docker Log Errors by Service\n\n`;
 
-  // Group by service
-  const errorsByService = new Map<string, number>();
+  // Group errors by service
+  const errorsByService = new Map<string, Array<{ timestamp: string; message: string }>>();
   for (const { service, errors } of dockerErrors) {
-    errorsByService.set(service, (errorsByService.get(service) || 0) + errors.length);
+    if (!errorsByService.has(service)) {
+      errorsByService.set(service, []);
+    }
+    errorsByService.get(service)!.push(...errors);
   }
 
-  // Sort by error count
+  // Sort services by error count
   const sorted = Array.from(errorsByService.entries())
-    .sort((a, b) => b[1] - a[1]);
+    .sort((a, b) => b[1].length - a[1].length);
 
-  for (const [service, count] of sorted) {
-    md += `- **${service}:** ${count} error(s)\n`;
+  for (const [service, errors] of sorted) {
+    md += `### ${service}: ${errors.length} error(s)\n\n`;
+
+    // Show first 5 unique errors
+    const uniqueErrors = deduplicateErrors(errors);
+    const errorsToShow = uniqueErrors.slice(0, 5);
+
+    for (const err of errorsToShow) {
+      // Clean up the message - remove ANSI codes and truncate
+      const cleanMessage = err.message
+        .replace(/\x1b\[[0-9;]*m/g, '') // Remove ANSI color codes
+        .substring(0, 200);
+      md += `- \`[${err.timestamp}]\` ${cleanMessage}\n`;
+    }
+
+    if (uniqueErrors.length > 5) {
+      md += `- _...and ${uniqueErrors.length - 5} more unique error(s)_\n`;
+    }
+    md += '\n';
   }
-  md += '\n';
 
   return md;
 }
