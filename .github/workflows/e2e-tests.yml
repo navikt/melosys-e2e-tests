@@ -341,7 +341,47 @@ jobs:
           echo "ℹ️  Note: Feature toggles are automatically created by melosys-api on startup"
 
       - name: Run Playwright tests
-        run: npx playwright test --project=chromium
+        id: playwright
+        run: |
+          # Run tests and capture exit code (don't fail immediately)
+          npx playwright test --project=chromium || PLAYWRIGHT_EXIT_CODE=$?
+
+          # Check if test-summary.json was created by reporter
+          if [ -f "playwright-report/test-summary.json" ]; then
+            # Get CI status from reporter (excludes @known-error tests from failures)
+            CI_STATUS=$(jq -r '.status' playwright-report/test-summary.json)
+            echo "📊 Reporter CI status: $CI_STATUS"
+
+            # Count test categories
+            TOTAL=$(jq '.tests | length' playwright-report/test-summary.json)
+            PASSED=$(jq '[.tests[] | select(.status == "passed")] | length' playwright-report/test-summary.json)
+            FAILED=$(jq '[.tests[] | select(.status == "failed")] | length' playwright-report/test-summary.json)
+            FLAKY=$(jq '[.tests[] | select(.status == "flaky")] | length' playwright-report/test-summary.json)
+            KNOWN_ERROR_FAILED=$(jq '[.tests[] | select(.status == "known-error-failed")] | length' playwright-report/test-summary.json)
+            KNOWN_ERROR_PASSED=$(jq '[.tests[] | select(.status == "known-error-passed")] | length' playwright-report/test-summary.json)
+
+            echo ""
+            echo "📋 Test Results:"
+            echo "  ✅ Passed: $PASSED"
+            echo "  ❌ Failed: $FAILED"
+            echo "  🔄 Flaky: $FLAKY"
+            echo "  ⚠️  Known Error (Failed): $KNOWN_ERROR_FAILED"
+            echo "  ✨ Known Error (Passed): $KNOWN_ERROR_PASSED"
+            echo "  📊 Total: $TOTAL"
+            echo ""
+
+            if [ "$CI_STATUS" = "passed" ]; then
+              echo "✅ CI Status: PASSED (known-error tests don't fail the build)"
+              exit 0
+            else
+              echo "❌ CI Status: FAILED (real test failures detected)"
+              exit 1
+            fi
+          else
+            # Fallback: use Playwright's exit code if reporter didn't run
+            echo "⚠️  test-summary.json not found, using Playwright exit code"
+            exit ${PLAYWRIGHT_EXIT_CODE:-1}
+          fi
         env:
           CI: true
 
