@@ -373,14 +373,14 @@ describe('Summary Generator', () => {
             status: 'failed',
             dockerErrors: [{
               service: 'melosys-api',
-              errors: [{ timestamp: '', message: 'error1' }, { timestamp: '', message: 'error2' }]
+              errors: [{ timestamp: '12:00:00', message: 'error1' }, { timestamp: '12:00:01', message: 'error2' }]
             }]
           }),
           createTest({
             status: 'failed',
             dockerErrors: [{
               service: 'melosys-web',
-              errors: [{ timestamp: '', message: 'error3' }]
+              errors: [{ timestamp: '12:00:02', message: 'error3' }]
             }]
           }),
         ]
@@ -389,8 +389,13 @@ describe('Summary Generator', () => {
       const result = generateMarkdownSummary(data);
 
       assert(result.includes('## 🐳 Docker Log Errors by Service'));
-      assert(result.includes('**melosys-api:** 2 error(s)'));
-      assert(result.includes('**melosys-web:** 1 error(s)'));
+      // New format: shows errors as header with actual error messages
+      assert(result.includes('### melosys-api: 2 error(s)'));
+      assert(result.includes('### melosys-web: 1 error(s)'));
+      // Should show actual error messages
+      assert(result.includes('error1'));
+      assert(result.includes('error2'));
+      assert(result.includes('error3'));
     });
 
     test('should show process errors summary', () => {
