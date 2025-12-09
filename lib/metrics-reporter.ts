@@ -124,6 +124,38 @@ export function generateMetricsMarkdown(report: MetricsCoverageReport): string {
     lines.push('');
   }
 
+  // Quick Reference Summary at the end
+  lines.push('## Quick Reference');
+  lines.push('');
+  lines.push('### Process Types Summary');
+  lines.push('');
+  if (coverage.processTypes.exercised.length > 0) {
+    const sortedTypes = Object.entries(coverage.processTypes.counts).sort(([, a], [, b]) => b - a);
+    lines.push(
+      `**Exercised (${coverage.processTypes.exercised.length}):** ` +
+        sortedTypes.map(([type, count]) => `${type} (${count})`).join(', ')
+    );
+  } else {
+    lines.push('**Exercised:** None');
+  }
+  lines.push('');
+
+  lines.push('### Process Steps Summary');
+  lines.push('');
+  if (coverage.processSteps.exercised.length > 0) {
+    const sortedSteps = Object.entries(coverage.processSteps.counts).sort(
+      ([, a], [, b]) => b.success + b.failed - (a.success + a.failed)
+    );
+    const stepsSummary = sortedSteps.map(([step, counts]) => {
+      const total = counts.success + counts.failed;
+      return counts.failed > 0 ? `${step} (${total}, ${counts.failed} failed)` : `${step} (${total})`;
+    });
+    lines.push(`**Exercised (${coverage.processSteps.exercised.length}):** ` + stepsSummary.join(', '));
+  } else {
+    lines.push('**Exercised:** None');
+  }
+  lines.push('');
+
   // Footer
   lines.push('---');
   lines.push('');
