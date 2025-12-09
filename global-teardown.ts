@@ -15,11 +15,11 @@ import {
 export default async function globalTeardown() {
   const metrics = new MetricsHelper();
   const resultsDir = path.join(process.cwd(), 'test-results');
-  const reportDir = path.join(process.cwd(), 'playwright-report');
 
-  // Ensure report directory exists
-  if (!fs.existsSync(reportDir)) {
-    fs.mkdirSync(reportDir, { recursive: true });
+  // Write to test-results directory (persists across reporter phases)
+  // The test-summary reporter will copy these to playwright-report/
+  if (!fs.existsSync(resultsDir)) {
+    fs.mkdirSync(resultsDir, { recursive: true });
   }
 
   try {
@@ -54,12 +54,12 @@ export default async function globalTeardown() {
       coverage,
     };
 
-    // Generate and save reports
+    // Generate and save reports to test-results (persists)
     const markdownReport = generateMetricsMarkdown(report);
     const jsonReport = generateMetricsJson(report);
 
-    fs.writeFileSync(path.join(reportDir, 'metrics-summary.md'), markdownReport);
-    fs.writeFileSync(path.join(reportDir, 'metrics-coverage.json'), jsonReport);
+    fs.writeFileSync(path.join(resultsDir, 'metrics-summary.md'), markdownReport);
+    fs.writeFileSync(path.join(resultsDir, 'metrics-coverage.json'), jsonReport);
 
     // Print summary to console
     console.log('');
@@ -87,8 +87,8 @@ export default async function globalTeardown() {
     }
 
     console.log('');
-    console.log('📄 Full report: playwright-report/metrics-summary.md');
-    console.log('📄 JSON data:   playwright-report/metrics-coverage.json');
+    console.log('📄 Full report: test-results/metrics-summary.md');
+    console.log('📄 JSON data:   test-results/metrics-coverage.json');
 
     // Clean up before snapshot
     fs.unlinkSync(beforePath);

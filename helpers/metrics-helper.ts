@@ -356,15 +356,22 @@ export class MetricsHelper {
     }
 
     // Calculate percentages
+    // Use the larger of known types/steps or discovered types/steps as denominator
+    const totalProcessTypes = Math.max(
+      KNOWN_PROCESS_TYPES.length,
+      stats.processTypes.exercised.length + stats.processTypes.notExercised.length
+    );
     stats.processTypes.percentage =
-      KNOWN_PROCESS_TYPES.length > 0
-        ? (stats.processTypes.exercised.length / KNOWN_PROCESS_TYPES.length) * 100
-        : 0;
+      totalProcessTypes > 0 ? (stats.processTypes.exercised.length / totalProcessTypes) * 100 : 0;
 
+    // For steps, we have an incomplete list - just show exercised count without percentage
+    // since we don't have a complete list of all 77 steps
+    const totalProcessSteps = Math.max(
+      KNOWN_PROCESS_STEPS.length,
+      stats.processSteps.exercised.length + stats.processSteps.notExercised.length
+    );
     stats.processSteps.percentage =
-      KNOWN_PROCESS_STEPS.length > 0
-        ? (stats.processSteps.exercised.length / KNOWN_PROCESS_STEPS.length) * 100
-        : 0;
+      totalProcessSteps > 0 ? (stats.processSteps.exercised.length / totalProcessSteps) * 100 : 0;
 
     return stats;
   }

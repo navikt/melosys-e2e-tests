@@ -159,6 +159,17 @@ class TestSummaryReporter implements Reporter {
     const jsonPath = path.join(outputDir, 'test-summary.json');
     fs.writeFileSync(jsonPath, JSON.stringify(summaryData, null, 2));
     console.log(`📊 JSON summary written to: ${jsonPath}`);
+
+    // Copy metrics files from test-results to playwright-report (if they exist)
+    const resultsDir = path.join(process.cwd(), 'test-results');
+    const metricsFiles = ['metrics-summary.md', 'metrics-coverage.json'];
+    for (const file of metricsFiles) {
+      const srcPath = path.join(resultsDir, file);
+      if (fs.existsSync(srcPath)) {
+        const destPath = path.join(outputDir, file);
+        fs.copyFileSync(srcPath, destPath);
+      }
+    }
   }
 
   private parseAttachment(attachment: any): any {
