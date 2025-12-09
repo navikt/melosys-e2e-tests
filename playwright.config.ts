@@ -96,4 +96,5 @@ export default defineConfig({
 
   /* Set up hooks to check docker logs after each test */
   globalSetup: './global-setup.ts',
+  globalTeardown: './global-teardown.ts',
 });
