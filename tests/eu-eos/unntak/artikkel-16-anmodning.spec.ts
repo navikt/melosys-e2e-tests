@@ -2,7 +2,9 @@ import { test, expect } from '../../../fixtures';
 import { AuthHelper } from '../../../helpers/auth-helper';
 import { HovedsidePage } from '../../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../../pages/opprett-ny-sak/opprett-ny-sak.page';
+import { EuEosBehandlingPage } from '../../../pages/behandling/eu-eos-behandling.page';
 import { AnmodningUnntakPage } from '../../../pages/eu-eos/unntak/anmodning-unntak.page';
+import { waitForProcessInstances } from '../../../helpers/api-helper';
 import { USER_ID_VALID, SAKSTYPER, EU_EOS_LAND } from '../../../pages/shared/constants';
 
 /**
@@ -39,11 +41,15 @@ test.describe('EU/EØS Artikkel 16 - Anmodning om unntak', () => {
 
   /**
    * Helper function to create an EU/EØS case
+   * Note: EU/EØS cases require period and country to be filled during creation
    */
   async function opprettEuEosSak(page: any): Promise<string | null> {
     console.log('📝 Creating EU/EØS case...');
 
-    await hovedside.gotoOgOpprettNySak();
+    const behandling = new EuEosBehandlingPage(page);
+
+    await hovedside.goto();
+    await hovedside.klikkOpprettNySak();
 
     // Fill in user ID
     await opprettSak.fyllInnBrukerID(USER_ID_VALID);
@@ -59,6 +65,10 @@ test.describe('EU/EØS Artikkel 16 - Anmodning om unntak', () => {
     const behandlingstemaDropdown = page.getByLabel('Behandlingstema');
     await behandlingstemaDropdown.selectOption('UTSENDT_ARBEIDSTAKER');
 
+    // For EU/EØS, we MUST fill period and country during case creation
+    await behandling.fyllInnFraTilDato('01.01.2024', '31.12.2025');
+    await behandling.velgLand('Sverige');
+
     // Select årsak
     const aarsakDropdown = page.getByLabel('Årsak', { exact: true });
     await aarsakDropdown.selectOption('SØKNAD');
@@ -70,10 +80,36 @@ test.describe('EU/EØS Artikkel 16 - Anmodning om unntak', () => {
     await opprettSak.klikkOpprettNyBehandling();
     await opprettSak.assertions.verifiserBehandlingOpprettet();
 
-    // Get saksnummer from URL
-    const url = page.url();
-    const match = url.match(/saksbehandling\/(\d+)/);
-    const saksnummer = match ? match[1] : null;
+    // Wait for process instances to complete
+    console.log('📝 Waiting for process instances...');
+    await waitForProcessInstances(page.request, 30);
+
+    // Navigate to forside to find the case
+    await hovedside.goto();
+
+    // Get saksnummer from URL or by navigating to the case
+    let saksnummer: string | null = null;
+
+    // Click on the case link to get to behandling page
+    const caseLink = page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' });
+    if (await caseLink.isVisible({ timeout: 5000 }).catch(() => false)) {
+      await caseLink.click();
+      await page.waitForLoadState('networkidle');
+
+      const url = page.url();
+      console.log(`   Current URL: ${url}`);
+
+      // Try different URL patterns - saksnummer can be MEL-XX or pure numbers
+      let match = url.match(/saksbehandling\/(MEL-\d+)/);
+      if (!match) {
+        match = url.match(/saksbehandling\/(\d+)/);
+      }
+      if (!match) {
+        match = url.match(/\/(\d{10,})/); // 10+ digit number
+      }
+
+      saksnummer = match ? match[1] : null;
+    }
 
     console.log(`✅ Created EU/EØS case: ${saksnummer || 'unknown'}`);
     return saksnummer;
@@ -238,9 +274,9 @@ test.describe('EU/EØS Artikkel 16 - Anmodning om unntak', () => {
       return;
     }
 
-    // Step 2: Navigate to the case behandling page
-    console.log('📝 Step 2: Navigating to behandling page...');
-    await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).click();
+    // Step 2: We're already on the behandling page after opprettEuEosSak
+    // No need to navigate - just wait for page to be ready
+    console.log('📝 Step 2: Verifying we are on behandling page...');
     await page.waitForLoadState('networkidle');
 
     // Step 3: Look for unntak/exception option in menu
