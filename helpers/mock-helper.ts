@@ -55,3 +55,67 @@ export async function clearMockDataSilent(request: APIRequestContext): Promise<M
 
   return await response.json();
 }
+
+/**
+ * Options for creating journalføring oppgaver
+ */
+export interface CreateJfrOppgaveOptions {
+  /** Number of oppgaver to create (default: 1) */
+  antall?: number;
+  /** Create for virksomhet (company) instead of person (default: false) */
+  forVirksomhet?: boolean;
+  /** Include logical attachments (default: false) */
+  medLogiskVedlegg?: boolean;
+  /** Include attachments (default: false) */
+  medVedlegg?: boolean;
+  /** Assigned resource/user ID (default: Z990693 - testuser) */
+  tilordnetRessurs?: string;
+}
+
+/**
+ * Create journalføring oppgaver in melosys-mock
+ *
+ * This creates test journalføring tasks that will appear in "Mine oppgaver"
+ * and trigger JFR_NY_SAK_BRUKER process when completed.
+ *
+ * @param request - Playwright APIRequestContext
+ * @param options - Configuration options
+ * @returns true if successful
+ *
+ * @example
+ * // Create 1 journalføring oppgave for the test user
+ * await createJournalforingOppgaver(request);
+ *
+ * // Create 3 oppgaver with attachments
+ * await createJournalforingOppgaver(request, { antall: 3, medVedlegg: true });
+ */
+export async function createJournalforingOppgaver(
+  request: APIRequestContext,
+  options: CreateJfrOppgaveOptions = {}
+): Promise<boolean> {
+  const payload = {
+    antall: options.antall ?? 1,
+    forVirksomhet: options.forVirksomhet ?? false,
+    medLogiskVedlegg: options.medLogiskVedlegg ?? false,
+    medVedlegg: options.medVedlegg ?? false,
+    tilordnetRessurs: options.tilordnetRessurs ?? 'Z990693', // testuser
+  };
+
+  try {
+    const response = await request.post('http://localhost:8083/testdata/jfr-oppgave', {
+      data: payload,
+      headers: { 'Content-Type': 'application/json' },
+    });
+
+    if (!response.ok()) {
+      console.log(`⚠️ Failed to create journalføring oppgaver: ${response.status()}`);
+      return false;
+    }
+
+    console.log(`✅ Created ${payload.antall} journalføring oppgave(r)`);
+    return true;
+  } catch (error) {
+    console.log(`⚠️ Could not create journalføring oppgaver: ${error}`);
+    return false;
+  }
+}

@@ -120,7 +120,8 @@ export class JournalforingPage extends BasePage {
    */
   async fyllSakstype(sakstype: string): Promise<void> {
     await this.sakstypeDropdown.waitFor({ state: 'visible', timeout: 5000 });
-    await this.sakstypeDropdown.selectOption({ label: new RegExp(sakstype, 'i') });
+    // Use value directly instead of regex label matching
+    await this.sakstypeDropdown.selectOption(sakstype);
   }
 
   /**
@@ -128,7 +129,7 @@ export class JournalforingPage extends BasePage {
    */
   async fyllSakstema(sakstema: string): Promise<void> {
     await this.waitForDropdownToPopulate(this.sakstemaDropdown);
-    await this.sakstemaDropdown.selectOption({ label: new RegExp(sakstema, 'i') });
+    await this.sakstemaDropdown.selectOption(sakstema);
   }
 
   /**
@@ -136,7 +137,7 @@ export class JournalforingPage extends BasePage {
    */
   async fyllBehandlingstema(tema: string): Promise<void> {
     await this.waitForDropdownToPopulate(this.behandlingstemaDropdown);
-    await this.behandlingstemaDropdown.selectOption({ label: new RegExp(tema, 'i') });
+    await this.behandlingstemaDropdown.selectOption(tema);
   }
 
   /**
