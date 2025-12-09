@@ -182,18 +182,11 @@ test.describe('Journalføring', () => {
       await journalforing.ventPåSkjemaLastet();
 
       // Step 4: Create new case from document
-      // Note: Only pass sakstype as required, other fields may not be available
-      console.log('📝 Step 4: Creating new case from document...');
-      try {
-        await journalforing.opprettNySakOgJournalfør({
-          sakstype: 'FTRL',
-        });
-      } catch (error) {
-        console.log(`ℹ️ Could not complete OPPRETT flow: ${error}`);
-        console.log('   This may be expected if form requires different fields');
-        expect(true).toBe(true);
-        return;
-      }
+      // Use correct dropdown labels: "EU/EØS-land", "Avtaleland", "Utenfor avtaleland"
+      console.log('📝 Step 4: Filling form and submitting...');
+      await journalforing.opprettNySakOgJournalfør({
+        sakstype: 'EU/EØS-land',
+      });
 
       // Step 5: Verify case was created
       console.log('📝 Step 5: Verifying case creation...');

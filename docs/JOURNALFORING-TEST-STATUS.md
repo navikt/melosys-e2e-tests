@@ -4,7 +4,7 @@
 
 This document tracks the work done on journalføring e2e tests and what's needed to complete them.
 
-## Current Status (2025-12-09)
+## Current Status (2025-12-09) - UPDATED
 
 ### Branch
 `feature/tier1-core-tests-with-metrics`
@@ -18,6 +18,14 @@ This document tracks the work done on journalføring e2e tests and what's needed
 | `tests/core/sok-og-navigasjon.spec.ts` | 5 | ✅ All pass |
 | `tests/core/sed-mottak.spec.ts` | 6 | ✅ All pass |
 
+### Process Types Now Triggered
+
+| Process Type | Status | Triggered By |
+|--------------|--------|--------------|
+| `JFR_NY_SAK_BRUKER` | ✅ **NOW WORKING** | `skal kunne opprette ny sak fra journalpost` test |
+| `JFR_MOTTATT_SED` | ❌ Not yet | Process received SED from EESSI |
+| `JFR_UTGAAENDE_SED` | ❌ Not yet | Send SED to EESSI |
+
 ### Key Infrastructure Added
 
 1. **`helpers/mock-helper.ts`** - Added `createJournalforingOppgaver()` function
@@ -29,101 +37,57 @@ This document tracks the work done on journalføring e2e tests and what's needed
    - Options: `antall`, `forVirksomhet`, `medVedlegg`, `medLogiskVedlegg`, `tilordnetRessurs`
 
 2. **`pages/journalforing/journalforing.page.ts`** - Page Object for journalføring
-   - `velgOpprettNySak()` - Select "Opprett ny sak" radio
-   - `velgKnyttTilEksisterende()` - Select "Knytt til sak" radio
-   - `fyllSakstype()` - Fill sakstype dropdown
+   - `fyllSakstype()` - Fill sakstype dropdown (values: "EU/EØS-land", "Avtaleland", "Utenfor avtaleland")
+   - `fyllSakstema()` - Fill sakstema dropdown
+   - `fyllBehandlingstema()` - Fill behandlingstema dropdown
+   - `fyllBehandlingstype()` - Fill behandlingstype dropdown
+   - `velgLand()` - Select country from combobox (required for "Utsendt arbeidstaker")
+   - `fyllSoknadsperiode()` - Fill søknadsperiode dates (required)
    - `journalførDokument()` - Click journalfør button
    - `opprettNySakOgJournalfør()` - Complete OPPRETT workflow
 
 3. **`pages/journalforing/journalforing.assertions.ts`** - Assertions for journalføring
 
-## Missing: JFR Process Types Not Being Triggered
+## JFR_NY_SAK_BRUKER - COMPLETED ✅
 
-The metrics show these process types are **NOT** being triggered:
+The test "skal kunne opprette ny sak fra journalpost" now successfully triggers `JFR_NY_SAK_BRUKER`.
 
-| Process Type | Description | What triggers it |
-|--------------|-------------|------------------|
-| `JFR_NY_SAK_BRUKER` | Journalføring creates new case | Complete "Opprett ny sak" flow in UI |
-| `JFR_MOTTATT_SED` | Incoming SED document journalføring | Process received SED from EESSI |
-| `JFR_UTGAAENDE_SED` | Outgoing SED document journalføring | Send SED to EESSI |
+## What Was Fixed (2025-12-09)
 
-### Why They're Not Triggered
+### Problem: Form Not Submitting
 
-The current tests:
-1. Create journalføring oppgaver via mock service ✅
-2. Navigate to journalføring page ✅
-3. View the journalføring form ✅
-4. **BUT**: Don't complete the full submission flow ❌
+The original test filled the form but didn't actually submit successfully because:
+1. **Wrong sakstype values** - Used code "FTRL" instead of label "EU/EØS-land"
+2. **Missing country selection** - "Velg minst ett land" validation error
+3. **Missing søknadsperiode** - "Må fylles ut" validation error on Fra/Til dates
 
-The mock service creates oppgaver directly in the mock database, bypassing melosys-api's process instance flow.
+### Solution
 
-## Next Steps to Complete
+Updated `pages/journalforing/journalforing.page.ts` to:
+1. Use correct dropdown labels (discovered via debug test)
+2. Add `velgLand()` method to select country from combobox
+3. Add `fyllSoknadsperiode()` method to fill required dates
+4. Auto-fill these fields in `opprettNySakOgJournalfør()` when visible
 
-### 1. Complete JFR_NY_SAK_BRUKER Flow
+### Form Structure Discovered
 
-Update `tests/core/journalforing.spec.ts` test "skal kunne opprette ny sak fra journalpost":
-
-```typescript
-test('skal kunne opprette ny sak fra journalpost', async ({ page, request }) => {
-  // Step 1: Create journalføring oppgave
-  await createJournalforingOppgaver(request, { antall: 1 });
-
-  // Step 2: Navigate to forside and open journalføring
-  await hovedside.goto();
-  await oppgaver.ventPåOppgaverLastet();
-  await oppgaver.klikkJournalforingOppgaveIndex(0);
-  await journalforing.ventPåSkjemaLastet();
-
-  // Step 3: Select "Opprett ny sak" option
-  await journalforing.velgOpprettNySak();
-
-  // Step 4: Fill required fields
-  await journalforing.fyllSakstype('FTRL');
-  // May need: sakstema, behandlingstema, behandlingstype
-
-  // Step 5: Submit journalføring - THIS IS THE MISSING PART
-  await journalforing.journalførDokument();
-
-  // Step 6: Wait for process to complete
-  await waitForProcessInstances(request, 30);
-
-  // Step 7: Verify JFR_NY_SAK_BRUKER was triggered
-  // Check metrics or verify case was created
-});
+```
+Journalføring form:
+├── Sakstype dropdown: "EU/EØS-land" | "Avtaleland" | "Utenfor avtaleland"
+├── Sakstema dropdown: "Medlemskap og lovvalg" | "Unntak" | "Trygdeavgift"
+├── Behandlingstema dropdown: (multiple options based on sakstema)
+├── Behandlingstype dropdown: "Førstegangsbehandling" | "Ny vurdering" | etc.
+├── Land combobox (when behandlingstema is "Utsendt arbeidstaker...")
+│   └── Type to filter, click to select (e.g., "Belgia")
+├── Søknadsperiode fieldset
+│   ├── Fra date input (REQUIRED)
+│   └── Til date input
+└── Journalfør button
 ```
 
-### 2. Investigate JFR Form Requirements
+## Next Steps
 
-The journalføring form may require different fields based on:
-- The journalpost type (søknad, brev, etc.)
-- The selected action (OPPRETT, KNYTT, NY_VURDERING)
-- The sakstype (FTRL, EU_EOS, TRYGDEAVTALE)
-
-Need to:
-1. Use Playwright UI mode to inspect the actual form
-2. Identify all required fields
-3. Update page object methods accordingly
-
-Run in UI mode:
-```bash
-npx playwright test tests/core/journalforing.spec.ts -g "opprette ny sak" --ui
-```
-
-### 3. Fix Dropdown Selection
-
-Current issue: Some dropdowns may not populate immediately. The `waitForDropdownToPopulate` method exists but may need adjustment:
-
-```typescript
-// In journalforing.page.ts
-async fyllSakstype(sakstype: string): Promise<void> {
-  await this.sakstypeDropdown.waitFor({ state: 'visible', timeout: 5000 });
-  // Wait for dropdown to have values
-  await this.waitForDropdownToPopulate(this.sakstypeDropdown);
-  await this.sakstypeDropdown.selectOption(sakstype);
-}
-```
-
-### 4. Test SED Journalføring (JFR_MOTTATT_SED)
+### 1. Test SED Journalføring (JFR_MOTTATT_SED)
 
 For incoming SED journalføring, we need:
 1. Send a SED via mock service that creates a journalpost
@@ -132,13 +96,13 @@ For incoming SED journalføring, we need:
 
 Current `sed-helper.ts` sends SEDs but may not create journalposter in the expected format.
 
-## Files to Modify
+## Files Modified
 
-| File | Changes Needed |
-|------|----------------|
-| `tests/core/journalforing.spec.ts` | Complete the submission flow in tests |
-| `pages/journalforing/journalforing.page.ts` | May need more field methods |
-| `helpers/sed-helper.ts` | Investigate SED -> journalpost flow |
+| File | Status |
+|------|--------|
+| `tests/core/journalforing.spec.ts` | ✅ Updated - test now completes full flow |
+| `pages/journalforing/journalforing.page.ts` | ✅ Updated - country & date methods added |
+| `helpers/sed-helper.ts` | ⏳ Investigate SED -> journalpost flow for JFR_MOTTATT_SED |
 
 ## How to Test Locally
 
