@@ -555,6 +555,45 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "🎬 Videos, traces, and screenshots are available in the artifacts." >> $GITHUB_STEP_SUMMARY
 
+          # Add metrics coverage summary if available
+          if [ -f "playwright-report/metrics-coverage.json" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "## 📊 Metrics Coverage" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "_Process types and steps exercised by E2E tests_" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            # Extract summary from JSON
+            CASES_CREATED=$(jq -r '.coverage.summary.sakCreated // 0' playwright-report/metrics-coverage.json)
+            TREATMENTS_COMPLETED=$(jq -r '.coverage.summary.behandlingerCompleted // 0' playwright-report/metrics-coverage.json)
+            PROCESS_TYPES_COUNT=$(jq -r '.coverage.processTypes.exercised | length' playwright-report/metrics-coverage.json)
+            PROCESS_TYPES_PCT=$(jq -r '.coverage.processTypes.percentage | floor' playwright-report/metrics-coverage.json)
+            PROCESS_STEPS_COUNT=$(jq -r '.coverage.processSteps.exercised | length' playwright-report/metrics-coverage.json)
+
+            echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
+            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
+            echo "| Cases created | $CASES_CREATED |" >> $GITHUB_STEP_SUMMARY
+            echo "| Treatments completed | $TREATMENTS_COMPLETED |" >> $GITHUB_STEP_SUMMARY
+            echo "| Process types exercised | $PROCESS_TYPES_COUNT (~${PROCESS_TYPES_PCT}%) |" >> $GITHUB_STEP_SUMMARY
+            echo "| Process steps exercised | $PROCESS_STEPS_COUNT |" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            # Show process types
+            echo "<details><summary>📋 Process Types (click to expand)</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            jq -r '.coverage.processTypes.counts | to_entries | sort_by(-.value) | .[] | "- \(.key): \(.value)"' playwright-report/metrics-coverage.json >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+
+            # Show process steps
+            echo "<details><summary>📋 Process Steps (click to expand)</summary>" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            jq -r '.coverage.processSteps.counts | to_entries | sort_by(-(.value.success + .value.failed)) | .[] | "- \(.key): \(.value.success) success, \(.value.failed) failed"' playwright-report/metrics-coverage.json >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "</details>" >> $GITHUB_STEP_SUMMARY
+          fi
+
           # Add E2E coverage summary if coverage collection was enabled
           if [ "${{ inputs.collect_coverage }}" = "true" ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -678,7 +717,7 @@ jobs:
             playwright-report/
           retention-days: 7
 
-      - name: Upload test summary
+      - name: Upload test summary and metrics
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -686,6 +725,8 @@ jobs:
           path: |
             playwright-report/test-summary.md
             playwright-report/test-summary.json
+            playwright-report/metrics-summary.md
+            playwright-report/metrics-coverage.json
           retention-days: 30
 
       - name: Upload test videos
