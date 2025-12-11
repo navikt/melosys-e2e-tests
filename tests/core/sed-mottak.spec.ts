@@ -111,15 +111,15 @@ test.describe('SED Mottak', () => {
     const customConfig = {
       bucType: SedHelper.getBucTypes().LA_BUC_01,
       sedType: SedHelper.getSedTypes().A003,
-      avsenderLand: 'FI', // Finland
-      mottakerLand: 'NO',
+      avsenderId: 'FI:KELA', // Finland
+      avsenderNavn: 'Kela',
     };
 
     const result = await sedHelper.sendSed(customConfig);
 
     console.log(`   BUC Type: ${customConfig.bucType}`);
     console.log(`   SED Type: ${customConfig.sedType}`);
-    console.log(`   From: ${customConfig.avsenderLand} -> ${customConfig.mottakerLand}`);
+    console.log(`   From: ${customConfig.avsenderId}`);
     console.log(`   Result: ${result.success ? 'Success' : 'Failed'}`);
 
     if (result.success) {
@@ -140,8 +140,8 @@ test.describe('SED Mottak', () => {
     const result = await sedHelper.sendSed({
       bucType: 'LA_BUC_04',
       sedType: 'A003',
-      avsenderLand: 'SE',
-      mottakerLand: 'NO',
+      avsenderId: 'SE:FK',
+      avsenderNavn: 'Försäkringskassan',
     });
 
     if (!result.success) {
@@ -185,8 +185,8 @@ test.describe('SED Mottak', () => {
       const result = await sedHelper.sendSed({
         bucType: 'LA_BUC_04',
         sedType: sedType,
-        avsenderLand: 'SE',
-        mottakerLand: 'NO',
+        avsenderId: 'SE:FK',
+        avsenderNavn: 'Försäkringskassan',
       });
 
       console.log(`   ${sedType}: ${result.success ? '✅' : '⚠️'}`);
