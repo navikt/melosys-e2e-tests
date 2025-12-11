@@ -33,12 +33,14 @@ This document tracks progress on achieving e2e test coverage for the most freque
 ## Tier 1: Highest Priority (95%+ of production traffic)
 
 ### 1. MOTTAK_SED (841 instances)
-**Status:** 🟡 In Progress
+**Status:** ✅ Infrastructure Ready
 **Description:** Receiving SED documents from EESSI (EU social security exchange)
 
 #### Investigation Findings (2025-12-11):
 
-**Current Issue:** The `sed-helper.ts` uses wrong payload format!
+**RESOLVED:** SED testing infrastructure is now working!
+
+**Previous Issue:** The `sed-helper.ts` used wrong payload format.
 
 **Wrong format (current):**
 ```json
@@ -127,11 +129,38 @@ const response = await this.request.post(`${this.mockBaseUrl}/testdata/lagsak`, 
 });
 ```
 
-#### Next Steps:
-- [ ] Update `sed-helper.ts` to use correct payload format
-- [ ] Update `SedConfig` interface to include new fields
-- [ ] Test that correct format triggers MOTTAK_SED process type
-- [ ] Update existing SED tests to actually send SEDs
+#### Solution Implemented (2025-12-11):
+
+**New mock endpoint in melosys-docker-compose:**
+```
+POST http://localhost:8083/testdata/lag-melosys-eessi-melding
+```
+
+This endpoint:
+1. Creates a mock journalpost in SAF
+2. Publishes `MelosysEessiMelding` directly to `teammelosys.eessi.v1-local`
+3. Triggers MOTTAK_SED and related processes in melosys-api
+
+**Branch:** `feature/melosys-eessi-melding-producer` in melosys-docker-compose
+
+**Usage:**
+```bash
+curl -X POST http://localhost:8083/testdata/lag-melosys-eessi-melding \
+  -H "Content-Type: application/json" \
+  -d '{"sedType": "A003", "bucType": "LA_BUC_02"}'
+```
+
+#### Completed Tasks:
+- [x] Fixed `sed-helper.ts` payload format (sedHendelseDto wrapper)
+- [x] Created new mock endpoint for direct Kafka publishing
+- [x] Added mock journalpost creation
+- [x] Added `/api/buc/{id}/sed/{id}/grunnlag` endpoint
+- [x] Verified MOTTAK_SED triggers successfully
+
+#### Remaining Tasks:
+- [ ] Update E2E tests to use new endpoint
+- [ ] Add process verification assertions
+- [ ] Create comprehensive SED test suite
 
 #### Test approach:
 ```typescript
