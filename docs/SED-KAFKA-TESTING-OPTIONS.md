@@ -310,10 +310,62 @@ Based on `MelosysEessiMelding.kt` error() calls:
 5. Can coexist with existing SedHendelse flow
 
 **Implementation order:**
-1. Create PR to melosys-docker-compose with new endpoint
-2. Rebuild mock: `mvn install -f mock/pom.xml`
-3. Update sed-helper.ts in E2E tests to use new endpoint
-4. Verify MOTTAK_SED triggers
+1. Create PR to melosys-docker-compose with new endpoint ✅
+2. Rebuild mock: `mvn install -f mock/pom.xml` ✅
+3. Update sed-helper.ts in E2E tests to use new endpoint ✅
+4. Verify MOTTAK_SED triggers ✅
+
+---
+
+## E2E Test Helper Usage (Updated 2025-12-12)
+
+The `sed-helper.ts` has been updated to use the new endpoint. Example usage:
+
+```typescript
+import { test, expect } from '../../fixtures';
+import { SedHelper, SED_SCENARIOS } from '../../helpers/sed-helper';
+
+test('should process incoming A003 SED', async ({ request }) => {
+  const sedHelper = new SedHelper(request);
+
+  // Option 1: Use predefined scenarios
+  const result = await sedHelper.sendSed(SED_SCENARIOS.A003_MINIMAL);
+
+  // Option 2: Custom configuration
+  const result2 = await sedHelper.sendSed({
+    sedType: 'A003',
+    bucType: 'LA_BUC_02',
+    landkode: 'SE',
+    lovvalgsland: 'SE',
+    fnr: '30056928150',
+  });
+
+  expect(result.success).toBe(true);
+  console.log(`SED sent: sedId=${result.sedId}, journalpostId=${result.journalpostId}`);
+
+  // Wait for process to complete using E2E Support API
+  const response = await request.get(
+    'http://localhost:8080/internal/e2e/process-instances/await?timeoutSeconds=60&expectedInstances=1',
+    { failOnStatusCode: false }
+  );
+
+  const data = await response.json();
+  expect(data.status).toBe('COMPLETED');
+});
+```
+
+**Available SED Scenarios:**
+- `A003_MINIMAL` - Basic A003, all defaults
+- `A003_FRA_SVERIGE` - A003 from Sweden (LA_BUC_02)
+- `A003_MED_PERSON` - A003 with specific fnr
+- `A009_FRA_TYSKLAND` - Information request from Germany
+- `A001_FRA_DANMARK` - Application from Denmark
+- `A003_UNNTAK_FRA_SVERIGE` - Exception request (LA_BUC_04)
+
+**Process Types Triggered:**
+- `MOTTAK_SED` - Always triggered for incoming SED
+- `ARBEID_FLERE_LAND_NY_SAK` - For work in multiple countries
+- `ANMODNING_OM_UNNTAK_MOTTAK_NY_SAK` - For exception requests
 
 ---
 

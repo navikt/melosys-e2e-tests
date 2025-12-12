@@ -1,38 +1,73 @@
 import { APIRequestContext } from '@playwright/test';
 
 /**
- * Configuration for creating a SED event
+ * Configuration for creating a MelosysEessiMelding
  *
- * This matches the SedHendelseDto expected by melosys-mock's /testdata/lagsak endpoint.
- * See: melosys-docker-compose/mock/src/main/kotlin/.../testdata/LagSedController.kt
+ * This matches MelosysEessiMeldingRequestDto in melosys-mock's
+ * /testdata/lag-melosys-eessi-melding endpoint.
+ *
+ * All fields are optional - the endpoint provides sensible defaults.
+ * Only specify what you need to override.
+ *
+ * @see melosys-docker-compose/mock/src/main/kotlin/.../testdata/LagMelosysEessiMeldingController.kt
  */
 export interface SedConfig {
-  /** Sector code, e.g., 'LA' for Applicable Legislation (default: 'LA') */
-  sektorKode?: string;
-  /** BUC type, e.g., 'LA_BUC_04' */
-  bucType: string;
-  /** SED type, e.g., 'A003', 'A009' */
-  sedType: string;
-  /** Sender institution ID, e.g., 'SE:123', 'DK' */
-  avsenderId: string;
-  /** Sender institution name, e.g., 'Försäkringskassan', 'DK trygd' */
-  avsenderNavn?: string;
-  /** Receiver institution ID, e.g., 'NO:NAV', '444' (default: 'NO:NAV') */
-  mottakerId?: string;
-  /** Receiver institution name (default: 'NAV') */
-  mottakerNavn?: string;
-  /** Optional RINA document ID (generated if not provided) */
-  rinaDokumentId?: string;
-  /** RINA document version (default: '1') */
-  rinaDokumentVersjon?: string;
+  /** Unique SED identifier (auto-generated if not provided) */
+  sedId?: string;
+  /** Sequence ID for ordering multiple SEDs (default: 1) */
+  sequenceId?: number;
+  /** RINA case number (auto-generated if not provided) */
+  rinaSaksnummer?: string;
+  /** Sender institution ID, e.g., 'DK:1000', 'SE:FK' (default: DK:1000) */
+  avsenderId?: string;
+  /** Sender country code, e.g., 'DK', 'SE' (default: DK) */
+  landkode?: string;
+  /** Journal post ID reference (auto-generated if not provided) */
+  journalpostId?: string;
+  /** Document ID reference */
+  dokumentId?: string;
+  /** GSAK case number */
+  gsakSaksnummer?: number;
+  /** Person's fødselsnummer for journalpost (default: 30056928150) */
+  fnr?: string;
+  /** Person's aktør ID (default: 1111111111111) */
+  aktoerId?: string;
+  /** List of citizenship country codes, e.g., ['DK', 'NO'] */
+  statsborgerskap?: string[];
+  /** List of work country codes, e.g., ['NO', 'SE'] */
+  arbeidsland?: string[];
+  /** Period start date (ISO format, default: today) */
+  periodeFom?: string;
+  /** Period end date (ISO format, default: 1 year from today) */
+  periodeTom?: string;
+  /** Applicable legislation country code (default: DK) */
+  lovvalgsland?: string;
+  /** Article/provision reference (default: 13_1_a) */
+  artikkel?: string;
+  /** Whether this is a change to existing determination */
+  erEndring?: boolean;
+  /** Whether temporary determination applies */
+  midlertidigBestemmelse?: boolean;
+  /** Whether NAV was removed in X006 */
+  x006NavErFjernet?: boolean;
+  /** Additional information text */
+  ytterligereInformasjon?: string;
+  /** BUC type: LA_BUC_01, LA_BUC_02, LA_BUC_04, LA_BUC_05 (default: LA_BUC_02) */
+  bucType?: string;
+  /** SED type: A001, A003, A008, A009, A010, A011, X001, X006, X007, X008 (default: A003) */
+  sedType?: string;
+  /** SED version (default: 1) */
+  sedVersjon?: string;
 }
 
 /**
- * Response from mock service after creating SED
+ * Response from mock service after creating MelosysEessiMelding
  */
 export interface SedResponse {
   success: boolean;
-  rinaDokumentId?: string;
+  sedId?: string;
+  rinaSaksnummer?: string;
+  journalpostId?: string;
   message?: string;
 }
 
@@ -42,20 +77,38 @@ export interface SedResponse {
  * This helper interacts with the melosys-mock service to simulate
  * incoming SED documents from EU/EØS partner countries.
  *
- * SED documents are published to Kafka and consumed by melosys-api,
- * triggering process types like MOTTAK_SED and ARBEID_FLERE_LAND_NY_SAK.
+ * SED documents are published to Kafka (teammelosys.eessi.v1-local) and
+ * consumed by melosys-api, triggering process types like:
+ * - MOTTAK_SED
+ * - ARBEID_FLERE_LAND_NY_SAK
+ * - MOTTAK_SED_JOURNALFØRING
  *
- * @example Basic usage
+ * The mock endpoint automatically creates a journalpost in SAF mock,
+ * so melosys-api can fetch it during processing.
+ *
+ * @example Basic usage (all fields optional - defaults provided)
  * ```typescript
  * const sedHelper = new SedHelper(request);
  * const result = await sedHelper.sendSed({
- *   bucType: 'LA_BUC_02',
  *   sedType: 'A003',
- *   avsenderId: 'SE:FK',
- *   avsenderNavn: 'Försäkringskassan',
+ *   bucType: 'LA_BUC_02',
+ *   landkode: 'SE',
  * });
  * expect(result.success).toBe(true);
  * await sedHelper.waitForSedProcessed();
+ * ```
+ *
+ * @example With specific person and period
+ * ```typescript
+ * const sedHelper = new SedHelper(request);
+ * await sedHelper.sendSed({
+ *   sedType: 'A003',
+ *   bucType: 'LA_BUC_02',
+ *   fnr: '30056928150',
+ *   lovvalgsland: 'DK',
+ *   periodeFom: '2025-01-01',
+ *   periodeTom: '2025-12-31',
+ * });
  * ```
  *
  * @example Using predefined scenarios
@@ -65,7 +118,7 @@ export interface SedResponse {
  * await sedHelper.waitForSedProcessed();
  * ```
  *
- * @see melosys-docker-compose/mock/src/main/kotlin/.../testdata/LagSedController.kt
+ * @see melosys-docker-compose/mock/src/main/kotlin/.../testdata/LagMelosysEessiMeldingController.kt
  */
 export class SedHelper {
   private readonly mockBaseUrl = 'http://localhost:8083';
@@ -75,41 +128,37 @@ export class SedHelper {
 
   /**
    * Send a SED event via the mock service
-   * This publishes a message to Kafka which melosys-api will consume
    *
-   * The mock endpoint expects a RequestDto with sedHendelseDto wrapper:
-   * { sedHendelseDto: { bucType, sedType, avsenderId, ... } }
+   * This publishes a MelosysEessiMelding to Kafka (teammelosys.eessi.v1-local)
+   * which melosys-api consumes to trigger MOTTAK_SED and related processes.
+   *
+   * The mock endpoint automatically:
+   * - Generates IDs for sedId, rinaSaksnummer, journalpostId if not provided
+   * - Creates a mock journalpost in SAF
+   * - Uses sensible defaults for all fields
+   *
+   * @param config - Configuration for the SED. All fields optional.
    */
-  async sendSed(config: SedConfig): Promise<SedResponse> {
-    const rinaDokumentId = config.rinaDokumentId || this.generateRinaId();
-
-    // Build the sedHendelseDto payload matching the mock API schema
-    const sedHendelseDto = {
-      sektorKode: config.sektorKode || 'LA',
-      bucType: config.bucType,
-      sedType: config.sedType,
-      avsenderId: config.avsenderId,
-      avsenderNavn: config.avsenderNavn || this.getDefaultSenderName(config.avsenderId),
-      mottakerId: config.mottakerId || 'NO:NAV',
-      mottakerNavn: config.mottakerNavn || 'NAV',
-      rinaDokumentId: rinaDokumentId,
-      rinaDokumentVersjon: config.rinaDokumentVersjon || '1',
-    };
-
+  async sendSed(config: SedConfig = {}): Promise<SedResponse> {
     try {
-      const response = await this.request.post(`${this.mockBaseUrl}/testdata/lagsak`, {
-        data: {
-          sedHendelseDto: sedHendelseDto,
-        },
-        headers: {
-          'Content-Type': 'application/json',
-        },
-      });
+      const response = await this.request.post(
+        `${this.mockBaseUrl}/testdata/lag-melosys-eessi-melding`,
+        {
+          data: config,
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
 
       if (response.ok()) {
+        const data = await response.json();
         return {
           success: true,
-          rinaDokumentId: rinaDokumentId,
+          sedId: data.sedId,
+          rinaSaksnummer: data.rinaSaksnummer,
+          journalpostId: data.journalpostId,
+          message: data.message,
         };
       } else {
         const text = await response.text();
@@ -124,25 +173,6 @@ export class SedHelper {
         message: `Error sending SED: ${error}`,
       };
     }
-  }
-
-  /**
-   * Get a default sender name based on sender ID (country code)
-   */
-  private getDefaultSenderName(avsenderId: string): string {
-    const countryCode = avsenderId.split(':')[0].toUpperCase();
-    const countryNames: Record<string, string> = {
-      SE: 'Försäkringskassan',
-      DK: 'Udbetaling Danmark',
-      DE: 'Deutsche Rentenversicherung',
-      FI: 'Kela',
-      NL: 'SVB',
-      PL: 'ZUS',
-      UK: 'HMRC',
-      FR: 'CLEISS',
-      NO: 'NAV',
-    };
-    return countryNames[countryCode] || `${countryCode} Social Security`;
   }
 
   /**
@@ -251,19 +281,19 @@ export class SedHelper {
     } as const;
   }
 
-  /**
-   * Generate a unique RINA document ID
-   */
-  private generateRinaId(): string {
-    return `RINA-DOC-${Date.now()}-${Math.random().toString(36).substring(2, 8)}`;
-  }
 }
 
 /**
  * Predefined SED configurations for common test scenarios
  *
- * These match the SedHendelseDto format expected by melosys-mock.
- * avsenderId format: 'COUNTRY_CODE' or 'COUNTRY_CODE:INSTITUTION_ID'
+ * These match the MelosysEessiMeldingRequestDto format.
+ * All fields are optional - the mock provides sensible defaults.
+ *
+ * Common patterns:
+ * - landkode: Country code (DK, SE, DE, etc.) - used to derive avsenderId if not specified
+ * - avsenderId: Full sender ID like 'SE:FK' or 'DK:1000'
+ * - lovvalgsland: Which country has applicable legislation
+ * - arbeidsland: Countries where person works (for multi-country scenarios)
  */
 export const SED_SCENARIOS = {
   /**
@@ -273,9 +303,9 @@ export const SED_SCENARIOS = {
   A003_FRA_SVERIGE: {
     bucType: 'LA_BUC_02',
     sedType: 'A003',
+    landkode: 'SE',
     avsenderId: 'SE:FK',
-    avsenderNavn: 'Försäkringskassan',
-    sektorKode: 'LA',
+    lovvalgsland: 'SE',
   } as SedConfig,
 
   /**
@@ -285,9 +315,9 @@ export const SED_SCENARIOS = {
   A009_FRA_TYSKLAND: {
     bucType: 'LA_BUC_02',
     sedType: 'A009',
+    landkode: 'DE',
     avsenderId: 'DE:DRV',
-    avsenderNavn: 'Deutsche Rentenversicherung',
-    sektorKode: 'LA',
+    lovvalgsland: 'DE',
   } as SedConfig,
 
   /**
@@ -297,9 +327,9 @@ export const SED_SCENARIOS = {
   A001_FRA_DANMARK: {
     bucType: 'LA_BUC_01',
     sedType: 'A001',
+    landkode: 'DK',
     avsenderId: 'DK:UD',
-    avsenderNavn: 'Udbetaling Danmark',
-    sektorKode: 'LA',
+    lovvalgsland: 'DK',
   } as SedConfig,
 
   /**
@@ -309,8 +339,30 @@ export const SED_SCENARIOS = {
   A003_UNNTAK_FRA_SVERIGE: {
     bucType: 'LA_BUC_04',
     sedType: 'A003',
+    landkode: 'SE',
     avsenderId: 'SE:FK',
-    avsenderNavn: 'Försäkringskassan',
-    sektorKode: 'LA',
+    lovvalgsland: 'SE',
+  } as SedConfig,
+
+  /**
+   * Minimal A003 - uses all defaults
+   * Good for quick smoke tests
+   */
+  A003_MINIMAL: {
+    sedType: 'A003',
+    bucType: 'LA_BUC_02',
+  } as SedConfig,
+
+  /**
+   * A003 with specific person (fnr)
+   * Use when you need to verify case is created for specific person
+   */
+  A003_MED_PERSON: {
+    sedType: 'A003',
+    bucType: 'LA_BUC_02',
+    fnr: '30056928150', // Default test person
+    landkode: 'DK',
+    lovvalgsland: 'DK',
+    arbeidsland: ['NO'],
   } as SedConfig,
 } as const;
