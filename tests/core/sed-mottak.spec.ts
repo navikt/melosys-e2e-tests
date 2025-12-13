@@ -482,7 +482,7 @@ test.describe('SED Mottak via melosys-eessi @eessi', () => {
     expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
 
     console.log('📝 Step 3: Verifying fagsak was created...');
-    await withDatabase(async (db) => {
+    const fagsak = await withDatabase(async (db) => {
       const fagsaker = await db.query(
         `SELECT f.SAKSNUMMER, f.GSAK_SAKSNUMMER, f.STATUS, f.REGISTRERT_DATO
          FROM FAGSAK f
@@ -491,21 +491,34 @@ test.describe('SED Mottak via melosys-eessi @eessi', () => {
       );
 
       if (fagsaker.length > 0) {
-        console.log(`   ✅ Fagsak found: SAKSNUMMER=${fagsaker[0].SAKSNUMMER}`);
-      } else {
-        console.log('   ⚠️ No recent fagsak found - checking process instances...');
-        const processes = await db.query(
-          `SELECT PI.PROSESS_TYPE, PI.STATUS, PI.SIST_FULLFORT_STEG
-           FROM PROSESSINSTANS PI
-           WHERE PI.REGISTRERT_DATO > SYSDATE - INTERVAL '5' MINUTE`
-        );
-        for (const p of processes) {
-          console.log(`      - ${p.PROSESS_TYPE}: ${p.STATUS} (${p.SIST_FULLFORT_STEG})`);
-        }
+        console.log(`   ✅ Fagsak found: SAKSNUMMER=${fagsaker[0].SAKSNUMMER}, STATUS=${fagsaker[0].STATUS}`);
+        return fagsaker[0];
       }
+
+      // No fagsak found - gather debug info
+      console.log('   ❌ No fagsak found - gathering debug info...');
+
+      const processes = await db.query(
+        `SELECT PI.PROSESS_TYPE, PI.STATUS, PI.SIST_FULLFORT_STEG
+         FROM PROSESSINSTANS PI
+         WHERE PI.REGISTRERT_DATO > SYSDATE - INTERVAL '5' MINUTE
+         ORDER BY PI.REGISTRERT_DATO DESC`
+      );
+      console.log('   Process instances:');
+      for (const p of processes) {
+        console.log(`      - ${p.PROSESS_TYPE}: ${p.STATUS} (step: ${p.SIST_FULLFORT_STEG})`);
+      }
+
+      if (processes.length === 0) {
+        console.log('   No process instances found - Kafka message may not have reached melosys-api');
+        console.log('   Check: Is melosys-api consuming from teammelosys.eessi.v1-local?');
+      }
+
+      return null;
     });
 
-    console.log('✅ Full eessi flow completed');
+    expect(fagsak, 'Expected fagsak to be created by A003 EESSI flow').not.toBeNull();
+    console.log('✅ Full eessi flow completed - fagsak created');
   });
 
   test('skal håndtere A009 informasjonsforespørsel via eessi', async ({ request }) => {
