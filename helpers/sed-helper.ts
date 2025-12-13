@@ -316,9 +316,10 @@ export class SedHelper {
 
   /**
    * Generate a unique ID for RINA documents/cases
+   * Must be alphanumeric only (no hyphens) to match låsreferanse validation: ^\d+_[a-zA-Z0-9]+_\d+$
    */
   private generateId(): string {
-    return `${Date.now()}-${Math.random().toString(36).substring(2, 9)}`;
+    return `${Date.now()}${Math.random().toString(36).substring(2, 9)}`;
   }
 
   /**

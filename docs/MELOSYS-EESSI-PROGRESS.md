@@ -1,37 +1,89 @@
 # Melosys-EESSI Integration Progress
 
-**Last Updated:** 2025-12-13
-**Status:** 🔄 IN PROGRESS - Fagsak not being created via EESSI flow
+**Last Updated:** 2025-12-13 17:15
+**Status:** 🔧 ROOT CAUSE IDENTIFIED - melosys-api Kafka consumer disconnected
 
-## Current Issue
+## Root Cause Identified (2025-12-13)
 
-The EESSI flow works (SedHendelse → melosys-eessi → EUX mock), but **no fagsak is being created** in melosys-api.
+### The Problem
+melosys-api's EESSI Kafka consumer has **disconnected from the consumer group**, leaving 72 messages unprocessed on the `teammelosys.eessi.v1-local` topic.
 
-**Symptoms:**
+### Evidence
+```bash
+$ docker exec kafka kafka-consumer-groups --bootstrap-server kafka.melosys.docker-internal:9092 \
+    --describe --group teammelosys-eessiMelding-consumer-local
+
+GROUP                                   TOPIC                      PARTITION  CURRENT-OFFSET  LOG-END-OFFSET  LAG   CONSUMER-ID
+teammelosys-eessiMelding-consumer-local teammelosys.eessi.v1-local 0          44              116             72    -  (EMPTY!)
 ```
-❌ No fagsak found - gathering debug info...
-Process instances:
-No process instances found - Kafka message may not have reached melosys-api
-Check: Is melosys-api consuming from teammelosys.eessi.v1-local?
+
+- **LAG: 72** - 72 messages waiting to be processed
+- **CONSUMER-ID: -** - No active consumer connected!
+- Kafka shows "unhealthy" status, which may have caused the consumer disconnect
+
+### Solution
+**Restart melosys-api from your IDE** (it's running as a local Java process, PID 58402):
+1. Stop the melosys-api Java process in IntelliJ/IDE
+2. Start melosys-api again
+3. The Kafka consumer will reconnect and process the backlog
+
+### Verification After Restart
+```bash
+# Check consumer is connected (CONSUMER-ID should NOT be empty)
+docker exec kafka kafka-consumer-groups --bootstrap-server kafka.melosys.docker-internal:9092 \
+    --describe --group teammelosys-eessiMelding-consumer-local
+
+# Should show something like:
+# LAG: 0, CONSUMER-ID: aiven-melosys-eessi-consumer-0-xxxxx
+
+# Check melosys-api logs for EESSI processing
+docker logs melosys-api 2>&1 | grep -E "MOTTAK_SED|eessi|fagsak" | tail -20
 ```
 
-**Possible causes:**
-1. melosys-eessi isn't publishing to `teammelosys.eessi.v1-local`
-2. melosys-api isn't consuming from that topic
-3. Message format from melosys-eessi doesn't match what melosys-api expects
-4. Business logic: A003 from foreign country may not create fagsak (it's a "reply")
+## Investigation Summary
 
-**Test file:** `tests/core/sed-mottak.spec.ts` - test "skal opprette fagsak via full eessi-flow med A003 fra Sverige"
+### What's Working (Verified ✅)
 
-## What's Working
+1. **SedHendelse published to Kafka** ✅
+   - `/testdata/lagsak` → `eessibasis-sedmottatt-v1-local`
 
-- ✅ melosys-eessi health check passes (`curl http://localhost:8081/internal/health`)
-- ✅ Mock returns correct SED type (A003, A009, etc.) via SedTypeRegistry
-- ✅ `/testdata/lagsak` endpoint publishes SedHendelse to Kafka
-- ✅ melosys-eessi fetches SED from `/eux/cpi/buc/{id}/sed/{sedId}`
-- ✅ 4 of 5 eessi tests pass (the fagsak verification test fails)
+2. **melosys-eessi receives and processes** ✅
+   ```
+   INFO | Mottatt melding om sed mottatt: SedHendelse(sedType=A003)
+   INFO | Søker etter person for SED
+   INFO | Resultat fra forsøk på identifisering av person: IDENTIFISERT
+   ```
 
-## Recent Fixes (This Session)
+3. **Person identification works** ✅
+   - PDL mock returns person for fnr from SED
+   - "IDENTIFISERT" logged
+
+4. **Journalpost created** ✅
+   ```
+   INFO | Oppretter journalpost for SED 1765640803407-dnllcsu
+   INFO | Oppretter journalpost av type INNGAAENDE for arkivsakid ukjent
+   ```
+
+5. **MelosysEessiMelding published** ✅
+   ```
+   INFO | Publiserer melding om SED mottatt. SED: 669847581
+   INFO | Publiserer eessiMelding melding på aiven
+   ```
+
+6. **Messages on topic** ✅
+   ```bash
+   $ docker exec kafka kafka-console-consumer --topic teammelosys.eessi.v1-local --from-beginning --max-messages 1
+   {"sedId":"382484353","rinaSaksnummer":"881312640","journalpostId":"634356487","aktoerId":"1111111111111",...}
+   ```
+
+### What's NOT Working (Fixed by restart)
+
+7. **melosys-api consumer disconnected** ❌
+   - Consumer was set up at startup (14:22:29)
+   - Later disconnected (possibly due to Kafka being unhealthy)
+   - No active consumer = no message processing
+
+## Previous Issues (Resolved)
 
 ### 1. SED Type Registry (melosys-docker-compose)
 
@@ -44,6 +96,8 @@ Check: Is melosys-api consuming from teammelosys.eessi.v1-local?
 - `FileUtils.kt` - Uses sedType for correct fallback file
 
 **Commit:** `f3bc803` - "Add SED type registry for correct mock responses"
+
+**Test file:** `tests/core/sed-mottak.spec.ts` - test "skal opprette fagsak via full eessi-flow med A003 fra Sverige"
 
 ### 2. Fagsak Verification Test (melosys-e2e-tests)
 
@@ -58,62 +112,53 @@ Check: Is melosys-api consuming from teammelosys.eessi.v1-local?
 ```
 Test calls /testdata/lagsak (mock)
         ↓
-   Kafka: eessibasis-sedmottatt-v1-local
+   Kafka: eessibasis-sedmottatt-v1-local          ✅ Working
         ↓
-   melosys-eessi consumes
+   melosys-eessi consumes                          ✅ Working
         ↓
-   Fetches SED from /eux/cpi/buc/{id}/sed/{sedId} (mock)
+   Fetches SED from /eux/cpi/buc/{id}/sed/{sedId}  ✅ Working (SedTypeRegistry)
         ↓
-   SedTypeRegistry returns correct SED type (A003, A009, etc.)
+   melosys-eessi identifies person via PDL (mock)  ✅ Working (IDENTIFISERT)
         ↓
-   melosys-eessi identifies person via PDL (mock)
+   Creates journalpost                             ✅ Working
         ↓
-   Creates journalpost
+   Kafka: teammelosys.eessi.v1-local               ✅ Messages present (72 waiting)
         ↓
-   Kafka: teammelosys.eessi.v1-local  ← IS THIS WORKING?
+   melosys-api consumes                            ❌ Consumer disconnected!
         ↓
-   melosys-api consumes               ← IS THIS WORKING?
-        ↓
-   MOTTAK_SED process → fagsak        ← NOT HAPPENING
+   MOTTAK_SED process → fagsak                     ❌ Not triggered (no consumer)
 ```
 
-## Next Steps to Investigate
+## Next Step: Restart melosys-api
 
-1. **Check Kafka topics:**
-   ```bash
-   # List topics
-   docker exec -it kafka kafka-topics --list --bootstrap-server localhost:9092
+**The fix is simple: Restart melosys-api from IntelliJ**
 
-   # Check messages on teammelosys.eessi.v1-local
-   docker exec -it kafka kafka-console-consumer --bootstrap-server localhost:9092 \
-     --topic teammelosys.eessi.v1-local --from-beginning --max-messages 5
-   ```
-
-2. **Check melosys-api Kafka consumer config:**
-   - Is it configured to consume from `teammelosys.eessi.v1-local`?
-   - Check application.yml or environment variables
-
-3. **Check melosys-eessi logs:**
-   - Is it successfully publishing to `teammelosys.eessi.v1-local`?
-   - Any errors after processing SED?
-
-4. **Consider business logic:**
-   - Does A003 from foreign country create a fagsak?
-   - Maybe only A001 (application) creates fagsak?
+After restart, the consumer will reconnect and process all 72 pending messages.
 
 ## Quick Commands
 
 ```bash
+# Check consumer group status (CONSUMER-ID should NOT be empty)
+docker exec kafka kafka-consumer-groups --bootstrap-server kafka.melosys.docker-internal:9092 \
+    --describe --group teammelosys-eessiMelding-consumer-local
+
+# Check messages on topic
+docker exec kafka kafka-console-consumer --bootstrap-server kafka.melosys.docker-internal:9092 \
+    --topic teammelosys.eessi.v1-local --from-beginning --max-messages 3
+
+# Check melosys-eessi logs (should show IDENTIFISERT)
+docker logs melosys-eessi 2>&1 | grep -E "IDENTIFISERT|Publiserer|ERROR" | tail -20
+
+# Check melosys-api health
+curl http://localhost:8080/internal/health
+
 # Run eessi tests
 npx playwright test sed-mottak --grep "@eessi"
 
 # Run specific fagsak test
 npx playwright test sed-mottak.spec.ts --grep "fagsak via full eessi"
 
-# Check melosys-eessi health
-curl http://localhost:8081/internal/health
-
-# Test SedHendelse endpoint
+# Test SedHendelse endpoint manually
 curl -X POST http://localhost:8083/testdata/lagsak \
   -H "Content-Type: application/json" \
   -d '{"sedHendelseDto":{"bucType":"LA_BUC_02","sedType":"A003"}}'
