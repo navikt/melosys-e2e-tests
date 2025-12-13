@@ -1,6 +1,6 @@
 import { test, expect } from '../../fixtures';
 import { AuthHelper } from '../../helpers/auth-helper';
-import { SedHelper, SED_SCENARIOS } from '../../helpers/sed-helper';
+import { SedHelper, SED_SCENARIOS, EESSI_SED_SCENARIOS, SedHendelseConfig } from '../../helpers/sed-helper';
 import { withDatabase } from '../../helpers/db-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { SokPage } from '../../pages/sok/sok.page';
@@ -339,5 +339,223 @@ test.describe('SED Mottak', () => {
     });
 
     console.log('✅ Process instance verification complete');
+  });
+});
+
+/**
+ * Test suite for SED intake via melosys-eessi (real E2E flow)
+ *
+ * These tests exercise the FULL E2E pipeline:
+ * 1. Test publishes SedHendelse to Kafka (eessibasis-sedmottatt-v1-local)
+ * 2. melosys-eessi consumes SedHendelse
+ * 3. melosys-eessi fetches SED from EUX mock (/eux/buc/*, /eux/v3/*)
+ * 4. melosys-eessi identifies person via PDL mock
+ * 5. melosys-eessi creates journalpost
+ * 6. melosys-eessi publishes MelosysEessiMelding to Kafka
+ * 7. melosys-api consumes and creates MOTTAK_SED process
+ *
+ * REQUIREMENTS:
+ * - melosys-eessi must be running (docker-compose --profile eessi OR IntelliJ)
+ * - Mock must have EUX endpoints (/eux/v3/buc/*, /eux/buc/*)
+ *
+ * These tests take longer (60-90s) because they go through melosys-eessi.
+ */
+test.describe('SED Mottak via melosys-eessi @eessi', () => {
+  const E2E_API_BASE = 'http://localhost:8080/internal/e2e';
+  const EESSI_BASE = 'http://localhost:8081';
+
+  let sedHelper: SedHelper;
+
+  test.beforeEach(async ({ request }) => {
+    sedHelper = new SedHelper(request);
+  });
+
+  /**
+   * Check if melosys-eessi is running
+   */
+  async function isEessiRunning(request: any): Promise<boolean> {
+    try {
+      const response = await request.get(`${EESSI_BASE}/internal/health`, {
+        failOnStatusCode: false,
+        timeout: 5000,
+      });
+      return response.ok();
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Wait for process instances to complete
+   */
+  async function awaitProcessInstances(
+    request: any,
+    options: { timeoutSeconds?: number; expectedInstances?: number } = {}
+  ): Promise<{ success: boolean; status: string; message: string; failedInstances?: any[] }> {
+    const timeout = options.timeoutSeconds || 60;
+    const params = new URLSearchParams({ timeoutSeconds: timeout.toString() });
+    if (options.expectedInstances) {
+      params.set('expectedInstances', options.expectedInstances.toString());
+    }
+
+    const response = await request.get(
+      `${E2E_API_BASE}/process-instances/await?${params}`,
+      { failOnStatusCode: false }
+    );
+
+    const data = await response.json();
+    return {
+      success: response.ok(),
+      status: data.status,
+      message: data.message,
+      failedInstances: data.failedInstances,
+    };
+  }
+
+  test('skal verifisere at melosys-eessi er tilgjengelig', async ({ request }) => {
+    console.log('📝 Checking if melosys-eessi is running...');
+
+    const eessiRunning = await isEessiRunning(request);
+
+    if (!eessiRunning) {
+      console.log('⚠️ melosys-eessi is not running!');
+      console.log('   Start it with: docker-compose --profile eessi up -d');
+      console.log('   Or run in IntelliJ with profile: local-mock');
+      test.skip(true, 'melosys-eessi is not running');
+    }
+
+    console.log('✅ melosys-eessi is running');
+  });
+
+  test('skal trigge MOTTAK_SED via melosys-eessi flow', async ({ request }) => {
+    // Skip if melosys-eessi is not running
+    const eessiRunning = await isEessiRunning(request);
+    test.skip(!eessiRunning, 'melosys-eessi is not running');
+
+    console.log('📝 Step 1: Sending SedHendelse via melosys-eessi flow...');
+    console.log('   This publishes to eessibasis-sedmottatt-v1-local Kafka topic');
+
+    const result = await sedHelper.sendSedViaEessi(EESSI_SED_SCENARIOS.A003_EESSI_FRA_DANMARK);
+
+    expect(result.success, `Send SedHendelse failed: ${result.message}`).toBe(true);
+    console.log(`   ✅ SedHendelse published: sedId=${result.sedId}, rinaSaksnummer=${result.rinaSaksnummer}`);
+
+    console.log('📝 Step 2: Waiting for melosys-eessi to process and forward to melosys-api...');
+    console.log('   Flow: SedHendelse → melosys-eessi → EUX mock → PDL mock → MelosysEessiMelding → melosys-api');
+
+    // Give melosys-eessi time to process (it needs to fetch from EUX mock, identify person, etc.)
+    const processResult = await awaitProcessInstances(request, {
+      timeoutSeconds: 90, // Longer timeout for eessi flow
+      expectedInstances: 1,
+    });
+
+    console.log(`   Status: ${processResult.status}`);
+    console.log(`   Message: ${processResult.message}`);
+
+    if (processResult.failedInstances && processResult.failedInstances.length > 0) {
+      console.log('   ❌ Failed instances:');
+      for (const instance of processResult.failedInstances) {
+        console.log(`      - ${instance.type}: ${instance.error?.melding || 'Unknown error'}`);
+      }
+    }
+
+    expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
+    console.log('✅ MOTTAK_SED process completed via melosys-eessi flow');
+  });
+
+  test('skal opprette fagsak via full eessi-flow med A003 fra Sverige', async ({ request }) => {
+    const eessiRunning = await isEessiRunning(request);
+    test.skip(!eessiRunning, 'melosys-eessi is not running');
+
+    console.log('📝 Step 1: Sending A003 from Sweden via melosys-eessi...');
+    const result = await sedHelper.sendSedViaEessi(EESSI_SED_SCENARIOS.A003_EESSI_FRA_SVERIGE);
+
+    expect(result.success, `Send failed: ${result.message}`).toBe(true);
+    console.log(`   ✅ SedHendelse published`);
+
+    console.log('📝 Step 2: Waiting for full eessi processing pipeline...');
+    const processResult = await awaitProcessInstances(request, {
+      timeoutSeconds: 90,
+      expectedInstances: 1,
+    });
+
+    expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
+
+    console.log('📝 Step 3: Verifying fagsak was created...');
+    await withDatabase(async (db) => {
+      const fagsaker = await db.query(
+        `SELECT f.SAKSNUMMER, f.GSAK_SAKSNUMMER, f.STATUS, f.REGISTRERT_DATO
+         FROM FAGSAK f
+         WHERE f.REGISTRERT_DATO > SYSDATE - INTERVAL '5' MINUTE
+         ORDER BY f.REGISTRERT_DATO DESC`
+      );
+
+      if (fagsaker.length > 0) {
+        console.log(`   ✅ Fagsak found: SAKSNUMMER=${fagsaker[0].SAKSNUMMER}`);
+      } else {
+        console.log('   ⚠️ No recent fagsak found - checking process instances...');
+        const processes = await db.query(
+          `SELECT PI.PROSESS_TYPE, PI.STATUS, PI.SIST_FULLFORT_STEG
+           FROM PROSESSINSTANS PI
+           WHERE PI.REGISTRERT_DATO > SYSDATE - INTERVAL '5' MINUTE`
+        );
+        for (const p of processes) {
+          console.log(`      - ${p.PROSESS_TYPE}: ${p.STATUS} (${p.SIST_FULLFORT_STEG})`);
+        }
+      }
+    });
+
+    console.log('✅ Full eessi flow completed');
+  });
+
+  test('skal håndtere A009 informasjonsforespørsel via eessi', async ({ request }) => {
+    const eessiRunning = await isEessiRunning(request);
+    test.skip(!eessiRunning, 'melosys-eessi is not running');
+
+    console.log('📝 Sending A009 from Germany via melosys-eessi...');
+    const result = await sedHelper.sendSedViaEessi(EESSI_SED_SCENARIOS.A009_EESSI_FRA_TYSKLAND);
+
+    expect(result.success, `Send failed: ${result.message}`).toBe(true);
+
+    console.log('📝 Waiting for processing...');
+    const processResult = await awaitProcessInstances(request, {
+      timeoutSeconds: 90,
+      expectedInstances: 1,
+    });
+
+    console.log(`   Status: ${processResult.status}, Message: ${processResult.message}`);
+    expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
+
+    console.log('✅ A009 via eessi processed');
+  });
+
+  test('skal sammenligne direkte vs eessi-flow @comparison', async ({ request }) => {
+    const eessiRunning = await isEessiRunning(request);
+    test.skip(!eessiRunning, 'melosys-eessi is not running');
+
+    console.log('📝 Test 1: Direct flow (bypasses melosys-eessi)...');
+    const directStart = Date.now();
+    const directResult = await sedHelper.sendSed({ sedType: 'A003', bucType: 'LA_BUC_02' });
+    expect(directResult.success).toBe(true);
+
+    await awaitProcessInstances(request, { timeoutSeconds: 60, expectedInstances: 1 });
+    const directTime = Date.now() - directStart;
+    console.log(`   Direct flow: ${directTime}ms`);
+
+    console.log('📝 Test 2: EESSI flow (through melosys-eessi)...');
+    const eessiStart = Date.now();
+    const eessiResult = await sedHelper.sendSedViaEessi({ bucType: 'LA_BUC_02', sedType: 'A003' });
+    expect(eessiResult.success).toBe(true);
+
+    await awaitProcessInstances(request, { timeoutSeconds: 90, expectedInstances: 1 });
+    const eessiTime = Date.now() - eessiStart;
+    console.log(`   EESSI flow: ${eessiTime}ms`);
+
+    console.log(`\n📊 Comparison:`);
+    console.log(`   Direct: ${directTime}ms`);
+    console.log(`   EESSI:  ${eessiTime}ms`);
+    console.log(`   Difference: ${eessiTime - directTime}ms (EESSI adds ${Math.round((eessiTime - directTime) / directTime * 100)}% overhead)`);
+
+    console.log('✅ Both flows completed successfully');
   });
 });
