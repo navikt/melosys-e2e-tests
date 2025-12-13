@@ -76,6 +76,9 @@ export interface SedResponse {
  *
  * This matches SedHendelseDto in melosys-mock's /testdata/lagsak endpoint.
  * Used for real E2E testing through melosys-eessi.
+ *
+ * Note: rinaSakId is NOT a field in SedHendelseDto - it's generated server-side
+ * by LagSedController.lagSedHendelseFraDto()
  */
 export interface SedHendelseConfig {
   /** BUC type: LA_BUC_01, LA_BUC_02, LA_BUC_04, LA_BUC_05 */
@@ -96,8 +99,6 @@ export interface SedHendelseConfig {
   rinaDokumentVersjon?: string;
   /** Sector code (default: 'LA') */
   sektorKode?: string;
-  /** RINA case ID (auto-generated if not provided) */
-  rinaSakId?: string;
 }
 
 /**
@@ -261,15 +262,20 @@ export class SedHelper {
    * ```
    */
   async sendSedViaEessi(config: SedHendelseConfig): Promise<SedResponse> {
-    const rinaSakId = config.rinaSakId || this.generateId();
+    // Note: rinaSakId is generated internally by LagSedController, not passed in
     const rinaDokumentId = config.rinaDokumentId || this.generateId();
 
     try {
+      // Payload matches SedHendelseDto in LagSedController.kt
+      // Fields: sektorKode, bucType, avsenderId, avsenderNavn, mottakerId, mottakerNavn,
+      //         rinaDokumentId, rinaDokumentVersjon, sedType
+      // Note: rinaSakId is NOT a DTO field - it's generated internally
       const response = await this.request.post(
         `${this.mockBaseUrl}/testdata/lagsak`,
         {
           data: {
             sedHendelseDto: {
+              sektorKode: config.sektorKode || 'LA',
               bucType: config.bucType,
               sedType: config.sedType,
               avsenderId: config.avsenderId || 'DK:1000',
@@ -278,8 +284,6 @@ export class SedHelper {
               mottakerNavn: config.mottakerNavn || 'NAV',
               rinaDokumentId: rinaDokumentId,
               rinaDokumentVersjon: config.rinaDokumentVersjon || '1',
-              sektorKode: config.sektorKode || 'LA',
-              rinaSakId: rinaSakId,
             }
           },
           headers: {
@@ -292,7 +296,7 @@ export class SedHelper {
         return {
           success: true,
           sedId: rinaDokumentId,
-          rinaSaksnummer: rinaSakId,
+          // rinaSaksnummer is generated server-side, we don't have it
           message: 'SedHendelse published to eessibasis-sedmottatt-v1-local (melosys-eessi flow)',
         };
       } else {
