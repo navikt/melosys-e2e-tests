@@ -418,11 +418,11 @@ test.describe('SED Mottak via melosys-eessi @eessi', () => {
     const eessiRunning = await isEessiRunning(request);
 
     if (!eessiRunning) {
-      console.log('⚠️ melosys-eessi is not running!');
+      console.log('❌ melosys-eessi is not running!');
       console.log('   Start it with: docker-compose --profile eessi up -d');
       console.log('   Or run in IntelliJ with profile: local-mock');
-      test.skip(true, 'melosys-eessi is not running');
     }
+    expect(eessiRunning, 'melosys-eessi must be running for this test').toBe(true);
 
     console.log('✅ melosys-eessi is running');
   });
@@ -430,7 +430,7 @@ test.describe('SED Mottak via melosys-eessi @eessi', () => {
   test('skal trigge MOTTAK_SED via melosys-eessi flow', async ({ request }) => {
     // Skip if melosys-eessi is not running
     const eessiRunning = await isEessiRunning(request);
-    test.skip(!eessiRunning, 'melosys-eessi is not running');
+    expect(eessiRunning, 'melosys-eessi must be running for this test').toBe(true);
 
     console.log('📝 Step 1: Sending SedHendelse via melosys-eessi flow...');
     console.log('   This publishes to eessibasis-sedmottatt-v1-local Kafka topic');
@@ -465,7 +465,7 @@ test.describe('SED Mottak via melosys-eessi @eessi', () => {
 
   test('skal opprette fagsak via full eessi-flow med A003 fra Sverige', async ({ request }) => {
     const eessiRunning = await isEessiRunning(request);
-    test.skip(!eessiRunning, 'melosys-eessi is not running');
+    expect(eessiRunning, 'melosys-eessi must be running for this test').toBe(true);
 
     console.log('📝 Step 1: Sending A003 from Sweden via melosys-eessi...');
     const result = await sedHelper.sendSedViaEessi(EESSI_SED_SCENARIOS.A003_EESSI_FRA_SVERIGE);
@@ -473,7 +473,34 @@ test.describe('SED Mottak via melosys-eessi @eessi', () => {
     expect(result.success, `Send failed: ${result.message}`).toBe(true);
     console.log(`   ✅ SedHendelse published`);
 
-    console.log('📝 Step 2: Waiting for full eessi processing pipeline...');
+    console.log('📝 Step 2: Waiting for Kafka message to be consumed...');
+    // Poll database until process instance appears (Kafka consumption can take a few seconds)
+    let processInstanceFound = false;
+    const maxWaitMs = 30000;
+    const pollIntervalMs = 1000;
+    const startTime = Date.now();
+
+    while (!processInstanceFound && Date.now() - startTime < maxWaitMs) {
+      const hasInstance = await withDatabase(async (db) => {
+        const result = await db.query(
+          `SELECT COUNT(*) as CNT FROM PROSESSINSTANS WHERE REGISTRERT_DATO > SYSDATE - INTERVAL '1' MINUTE`
+        );
+        return result[0]?.CNT > 0;
+      });
+
+      if (hasInstance) {
+        processInstanceFound = true;
+        console.log(`   ✅ Process instance found after ${Date.now() - startTime}ms`);
+      } else {
+        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
+      }
+    }
+
+    if (!processInstanceFound) {
+      console.log(`   ⚠️ No process instance found after ${maxWaitMs}ms - Kafka message may not have been consumed`);
+    }
+
+    console.log('📝 Step 3: Waiting for process to complete...');
     const processResult = await awaitProcessInstances(request, {
       timeoutSeconds: 90,
       expectedInstances: 1,
@@ -481,7 +508,7 @@ test.describe('SED Mottak via melosys-eessi @eessi', () => {
 
     expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
 
-    console.log('📝 Step 3: Verifying fagsak was created...');
+    console.log('📝 Step 4: Verifying fagsak was created...');
     const fagsak = await withDatabase(async (db) => {
       const fagsaker = await db.query(
         `SELECT f.SAKSNUMMER, f.GSAK_SAKSNUMMER, f.STATUS, f.REGISTRERT_DATO
@@ -523,7 +550,7 @@ test.describe('SED Mottak via melosys-eessi @eessi', () => {
 
   test('skal håndtere A009 informasjonsforespørsel via eessi', async ({ request }) => {
     const eessiRunning = await isEessiRunning(request);
-    test.skip(!eessiRunning, 'melosys-eessi is not running');
+    expect(eessiRunning, 'melosys-eessi must be running for this test').toBe(true);
 
     console.log('📝 Sending A009 from Germany via melosys-eessi...');
     const result = await sedHelper.sendSedViaEessi(EESSI_SED_SCENARIOS.A009_EESSI_FRA_TYSKLAND);
@@ -544,7 +571,7 @@ test.describe('SED Mottak via melosys-eessi @eessi', () => {
 
   test('skal sammenligne direkte vs eessi-flow @comparison', async ({ request }) => {
     const eessiRunning = await isEessiRunning(request);
-    test.skip(!eessiRunning, 'melosys-eessi is not running');
+    expect(eessiRunning, 'melosys-eessi must be running for this test').toBe(true);
 
     console.log('📝 Test 1: Direct flow (bypasses melosys-eessi)...');
     const directStart = Date.now();
