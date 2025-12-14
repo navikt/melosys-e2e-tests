@@ -104,6 +104,7 @@ const MONITORED_SERVICES = [
   'melosys-api',
   'melosys-web',
   'melosys-mock',
+  'melosys-eessi',
   'faktureringskomponenten',
   'melosys-dokgen',
   'melosys-trygdeavgift-beregning',
