@@ -1,0 +1,15 @@
+// Denne kjøres i http://localhost:8083/swagger-ui/#/lag-sed-controller/lagSakUsingPOST
+// Oppdater bare det du trenger, i hovedsak bucType og sedTYpe
+{
+  "sedHendelseDto": {
+    "sektorKode": "LA",
+    "bucType": "LA_BUC_02",
+    "avsenderId": "DK",
+    "avsenderNavn": "DK trygd",
+    "mottakerId": "444",
+    "mottakerNavn": "NAV",
+    "rinaDokumentId": "sedA003",
+    "rinaDokumentVersjon": "1",
+    "sedType": "A003"
+  }
+}

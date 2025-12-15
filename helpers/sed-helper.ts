@@ -72,6 +72,36 @@ export interface SedResponse {
 }
 
 /**
+ * Configuration for sending SedHendelse (triggers melosys-eessi flow)
+ *
+ * This matches SedHendelseDto in melosys-mock's /testdata/lagsak endpoint.
+ * Used for real E2E testing through melosys-eessi.
+ *
+ * Note: rinaSakId is NOT a field in SedHendelseDto - it's generated server-side
+ * by LagSedController.lagSedHendelseFraDto()
+ */
+export interface SedHendelseConfig {
+  /** BUC type: LA_BUC_01, LA_BUC_02, LA_BUC_04, LA_BUC_05 */
+  bucType: string;
+  /** SED type: A001, A003, A008, A009, A010, A011, X001, X006, X007, X008 */
+  sedType: string;
+  /** Sender institution ID (e.g., 'DK:1000', 'SE:FK') */
+  avsenderId?: string;
+  /** Sender institution name */
+  avsenderNavn?: string;
+  /** Receiver institution ID (default: 'NO:NAV') */
+  mottakerId?: string;
+  /** Receiver institution name (default: 'NAV') */
+  mottakerNavn?: string;
+  /** RINA document ID (auto-generated if not provided) */
+  rinaDokumentId?: string;
+  /** RINA document version (default: '1') */
+  rinaDokumentVersjon?: string;
+  /** Sector code (default: 'LA') */
+  sektorKode?: string;
+}
+
+/**
  * Helper class for working with SED (Structured Electronic Document) events
  *
  * This helper interacts with the melosys-mock service to simulate
@@ -200,6 +230,112 @@ export class SedHelper {
 
     console.warn(`SED processing did not complete within ${timeoutMs}ms`);
     return false;
+  }
+
+  /**
+   * Send SedHendelse via mock service to trigger melosys-eessi flow (RECOMMENDED)
+   *
+   * This publishes a SedHendelse to Kafka (eessibasis-sedmottatt-v1-local)
+   * which melosys-eessi consumes. melosys-eessi then:
+   * 1. Fetches the SED content from EUX mock API
+   * 2. Identifies the person via PDL
+   * 3. Creates a journalpost
+   * 4. Publishes MelosysEessiMelding to melosys-api
+   *
+   * This is the recommended method for real E2E testing as it exercises
+   * the full melosys-eessi integration.
+   *
+   * NOTE: Requires melosys-eessi to be running (docker-compose --profile eessi)
+   *
+   * @param config - SedHendelse configuration
+   * @returns Result with generated IDs
+   *
+   * @example
+   * ```typescript
+   * const result = await sedHelper.sendSedViaEessi({
+   *   bucType: 'LA_BUC_02',
+   *   sedType: 'A003',
+   *   avsenderId: 'DK:1000',
+   * });
+   * expect(result.success).toBe(true);
+   * await sedHelper.waitForSedProcessed(60000); // Longer timeout for eessi flow
+   * ```
+   */
+  async sendSedViaEessi(config: SedHendelseConfig): Promise<SedResponse> {
+    // Note: rinaSakId is generated internally by LagSedController, not passed in
+    const rinaDokumentId = config.rinaDokumentId || this.generateId();
+
+    try {
+      // Payload matches SedHendelseDto in LagSedController.kt
+      // Fields: sektorKode, bucType, avsenderId, avsenderNavn, mottakerId, mottakerNavn,
+      //         rinaDokumentId, rinaDokumentVersjon, sedType
+      // Note: rinaSakId is NOT a DTO field - it's generated internally
+      const response = await this.request.post(
+        `${this.mockBaseUrl}/testdata/lagsak`,
+        {
+          data: {
+            sedHendelseDto: {
+              sektorKode: config.sektorKode || 'LA',
+              bucType: config.bucType,
+              sedType: config.sedType,
+              avsenderId: config.avsenderId || 'DK:1000',
+              avsenderNavn: config.avsenderNavn || this.getInstitutionName(config.avsenderId || 'DK:1000'),
+              mottakerId: config.mottakerId || 'NO:NAV',
+              mottakerNavn: config.mottakerNavn || 'NAV',
+              rinaDokumentId: rinaDokumentId,
+              rinaDokumentVersjon: config.rinaDokumentVersjon || '1',
+            }
+          },
+          headers: {
+            'Content-Type': 'application/json',
+          },
+        }
+      );
+
+      if (response.ok()) {
+        return {
+          success: true,
+          sedId: rinaDokumentId,
+          // rinaSaksnummer is generated server-side, we don't have it
+          message: 'SedHendelse published to eessibasis-sedmottatt-v1-local (melosys-eessi flow)',
+        };
+      } else {
+        const text = await response.text();
+        return {
+          success: false,
+          message: `Failed to send SedHendelse: ${response.status()} - ${text}`,
+        };
+      }
+    } catch (error) {
+      return {
+        success: false,
+        message: `Error sending SedHendelse: ${error}`,
+      };
+    }
+  }
+
+  /**
+   * Generate a unique ID for RINA documents/cases
+   * Must be alphanumeric only (no hyphens) to match låsreferanse validation: ^\d+_[a-zA-Z0-9]+_\d+$
+   */
+  private generateId(): string {
+    return `${Date.now()}${Math.random().toString(36).substring(2, 9)}`;
+  }
+
+  /**
+   * Get institution name based on ID
+   */
+  private getInstitutionName(institutionId: string): string {
+    const names: Record<string, string> = {
+      'DK:1000': 'Udbetaling Danmark',
+      'DK:UD': 'Udbetaling Danmark',
+      'SE:FK': 'Försäkringskassan',
+      'DE:DRV': 'Deutsche Rentenversicherung',
+      'NO:NAV': 'NAV',
+      'FI:KELA': 'Kela',
+      'NL:SVB': 'Sociale Verzekeringsbank',
+    };
+    return names[institutionId] || institutionId;
   }
 
   /**
@@ -365,4 +501,74 @@ export const SED_SCENARIOS = {
     lovvalgsland: 'DK',
     arbeidsland: ['NO'],
   } as SedConfig,
+} as const;
+
+/**
+ * Predefined SedHendelse configurations for melosys-eessi flow
+ *
+ * These are used with sendSedViaEessi() method which triggers
+ * the full melosys-eessi processing pipeline.
+ *
+ * Use these when you need real E2E testing through melosys-eessi.
+ * The melosys-eessi service must be running (docker-compose --profile eessi).
+ */
+export const EESSI_SED_SCENARIOS = {
+  /**
+   * A003 reply from Denmark
+   * Flow: SedHendelse → melosys-eessi → EUX mock → PDL mock → MelosysEessiMelding → melosys-api
+   */
+  A003_EESSI_FRA_DANMARK: {
+    bucType: 'LA_BUC_02',
+    sedType: 'A003',
+    avsenderId: 'DK:1000',
+    avsenderNavn: 'Udbetaling Danmark',
+  } as SedHendelseConfig,
+
+  /**
+   * A003 reply from Sweden
+   */
+  A003_EESSI_FRA_SVERIGE: {
+    bucType: 'LA_BUC_02',
+    sedType: 'A003',
+    avsenderId: 'SE:FK',
+    avsenderNavn: 'Försäkringskassan',
+  } as SedHendelseConfig,
+
+  /**
+   * A009 information request from Germany
+   */
+  A009_EESSI_FRA_TYSKLAND: {
+    bucType: 'LA_BUC_02',
+    sedType: 'A009',
+    avsenderId: 'DE:DRV',
+    avsenderNavn: 'Deutsche Rentenversicherung',
+  } as SedHendelseConfig,
+
+  /**
+   * A001 application from Denmark
+   */
+  A001_EESSI_FRA_DANMARK: {
+    bucType: 'LA_BUC_01',
+    sedType: 'A001',
+    avsenderId: 'DK:1000',
+    avsenderNavn: 'Udbetaling Danmark',
+  } as SedHendelseConfig,
+
+  /**
+   * A003 exception request (LA_BUC_04)
+   */
+  A003_EESSI_UNNTAK_FRA_SVERIGE: {
+    bucType: 'LA_BUC_04',
+    sedType: 'A003',
+    avsenderId: 'SE:FK',
+    avsenderNavn: 'Försäkringskassan',
+  } as SedHendelseConfig,
+
+  /**
+   * Minimal A003 for quick tests
+   */
+  A003_EESSI_MINIMAL: {
+    bucType: 'LA_BUC_02',
+    sedType: 'A003',
+  } as SedHendelseConfig,
 } as const;

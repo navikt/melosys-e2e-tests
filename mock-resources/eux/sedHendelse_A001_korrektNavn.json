@@ -1,0 +1,15 @@
+{
+    "id": 123456,
+    "sedId": "sedA001",
+    "sektorKode": "LA",
+    "bucType": "LA_BUC_01",
+    "rinaSakId": "123",
+    "avsenderId": "NO:123456789",
+    "avsenderNavn": "NAV Norge",
+    "mottakerId": "SE:987654321",
+    "mottakerNavn": "Försäkringskassan",
+    "rinaDokumentId": "sedA001KorrektNavn",
+    "rinaDokumentVersjon": "1",
+    "sedType": "A001",
+    "navBruker": "12345678901"
+}

@@ -1,0 +1,168 @@
+{
+  "nav": {
+    "bruker": {
+      "mor": {
+        "person": {
+          "etternavnvedfoedsel": "æøå",
+          "fornavn": "æøå"
+        }
+      },
+      "person": {
+        "fornavn": "æøå",
+        "kjoenn": "M",
+        "etternavn": "æøå",
+        "etternavnvedfoedsel": "æøå",
+        "foedselsdato": "æøå",
+        "statsborgerskap": [
+          {
+            "land": "NO"
+          }
+        ],
+        "pin": [
+          {
+            "institusjonsnavn": "æøå",
+            "identifikator": "æøå",
+            "sektor": "yrkesskade_og_yrkessykdom",
+            "land": "NO",
+            "institusjonsid": "æøå"
+          }
+        ],
+        "foedested": {
+          "region": "æøå",
+          "by": "æøå",
+          "land": "NO"
+        },
+        "fornavnvedfoedsel": "æøå"
+      },
+      "adresse": [
+        {
+          "land": "NO",
+          "by": "æøå",
+          "postnummer": "æøå",
+          "bygning": "æøå",
+          "type": "bosted",
+          "gate": "æøå",
+          "region": "æøå"
+        }
+      ],
+      "far": {
+        "person": {
+          "fornavn": "æøå",
+          "etternavnvedfoedsel": "æøå"
+        }
+      }
+    },
+    "arbeidsgiver": [
+      {
+        "identifikator": [
+          {
+            "id": "æøå",
+            "type": "registrering"
+          }
+        ],
+        "navn": "æøå",
+        "adresse": {
+          "gate": "æøå",
+          "land": "NO",
+          "bygning": "æøå",
+          "by": "æøå",
+          "postnummer": "æøå",
+          "region": "æøå"
+        }
+      }
+    ],
+    "arbeidssted": [
+      {
+        "adresse": {
+          "land": "NO",
+          "gate": "æøå",
+          "region": "æøå",
+          "bygning": "æøå",
+          "by": "æøå",
+          "postnummer": "æøå"
+        },
+        "erikkefastadresse": "ja",
+        "navn": "æøå",
+        "hjemmebase": "æøå"
+      }
+    ],
+    "selvstendig": {
+      "arbeidsgiver": [
+        {
+          "identifikator": [
+            {
+              "id": "æøå",
+              "type": "registrering"
+            }
+          ],
+          "navn": "æøå",
+          "adresse": {
+            "region": "æøå",
+            "gate": "æøå",
+            "bygning": "æøå",
+            "land": "NO",
+            "by": "æøå",
+            "postnummer": "æøå"
+          }
+        }
+      ]
+    },
+    "eessisak": {
+      "institusjonsnummer": "æøå",
+      "institusjonsid": "æøå"
+    },
+    "ytterligereinformasjon": "æøå",
+    "arbeidsgiveraktivitet": {
+      "eraktivitetmarginal": "ja"
+    }
+  },
+  "medlemskap": {
+    "vedtak": {
+      "gjelderperiode": {
+        "aapenperiode": {
+          "type": "åpen_sluttdato",
+          "startdato": "æøå"
+        },
+        "startdato": "æøå",
+        "sluttdato": "æøå"
+      },
+      "land": "NO",
+      "gjeldervarighetyrkesaktivitet": "ja",
+      "eropprinneligvedtak": "ja",
+      "erendringsvedtak": "nei",
+      "datoforrigevedtak": "æøå"
+    },
+    "relevantartikkelfor8832004eller9872009": "13_1_a",
+    "andreland": {
+      "arbeidsgiver": [
+        {
+          "adresse": {
+            "by": "æøå",
+            "postnummer": "æøå",
+            "bygning": "æøå",
+            "gate": "æøå",
+            "region": "æøå",
+            "land": "NO"
+          },
+          "identifikator": [
+            {
+              "type": "registrering",
+              "id": "æøå"
+            }
+          ],
+          "navn": "æøå"
+        }
+      ],
+      "arbeidsgiveraktivitet": {
+        "eraktivitetmarginal": "ja"
+      }
+    },
+    "isDeterminationProvisional": "ja",
+    "gjeldendereglerEC883": [
+      "14_2_a"
+    ]
+  },
+  "sedVer": "2",
+  "sedGVer": "4",
+  "sed": "A003"
+}

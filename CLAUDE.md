@@ -249,9 +249,10 @@ The test suite depends on a full Docker Compose stack. **Locally**, use `../melo
 
 - **melosys-web** (port 3000) - Frontend application
 - **melosys-api** (port 8080) - Backend API
+- **melosys-eessi** (port 8081) - EESSI integration service (EU social security exchange)
 - **melosys-oracle** (port 1521) - Oracle database
-- **postgres** (port 5432) - PostgreSQL database (for faktureringskomponenten, trygdeavgift, and Unleash)
-- **kafka** + **zookeeper** - Message queue
+- **postgres** (port 5432) - PostgreSQL database (for faktureringskomponenten, trygdeavgift, melosys-eessi, and Unleash)
+- **kafka** - Message queue (KRaft mode)
 - **mock-oauth2-server** (ports 8082, 8086) - OAuth authentication
 - **unleash** (port 4242) - Feature toggle server (shared by all services)
 - **faktureringskomponenten** (port 8084) - Billing component
@@ -294,10 +295,12 @@ The test suite automatically monitors Docker logs from all Melosys services for 
 - melosys-api
 - melosys-web
 - melosys-mock
+- melosys-eessi
 - faktureringskomponenten
 - melosys-dokgen
 - melosys-trygdeavgift-beregning
 - melosys-trygdeavtale
+- melosys-inngangsvilkar
 
 **Per-Test Logs:**
 - Captures logs from each test's execution time using `--timestamps`

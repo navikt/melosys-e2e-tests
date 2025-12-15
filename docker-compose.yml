@@ -138,6 +138,10 @@ services:
         }'
     ports:
       - "8086:8086"
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - host.docker.internal.sts
 
   melosys-mock:
     container_name: melosys-mock
@@ -147,6 +151,8 @@ services:
       - "8389:8389"
     environment:
       SPRING_PROFILES_ACTIVE: local-docker
+    volumes:
+      - ./mock-resources:/files
     networks:
       melosys.docker-internal:
         aliases:
@@ -429,6 +435,90 @@ services:
       ABAC_PDP_ENDPOINT_URL: http://melosys-mock:8083/asm-pdp/authorize
     ports:
       - "8089:8080"
+
+  # ============================================================================
+  # EESSI Integration
+  # ============================================================================
+
+  melosys-eessi:
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-eessi:${MELOSYS_EESSI_TAG:-latest}
+    container_name: melosys-eessi
+    depends_on:
+      - kafka
+      - mock-oauth2-server
+      - mock-oauth2-server-sts
+      - melosys-mock
+      - postgres
+    ports:
+      - "8081:8081"
+    environment:
+      SPRING_PROFILES_ACTIVE: local-mock
+      # Server port (matches local-mock profile)
+      SERVER_PORT: 8081
+      # Database configuration
+      PG_HOST: postgres.melosys.docker-internal
+      DATABASE_NAME: postgres
+      SPRING_DATASOURCE_USERNAME: postgres
+      SPRING_DATASOURCE_PASSWORD: mysecretpassword
+      SPRING_DATASOURCE_HIKARI_SCHEMA: eessi
+      # Integration URLs (pointing to mock service)
+      EUX_RINA_API_URL: http://melosys-mock.melosys.docker-internal:8083/eux
+      EUXAPP_RINASAKER_URL: dummy
+      RINA_HOST_URL: dummy
+      EUXCASESTORE_URL: http://melosys-mock.melosys.docker-internal:8083/eux_casestore
+      RESTSTS_URL: http://host.docker.internal.sts:8086/reststs
+      SAK_URL: http://melosys-mock.melosys.docker-internal:8083/api/v1/saker
+      JOURNALPOSTAPI_URL: http://melosys-mock.melosys.docker-internal:8083/rest/journalpostapi/v1/journalpost
+      OPPGAVE_URL: http://melosys-mock.melosys.docker-internal:8083/api/v1
+      SAF_URL: http://melosys-mock.melosys.docker-internal:8083
+      PDL_URL: http://melosys-mock.melosys.docker-internal:8083/graphql
+      PDL_WEB_URL: http://melosys-mock.melosys.docker-internal:8083
+      # RINA config
+      RINA_INSTITUSJON_ID: dummy
+      # Admin API key
+      MELOSYS_ADMIN_API_KEY: dummy
+      # System user credentials
+      SRV_USERNAME: srvmelosys
+      SRV_PASSWORD: dummy
+      # OAuth / Azure AD configuration
+      AZURE_APP_CLIENT_ID: melosys-localhost
+      AZURE_APP_CLIENT_SECRET: dummy
+      AZURE_APP_WELL_KNOWN_URL: http://host.docker.internal:8082/isso/.well-known/openid-configuration
+      AZURE_OPENID_CONFIG_TOKEN_ENDPOINT: http://host.docker.internal:8082/isso/token
+      # OAuth scopes (dummy values for local-mock)
+      EUX_RINA_API_SCOPE: dummy
+      EUX_NAV_RINASAK_SCOPE: dummy
+      PDL_WEB_SCOPE: dummy
+      PDL_SCOPE: dummy
+      OPPGAVE_API_SCOPE: dummy
+      SAF_SCOPE: dummy
+      # Kafka configuration
+      KAFKA_BOOTSTRAP_SERVERS: kafka.melosys.docker-internal:9092
+      KAFKA_BROKERS: kafka.melosys.docker-internal:9092
+      KAFKA_KEYSTORE_PATH: /dev/zero
+      KAFKA_TRUSTSTORE_PATH: /dev/zero
+      KAFKA_CREDSTORE_PASSWORD: pwd
+      # Kafka topics
+      KAFKA_AIVEN_SEDMOTTATT_TOPIC: eessibasis-sedmottatt-v1-local
+      KAFKA_AIVEN_SEDSENDT_TOPIC: eessibasis-sedsendt-v1
+      KAFKA_AIVEN_SEDHENDELSER_MOTTATT_GROUPID: melosys-eessi-sedHendelser-local
+      KAFKA_AIVEN_SEDHENDELSER_SENDT_GROUPID: melosys-eessi-sedHendelser-local
+      KAFKA_AIVEN_OPPGAVE_HENDELSE_GROUPID: melosys-eessi-oppgaveHendelser-local
+      KAFKA_AIVEN_OPPGAVE_HENDELSE_TOPIC: oppgavehandtering.oppgavehendelse-v1
+      KAFKA_AIVEN_EESSIMELDING_TOPIC: teammelosys.eessi.v1-local
+      KAFKA_OPPGAVE_GROUPID: melosys-eessi-oppgaveHendelser-local
+      KAFKA_OPPGAVE_ENDRET_TOPIC: teammelosys.eessi.oppgave-endret.v1-local
+      # Kafka security (plaintext for local)
+      SPRING_KAFKA_PROPERTIES_SASL_MECHANISM: PLAIN
+      SPRING_KAFKA_PROPERTIES_SECURITY_PROTOCOL: PLAINTEXT
+      # Cron job (disabled - run only Jan 1 at 00:00)
+      CRON_JOB_LUKK_BUC: "0 0 0 1 1 *"
+      # Unleash
+      UNLEASH_SERVER_API_TOKEN: fake
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - melosys-eessi.melosys.docker-internal
 
 networks:
   melosys.docker-internal:
