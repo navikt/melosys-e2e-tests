@@ -1,0 +1,283 @@
+{
+  "A003": {
+    "sedGVer": "4",
+    "sedVer": "2",
+    "Person": {
+      "PersonIdentification": {
+        "familyName": "æøå",
+        "forename": "æøå",
+        "dateBirth": "æøå",
+        "sex": {
+          "value": [
+            "01"
+          ]
+        },
+        "familyNameAtBirth": "æøå",
+        "forenameAtBirth": "æøå",
+        "PINPersonInEachInstitution": {
+          "PersonalIdentificationNumber": [
+            {
+              "country": {
+                "value": [
+                  "NO"
+                ]
+              },
+              "personalIdentificationNumber": "æøå",
+              "sector": {
+                "value": [
+                  "01"
+                ]
+              },
+              "Institution": {
+                "institutionID": "æøå",
+                "institutionName": "æøå"
+              }
+            }
+          ]
+        },
+        "IfPINNotProvidedForEveryInstitutionPleaseProvide": {
+          "PlaceBirth": {
+            "town": "æøå",
+            "region": "æøå",
+            "country": {
+              "value": [
+                "NO"
+              ]
+            }
+          },
+          "fatherFamilyNameAtBirth": "æøå",
+          "forenameFather": "æøå",
+          "motherFamilyNameAtBirth": "æøå",
+          "forenameMother": "æøå"
+        }
+      },
+      "AdditionalInformationPerson": {
+        "nationality": {
+          "value": [
+            "NO"
+          ]
+        }
+      }
+    },
+    "CompetentInstitutionIfDiffersFromSending": {
+      "institutionID": "æøå",
+      "institutionName": "æøå"
+    },
+    "Addresses": {
+      "Address": [
+        {
+          "Address": {
+            "street": "æøå",
+            "buildingName": "æøå",
+            "town": "æøå",
+            "postalCode": "æøå",
+            "region": "æøå",
+            "country": {
+              "value": [
+                "NO"
+              ]
+            }
+          },
+          "type": {
+            "value": [
+              "01"
+            ]
+          }
+        }
+      ]
+    },
+    "EmployerInMemberStateWhichLegislationApplies": {
+      "Employer": [
+        {
+          "name": "æøå",
+          "IdentificationNumbers": {
+            "IdentificationNumber": [
+              {
+                "number": "æøå",
+                "type": {
+                  "value": [
+                    "01"
+                  ]
+                }
+              }
+            ]
+          },
+          "Address": {
+            "street": "æøå",
+            "buildingName": "æøå",
+            "town": "æøå",
+            "postalCode": "æøå",
+            "region": "æøå",
+            "country": {
+              "value": [
+                "NO"
+              ]
+            }
+          }
+        }
+      ],
+      "activityMarginalAccordingArticle145bEC9872009Indicator": {
+        "value": [
+          "1"
+        ]
+      }
+    },
+    "EmployerInOtherMemberStateConcerned": {
+      "Employer": [
+        {
+          "name": "æøå",
+          "IdentificationNumbers": {
+            "IdentificationNumber": [
+              {
+                "number": "æøå",
+                "type": {
+                  "value": [
+                    "01"
+                  ]
+                }
+              }
+            ]
+          },
+          "Address": {
+            "street": "æøå",
+            "buildingName": "æøå",
+            "town": "æøå",
+            "postalCode": "æøå",
+            "region": "æøå",
+            "country": {
+              "value": [
+                "NO"
+              ]
+            }
+          }
+        }
+      ],
+      "activityMarginalAccordingArticle145bEC9872009Indicator": {
+        "value": [
+          "1"
+        ]
+      }
+    },
+    "SelfEmployment": {
+      "SelfEmployment": [
+        {
+          "name": "æøå",
+          "IdentificationNumbers": {
+            "IdentificationNumber": [
+              {
+                "number": "æøå",
+                "type": {
+                  "value": [
+                    "01"
+                  ]
+                }
+              }
+            ]
+          },
+          "Address": {
+            "street": "æøå",
+            "buildingName": "æøå",
+            "town": "æøå",
+            "postalCode": "æøå",
+            "region": "æøå",
+            "country": {
+              "value": [
+                "NO"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "PlaceWork": {
+      "PlaceWork": [
+        {
+          "companyNameVesselName": "æøå",
+          "flagStateHomeBase": "æøå",
+          "Address": {
+            "street": "æøå",
+            "buildingName": "æøå",
+            "town": "æøå",
+            "postalCode": "æøå",
+            "region": "æøå",
+            "country": {
+              "value": [
+                "NO"
+              ]
+            }
+          },
+          "noFixedAddressInStateWorkIndicator": {
+            "value": [
+              "1"
+            ]
+          }
+        }
+      ]
+    },
+    "DecisionLegislationApplicable": {
+      "Decision": {
+        "InitialDecision": {
+          "value": [
+            "1"
+          ]
+        },
+        "AmendingDecision": {
+          "datePreviousDecision": "æøå",
+          "InitialDecision": {
+            "value": [
+              "0"
+            ]
+          }
+        }
+      },
+      "memberStateWhichLegislationApplies": {
+        "value": [
+          "NO"
+        ]
+      },
+      "theDecisionAppliesForDurationActivityIndicator": {
+        "value": [
+          "1"
+        ]
+      },
+      "PeriodForWhichDecisionApplies": {
+        "FixedPeriod": {
+          "startDate": "æøå",
+          "endDate": "æøå"
+        },
+        "OpenPeriod": {
+          "typeOpenPeriod": {
+            "value": [
+              "01"
+            ]
+          },
+          "startDate": "æøå"
+        }
+      }
+    },
+    "InformationDeterminationProvisionalAccording": {
+      "informationDeterminationProvisionalArt16EC9872009Indicator": {
+        "value": [
+          "1"
+        ]
+      }
+    },
+    "ArticleRegulationECNo8832004Or9872009": {
+      "articleRegulationECNo8832004Or9872009": {
+        "value": [
+          "01"
+        ]
+      }
+    },
+    "RulesApplyProvidedForByRegulationEC883": {
+      "articleRegulationECNo140871WhichApplies": {
+        "value": [
+          "01"
+        ]
+      }
+    },
+    "AdditionalInformation": {
+      "additionalInformation": "æøå"
+    }
+  }
+}

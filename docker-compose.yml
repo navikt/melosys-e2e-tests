@@ -151,6 +151,8 @@ services:
       - "8389:8389"
     environment:
       SPRING_PROFILES_ACTIVE: local-docker
+    volumes:
+      - ./mock-resources:/files
     networks:
       melosys.docker-internal:
         aliases:

@@ -1,0 +1,283 @@
+{
+  "A003": {
+    "sedGVer": "$sedGVer",
+    "sedVer": "$sedVer",
+    "Person": {
+      "PersonIdentification": {
+        "familyName": "$nav.bruker.person.etternavn",
+        "forename": "$nav.bruker.person.fornavn",
+        "dateBirth": "$nav.bruker.person.foedselsdato",
+        "sex": {
+          "value": [
+            "$nav.bruker.person.kjoenn"
+          ]
+        },
+        "familyNameAtBirth": "$nav.bruker.person.etternavnvedfoedsel",
+        "forenameAtBirth": "$nav.bruker.person.fornavnvedfoedsel",
+        "PINPersonInEachInstitution": {
+          "PersonalIdentificationNumber": [
+            {
+              "country": {
+                "value": [
+                  "$nav.bruker.person.pin[x].land"
+                ]
+              },
+              "personalIdentificationNumber": "$nav.bruker.person.pin[x].identifikator",
+              "sector": {
+                "value": [
+                  "$nav.bruker.person.pin[x].sektor"
+                ]
+              },
+              "Institution": {
+                "institutionID": "$nav.bruker.person.pin[x].institusjonsid",
+                "institutionName": "$nav.bruker.person.pin[x].institusjonsnavn"
+              }
+            }
+          ]
+        },
+        "IfPINNotProvidedForEveryInstitutionPleaseProvide": {
+          "PlaceBirth": {
+            "town": "$nav.bruker.person.foedested.by",
+            "region": "$nav.bruker.person.foedested.region",
+            "country": {
+              "value": [
+                "$nav.bruker.person.foedested.land"
+              ]
+            }
+          },
+          "fatherFamilyNameAtBirth": "$nav.bruker.far.person.etternavnvedfoedsel",
+          "forenameFather": "$nav.bruker.far.person.fornavn",
+          "motherFamilyNameAtBirth": "$nav.bruker.mor.person.etternavnvedfoedsel",
+          "forenameMother": "$nav.bruker.mor.person.fornavn"
+        }
+      },
+      "AdditionalInformationPerson": {
+        "nationality": {
+          "value": [
+            "$nav.bruker.person.statsborgerskap[x].land"
+          ]
+        }
+      }
+    },
+    "CompetentInstitutionIfDiffersFromSending": {
+      "institutionID": "$nav.eessisak.institusjonsid",
+      "institutionName": "$nav.eessisak.institusjonsnummer"
+    },
+    "Addresses": {
+      "Address": [
+        {
+          "Address": {
+            "street": "$nav.bruker.adresse[x].gate",
+            "buildingName": "$nav.bruker.adresse[x].bygning",
+            "town": "$nav.bruker.adresse[x].by",
+            "postalCode": "$nav.bruker.adresse[x].postnummer",
+            "region": "$nav.bruker.adresse[x].region",
+            "country": {
+              "value": [
+                "$nav.bruker.adresse[x].land"
+              ]
+            }
+          },
+          "type": {
+            "value": [
+              "$nav.bruker.adresse[x].type"
+            ]
+          }
+        }
+      ]
+    },
+    "EmployerInMemberStateWhichLegislationApplies": {
+      "Employer": [
+        {
+          "name": "$nav.arbeidsgiver[x].navn",
+          "IdentificationNumbers": {
+            "IdentificationNumber": [
+              {
+                "number": "$nav.arbeidsgiver[x].identifikator[x].id",
+                "type": {
+                  "value": [
+                    "$nav.arbeidsgiver[x].identifikator[x].type"
+                  ]
+                }
+              }
+            ]
+          },
+          "Address": {
+            "street": "$nav.arbeidsgiver[x].adresse.gate",
+            "buildingName": "$nav.arbeidsgiver[x].adresse.bygning",
+            "town": "$nav.arbeidsgiver[x].adresse.by",
+            "postalCode": "$nav.arbeidsgiver[x].adresse.postnummer",
+            "region": "$nav.arbeidsgiver[x].adresse.region",
+            "country": {
+              "value": [
+                "$nav.arbeidsgiver[x].adresse.land"
+              ]
+            }
+          }
+        }
+      ],
+      "activityMarginalAccordingArticle145bEC9872009Indicator": {
+        "value": [
+          "$nav.arbeidsgiveraktivitet.eraktivitetmarginal"
+        ]
+      }
+    },
+    "EmployerInOtherMemberStateConcerned": {
+      "Employer": [
+        {
+          "name": "$medlemskap.andreland.arbeidsgiver[x].navn",
+          "IdentificationNumbers": {
+            "IdentificationNumber": [
+              {
+                "number": "$medlemskap.andreland.arbeidsgiver[x].identifikator[x].id",
+                "type": {
+                  "value": [
+                    "$medlemskap.andreland.arbeidsgiver[x].identifikator[x].type"
+                  ]
+                }
+              }
+            ]
+          },
+          "Address": {
+            "street": "$medlemskap.andreland.arbeidsgiver[x].adresse.gate",
+            "buildingName": "$medlemskap.andreland.arbeidsgiver[x].adresse.bygning",
+            "town": "$medlemskap.andreland.arbeidsgiver[x].adresse.by",
+            "postalCode": "$medlemskap.andreland.arbeidsgiver[x].adresse.postnummer",
+            "region": "$medlemskap.andreland.arbeidsgiver[x].adresse.region",
+            "country": {
+              "value": [
+                "$medlemskap.andreland.arbeidsgiver[x].adresse.land"
+              ]
+            }
+          }
+        }
+      ],
+      "activityMarginalAccordingArticle145bEC9872009Indicator": {
+        "value": [
+          "$medlemskap.andreland.arbeidsgiveraktivitet.eraktivitetmarginal"
+        ]
+      }
+    },
+    "SelfEmployment": {
+      "SelfEmployment": [
+        {
+          "name": "$nav.selvstendig.arbeidsgiver[x].navn",
+          "IdentificationNumbers": {
+            "IdentificationNumber": [
+              {
+                "number": "$nav.selvstendig.arbeidsgiver[x].identifikator[x].id",
+                "type": {
+                  "value": [
+                    "$nav.selvstendig.arbeidsgiver[x].identifikator[x].type"
+                  ]
+                }
+              }
+            ]
+          },
+          "Address": {
+            "street": "$nav.selvstendig.arbeidsgiver[x].adresse.gate",
+            "buildingName": "$nav.selvstendig.arbeidsgiver[x].adresse.bygning",
+            "town": "$nav.selvstendig.arbeidsgiver[x].adresse.by",
+            "postalCode": "$nav.selvstendig.arbeidsgiver[x].adresse.postnummer",
+            "region": "$nav.selvstendig.arbeidsgiver[x].adresse.region",
+            "country": {
+              "value": [
+                "$nav.selvstendig.arbeidsgiver[x].adresse.land"
+              ]
+            }
+          }
+        }
+      ]
+    },
+    "PlaceWork": {
+      "PlaceWork": [
+        {
+          "companyNameVesselName": "$nav.arbeidssted[x].navn",
+          "flagStateHomeBase": "$nav.arbeidssted[x].hjemmebase",
+          "Address": {
+            "street": "$nav.arbeidssted[x].adresse.gate",
+            "buildingName": "$nav.arbeidssted[x].adresse.bygning",
+            "town": "$nav.arbeidssted[x].adresse.by",
+            "postalCode": "$nav.arbeidssted[x].adresse.postnummer",
+            "region": "$nav.arbeidssted[x].adresse.region",
+            "country": {
+              "value": [
+                "$nav.arbeidssted[x].adresse.land"
+              ]
+            }
+          },
+          "noFixedAddressInStateWorkIndicator": {
+            "value": [
+              "$nav.arbeidssted[x].erikkefastadresse"
+            ]
+          }
+        }
+      ]
+    },
+    "DecisionLegislationApplicable": {
+      "Decision": {
+        "InitialDecision": {
+          "value": [
+            "$medlemskap.vedtak.eropprinneligvedtak"
+          ]
+        },
+        "AmendingDecision": {
+          "datePreviousDecision": "$medlemskap.vedtak.datoforrigevedtak",
+          "InitialDecision": {
+            "value": [
+              "$medlemskap.vedtak.erendringsvedtak"
+            ]
+          }
+        }
+      },
+      "memberStateWhichLegislationApplies": {
+        "value": [
+          "$medlemskap.vedtak.land"
+        ]
+      },
+      "theDecisionAppliesForDurationActivityIndicator": {
+        "value": [
+          "$medlemskap.vedtak.gjeldervarighetyrkesaktivitet"
+        ]
+      },
+      "PeriodForWhichDecisionApplies": {
+        "FixedPeriod": {
+          "startDate": "$medlemskap.vedtak.gjelderperiode.startdato",
+          "endDate": "$medlemskap.vedtak.gjelderperiode.sluttdato"
+        },
+        "OpenPeriod": {
+          "typeOpenPeriod": {
+            "value": [
+              "$medlemskap.vedtak.gjelderperiode.aapenperiode.type"
+            ]
+          },
+          "startDate": "$medlemskap.vedtak.gjelderperiode.aapenperiode.startdato"
+        }
+      }
+    },
+    "InformationDeterminationProvisionalAccording": {
+      "informationDeterminationProvisionalArt16EC9872009Indicator": {
+        "value": [
+          "$medlemskap.isDeterminationProvisional"
+        ]
+      }
+    },
+    "ArticleRegulationECNo8832004Or9872009": {
+      "articleRegulationECNo8832004Or9872009": {
+        "value": [
+          "$medlemskap.relevantartikkelfor8832004eller9872009"
+        ]
+      }
+    },
+    "RulesApplyProvidedForByRegulationEC883": {
+      "articleRegulationECNo140871WhichApplies": {
+        "value": [
+          "$medlemskap.gjeldendereglerEC883[x]"
+        ]
+      }
+    },
+    "AdditionalInformation": {
+      "additionalInformation": "$nav.ytterligereinformasjon"
+    }
+  }
+}
