@@ -74,6 +74,28 @@ jobs:
             echo "has_summary=true" >> $GITHUB_OUTPUT
           fi
 
+      - name: Ensure required labels exist
+        if: steps.check-summary.outputs.has_summary == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🏷️ Ensuring required labels exist..."
+
+          # Create labels if they don't exist (ignore errors if they already exist)
+          gh label create "e2e-failure" \
+            --description "E2E test failure detected by automated analysis" \
+            --color "d73a4a" 2>/dev/null || echo "  Label 'e2e-failure' already exists"
+
+          gh label create "needs-triage" \
+            --description "New issue that needs review and classification" \
+            --color "fbca04" 2>/dev/null || echo "  Label 'needs-triage' already exists"
+
+          gh label create "copilot-analyze" \
+            --description "Trigger Copilot AI analysis for this issue" \
+            --color "7057ff" 2>/dev/null || echo "  Label 'copilot-analyze' already exists"
+
+          echo "✅ Labels ready"
+
       - name: Analyze failures and create/update issues
         if: steps.check-summary.outputs.has_summary == 'true'
         env:
