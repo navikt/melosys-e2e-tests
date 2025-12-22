@@ -2,6 +2,10 @@
 
 This document describes the automated E2E test failure analysis workflows that help identify and triage test failures.
 
+## Prerequisites
+
+**Important:** Before using these workflows, you must create the required GitHub labels. See [Labels Setup Guide](./LABELS-SETUP.md) for instructions.
+
 ## Overview
 
 The system consists of three interconnected workflows:
@@ -16,21 +20,15 @@ The system consists of three interconnected workflows:
 
 The E2E Tests workflow now includes:
 
-**Outputs:**
-- `test-status` - Overall test status (passed/failed/unknown)
-- `has-failures` - Boolean indicating if there are real test failures
-- `has-flaky` - Boolean indicating if there are flaky tests
-
 **New Step:**
-- "Set test status outputs" - Analyzes `test-summary.json` and sets outputs for downstream workflows
+- "Set test status outputs" - Analyzes `test-summary.json` for internal workflow use
 
 ### How It Works
 
 After tests complete, the workflow:
 1. Reads `playwright-report/test-summary.json`
 2. Counts failed and flaky tests
-3. Sets outputs that can trigger the analysis workflow
-4. Uploads `test-summary` artifact for analysis
+3. Uploads `test-summary` artifact for analysis
 
 ## Workflow 2: Analyze E2E Failures
 

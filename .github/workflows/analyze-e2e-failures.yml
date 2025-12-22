@@ -114,7 +114,7 @@ jobs:
             DOCKER_ERRORS_MD=""
             if [ "$DOCKER_ERRORS" != "[]" ] && [ "$DOCKER_ERRORS" != "null" ]; then
               DOCKER_ERRORS_CONTENT=$(echo "$DOCKER_ERRORS" | jq -r \
-                'to_entries[] | "#### \(.key)\n\n\(.value | map("- [\(.timestamp)] \(.message)") | join("\n"))\n"')
+                '.[] | "#### \(.service)\n\n\(.errors | map("- [\(.timestamp)] \(.message)") | join("\n"))\n"')
               DOCKER_ERRORS_MD=$(printf "### 🐳 Docker Log Errors\n\n%s\n" "$DOCKER_ERRORS_CONTENT")
             fi
 
