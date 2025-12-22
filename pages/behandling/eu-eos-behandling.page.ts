@@ -31,6 +31,10 @@ import { EuEosBehandlingAssertions } from './eu-eos-behandling.assertions';
 export class EuEosBehandlingPage extends BasePage {
   readonly assertions: EuEosBehandlingAssertions;
 
+  // Constants
+  private static readonly REACT_RENDER_DELAY_MS = 500;
+  private static readonly EMPLOYER_API_TIMEOUT_MS = 15000;
+
   // Locators - Periode
   private readonly åpneDatepickerButton = this.page.getByRole('button', {
     name: 'Åpne datovelger'
@@ -190,6 +194,19 @@ export class EuEosBehandlingPage extends BasePage {
     await this.selvstendigRadio.waitFor({ state: 'visible' });
     await this.selvstendigRadio.check();
     console.log('✅ Valgte: Selvstendig');
+  }
+
+  /**
+   * Check if URL is an employer data endpoint
+   *
+   * @param url - API endpoint URL to check
+   * @returns true if URL is an employer-related endpoint
+   */
+  private isEmployerDataEndpoint(url: string): boolean {
+    return url.includes('/arbeidsforhold') ||
+           url.includes('/virksomheter') ||
+           url.includes('/registeropplysninger') ||
+           url.includes('/mottatteopplysninger');
   }
 
   /**
@@ -491,14 +508,11 @@ export class EuEosBehandlingPage extends BasePage {
     // Race condition: If we select too fast, the checkbox won't exist yet.
     console.log('⏳ Waiting for employer data API after step transition...');
     const employerApiPromise = this.page.waitForResponse(
-      response => (response.url().includes('/arbeidsforhold') ||
-                   response.url().includes('/virksomheter') ||
-                   response.url().includes('/registeropplysninger') ||
-                   response.url().includes('/mottatteopplysninger')) &&
+      response => this.isEmployerDataEndpoint(response.url()) &&
                   response.status() === 200,
-      { timeout: 15000 }
+      { timeout: EuEosBehandlingPage.EMPLOYER_API_TIMEOUT_MS }
     ).catch(() => {
-      console.log('⚠️  No employer API detected within 15s - proceeding anyway');
+      console.log(`⚠️  No employer API detected within ${EuEosBehandlingPage.EMPLOYER_API_TIMEOUT_MS}ms - proceeding anyway`);
       return null;
     });
 
@@ -506,7 +520,7 @@ export class EuEosBehandlingPage extends BasePage {
     if (employerResponse) {
       console.log(`✅ Employer data loaded: ${employerResponse.url()} -> ${employerResponse.status()}`);
       // Give React time to render the employer list after API response
-      await this.page.waitForTimeout(500);
+      await this.page.waitForTimeout(EuEosBehandlingPage.REACT_RENDER_DELAY_MS);
     }
 
     await this.velgArbeidsgiver(arbeidsgiverNavn);
