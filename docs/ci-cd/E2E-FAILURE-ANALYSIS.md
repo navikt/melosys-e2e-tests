@@ -74,6 +74,7 @@ Can be manually triggered to re-analyze a specific workflow run.
    - If no issue exists: Creates new issue with labels:
      - `e2e-failure` - All E2E test failure issues
      - `needs-triage` - New issues needing review
+     - `copilot-analyze` - Triggers automatic Copilot analysis
 
 ### Issue Format
 
@@ -90,7 +91,7 @@ E2E Failure: {test title}
 - Error message and stack trace
 - Docker log errors by service (if any)
 - Docker image tags used in the run
-- Instructions to add `copilot-analyze` label
+- Note about automatic Copilot analysis
 
 **Example Issue:**
 ```markdown
@@ -121,17 +122,14 @@ TimeoutError: Timeout 30000ms exceeded.
 
 ---
 
-### 🤖 Analysis Needed
+### 🤖 Automatic Analysis
 
 This issue has been automatically created from an E2E test failure.
 
-**Next Steps:**
-1. Review the error details and workflow run above
-2. Add the `copilot-analyze` label to trigger automated analysis
-3. Copilot will search relevant repositories and suggest whether this is:
-   - A test bug (issue in test code)
-   - A production bug (issue in application code)
-   - A flaky test (timing/race condition)
+**Copilot will automatically analyze this issue and provide:**
+- Root cause analysis
+- Classification (test bug, production bug, or flaky test)
+- Suggested fixes based on melosys-api and melosys-web code
 
 ---
 *This issue was automatically created by the E2E failure analysis workflow.*
@@ -173,11 +171,12 @@ The comment includes:
 
 ## Usage
 
-### For Test Failures
+### For Test Failures (Fully Automatic)
 
 1. **Automatic** - When E2E tests fail:
-   - Issue is automatically created with `e2e-failure` and `needs-triage` labels
+   - Issue is automatically created with `e2e-failure`, `needs-triage`, and `copilot-analyze` labels
    - Issue contains full error details and context
+   - Copilot automatically analyzes and comments with findings
 
 2. **Manual Re-analysis** - To re-analyze a specific run:
    ```bash
@@ -185,13 +184,12 @@ The comment includes:
    # Enter the workflow run ID from the E2E Tests run
    ```
 
-### For Copilot Analysis
+### Reviewing Copilot Analysis
 
 1. Go to the auto-created issue
-2. Review the error details
-3. Add the `copilot-analyze` label
-4. Copilot will automatically add an analysis comment
-5. Review Copilot's findings and apply recommendations
+2. Review Copilot's analysis comment (added automatically)
+3. Apply Copilot's recommended fixes or labels
+4. Close the issue when resolved
 
 ### Labels
 

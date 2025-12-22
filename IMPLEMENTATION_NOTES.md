@@ -40,16 +40,12 @@ This PR implements automated E2E test failure analysis using GitHub Actions work
 
 ## How to Use
 
-### When Tests Fail
+### When Tests Fail (Fully Automatic)
 1. E2E tests run and fail
-2. Issue is automatically created with `e2e-failure` and `needs-triage` labels
+2. Issue is automatically created with `e2e-failure`, `needs-triage`, and `copilot-analyze` labels
 3. Issue contains full error context
-
-### For Copilot Analysis
-1. Open the auto-created issue
-2. Add the `copilot-analyze` label
-3. Copilot will automatically add an analysis comment
-4. Review Copilot's findings and apply recommendations
+4. Copilot automatically analyzes and adds a comment with findings
+5. Review Copilot's analysis and apply recommendations
 
 ### Manual Re-analysis
 1. Go to Actions → Analyze E2E Failures
@@ -73,7 +69,7 @@ All workflows have appropriate permissions configured:
 ### Labels Used
 - `e2e-failure` - All E2E test failure issues (auto-applied)
 - `needs-triage` - New issues needing review (auto-applied)
-- `copilot-analyze` - Trigger for Copilot analysis (manual)
+- `copilot-analyze` - Trigger for Copilot analysis (auto-applied)
 - `test-bug` - Issue in test code (Copilot suggests)
 - `production-bug` - Issue in application code (Copilot suggests)
 - `flaky-test` - Timing/race condition (Copilot suggests)

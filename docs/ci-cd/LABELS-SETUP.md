@@ -22,15 +22,11 @@ These labels are automatically applied by the workflows:
    - **Applied by:** `analyze-e2e-failures.yml` workflow
    - **Usage:** New issues that haven't been reviewed yet
 
-### Labels Applied Manually (Triggers)
-
-This label is added manually by developers to trigger Copilot analysis:
-
 3. **`copilot-analyze`**
    - **Description:** Trigger Copilot AI analysis for this issue
    - **Color:** `#7057ff` (purple)
-   - **Applied by:** Developer (manual)
-   - **Usage:** Triggers the `copilot-analyze-failure.yml` workflow
+   - **Applied by:** `analyze-e2e-failures.yml` workflow (automatic)
+   - **Usage:** Triggers the `copilot-analyze-failure.yml` workflow automatically
 
 ### Labels Suggested by Copilot (Optional)
 

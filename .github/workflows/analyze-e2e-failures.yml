@@ -185,17 +185,14 @@ jobs:
               echo "" >> /tmp/issue.md
               echo "---" >> /tmp/issue.md
               echo "" >> /tmp/issue.md
-              echo "### 🤖 Analysis Needed" >> /tmp/issue.md
+              echo "### 🤖 Automatic Analysis" >> /tmp/issue.md
               echo "" >> /tmp/issue.md
               echo "This issue has been automatically created from an E2E test failure." >> /tmp/issue.md
               echo "" >> /tmp/issue.md
-              echo "**Next Steps:**" >> /tmp/issue.md
-              echo "1. Review the error details and workflow run above" >> /tmp/issue.md
-              echo "2. Add the \`copilot-analyze\` label to trigger automated analysis" >> /tmp/issue.md
-              echo "3. Copilot will search relevant repositories and suggest whether this is:" >> /tmp/issue.md
-              echo "   - A test bug (issue in test code)" >> /tmp/issue.md
-              echo "   - A production bug (issue in application code)" >> /tmp/issue.md
-              echo "   - A flaky test (timing/race condition)" >> /tmp/issue.md
+              echo "**Copilot will automatically analyze this issue and provide:**" >> /tmp/issue.md
+              echo "- Root cause analysis" >> /tmp/issue.md
+              echo "- Classification (test bug, production bug, or flaky test)" >> /tmp/issue.md
+              echo "- Suggested fixes based on melosys-api and melosys-web code" >> /tmp/issue.md
               echo "" >> /tmp/issue.md
               echo "---" >> /tmp/issue.md
               echo "*This issue was automatically created by the E2E failure analysis workflow.*" >> /tmp/issue.md
@@ -204,7 +201,8 @@ jobs:
                 --title "$ISSUE_TITLE" \
                 --body-file /tmp/issue.md \
                 --label "e2e-failure" \
-                --label "needs-triage"
+                --label "needs-triage" \
+                --label "copilot-analyze"
             fi
           done
 
