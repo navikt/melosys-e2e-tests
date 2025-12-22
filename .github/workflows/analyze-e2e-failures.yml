@@ -423,42 +423,19 @@ jobs:
               # Extract issue number from URL
               ISSUE_NUM=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$')
 
-              # Assign Copilot to analyze the issue
-              if [ -n "$ISSUE_NUM" ]; then
-                echo "   🤖 Assigning Copilot to issue #$ISSUE_NUM..."
-
-                # Get issue node ID
-                ISSUE_NODE_ID=$(gh api graphql -f query="query {
-                  repository(owner: \"${{ github.repository_owner }}\", name: \"${GITHUB_REPOSITORY#*/}\") {
-                    issue(number: $ISSUE_NUM) { id }
-                  }
-                }" --jq '.data.repository.issue.id' 2>/dev/null)
-
-                # Copilot SWE Agent bot ID - hardcoded because GITHUB_TOKEN cannot query suggestedActors
-                # This ID is stable across GitHub and was retrieved via:
-                # gh api graphql -f query='{ repository(owner:"navikt",name:"melosys-e2e-tests") {
-                #   suggestedActors(capabilities:[CAN_BE_ASSIGNED],first:100) {
-                #     nodes { __typename login ... on Bot { id } } } } }'
-                COPILOT_ID="BOT_kgDOC9w8XQ"
-
-                if [ -n "$ISSUE_NODE_ID" ]; then
-                  # Assign Copilot using special GraphQL header
-                  gh api graphql \
-                    -H "GraphQL-Features: issues_copilot_assignment_api_support" \
-                    -f query="mutation {
-                      addAssigneesToAssignable(input: {
-                        assignableId: \"$ISSUE_NODE_ID\",
-                        assigneeIds: [\"$COPILOT_ID\"]
-                      }) {
-                        assignable {
-                          ... on Issue { number }
-                        }
-                      }
-                    }" >/dev/null 2>&1 && echo "   ✅ Copilot assigned" || echo "   ⚠️ Failed to assign Copilot"
-                else
-                  echo "   ⚠️ Could not get issue node ID"
-                fi
-              fi
+              # NOTE: Copilot auto-assignment disabled (2025-12-22)
+              # Copilot Coding Agent creates PRs regardless of instructions - it doesn't have
+              # an "analyze only" mode. It would create workaround PRs (adding waits) instead
+              # of identifying root causes in other repos (melosys-api).
+              #
+              # To manually assign Copilot to an issue:
+              #   gh api graphql -H "GraphQL-Features: issues_copilot_assignment_api_support" \
+              #     -f query='mutation { addAssigneesToAssignable(input: {
+              #       assignableId: "<ISSUE_NODE_ID>", assigneeIds: ["BOT_kgDOC9w8XQ"]
+              #     }) { assignable { ... on Issue { number } } } }'
+              #
+              # See docs/copilot-analysis-experiment.md for details.
+              echo "   ℹ️  Issue created - assign Copilot manually if needed"
             fi
           done
 
