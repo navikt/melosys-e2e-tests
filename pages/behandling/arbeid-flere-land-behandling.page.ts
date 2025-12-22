@@ -350,13 +350,17 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
       console.log('⚠️  No step transition APIs detected, waiting for React state update');
     }
 
-    // Still wait for React state update
-    await this.page.waitForTimeout(500);
+    // CRITICAL FIX: Wait for network to be fully idle BEFORE proceeding
+    // The backend locks the treatment during state transitions. We MUST wait
+    // for ALL network activity to complete to ensure the treatment is editable again.
+    // Increased timeout to 20s to handle slow CI environments.
+    console.log('⏳ Waiting for complete network idle after step transition...');
+    await this.page.waitForLoadState('networkidle', { timeout: 20000 });
+    console.log('✅ Network fully idle');
 
-    // Optional: Wait for network idle as fallback (shorter timeout now)
-    await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
-      console.log('⚠️  Network idle timeout (non-critical)');
-    });
+    // Additional wait for backend state machine to unlock treatment
+    // This ensures the backend has finished all async processing
+    await this.page.waitForTimeout(1000);
 
     // ENHANCED: Verify URL change and report detailed navigation status
     const urlAfter = this.page.url();
