@@ -1,0 +1,211 @@
+name: Analyze E2E Failures
+
+on:
+  workflow_run:
+    workflows: ["E2E Tests"]
+    types:
+      - completed
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: 'Workflow run ID to analyze'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+jobs:
+  analyze-failures:
+    runs-on: ubuntu-latest
+    # Only run if the E2E workflow completed (workflow_run) or if manually triggered
+    if: |
+      github.event_name == 'workflow_dispatch' ||
+      (github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'success')
+    
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Determine run ID
+        id: run-id
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            RUN_ID="${{ inputs.run_id }}"
+            echo "🔍 Manually triggered - analyzing run: $RUN_ID"
+          else
+            RUN_ID="${{ github.event.workflow_run.id }}"
+            echo "🔔 Auto-triggered - analyzing run: $RUN_ID"
+          fi
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
+
+      - name: Download test summary artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: test-summary
+          path: test-summary
+          run-id: ${{ steps.run-id.outputs.run_id }}
+          github-token: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if test summary exists
+        id: check-summary
+        run: |
+          if [ ! -f "test-summary/test-summary.json" ]; then
+            echo "⚠️  No test-summary.json found - skipping analysis"
+            echo "has_summary=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+          
+          # Check if there are any failures or flaky tests
+          FAILED=$(jq '[.tests[] | select(.status == "failed")] | length' test-summary/test-summary.json)
+          FLAKY=$(jq '[.tests[] | select(.status == "flaky")] | length' test-summary/test-summary.json)
+          
+          echo "📊 Test Results:"
+          echo "  ❌ Failed: $FAILED"
+          echo "  🔄 Flaky: $FLAKY"
+          
+          if [ "$FAILED" -eq 0 ] && [ "$FLAKY" -eq 0 ]; then
+            echo "✅ No failures or flaky tests - skipping analysis"
+            echo "has_summary=false" >> $GITHUB_OUTPUT
+          else
+            echo "🔍 Found failures or flaky tests - proceeding with analysis"
+            echo "has_summary=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Analyze failures and create/update issues
+        if: steps.check-summary.outputs.has_summary == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Get workflow run URL
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ steps.run-id.outputs.run_id }}"
+
+          # Read test summary
+          SUMMARY_JSON="test-summary/test-summary.json"
+
+          # Process failed and flaky tests
+          jq -c '.tests[] | select(.status == "failed" or .status == "flaky")' "$SUMMARY_JSON" | while read -r test; do
+            TITLE=$(echo "$test" | jq -r '.title')
+            FILE=$(echo "$test" | jq -r '.file')
+            STATUS=$(echo "$test" | jq -r '.status')
+            ERROR=$(echo "$test" | jq -r '.error // "No error message"')
+            DOCKER_ERRORS=$(echo "$test" | jq -c '.dockerErrors // []')
+            ATTEMPTS=$(echo "$test" | jq -r '.totalAttempts')
+            FAILED_ATTEMPTS=$(echo "$test" | jq -r '.failedAttempts')
+
+            # Create issue title
+            ISSUE_TITLE="E2E Failure: $TITLE"
+
+            echo "🔍 Processing: $TITLE"
+            echo "   Status: $STATUS"
+            echo "   File: $FILE"
+
+            # Search for existing open issue
+            EXISTING_ISSUE=$(gh issue list \
+              --label "e2e-failure" \
+              --state open \
+              --search "\"$ISSUE_TITLE\"" \
+              --json number,title \
+              --jq ".[0].number // empty")
+
+            # Prepare Docker errors section
+            DOCKER_ERRORS_MD=""
+            if [ "$DOCKER_ERRORS" != "[]" ] && [ "$DOCKER_ERRORS" != "null" ]; then
+              DOCKER_ERRORS_CONTENT=$(echo "$DOCKER_ERRORS" | jq -r \
+                'to_entries[] | "#### \(.key)\n\n\(.value | map("- [\(.timestamp)] \(.message)") | join("\n"))\n"')
+              DOCKER_ERRORS_MD=$(printf "### 🐳 Docker Log Errors\n\n%s\n" "$DOCKER_ERRORS_CONTENT")
+            fi
+
+            # Get image tags if available
+            TAGS_MD=""
+            TAGS=$(jq -r '.tags // empty | to_entries | map("- \(.key): \(.value)") | join("\n")' "$SUMMARY_JSON")
+            if [ -n "$TAGS" ]; then
+              TAGS_MD=$(printf "### 🏷️ Docker Image Tags\n\n%s\n" "$TAGS")
+            fi
+
+            # Truncate error message if too long (keep first 1000 chars)
+            if [ ${#ERROR} -gt 1000 ]; then
+              ERROR="${ERROR:0:1000}... (truncated)"
+            fi
+
+            if [ -n "$EXISTING_ISSUE" ]; then
+              # Add comment to existing issue
+              echo "📝 Adding comment to existing issue #$EXISTING_ISSUE"
+
+              # Create comment file
+              echo "## New Failure Occurrence" > /tmp/comment.md
+              echo "" >> /tmp/comment.md
+              echo "**Status:** ${STATUS}" >> /tmp/comment.md
+              echo "**Workflow Run:** ${RUN_URL}" >> /tmp/comment.md
+              echo "**Attempts:** ${FAILED_ATTEMPTS}/${ATTEMPTS}" >> /tmp/comment.md
+              echo "" >> /tmp/comment.md
+              echo "### Error Details" >> /tmp/comment.md
+              echo "" >> /tmp/comment.md
+              echo '```' >> /tmp/comment.md
+              echo "${ERROR}" >> /tmp/comment.md
+              echo '```' >> /tmp/comment.md
+              echo "" >> /tmp/comment.md
+              if [ -n "$DOCKER_ERRORS_MD" ]; then
+                echo "${DOCKER_ERRORS_MD}" >> /tmp/comment.md
+              fi
+              if [ -n "$TAGS_MD" ]; then
+                echo "${TAGS_MD}" >> /tmp/comment.md
+              fi
+              echo "---" >> /tmp/comment.md
+              echo "*This failure was automatically detected and reported.*" >> /tmp/comment.md
+
+              gh issue comment "$EXISTING_ISSUE" --body-file /tmp/comment.md
+
+            else
+              # Create new issue
+              echo "🆕 Creating new issue"
+
+              # Create issue body file
+              echo "## Test Failure Details" > /tmp/issue.md
+              echo "" >> /tmp/issue.md
+              echo "**Test File:** \`${FILE}\`" >> /tmp/issue.md
+              echo "**Status:** ${STATUS}" >> /tmp/issue.md
+              echo "**Workflow Run:** [${RUN_URL}](${RUN_URL})" >> /tmp/issue.md
+              echo "**Attempts:** ${FAILED_ATTEMPTS}/${ATTEMPTS}" >> /tmp/issue.md
+              echo "" >> /tmp/issue.md
+              echo "### Error Message" >> /tmp/issue.md
+              echo "" >> /tmp/issue.md
+              echo '```' >> /tmp/issue.md
+              echo "${ERROR}" >> /tmp/issue.md
+              echo '```' >> /tmp/issue.md
+              echo "" >> /tmp/issue.md
+              if [ -n "$DOCKER_ERRORS_MD" ]; then
+                echo "${DOCKER_ERRORS_MD}" >> /tmp/issue.md
+              fi
+              if [ -n "$TAGS_MD" ]; then
+                echo "${TAGS_MD}" >> /tmp/issue.md
+              fi
+              echo "" >> /tmp/issue.md
+              echo "---" >> /tmp/issue.md
+              echo "" >> /tmp/issue.md
+              echo "### 🤖 Analysis Needed" >> /tmp/issue.md
+              echo "" >> /tmp/issue.md
+              echo "This issue has been automatically created from an E2E test failure." >> /tmp/issue.md
+              echo "" >> /tmp/issue.md
+              echo "**Next Steps:**" >> /tmp/issue.md
+              echo "1. Review the error details and workflow run above" >> /tmp/issue.md
+              echo "2. Add the \`copilot-analyze\` label to trigger automated analysis" >> /tmp/issue.md
+              echo "3. Copilot will search relevant repositories and suggest whether this is:" >> /tmp/issue.md
+              echo "   - A test bug (issue in test code)" >> /tmp/issue.md
+              echo "   - A production bug (issue in application code)" >> /tmp/issue.md
+              echo "   - A flaky test (timing/race condition)" >> /tmp/issue.md
+              echo "" >> /tmp/issue.md
+              echo "---" >> /tmp/issue.md
+              echo "*This issue was automatically created by the E2E failure analysis workflow.*" >> /tmp/issue.md
+
+              gh issue create \
+                --title "$ISSUE_TITLE" \
+                --body-file /tmp/issue.md \
+                --label "e2e-failure" \
+                --label "needs-triage"
+            fi
+          done
+
+          echo "✅ Analysis complete"

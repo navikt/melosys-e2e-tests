@@ -33,6 +33,10 @@ jobs:
   e2e-tests:
     runs-on: ubuntu-latest-8-cores
     timeout-minutes: 45
+    outputs:
+      test-status: ${{ steps.test-status.outputs.status }}
+      has-failures: ${{ steps.test-status.outputs.has-failures }}
+      has-flaky: ${{ steps.test-status.outputs.has-flaky }}
 
     steps:
       - name: Checkout code
@@ -403,6 +407,42 @@ jobs:
           fi
         env:
           CI: true
+
+      - name: Set test status outputs
+        id: test-status
+        if: always()
+        run: |
+          # Default values
+          HAS_FAILURES="false"
+          HAS_FLAKY="false"
+          STATUS="unknown"
+          
+          # Check if test-summary.json exists
+          if [ -f "playwright-report/test-summary.json" ]; then
+            # Get status from reporter
+            STATUS=$(jq -r '.status' playwright-report/test-summary.json)
+            
+            # Count failures and flaky tests
+            FAILED=$(jq '[.tests[] | select(.status == "failed")] | length' playwright-report/test-summary.json)
+            FLAKY=$(jq '[.tests[] | select(.status == "flaky")] | length' playwright-report/test-summary.json)
+            
+            if [ "$FAILED" -gt 0 ]; then
+              HAS_FAILURES="true"
+            fi
+            
+            if [ "$FLAKY" -gt 0 ]; then
+              HAS_FLAKY="true"
+            fi
+          fi
+          
+          echo "status=$STATUS" >> $GITHUB_OUTPUT
+          echo "has-failures=$HAS_FAILURES" >> $GITHUB_OUTPUT
+          echo "has-flaky=$HAS_FLAKY" >> $GITHUB_OUTPUT
+          
+          echo "📊 Test status outputs:"
+          echo "  status: $STATUS"
+          echo "  has-failures: $HAS_FAILURES"
+          echo "  has-flaky: $HAS_FLAKY"
 
       - name: Dump JaCoCo coverage from melosys-api
         if: always() && inputs.collect_coverage
