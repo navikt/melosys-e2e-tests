@@ -1,0 +1,69 @@
+name: Copilot Analyze Failure
+
+on:
+  issues:
+    types: [labeled]
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  trigger-copilot-analysis:
+    runs-on: ubuntu-latest
+    if: github.event.label.name == 'copilot-analyze'
+
+    steps:
+      - name: Add Copilot analysis comment
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          ISSUE_NUMBER="${{ github.event.issue.number }}"
+
+          # Create comment file
+          {
+            echo "@copilot I need your help analyzing this E2E test failure."
+            echo ""
+            echo "## Analysis Request"
+            echo ""
+            echo "Please analyze the error details in this issue and help determine the root cause."
+            echo ""
+            echo "### Tasks:"
+            echo ""
+            echo "1. **Review Error Details**"
+            echo "   - Examine the error message and stack trace"
+            echo "   - Review any Docker log errors from services"
+            echo "   - Check the workflow run link for additional context"
+            echo ""
+            echo "2. **Search Related Code**"
+            echo "   - Search the \`navikt/melosys-api\` repository for relevant backend code"
+            echo "   - Search the \`navikt/melosys-web\` repository for relevant frontend code"
+            echo "   - Look for recent changes that might have introduced this issue"
+            echo ""
+            echo "3. **Determine Issue Type**"
+            echo "   Based on your analysis, classify this as one of:"
+            echo "   - **Test Bug** - Issue in the E2E test code itself (e.g., incorrect selectors, timing issues in test)"
+            echo "   - **Production Bug** - Issue in the application code (backend or frontend)"
+            echo "   - **Flaky Test** - Race condition or timing issue that causes intermittent failures"
+            echo "   - **Environment Issue** - Problem with test environment, Docker setup, or infrastructure"
+            echo ""
+            echo "4. **Provide Recommendations**"
+            echo "   - Suggest a fix or workaround if possible"
+            echo "   - Link to related issues or PRs if relevant"
+            echo "   - Recommend appropriate labels to add (e.g., \`test-bug\`, \`production-bug\`, \`flaky-test\`)"
+            echo ""
+            echo "### Additional Context"
+            echo ""
+            echo "- This is an E2E test for the Melosys application (Norwegian social security system)"
+            echo "- Tests use Playwright with TypeScript"
+            echo "- The application stack includes: melosys-web (frontend), melosys-api (backend), and various microservices"
+            echo "- Tests run in Docker Compose with services like Oracle DB, Kafka, Unleash (feature toggles)"
+            echo ""
+            echo "Please provide a detailed analysis with your findings and recommendations."
+          } > /tmp/copilot-request.md
+
+          gh issue comment "$ISSUE_NUMBER" \
+            --repo "${{ github.repository }}" \
+            --body-file /tmp/copilot-request.md
+
+          echo "✅ Copilot analysis request added to issue #$ISSUE_NUMBER"
