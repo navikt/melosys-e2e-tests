@@ -523,6 +523,7 @@ npm run codegen
 ## Resources
 
 ### Documentation
+- **[E2E Failure Analysis](docs/ci-cd/E2E-FAILURE-ANALYSIS.md)** - Automated failure detection and Copilot analysis
 - **[Error Reporting Guide](docs/guides/ERROR-REPORTING.md)** - How tests detect and report failures
 - **[Fixtures Guide](docs/guides/FIXTURES.md)** - Auto-cleanup and Docker log checking
 - **[GitHub Actions Guide](docs/ci-cd/GITHUB-ACTIONS.md)** - CI/CD setup and usage
