@@ -479,9 +479,36 @@ export class EuEosBehandlingPage extends BasePage {
    * Fullfør arbeidsgiver-seksjonen
    * Hjelpemetode for tredje steg
    *
+   * CRITICAL FIX: Waits for employer data API after previous step transition.
+   * After clicking "Bekreft og fortsett" in step 2, the frontend fetches employer
+   * data from backend. We must wait for these API calls to complete before selecting.
+   *
    * @param arbeidsgiverNavn - Navn på arbeidsgiver (default: 'Ståles Stål AS')
    */
   async velgArbeidsgiverOgFortsett(arbeidsgiverNavn: string = 'Ståles Stål AS'): Promise<void> {
+    // CRITICAL FIX: Wait for employer data to be loaded before selecting
+    // After step 2 transition (Yrkesaktiv/Selvstendig), the frontend fetches employer data.
+    // Race condition: If we select too fast, the checkbox won't exist yet.
+    console.log('⏳ Waiting for employer data API after step transition...');
+    const employerApiPromise = this.page.waitForResponse(
+      response => (response.url().includes('/arbeidsforhold') ||
+                   response.url().includes('/virksomheter') ||
+                   response.url().includes('/registeropplysninger') ||
+                   response.url().includes('/mottatteopplysninger')) &&
+                  response.status() === 200,
+      { timeout: 15000 }
+    ).catch(() => {
+      console.log('⚠️  No employer API detected within 15s - proceeding anyway');
+      return null;
+    });
+
+    const employerResponse = await employerApiPromise;
+    if (employerResponse) {
+      console.log(`✅ Employer data loaded: ${employerResponse.url()} -> ${employerResponse.status()}`);
+      // Give React time to render the employer list after API response
+      await this.page.waitForTimeout(500);
+    }
+
     await this.velgArbeidsgiver(arbeidsgiverNavn);
     await this.klikkBekreftOgFortsett();
   }
