@@ -114,6 +114,27 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     this.page.on('response', apiListener);
 
     try {
+      // CRITICAL FIX: Wait for employer data API to complete after step transition
+      // After klikkBekreftOgFortsett(), the frontend fetches employer data from backend.
+      // We must wait for these API calls to complete before the checkbox can be rendered.
+      console.log('⏳ Waiting for employer data API after step transition...');
+      const employerApiPromise = this.page.waitForResponse(
+        response => (response.url().includes('/arbeidsforhold') ||
+                     response.url().includes('/virksomheter') ||
+                     response.url().includes('/registeropplysninger') ||
+                     response.url().includes('/mottatteopplysninger')) &&
+                    response.status() === 200,
+        { timeout: 15000 }
+      ).catch(() => {
+        console.log('⚠️  No employer API detected within 15s - proceeding anyway');
+        return null;
+      });
+
+      const employerResponse = await employerApiPromise;
+      if (employerResponse) {
+        console.log(`✅ Employer data loaded: ${employerResponse.url()} -> ${employerResponse.status()}`);
+      }
+
       // CRITICAL: Wait for network to be idle FIRST
       console.log(`⏳ Waiting for network idle (15s timeout)...`);
       const networkStart = Date.now();
@@ -466,30 +487,8 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     await this.velgLandRadio(land);
     await this.klikkBekreftOgFortsett();
 
-    // CRITICAL FIX: Wait for employer data to be loaded before selecting
-    // After step transition, the frontend fetches employer data from backend.
-    // We must wait for these API calls to complete before calling velgArbeidsgiver.
-    console.log('⏳ Waiting for employer data API after step transition...');
-    const employerApiPromise = this.page.waitForResponse(
-      response => (response.url().includes('/arbeidsforhold') ||
-                   response.url().includes('/virksomheter') ||
-                   response.url().includes('/registeropplysninger') ||
-                   response.url().includes('/mottatteopplysninger')) &&
-                  response.status() === 200,
-      { timeout: 15000 }
-    ).catch(() => {
-      console.log('⚠️  No employer API detected within 15s - proceeding anyway');
-      return null;
-    });
-
-    const employerResponse = await employerApiPromise;
-    if (employerResponse) {
-      console.log(`✅ Employer data loaded: ${employerResponse.url()} -> ${employerResponse.status()}`);
-      // Give React time to render the employer list after API response
-      await this.page.waitForTimeout(500);
-    }
-
     // Steg 3: Velg arbeidsgiver
+    // NOTE: velgArbeidsgiver() now handles the employer API wait internally
     await this.velgArbeidsgiver(arbeidsgiver);
     await this.klikkBekreftOgFortsett();
 
