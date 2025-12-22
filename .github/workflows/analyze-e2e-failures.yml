@@ -130,20 +130,54 @@ jobs:
             DURATION=$(echo "$test" | jq -r '.duration // 0')
             DURATION_SEC=$((DURATION / 1000))
 
-            # Create issue title
-            ISSUE_TITLE="E2E Failure: $TITLE"
+            # Detect error pattern FIRST (needed for issue title matching)
+            ERROR_PATTERN="Unknown"
+            ERROR_PATTERN_SHORT="unknown"
+            if echo "$ERROR" | grep -qi "timeout"; then
+              ERROR_PATTERN="Timeout - Element or API did not respond in time"
+              ERROR_PATTERN_SHORT="timeout"
+            elif echo "$ERROR" | grep -qi "Expected:.*Received:"; then
+              ERROR_PATTERN="Assertion Failed - Expected value did not match"
+              ERROR_PATTERN_SHORT="assertion"
+            elif echo "$ERROR" | grep -qi "selector\|locator"; then
+              ERROR_PATTERN="Element Not Found - UI element missing or changed"
+              ERROR_PATTERN_SHORT="element-not-found"
+            elif echo "$ERROR" | grep -qi "connection\|ECONNREFUSED"; then
+              ERROR_PATTERN="Connection Error - Service unavailable"
+              ERROR_PATTERN_SHORT="connection"
+            elif echo "$ERROR" | grep -qi "antallProsessert.*0\|Expected: 1.*Received: 0"; then
+              ERROR_PATTERN="Race Condition - Async operation not complete"
+              ERROR_PATTERN_SHORT="race-condition"
+            fi
+
+            # Create issue title with error pattern for better deduplication
+            ISSUE_TITLE="E2E Failure: $TITLE [$ERROR_PATTERN_SHORT]"
 
             echo "🔍 Processing: $TITLE"
             echo "   Status: $STATUS"
             echo "   File: $FILE"
+            echo "   Pattern: $ERROR_PATTERN_SHORT"
 
-            # Search for existing open issue
+            # Search for existing open issue with same test AND error pattern
             EXISTING_ISSUE=$(gh issue list \
               --label "e2e-failure" \
               --state open \
-              --search "\"$ISSUE_TITLE\"" \
+              --search "\"E2E Failure: $TITLE\" \"$ERROR_PATTERN_SHORT\"" \
               --json number,title \
               --jq ".[0].number // empty")
+
+            # If no exact match, also check for issues with same test but different pattern
+            if [ -z "$EXISTING_ISSUE" ]; then
+              RELATED_ISSUE=$(gh issue list \
+                --label "e2e-failure" \
+                --state open \
+                --search "\"E2E Failure: $TITLE\"" \
+                --json number,title \
+                --jq ".[0].number // empty")
+              if [ -n "$RELATED_ISSUE" ]; then
+                echo "   Found related issue #$RELATED_ISSUE with different error pattern"
+              fi
+            fi
 
             # Try to find error-context.md for this test
             TEST_NAME=$(basename "$FILE" .spec.ts)
@@ -160,20 +194,6 @@ jobs:
             if [ -n "$API_LOG" ] && [ -f "$API_LOG" ]; then
               # Get last 20 ERROR lines from API log
               DOCKER_LOG_SNIPPET=$(grep -i "ERROR\|Exception\|WARN" "$API_LOG" | tail -20 | head -c 1500)
-            fi
-
-            # Detect error pattern
-            ERROR_PATTERN="Unknown"
-            if echo "$ERROR" | grep -qi "timeout"; then
-              ERROR_PATTERN="Timeout - Element or API did not respond in time"
-            elif echo "$ERROR" | grep -qi "Expected:.*Received:"; then
-              ERROR_PATTERN="Assertion Failed - Expected value did not match"
-            elif echo "$ERROR" | grep -qi "selector\|locator"; then
-              ERROR_PATTERN="Element Not Found - UI element missing or changed"
-            elif echo "$ERROR" | grep -qi "connection\|ECONNREFUSED"; then
-              ERROR_PATTERN="Connection Error - Service unavailable"
-            elif echo "$ERROR" | grep -qi "antallProsessert.*0\|Expected: 1.*Received: 0"; then
-              ERROR_PATTERN="Race Condition - Async operation not complete"
             fi
 
             # Prepare Docker errors section from test summary
