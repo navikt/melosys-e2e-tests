@@ -392,20 +392,14 @@ jobs:
                   }
                 }" --jq '.data.repository.issue.id' 2>/dev/null)
 
-                # Get Copilot bot ID
-                COPILOT_ID=$(gh api graphql -f query="query {
-                  repository(owner: \"${{ github.repository_owner }}\", name: \"${GITHUB_REPOSITORY#*/}\") {
-                    suggestedActors(capabilities: [CAN_BE_ASSIGNED], first: 100) {
-                      nodes {
-                        __typename
-                        login
-                        ... on Bot { id }
-                      }
-                    }
-                  }
-                }" --jq '.data.repository.suggestedActors.nodes[] | select(.login == "copilot-swe-agent") | .id' 2>/dev/null)
+                # Copilot SWE Agent bot ID - hardcoded because GITHUB_TOKEN cannot query suggestedActors
+                # This ID is stable across GitHub and was retrieved via:
+                # gh api graphql -f query='{ repository(owner:"navikt",name:"melosys-e2e-tests") {
+                #   suggestedActors(capabilities:[CAN_BE_ASSIGNED],first:100) {
+                #     nodes { __typename login ... on Bot { id } } } } }'
+                COPILOT_ID="BOT_kgDOC9w8XQ"
 
-                if [ -n "$ISSUE_NODE_ID" ] && [ -n "$COPILOT_ID" ]; then
+                if [ -n "$ISSUE_NODE_ID" ]; then
                   # Assign Copilot using special GraphQL header
                   gh api graphql \
                     -H "GraphQL-Features: issues_copilot_assignment_api_support" \
@@ -420,7 +414,7 @@ jobs:
                       }
                     }" >/dev/null 2>&1 && echo "   ✅ Copilot assigned" || echo "   ⚠️ Failed to assign Copilot"
                 else
-                  echo "   ⚠️ Could not get IDs for Copilot assignment"
+                  echo "   ⚠️ Could not get issue node ID"
                 fi
               fi
             fi
