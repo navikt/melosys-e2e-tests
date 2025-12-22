@@ -41,26 +41,36 @@ jobs:
           fi
           echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
 
-      - name: Download test summary artifact
+      - name: Download test artifacts
         uses: actions/download-artifact@v4
         with:
-          name: test-summary
-          path: test-summary
           run-id: ${{ steps.run-id.outputs.run_id }}
           github-token: ${{ secrets.GITHUB_TOKEN }}
+          path: artifacts
+
+      - name: List downloaded artifacts
+        run: |
+          echo "📦 Downloaded artifacts:"
+          find artifacts -type f -name "*.json" -o -name "*.md" -o -name "*.log" | head -50
 
       - name: Check if test summary exists
         id: check-summary
         run: |
-          if [ ! -f "test-summary/test-summary.json" ]; then
+          # Find test-summary.json in downloaded artifacts
+          SUMMARY_FILE=$(find artifacts -name "test-summary.json" -type f | head -1)
+
+          if [ -z "$SUMMARY_FILE" ]; then
             echo "⚠️  No test-summary.json found - skipping analysis"
             echo "has_summary=false" >> $GITHUB_OUTPUT
             exit 0
           fi
-          
+
+          echo "📄 Found summary: $SUMMARY_FILE"
+          echo "summary_file=$SUMMARY_FILE" >> $GITHUB_OUTPUT
+
           # Check if there are any failures or flaky tests
-          FAILED=$(jq '[.tests[] | select(.status == "failed")] | length' test-summary/test-summary.json)
-          FLAKY=$(jq '[.tests[] | select(.status == "flaky")] | length' test-summary/test-summary.json)
+          FAILED=$(jq '[.tests[] | select(.status == "failed")] | length' "$SUMMARY_FILE")
+          FLAKY=$(jq '[.tests[] | select(.status == "flaky")] | length' "$SUMMARY_FILE")
           
           echo "📊 Test Results:"
           echo "  ❌ Failed: $FAILED"
@@ -74,135 +84,345 @@ jobs:
             echo "has_summary=true" >> $GITHUB_OUTPUT
           fi
 
+      - name: Ensure required labels exist
+        if: steps.check-summary.outputs.has_summary == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          echo "🏷️ Ensuring required labels exist..."
+
+          # Create labels if they don't exist (ignore errors if they already exist)
+          gh label create "e2e-failure" \
+            --description "E2E test failure detected by automated analysis" \
+            --color "d73a4a" 2>/dev/null || echo "  Label 'e2e-failure' already exists"
+
+          gh label create "needs-triage" \
+            --description "New issue that needs review and classification" \
+            --color "fbca04" 2>/dev/null || echo "  Label 'needs-triage' already exists"
+
+          gh label create "copilot-analyze" \
+            --description "Trigger Copilot AI analysis for this issue" \
+            --color "7057ff" 2>/dev/null || echo "  Label 'copilot-analyze' already exists"
+
+          echo "✅ Labels ready"
+
+      - name: Get error annotations from GitHub API
+        if: steps.check-summary.outputs.has_summary == 'true'
+        id: annotations
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Fetch annotations from the workflow run jobs
+          RUN_ID="${{ steps.run-id.outputs.run_id }}"
+
+          echo "📋 Fetching annotations from run $RUN_ID..."
+
+          # Get all job IDs for this run
+          JOB_IDS=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}/jobs" --jq '.jobs[].id')
+
+          # Fetch annotations from each job and combine
+          echo "[]" > /tmp/annotations.json
+          for JOB_ID in $JOB_IDS; do
+            echo "   Fetching annotations from job $JOB_ID..."
+            JOB_ANNOTATIONS=$(gh api "repos/${{ github.repository }}/check-runs/${JOB_ID}/annotations" 2>/dev/null || echo "[]")
+            # Merge with existing annotations
+            jq -s 'add' /tmp/annotations.json <(echo "$JOB_ANNOTATIONS") > /tmp/annotations_new.json
+            mv /tmp/annotations_new.json /tmp/annotations.json
+          done
+
+          # Show what we found
+          ANNOTATION_COUNT=$(jq 'length' /tmp/annotations.json)
+          FAILURE_COUNT=$(jq '[.[] | select(.annotation_level == "failure")] | length' /tmp/annotations.json)
+          echo "📝 Found $ANNOTATION_COUNT annotations ($FAILURE_COUNT failures)"
+
+          echo "annotations_file=/tmp/annotations.json" >> $GITHUB_OUTPUT
+
       - name: Analyze failures and create/update issues
         if: steps.check-summary.outputs.has_summary == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          # Get workflow run URL
+          # Get workflow run URL and summary file
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ steps.run-id.outputs.run_id }}"
+          SUMMARY_JSON="${{ steps.check-summary.outputs.summary_file }}"
+          ANNOTATIONS_FILE="${{ steps.annotations.outputs.annotations_file }}"
 
-          # Read test summary
-          SUMMARY_JSON="test-summary/test-summary.json"
+          # Get image tags from summary
+          TAGS=$(jq -r '.tags // {} | to_entries | map("| \(.key) | `\(.value)` |") | join("\n")' "$SUMMARY_JSON")
 
           # Process failed and flaky tests
           jq -c '.tests[] | select(.status == "failed" or .status == "flaky")' "$SUMMARY_JSON" | while read -r test; do
             TITLE=$(echo "$test" | jq -r '.title')
             FILE=$(echo "$test" | jq -r '.file')
             STATUS=$(echo "$test" | jq -r '.status')
-            ERROR=$(echo "$test" | jq -r '.error // "No error message"')
             DOCKER_ERRORS=$(echo "$test" | jq -c '.dockerErrors // []')
             ATTEMPTS=$(echo "$test" | jq -r '.totalAttempts')
             FAILED_ATTEMPTS=$(echo "$test" | jq -r '.failedAttempts')
+            DURATION=$(echo "$test" | jq -r '.duration // 0')
+            DURATION_SEC=$((DURATION / 1000))
 
-            # Create issue title
-            ISSUE_TITLE="E2E Failure: $TITLE"
+            # Extract error message from annotations by matching test title
+            # Annotations have title like: "[chromium] › path › TestSuite › testName"
+            # We match against the test title at the end of the annotation title
+            ERROR="No error message available"
+            if [ -f "$ANNOTATIONS_FILE" ]; then
+              # Search for failure annotation where title ends with our test title
+              MATCHED_ERROR=$(jq -r --arg title "$TITLE" \
+                '[.[] | select(.annotation_level == "failure") | select(.title | endswith($title))] | .[0].message // empty' \
+                "$ANNOTATIONS_FILE")
+              if [ -n "$MATCHED_ERROR" ]; then
+                ERROR="$MATCHED_ERROR"
+                echo "   ✅ Found error from annotations"
+              else
+                echo "   ⚠️ No matching annotation found for: $TITLE"
+              fi
+            fi
+
+            # Detect error pattern FIRST (needed for issue title matching)
+            ERROR_PATTERN="Unknown"
+            ERROR_PATTERN_SHORT="unknown"
+            if echo "$ERROR" | grep -qi "timeout"; then
+              ERROR_PATTERN="Timeout - Element or API did not respond in time"
+              ERROR_PATTERN_SHORT="timeout"
+            elif echo "$ERROR" | grep -qi "Expected:.*Received:"; then
+              ERROR_PATTERN="Assertion Failed - Expected value did not match"
+              ERROR_PATTERN_SHORT="assertion"
+            elif echo "$ERROR" | grep -qi "selector\|locator"; then
+              ERROR_PATTERN="Element Not Found - UI element missing or changed"
+              ERROR_PATTERN_SHORT="element-not-found"
+            elif echo "$ERROR" | grep -qi "connection\|ECONNREFUSED"; then
+              ERROR_PATTERN="Connection Error - Service unavailable"
+              ERROR_PATTERN_SHORT="connection"
+            elif echo "$ERROR" | grep -qi "antallProsessert.*0\|Expected: 1.*Received: 0"; then
+              ERROR_PATTERN="Race Condition - Async operation not complete"
+              ERROR_PATTERN_SHORT="race-condition"
+            fi
+
+            # Create issue title with error pattern for better deduplication
+            ISSUE_TITLE="E2E Failure: $TITLE [$ERROR_PATTERN_SHORT]"
 
             echo "🔍 Processing: $TITLE"
             echo "   Status: $STATUS"
             echo "   File: $FILE"
+            echo "   Pattern: $ERROR_PATTERN_SHORT"
 
-            # Search for existing open issue
+            # Search for existing open issue with same test AND error pattern
             EXISTING_ISSUE=$(gh issue list \
               --label "e2e-failure" \
               --state open \
-              --search "\"$ISSUE_TITLE\"" \
+              --search "\"E2E Failure: $TITLE\" \"$ERROR_PATTERN_SHORT\"" \
               --json number,title \
               --jq ".[0].number // empty")
 
-            # Prepare Docker errors section
+            # If no exact match, also check for issues with same test but different pattern
+            if [ -z "$EXISTING_ISSUE" ]; then
+              RELATED_ISSUE=$(gh issue list \
+                --label "e2e-failure" \
+                --state open \
+                --search "\"E2E Failure: $TITLE\"" \
+                --json number,title \
+                --jq ".[0].number // empty")
+              if [ -n "$RELATED_ISSUE" ]; then
+                echo "   Found related issue #$RELATED_ISSUE with different error pattern"
+              fi
+            fi
+
+            # Try to find error-context.md for this test
+            TEST_NAME=$(basename "$FILE" .spec.ts)
+            ERROR_CONTEXT=""
+            ERROR_CONTEXT_FILE=$(find artifacts -path "*${TEST_NAME}*" -name "error-context.md" 2>/dev/null | head -1)
+            if [ -n "$ERROR_CONTEXT_FILE" ] && [ -f "$ERROR_CONTEXT_FILE" ]; then
+              ERROR_CONTEXT=$(head -100 "$ERROR_CONTEXT_FILE" | head -c 2000)
+              echo "   Found error context: $ERROR_CONTEXT_FILE"
+            fi
+
+            # Try to find relevant Docker logs
+            DOCKER_LOG_SNIPPET=""
+            API_LOG=$(find artifacts -name "melosys-api-complete.log" 2>/dev/null | head -1)
+            if [ -n "$API_LOG" ] && [ -f "$API_LOG" ]; then
+              # Get last 20 ERROR lines from API log
+              DOCKER_LOG_SNIPPET=$(grep -i "ERROR\|Exception\|WARN" "$API_LOG" | tail -20 | head -c 1500)
+            fi
+
+            # Prepare Docker errors section from test summary
             DOCKER_ERRORS_MD=""
             if [ "$DOCKER_ERRORS" != "[]" ] && [ "$DOCKER_ERRORS" != "null" ]; then
               DOCKER_ERRORS_CONTENT=$(echo "$DOCKER_ERRORS" | jq -r \
-                '.[] | "#### \(.service)\n\n\(.errors | map("- [\(.timestamp)] \(.message)") | join("\n"))\n"')
-              DOCKER_ERRORS_MD=$(printf "### 🐳 Docker Log Errors\n\n%s\n" "$DOCKER_ERRORS_CONTENT")
+                '.[] | "**\(.service):**\n\(.errors[:5] | map("- `[\(.timestamp)]` \(.message)") | join("\n"))"')
+              DOCKER_ERRORS_MD="$DOCKER_ERRORS_CONTENT"
             fi
 
-            # Get image tags if available
-            TAGS_MD=""
-            TAGS=$(jq -r '.tags // empty | to_entries | map("- \(.key): \(.value)") | join("\n")' "$SUMMARY_JSON")
-            if [ -n "$TAGS" ]; then
-              TAGS_MD=$(printf "### 🏷️ Docker Image Tags\n\n%s\n" "$TAGS")
-            fi
-
-            # Truncate error message if too long (keep first 1000 chars)
-            if [ ${#ERROR} -gt 1000 ]; then
-              ERROR="${ERROR:0:1000}... (truncated)"
+            # Truncate error message if too long
+            if [ ${#ERROR} -gt 1500 ]; then
+              ERROR="${ERROR:0:1500}... (truncated)"
             fi
 
             if [ -n "$EXISTING_ISSUE" ]; then
               # Add comment to existing issue
               echo "📝 Adding comment to existing issue #$EXISTING_ISSUE"
 
-              # Create comment file
-              echo "## New Failure Occurrence" > /tmp/comment.md
-              echo "" >> /tmp/comment.md
-              echo "**Status:** ${STATUS}" >> /tmp/comment.md
-              echo "**Workflow Run:** ${RUN_URL}" >> /tmp/comment.md
-              echo "**Attempts:** ${FAILED_ATTEMPTS}/${ATTEMPTS}" >> /tmp/comment.md
-              echo "" >> /tmp/comment.md
-              echo "### Error Details" >> /tmp/comment.md
-              echo "" >> /tmp/comment.md
-              echo '```' >> /tmp/comment.md
-              echo "${ERROR}" >> /tmp/comment.md
-              echo '```' >> /tmp/comment.md
-              echo "" >> /tmp/comment.md
-              if [ -n "$DOCKER_ERRORS_MD" ]; then
-                echo "${DOCKER_ERRORS_MD}" >> /tmp/comment.md
-              fi
-              if [ -n "$TAGS_MD" ]; then
-                echo "${TAGS_MD}" >> /tmp/comment.md
-              fi
-              echo "---" >> /tmp/comment.md
-              echo "*This failure was automatically detected and reported.*" >> /tmp/comment.md
+              {
+                echo "## 🔄 New Failure Occurrence"
+                echo ""
+                echo "| Metric | Value |"
+                echo "|--------|-------|"
+                echo "| Status | \`${STATUS}\` |"
+                echo "| Attempts | ${FAILED_ATTEMPTS}/${ATTEMPTS} |"
+                echo "| Duration | ${DURATION_SEC}s |"
+                echo "| Workflow | [Run #${{ steps.run-id.outputs.run_id }}](${RUN_URL}) |"
+                echo ""
+                echo "### Error Message"
+                echo "\`\`\`"
+                echo "${ERROR}"
+                echo "\`\`\`"
+                echo ""
+                if [ -n "$DOCKER_ERRORS_MD" ]; then
+                  echo "### Docker Errors During Test"
+                  echo ""
+                  echo "$DOCKER_ERRORS_MD"
+                  echo ""
+                fi
+                echo "---"
+                echo "*Automatically reported at $(date -u +"%Y-%m-%d %H:%M:%S UTC")*"
+              } > /tmp/comment.md
 
               gh issue comment "$EXISTING_ISSUE" --body-file /tmp/comment.md
 
             else
-              # Create new issue
+              # Create new issue with rich context
               echo "🆕 Creating new issue"
 
-              # Create issue body file
-              echo "## Test Failure Details" > /tmp/issue.md
-              echo "" >> /tmp/issue.md
-              echo "**Test File:** \`${FILE}\`" >> /tmp/issue.md
-              echo "**Status:** ${STATUS}" >> /tmp/issue.md
-              echo "**Workflow Run:** [${RUN_URL}](${RUN_URL})" >> /tmp/issue.md
-              echo "**Attempts:** ${FAILED_ATTEMPTS}/${ATTEMPTS}" >> /tmp/issue.md
-              echo "" >> /tmp/issue.md
-              echo "### Error Message" >> /tmp/issue.md
-              echo "" >> /tmp/issue.md
-              echo '```' >> /tmp/issue.md
-              echo "${ERROR}" >> /tmp/issue.md
-              echo '```' >> /tmp/issue.md
-              echo "" >> /tmp/issue.md
-              if [ -n "$DOCKER_ERRORS_MD" ]; then
-                echo "${DOCKER_ERRORS_MD}" >> /tmp/issue.md
-              fi
-              if [ -n "$TAGS_MD" ]; then
-                echo "${TAGS_MD}" >> /tmp/issue.md
-              fi
-              echo "" >> /tmp/issue.md
-              echo "---" >> /tmp/issue.md
-              echo "" >> /tmp/issue.md
-              echo "### 🤖 Automatic Analysis" >> /tmp/issue.md
-              echo "" >> /tmp/issue.md
-              echo "This issue has been automatically created from an E2E test failure." >> /tmp/issue.md
-              echo "" >> /tmp/issue.md
-              echo "**Copilot will automatically analyze this issue and provide:**" >> /tmp/issue.md
-              echo "- Root cause analysis" >> /tmp/issue.md
-              echo "- Classification (test bug, production bug, or flaky test)" >> /tmp/issue.md
-              echo "- Suggested fixes based on melosys-api and melosys-web code" >> /tmp/issue.md
-              echo "" >> /tmp/issue.md
-              echo "---" >> /tmp/issue.md
-              echo "*This issue was automatically created by the E2E failure analysis workflow.*" >> /tmp/issue.md
+              {
+                echo "## Summary"
+                echo ""
+                echo "| Metric | Value |"
+                echo "|--------|-------|"
+                echo "| **Status** | \`${STATUS}\` |"
+                echo "| **Test File** | \`${FILE}\` |"
+                echo "| **Attempts** | ${FAILED_ATTEMPTS} failed / ${ATTEMPTS} total |"
+                echo "| **Duration** | ${DURATION_SEC}s |"
+                echo "| **Error Pattern** | ${ERROR_PATTERN} |"
+                echo "| **Workflow Run** | [View Logs](${RUN_URL}) |"
+                echo ""
+                echo "## Error Details"
+                echo ""
+                echo "### Error Message"
+                echo "\`\`\`"
+                echo "${ERROR}"
+                echo "\`\`\`"
+                echo ""
+                echo "### Detected Pattern"
+                echo "> **${ERROR_PATTERN}**"
+                echo ""
+                if [ -n "$DOCKER_ERRORS_MD" ]; then
+                  echo "### 🐳 Docker Service Errors"
+                  echo ""
+                  echo "These errors were found in Docker logs during the test:"
+                  echo ""
+                  echo "$DOCKER_ERRORS_MD"
+                  echo ""
+                fi
+                if [ -n "$ERROR_CONTEXT" ]; then
+                  echo "### 📸 Page State at Failure"
+                  echo ""
+                  echo "\`\`\`"
+                  echo "${ERROR_CONTEXT}"
+                  echo "\`\`\`"
+                  echo ""
+                fi
+                if [ -n "$DOCKER_LOG_SNIPPET" ]; then
+                  echo "### 📋 Recent API Errors"
+                  echo ""
+                  echo "\`\`\`"
+                  echo "${DOCKER_LOG_SNIPPET}"
+                  echo "\`\`\`"
+                  echo ""
+                fi
+                if [ -n "$TAGS" ]; then
+                  echo "### 🏷️ Docker Image Tags"
+                  echo ""
+                  echo "| Service | Tag |"
+                  echo "|---------|-----|"
+                  echo "${TAGS}"
+                  echo ""
+                fi
+                echo "---"
+                echo ""
+                echo "## 🤖 Analysis Instructions"
+                echo ""
+                echo "@copilot Please analyze this E2E test failure:"
+                echo ""
+                echo "1. **Review the error pattern** - Is this a known issue type?"
+                echo "2. **Check the Docker logs** - Any backend errors that caused this?"
+                echo "3. **Search related code:**"
+                echo "   - \`navikt/melosys-api\` for backend issues"
+                echo "   - \`navikt/melosys-web\` for frontend issues"
+                echo "   - \`navikt/melosys-e2e-tests\` for test code issues"
+                echo "4. **Classify this issue:**"
+                echo "   - \`test-bug\` - Issue in test code (selectors, timing, assertions)"
+                echo "   - \`production-bug\` - Issue in application code"
+                echo "   - \`flaky-test\` - Race condition or timing issue"
+                echo "   - \`environment-issue\` - Docker/infrastructure problem"
+                echo "5. **Suggest a fix** based on the error pattern and logs"
+                echo ""
+                echo "---"
+                echo "*Auto-generated by E2E failure analysis workflow*"
+              } > /tmp/issue.md
 
-              gh issue create \
+              # Create issue and capture the URL
+              ISSUE_URL=$(gh issue create \
                 --title "$ISSUE_TITLE" \
                 --body-file /tmp/issue.md \
                 --label "e2e-failure" \
-                --label "needs-triage" \
-                --label "copilot-analyze"
+                --label "needs-triage")
+
+              echo "   📝 Created: $ISSUE_URL"
+
+              # Extract issue number from URL
+              ISSUE_NUM=$(echo "$ISSUE_URL" | grep -oE '[0-9]+$')
+
+              # Assign Copilot to analyze the issue
+              if [ -n "$ISSUE_NUM" ]; then
+                echo "   🤖 Assigning Copilot to issue #$ISSUE_NUM..."
+
+                # Get issue node ID
+                ISSUE_NODE_ID=$(gh api graphql -f query="query {
+                  repository(owner: \"${{ github.repository_owner }}\", name: \"${GITHUB_REPOSITORY#*/}\") {
+                    issue(number: $ISSUE_NUM) { id }
+                  }
+                }" --jq '.data.repository.issue.id' 2>/dev/null)
+
+                # Get Copilot bot ID
+                COPILOT_ID=$(gh api graphql -f query="query {
+                  repository(owner: \"${{ github.repository_owner }}\", name: \"${GITHUB_REPOSITORY#*/}\") {
+                    suggestedActors(capabilities: [CAN_BE_ASSIGNED], first: 100) {
+                      nodes {
+                        __typename
+                        login
+                        ... on Bot { id }
+                      }
+                    }
+                  }
+                }" --jq '.data.repository.suggestedActors.nodes[] | select(.login == "copilot-swe-agent") | .id' 2>/dev/null)
+
+                if [ -n "$ISSUE_NODE_ID" ] && [ -n "$COPILOT_ID" ]; then
+                  # Assign Copilot using special GraphQL header
+                  gh api graphql \
+                    -H "GraphQL-Features: issues_copilot_assignment_api_support" \
+                    -f query="mutation {
+                      addAssigneesToAssignable(input: {
+                        assignableId: \"$ISSUE_NODE_ID\",
+                        assigneeIds: [\"$COPILOT_ID\"]
+                      }) {
+                        assignable {
+                          ... on Issue { number }
+                        }
+                      }
+                    }" >/dev/null 2>&1 && echo "   ✅ Copilot assigned" || echo "   ⚠️ Failed to assign Copilot"
+                else
+                  echo "   ⚠️ Could not get IDs for Copilot assignment"
+                fi
+              fi
             fi
           done
 
