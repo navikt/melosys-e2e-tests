@@ -106,6 +106,37 @@ jobs:
 
           echo "✅ Labels ready"
 
+      - name: Get error annotations from GitHub API
+        if: steps.check-summary.outputs.has_summary == 'true'
+        id: annotations
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Fetch annotations from the workflow run jobs
+          RUN_ID="${{ steps.run-id.outputs.run_id }}"
+
+          echo "📋 Fetching annotations from run $RUN_ID..."
+
+          # Get all job IDs for this run
+          JOB_IDS=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}/jobs" --jq '.jobs[].id')
+
+          # Fetch annotations from each job and combine
+          echo "[]" > /tmp/annotations.json
+          for JOB_ID in $JOB_IDS; do
+            echo "   Fetching annotations from job $JOB_ID..."
+            JOB_ANNOTATIONS=$(gh api "repos/${{ github.repository }}/check-runs/${JOB_ID}/annotations" 2>/dev/null || echo "[]")
+            # Merge with existing annotations
+            jq -s 'add' /tmp/annotations.json <(echo "$JOB_ANNOTATIONS") > /tmp/annotations_new.json
+            mv /tmp/annotations_new.json /tmp/annotations.json
+          done
+
+          # Show what we found
+          ANNOTATION_COUNT=$(jq 'length' /tmp/annotations.json)
+          FAILURE_COUNT=$(jq '[.[] | select(.annotation_level == "failure")] | length' /tmp/annotations.json)
+          echo "📝 Found $ANNOTATION_COUNT annotations ($FAILURE_COUNT failures)"
+
+          echo "annotations_file=/tmp/annotations.json" >> $GITHUB_OUTPUT
+
       - name: Analyze failures and create/update issues
         if: steps.check-summary.outputs.has_summary == 'true'
         env:
@@ -114,6 +145,7 @@ jobs:
           # Get workflow run URL and summary file
           RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ steps.run-id.outputs.run_id }}"
           SUMMARY_JSON="${{ steps.check-summary.outputs.summary_file }}"
+          ANNOTATIONS_FILE="${{ steps.annotations.outputs.annotations_file }}"
 
           # Get image tags from summary
           TAGS=$(jq -r '.tags // {} | to_entries | map("| \(.key) | `\(.value)` |") | join("\n")' "$SUMMARY_JSON")
@@ -123,12 +155,28 @@ jobs:
             TITLE=$(echo "$test" | jq -r '.title')
             FILE=$(echo "$test" | jq -r '.file')
             STATUS=$(echo "$test" | jq -r '.status')
-            ERROR=$(echo "$test" | jq -r '.error // "No error message"')
             DOCKER_ERRORS=$(echo "$test" | jq -c '.dockerErrors // []')
             ATTEMPTS=$(echo "$test" | jq -r '.totalAttempts')
             FAILED_ATTEMPTS=$(echo "$test" | jq -r '.failedAttempts')
             DURATION=$(echo "$test" | jq -r '.duration // 0')
             DURATION_SEC=$((DURATION / 1000))
+
+            # Extract error message from annotations by matching test title
+            # Annotations have title like: "[chromium] › path › TestSuite › testName"
+            # We match against the test title at the end of the annotation title
+            ERROR="No error message available"
+            if [ -f "$ANNOTATIONS_FILE" ]; then
+              # Search for failure annotation where title ends with our test title
+              MATCHED_ERROR=$(jq -r --arg title "$TITLE" \
+                '[.[] | select(.annotation_level == "failure") | select(.title | endswith($title))] | .[0].message // empty' \
+                "$ANNOTATIONS_FILE")
+              if [ -n "$MATCHED_ERROR" ]; then
+                ERROR="$MATCHED_ERROR"
+                echo "   ✅ Found error from annotations"
+              else
+                echo "   ⚠️ No matching annotation found for: $TITLE"
+              fi
+            fi
 
             # Detect error pattern FIRST (needed for issue title matching)
             ERROR_PATTERN="Unknown"
