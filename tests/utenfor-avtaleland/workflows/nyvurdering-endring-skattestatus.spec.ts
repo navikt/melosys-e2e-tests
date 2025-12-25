@@ -348,6 +348,13 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         // Click on the FIRST link (the new active behandling)
         await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).first().click();
 
+        // Extract the NY VURDERING behandlingId from URL (this is different from the first behandling!)
+        const nyVurderingBehandlingId = extractBehandlingIdFromUrl(page.url());
+        if (!nyVurderingBehandlingId) {
+            throw new Error(`Could not extract ny vurdering behandlingId from URL: ${page.url()}`);
+        }
+        console.log(`📝 Extracted ny vurdering behandlingId: ${nyVurderingBehandlingId} (first was: ${behandlingId})`);
+
         // Navigate to Trygdeavgift immediately
         await behandling.gåTilTrygdeavgift();
 
@@ -421,8 +428,9 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         // Step 16: Wait for IVERKSETT_VEDTAK_FTRL saga to complete for this specific behandling
         // This is more precise than waitForProcessInstances() - it ensures the saga has fully
         // committed all changes (including RESULTAT_TYPE) before the årsavregning job queries the database
+        // IMPORTANT: Use nyVurderingBehandlingId (not behandlingId which is the first behandling!)
         console.log('📝 Step 16: Wait for saga completion...');
-        await waitForSagaCompletion(page.request, behandlingId, 30000);
+        await waitForSagaCompletion(page.request, nyVurderingBehandlingId, 30000);
 
 
         // 🔍 DEBUG: Check what's actually in the database AFTER process completion
@@ -432,8 +440,6 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         console.log('\n' + '═'.repeat(70));
         console.log('📊 DETAILED COMPARISON: First Vedtak vs Ny Vurdering');
         console.log('═'.repeat(70));
-
-        let nyVurderingBehandlingId: number | undefined;
 
         await withDatabase(async (db) => {
             const result = await db.query(`
@@ -449,7 +455,6 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
             if (result.length >= 2) {
                 const firstBehandling = result[0];
                 const nyVurderingBehandling = result[result.length - 1];
-                nyVurderingBehandlingId = nyVurderingBehandling.BEHANDLING_ID;
 
                 const firstType = firstBehandling.RESULTAT_TYPE;
                 const nyType = nyVurderingBehandling.RESULTAT_TYPE;
