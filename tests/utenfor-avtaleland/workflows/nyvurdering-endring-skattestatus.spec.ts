@@ -11,7 +11,7 @@ import {TrygdeavgiftPage} from '../../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../../pages/shared/constants';
 import {UnleashHelper} from "../../../helpers/unleash-helper";
-import {AdminApiHelper, waitForProcessInstances} from '../../../helpers/api-helper';
+import {AdminApiHelper, waitForProcessInstances, waitForSagaCompletion, extractBehandlingIdFromUrl} from '../../../helpers/api-helper';
 import {expect} from "@playwright/test";
 
 
@@ -258,6 +258,13 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         // Click on the FIRST link (the new active behandling)
         await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).first().click();
 
+        // Extract behandlingId from URL for saga-specific wait later
+        const behandlingId = extractBehandlingIdFromUrl(page.url());
+        if (!behandlingId) {
+            throw new Error(`Could not extract behandlingId from URL: ${page.url()}`);
+        }
+        console.log(`📝 Extracted behandlingId: ${behandlingId}`);
+
         // Navigate to Trygdeavgift immediately
         await behandling.gåTilTrygdeavgift();
 
@@ -281,10 +288,11 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         console.log('📝 Step 15: Submitting vedtak for ny vurdering...');
         await vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING');
 
-        // Step 16: Wait for IVERKSETT_VEDTAK_FTRL process to complete and commit to database
-        // This ensures behandling.status = 'AVSLUTTET' is committed before the job queries
-        console.log('📝 Step 16: Wait for vedtak process to complete...');
-        await waitForProcessInstances(page.request, 30);
+        // Step 16: Wait for IVERKSETT_VEDTAK_FTRL saga to complete for this specific behandling
+        // This is more precise than waitForProcessInstances() - it ensures the saga has fully
+        // committed all changes (including RESULTAT_TYPE) before the årsavregning job queries the database
+        console.log('📝 Step 16: Wait for saga completion...');
+        await waitForSagaCompletion(page.request, behandlingId, 30000);
 
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
 

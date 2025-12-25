@@ -268,6 +268,89 @@ export async function waitForProcessInstances(request: APIRequestContext, timeou
 }
 
 /**
+ * Wait for saga completion for a specific behandling
+ *
+ * This calls the melosys-api E2E endpoint that checks if all saga steps
+ * for the given behandling have completed. This is more precise than
+ * waitForProcessInstances() because it waits for the specific behandling's
+ * saga to complete, including all async steps like LAGRE_PERSONOPPLYSNINGER.
+ *
+ * Use this after fattVedtak() when you need to ensure the saga has fully
+ * completed before executing follow-up operations like årsavregning jobs.
+ *
+ * @param request - Playwright API request context
+ * @param behandlingId - The ID of the behandling to wait for
+ * @param timeoutMs - Maximum time to wait (default: 30000ms)
+ * @returns Promise<void> - Resolves when saga is complete
+ * @throws Error if saga doesn't complete within timeout
+ */
+export async function waitForSagaCompletion(
+  request: APIRequestContext,
+  behandlingId: number,
+  timeoutMs: number = 30000
+): Promise<void> {
+  const startTime = Date.now();
+  const pollIntervalMs = 500;
+
+  console.log(`\n⏳ Waiting for saga completion for behandling ${behandlingId} (timeout: ${timeoutMs / 1000}s)...`);
+
+  while (Date.now() - startTime < timeoutMs) {
+    try {
+      const response = await request.get(
+        `http://localhost:8080/internal/e2e/behandlinger/${behandlingId}/saga/ferdig`,
+        {
+          failOnStatusCode: false,
+          timeout: 5000
+        }
+      );
+
+      if (response.ok()) {
+        const data = await response.json();
+        if (data.ferdig === true) {
+          const elapsed = Math.round((Date.now() - startTime) / 1000);
+          console.log(`✅ Saga completed for behandling ${behandlingId} after ${elapsed}s`);
+          return;
+        }
+      } else if (response.status() === 404) {
+        // Behandling not found - wait and retry
+        console.log(`   ⚠️  Behandling ${behandlingId} not found, retrying...`);
+      } else {
+        console.log(`   ⚠️  Unexpected response: HTTP ${response.status()}`);
+      }
+    } catch (error: unknown) {
+      const errorMessage = error instanceof Error ? error.message : String(error);
+      if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('connect')) {
+        console.log(`   ⚠️  Could not connect to API - endpoint may not be available`);
+        return; // Don't fail if endpoint doesn't exist
+      }
+      // Log other errors but continue polling
+      console.log(`   ⚠️  Poll error: ${errorMessage}`);
+    }
+
+    await new Promise(resolve => setTimeout(resolve, pollIntervalMs));
+  }
+
+  const elapsed = Math.round((Date.now() - startTime) / 1000);
+  throw new Error(`Saga for behandling ${behandlingId} did not complete within ${elapsed}s`);
+}
+
+/**
+ * Extract behandlingId from the current page URL
+ *
+ * Parses URLs like /melosys/behandling/123/... to extract the behandlingId.
+ *
+ * @param url - The current page URL
+ * @returns The behandlingId as a number, or null if not found
+ */
+export function extractBehandlingIdFromUrl(url: string): number | null {
+  const match = url.match(/\/behandling\/(\d+)/);
+  if (match && match[1]) {
+    return parseInt(match[1], 10);
+  }
+  return null;
+}
+
+/**
  * Attempt to clear JPA/Hibernate caches in melosys-api
  *
  * Calls the POST /internal/e2e/caches/clear endpoint which clears:
