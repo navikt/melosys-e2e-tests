@@ -22,7 +22,6 @@ on:
       - melosys-dokgen-published
       - melosys-trygdeavtale-published
       - melosys-inngangsvilkar-published
-      - melosys-eessi-published
 
 permissions:
   contents: read
@@ -32,7 +31,7 @@ permissions:
 jobs:
   e2e-tests:
     runs-on: ubuntu-latest-8-cores
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout code
@@ -95,7 +94,6 @@ jobs:
             MELOSYS_TRYGDEAVGIFT_TAG="latest"
             MELOSYS_TRYGDEAVTALE_TAG="latest"
             MELOSYS_INNGANGSVILKAR_TAG="latest"
-            MELOSYS_EESSI_TAG="latest"
 
             # Override with specific tag based on which service triggered
             if [ "${{ github.event.action }}" = "melosys-api-published" ]; then
@@ -121,10 +119,6 @@ jobs:
             if [ "${{ github.event.action }}" = "melosys-inngangsvilkar-published" ]; then
               MELOSYS_INNGANGSVILKAR_TAG="${{ github.event.client_payload.image_tag }}"
             fi
-
-            if [ "${{ github.event.action }}" = "melosys-eessi-published" ]; then
-              MELOSYS_EESSI_TAG="${{ github.event.client_payload.image_tag }}"
-            fi
           else
             # Manual trigger via workflow_dispatch
             echo "👆 Manually triggered via workflow_dispatch"
@@ -137,7 +131,6 @@ jobs:
             MELOSYS_TRYGDEAVGIFT_TAG="latest"
             MELOSYS_TRYGDEAVTALE_TAG="latest"
             MELOSYS_INNGANGSVILKAR_TAG="latest"
-            MELOSYS_EESSI_TAG="latest"
 
             # Check if input contains service:tag format (has colon)
             if [[ "$INPUT_ENV" == *":"* ]]; then
@@ -171,9 +164,6 @@ jobs:
                   melosys-inngangsvilkar)
                     MELOSYS_INNGANGSVILKAR_TAG="$tag"
                     ;;
-                  melosys-eessi)
-                    MELOSYS_EESSI_TAG="$tag"
-                    ;;
                   *)
                     echo "  ⚠️  Unknown service: $service (ignored)"
                     ;;
@@ -193,7 +183,6 @@ jobs:
           echo "melosys_trygdeavgift_tag=$MELOSYS_TRYGDEAVGIFT_TAG" >> $GITHUB_OUTPUT
           echo "melosys_trygdeavtale_tag=$MELOSYS_TRYGDEAVTALE_TAG" >> $GITHUB_OUTPUT
           echo "melosys_inngangsvilkar_tag=$MELOSYS_INNGANGSVILKAR_TAG" >> $GITHUB_OUTPUT
-          echo "melosys_eessi_tag=$MELOSYS_EESSI_TAG" >> $GITHUB_OUTPUT
 
           echo ""
           echo "📋 Image tags to be used:"
@@ -203,7 +192,6 @@ jobs:
           echo "  melosys-trygdeavgift-beregning: $MELOSYS_TRYGDEAVGIFT_TAG"
           echo "  melosys-trygdeavtale: $MELOSYS_TRYGDEAVTALE_TAG"
           echo "  melosys-inngangsvilkar: $MELOSYS_INNGANGSVILKAR_TAG"
-          echo "  melosys-eessi: $MELOSYS_EESSI_TAG"
 
       - name: Set environment variables for GitHub Actions
         run: |
@@ -215,7 +203,6 @@ jobs:
           echo "MELOSYS_TRYGDEAVGIFT_TAG=${{ steps.image-tags.outputs.melosys_trygdeavgift_tag }}" >> $GITHUB_ENV
           echo "MELOSYS_TRYGDEAVTALE_TAG=${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }}" >> $GITHUB_ENV
           echo "MELOSYS_INNGANGSVILKAR_TAG=${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }}" >> $GITHUB_ENV
-          echo "MELOSYS_EESSI_TAG=${{ steps.image-tags.outputs.melosys_eessi_tag }}" >> $GITHUB_ENV
 
       - name: Download JaCoCo agent for E2E coverage
         if: inputs.collect_coverage
@@ -258,7 +245,6 @@ jobs:
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:${{ steps.image-tags.outputs.melosys_trygdeavgift_tag }} &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }} &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-inngangsvilkar:${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }} &
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-eessi:${{ steps.image-tags.outputs.melosys_eessi_tag }} &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:latest &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/felles-kodeverk:latest &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-mock:latest &
@@ -282,7 +268,6 @@ jobs:
           MELOSYS_TRYGDEAVGIFT_TAG: ${{ steps.image-tags.outputs.melosys_trygdeavgift_tag }}
           MELOSYS_TRYGDEAVTALE_TAG: ${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }}
           MELOSYS_INNGANGSVILKAR_TAG: ${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }}
-          MELOSYS_EESSI_TAG: ${{ steps.image-tags.outputs.melosys_eessi_tag }}
           JACOCO_AGENT_OPTS: ${{ inputs.collect_coverage && '-javaagent:/jacoco/jacocoagent.jar=output=tcpserver,address=*,port=6300' || '' }}
 
       - name: Wait for services to be healthy
@@ -325,12 +310,8 @@ jobs:
             unleash_health=$(curl -sf http://localhost:4242/health > /dev/null 2>&1 && echo "healthy" || echo "unhealthy")
             echo "  unleash: $unleash_health"
 
-            # Check melosys-eessi health endpoint
-            eessi_health=$(curl -sf http://localhost:8081/internal/health > /dev/null 2>&1 && echo "healthy" || echo "unhealthy")
-            echo "  melosys-eessi: $eessi_health"
-
             # Check if all critical services are healthy
-            if [ "$oracle_health" = "healthy" ] && [ "$kafka_health" = "healthy" ] && [ "$api_health" = "healthy" ] && [ "$web_health" = "healthy" ] && [ "$unleash_health" = "healthy" ] && [ "$eessi_health" = "healthy" ]; then
+            if [ "$oracle_health" = "healthy" ] && [ "$kafka_health" = "healthy" ] && [ "$api_health" = "healthy" ] && [ "$web_health" = "healthy" ] && [ "$unleash_health" = "healthy" ]; then
               echo "✅ All critical services are healthy!"
               break
             fi
@@ -360,85 +341,113 @@ jobs:
           echo "ℹ️  Note: Feature toggles are automatically created by melosys-api on startup"
 
       - name: Run Playwright tests
-        id: playwright
         run: |
-          # Run tests and capture exit code (don't fail immediately)
-          npx playwright test --project=chromium || PLAYWRIGHT_EXIT_CODE=$?
+          # TEMPORARY: Run only the flaky test multiple times to reproduce the bug
+          echo "🔁 Running flaky test 10 times to check stability..."
+          echo "=================================================="
 
-          # Check if test-summary.json was created by reporter
-          if [ -f "playwright-report/test-summary.json" ]; then
-            # Get CI status from reporter (excludes @known-error tests from failures)
-            CI_STATUS=$(jq -r '.status' playwright-report/test-summary.json)
-            echo "📊 Reporter CI status: $CI_STATUS"
+          passed=0
+          failed=0
+          declare -a run_results
+          declare -a run_durations
 
-            # Count test categories
-            TOTAL=$(jq '.tests | length' playwright-report/test-summary.json)
-            PASSED=$(jq '[.tests[] | select(.status == "passed")] | length' playwright-report/test-summary.json)
-            FAILED=$(jq '[.tests[] | select(.status == "failed")] | length' playwright-report/test-summary.json)
-            FLAKY=$(jq '[.tests[] | select(.status == "flaky")] | length' playwright-report/test-summary.json)
-            KNOWN_ERROR_FAILED=$(jq '[.tests[] | select(.status == "known-error-failed")] | length' playwright-report/test-summary.json)
-            KNOWN_ERROR_PASSED=$(jq '[.tests[] | select(.status == "known-error-passed")] | length' playwright-report/test-summary.json)
-
+          for i in {1..10}; do
             echo ""
-            echo "📋 Test Results:"
-            echo "  ✅ Passed: $PASSED"
-            echo "  ❌ Failed: $FAILED"
-            echo "  🔄 Flaky: $FLAKY"
-            echo "  ⚠️  Known Error (Failed): $KNOWN_ERROR_FAILED"
-            echo "  ✨ Known Error (Passed): $KNOWN_ERROR_PASSED"
-            echo "  📊 Total: $TOTAL"
-            echo ""
+            echo "════════════════════════════════════════════════"
+            echo "🔄 RUN $i/10 - $(date +%H:%M:%S)"
+            echo "════════════════════════════════════════════════"
 
-            if [ "$CI_STATUS" = "passed" ]; then
-              echo "✅ CI Status: PASSED (known-error tests don't fail the build)"
-              exit 0
+            start_time=$(date +%s)
+
+            # Run the specific flaky test
+            if npx playwright test tests/utenfor-avtaleland/workflows/nyvurdering-endring-skattestatus.spec.ts -g "skattepliktig til ikke-skattepliktig" --project=chromium --workers=1; then
+              echo "✅ Run $i: PASSED"
+              passed=$((passed + 1))
+              run_results[$i]="✅"
             else
-              echo "❌ CI Status: FAILED (real test failures detected)"
-              exit 1
+              echo "❌ Run $i: FAILED"
+              failed=$((failed + 1))
+              run_results[$i]="❌"
             fi
+
+            end_time=$(date +%s)
+            run_durations[$i]=$((end_time - start_time))
+
+            # Small delay between runs
+            sleep 2
+          done
+
+          echo ""
+          echo "════════════════════════════════════════════════"
+          echo "📊 FINAL SUMMARY"
+          echo "════════════════════════════════════════════════"
+          echo "✅ Passed: $passed/10"
+          echo "❌ Failed: $failed/10"
+          echo "📈 Success rate: $(awk "BEGIN {printf \"%.1f\", ($passed / 10) * 100}")%"
+          echo ""
+
+          # Generate test-summary.md with per-run results
+          cat > playwright-report/test-summary.md << EOF
+          # E2E Test Summary
+
+          **Generated:** $(date -u +"%Y-%m-%dT%H:%M:%SZ")
+
+          ## 🔁 Flaky Test Stability Check (10 runs)
+
+          **Test:** \`skal endre skattestatus fra skattepliktig til ikke-skattepliktig via nyvurdering\`
+
+          ## Overall Results
+
+          - ✅ Passed: $passed/10
+          - ❌ Failed: $failed/10
+          - 📈 Success rate: $(awk "BEGIN {printf \"%.1f\", ($passed / 10) * 100}")%
+          - **Status:** $([ $failed -eq 0 ] && echo "passed" || echo "failed")
+
+          ## 📊 Test Results
+
+          | Run | Status | Duration |
+          |-----|--------|----------|
+          | 1 | ${run_results[1]} | ${run_durations[1]}s |
+          | 2 | ${run_results[2]} | ${run_durations[2]}s |
+          | 3 | ${run_results[3]} | ${run_durations[3]}s |
+          | 4 | ${run_results[4]} | ${run_durations[4]}s |
+          | 5 | ${run_results[5]} | ${run_durations[5]}s |
+          | 6 | ${run_results[6]} | ${run_durations[6]}s |
+          | 7 | ${run_results[7]} | ${run_durations[7]}s |
+          | 8 | ${run_results[8]} | ${run_durations[8]}s |
+          | 9 | ${run_results[9]} | ${run_durations[9]}s |
+          | 10 | ${run_results[10]} | ${run_durations[10]}s |
+
+          ## 📎 Artifacts
+
+          The following artifacts are available for download:
+
+          - \`playwright-report/\` - HTML test report
+          - \`test-results/\` - Individual test results, traces, videos, screenshots
+          - \`playwright-report/*-complete.log\` - Complete Docker logs for each service
+          EOF
+
+          # Also save flaky summary for backward compatibility
+          echo "## 🔁 Flaky Test Results (10 runs)" > playwright-report/flaky-test-summary.md
+          echo "" >> playwright-report/flaky-test-summary.md
+          echo "| Metric | Value |" >> playwright-report/flaky-test-summary.md
+          echo "|--------|-------|" >> playwright-report/flaky-test-summary.md
+          echo "| ✅ Passed | $passed/10 |" >> playwright-report/flaky-test-summary.md
+          echo "| ❌ Failed | $failed/10 |" >> playwright-report/flaky-test-summary.md
+          echo "| 📈 Success rate | $(awk "BEGIN {printf \"%.1f\", ($passed / 10) * 100}")% |" >> playwright-report/flaky-test-summary.md
+          echo "" >> playwright-report/flaky-test-summary.md
+          echo "**Test:** \`skal endre skattestatus fra skattepliktig til ikke-skattepliktig via nyvurdering\`" >> playwright-report/flaky-test-summary.md
+
+          # Report results but don't fail the job - we want artifacts uploaded
+          if [ $failed -gt 0 ]; then
+            echo "⚠️ $failed out of 10 runs failed - but allowing job to complete for artifact capture"
+            echo "FLAKY_TEST_FAILURES=$failed" >> $GITHUB_ENV
           else
-            # Fallback: use Playwright's exit code if reporter didn't run
-            echo "⚠️  test-summary.json not found, using Playwright exit code"
-            exit ${PLAYWRIGHT_EXIT_CODE:-1}
+            echo "✅ All 10 runs passed!"
+            echo "FLAKY_TEST_FAILURES=0" >> $GITHUB_ENV
           fi
         env:
           CI: true
-
-      - name: Set test status outputs
-        id: test-status
-        if: always()
-        run: |
-          # Default values
-          HAS_FAILURES="false"
-          HAS_FLAKY="false"
-          STATUS="unknown"
-          
-          # Check if test-summary.json exists
-          if [ -f "playwright-report/test-summary.json" ]; then
-            # Get status from reporter
-            STATUS=$(jq -r '.status' playwright-report/test-summary.json)
-            
-            # Count failures and flaky tests
-            FAILED=$(jq '[.tests[] | select(.status == "failed")] | length' playwright-report/test-summary.json)
-            FLAKY=$(jq '[.tests[] | select(.status == "flaky")] | length' playwright-report/test-summary.json)
-            
-            if [ "$FAILED" -gt 0 ]; then
-              HAS_FAILURES="true"
-            fi
-            
-            if [ "$FLAKY" -gt 0 ]; then
-              HAS_FLAKY="true"
-            fi
-          fi
-          
-          echo "status=$STATUS" >> $GITHUB_OUTPUT
-          echo "has-failures=$HAS_FAILURES" >> $GITHUB_OUTPUT
-          echo "has-flaky=$HAS_FLAKY" >> $GITHUB_OUTPUT
-          
-          echo "📊 Test status outputs:"
-          echo "  status: $STATUS"
-          echo "  has-failures: $HAS_FAILURES"
-          echo "  has-flaky: $HAS_FLAKY"
 
       - name: Dump JaCoCo coverage from melosys-api
         if: always() && inputs.collect_coverage
@@ -610,45 +619,6 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "🎬 Videos, traces, and screenshots are available in the artifacts." >> $GITHUB_STEP_SUMMARY
 
-          # Add metrics coverage summary if available
-          if [ -f "playwright-report/metrics-coverage.json" ]; then
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "## 📊 Metrics Coverage" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "_Process types and steps exercised by E2E tests_" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-
-            # Extract summary from JSON
-            CASES_CREATED=$(jq -r '.coverage.summary.sakCreated // 0' playwright-report/metrics-coverage.json)
-            TREATMENTS_COMPLETED=$(jq -r '.coverage.summary.behandlingerCompleted // 0' playwright-report/metrics-coverage.json)
-            PROCESS_TYPES_COUNT=$(jq -r '.coverage.processTypes.exercised | length' playwright-report/metrics-coverage.json)
-            PROCESS_TYPES_PCT=$(jq -r '.coverage.processTypes.percentage | floor' playwright-report/metrics-coverage.json)
-            PROCESS_STEPS_COUNT=$(jq -r '.coverage.processSteps.exercised | length' playwright-report/metrics-coverage.json)
-
-            echo "| Metric | Value |" >> $GITHUB_STEP_SUMMARY
-            echo "|--------|-------|" >> $GITHUB_STEP_SUMMARY
-            echo "| Cases created | $CASES_CREATED |" >> $GITHUB_STEP_SUMMARY
-            echo "| Treatments completed | $TREATMENTS_COMPLETED |" >> $GITHUB_STEP_SUMMARY
-            echo "| Process types exercised | $PROCESS_TYPES_COUNT (~${PROCESS_TYPES_PCT}%) |" >> $GITHUB_STEP_SUMMARY
-            echo "| Process steps exercised | $PROCESS_STEPS_COUNT |" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-
-            # Show process types
-            echo "<details><summary>📋 Process Types (click to expand)</summary>" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            jq -r '.coverage.processTypes.counts | to_entries | sort_by(-.value) | .[] | "- \(.key): \(.value)"' playwright-report/metrics-coverage.json >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "</details>" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-
-            # Show process steps
-            echo "<details><summary>📋 Process Steps (click to expand)</summary>" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            jq -r '.coverage.processSteps.counts | to_entries | sort_by(-(.value.success + .value.failed)) | .[] | "- \(.key): \(.value.success) success, \(.value.failed) failed"' playwright-report/metrics-coverage.json >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "</details>" >> $GITHUB_STEP_SUMMARY
-          fi
-
           # Add E2E coverage summary if coverage collection was enabled
           if [ "${{ inputs.collect_coverage }}" = "true" ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -742,7 +712,6 @@ jobs:
             "melosys-api"
             "melosys-web"
             "melosys-mock"
-            "melosys-eessi"
             "faktureringskomponenten"
             "melosys-dokgen"
             "melosys-trygdeavgift-beregning"
@@ -765,7 +734,7 @@ jobs:
 
       - name: Upload test results and reports
         uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: playwright-results
           path: |
@@ -773,7 +742,7 @@ jobs:
             playwright-report/
           retention-days: 7
 
-      - name: Upload test summary and metrics
+      - name: Upload test summary
         uses: actions/upload-artifact@v4
         if: always()
         with:
@@ -781,13 +750,11 @@ jobs:
           path: |
             playwright-report/test-summary.md
             playwright-report/test-summary.json
-            playwright-report/metrics-summary.md
-            playwright-report/metrics-coverage.json
           retention-days: 30
 
       - name: Upload test videos
         uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: playwright-videos
           path: test-results/**/video.webm
@@ -795,7 +762,7 @@ jobs:
 
       - name: Upload test traces
         uses: actions/upload-artifact@v4
-        if: failure()
+        if: always()
         with:
           name: playwright-traces
           path: test-results/**/trace.zip
@@ -812,3 +779,10 @@ jobs:
         run: |
           docker compose down -v
           docker network rm melosys.docker-internal || true
+
+      - name: Fail job if flaky tests had failures
+        if: always() && env.FLAKY_TEST_FAILURES != '0' && env.FLAKY_TEST_FAILURES != ''
+        run: |
+          echo "❌ Flaky test debugging: $FLAKY_TEST_FAILURES out of 10 runs failed"
+          echo "📦 All artifacts have been uploaded - check the results above"
+          exit 1
