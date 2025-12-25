@@ -337,16 +337,27 @@ export async function waitForSagaCompletion(
 /**
  * Extract behandlingId from the current page URL
  *
- * Parses URLs like /melosys/behandling/123/... to extract the behandlingId.
+ * Supports multiple URL formats:
+ * - Query parameter: /melosys/FTRL/saksbehandling/MEL-22/?behandlingID=22
+ * - Path segment: /melosys/behandling/123/...
  *
  * @param url - The current page URL
  * @returns The behandlingId as a number, or null if not found
  */
 export function extractBehandlingIdFromUrl(url: string): number | null {
+  // Try query parameter first (e.g., ?behandlingID=22)
+  const urlObj = new URL(url);
+  const behandlingIdParam = urlObj.searchParams.get('behandlingID');
+  if (behandlingIdParam) {
+    return parseInt(behandlingIdParam, 10);
+  }
+
+  // Fallback to path segment (e.g., /behandling/123/)
   const match = url.match(/\/behandling\/(\d+)/);
   if (match && match[1]) {
     return parseInt(match[1], 10);
   }
+
   return null;
 }
 
