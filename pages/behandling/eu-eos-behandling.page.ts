@@ -196,77 +196,93 @@ export class EuEosBehandlingPage extends BasePage {
    * Velg arbeidsgiver(e) med checkbox
    *
    * IMPORTANT: Checkbox triggers immediate API save when checked!
-   * Investigation showed: POST /api/mottatteopplysninger/{id} -> 200
    * This method now waits for that API call to complete.
+   *
+   * FIX: Now actively waits for employer API to complete before looking for checkbox.
+   * The employer list is loaded asynchronously after step transition.
    *
    * @param arbeidsgiverNavn - Navn på arbeidsgiver (f.eks. 'Ståles Stål AS')
    */
   async velgArbeidsgiver(arbeidsgiverNavn: string): Promise<void> {
-    console.log(`🔍 Leter etter arbeidsgiver checkbox: "${arbeidsgiverNavn}"`);
+    console.log(`\n🔍 velgArbeidsgiver("${arbeidsgiverNavn}")`);
 
-    // CRITICAL: Wait for network to be idle FIRST to ensure employer list has loaded
-    // The checkbox won't exist until the backend provides the employer data
-    await this.page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {
-      console.log('⚠️  Network idle timeout, continuing anyway (employer list might still load)');
+    // CRITICAL FIX: Wait for employer data API to complete FIRST
+    // The checkbox won't appear until the backend returns employer data.
+    // networkidle is not reliable because it might pass before the API is even called.
+    console.log(`⏳ Waiting for employer data API (20s timeout)...`);
+    const apiStart = Date.now();
+
+    const employerApiResponse = await this.page.waitForResponse(
+      response => {
+        const responseUrl = response.url();
+        const isEmployerApi = (
+          responseUrl.includes('/arbeidsforhold') ||
+          responseUrl.includes('/virksomheter') ||
+          responseUrl.includes('/registeropplysninger') ||
+          responseUrl.includes('/mottatteopplysninger')
+        ) && response.status() === 200;
+
+        if (isEmployerApi) {
+          console.log(`📡 Employer API: ${responseUrl} → ${response.status()}`);
+        }
+        return isEmployerApi;
+      },
+      { timeout: 20000 }
+    ).catch(() => {
+      console.log('⚠️  No employer API within 20s - checkbox might already be rendered');
+      return null;
     });
 
-    // Extra wait to ensure React has rendered the employer list
-    await this.page.waitForTimeout(1000);
+    if (employerApiResponse) {
+      console.log(`✅ Employer API completed (${Date.now() - apiStart}ms)`);
+    }
 
-    // Debug: Se hva som finnes på siden
-    const pageContent = await this.page.content();
-    console.log(`📄 Sidelengde: ${pageContent.length} bytes`);
+    // Wait for React to render after API response
+    await this.page.waitForTimeout(500);
 
-    // Debug: Tell hvor mange checkboxer som finnes
-    const allCheckboxes = await this.page.getByRole('checkbox').count();
-    console.log(`✓ Fant ${allCheckboxes} checkboxer totalt på siden`);
+    // Wait for any remaining network activity
+    await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
+      console.log('⚠️  Network idle timeout (non-critical)');
+    });
 
-    // Debug: Vis URL for å bekrefte hvilket steg vi er på
-    console.log(`🔗 Nåværende URL: ${this.page.url()}`);
-
+    // Now look for the checkbox
     const checkbox = this.page.getByRole('checkbox', { name: arbeidsgiverNavn });
 
-    // Vent på at checkbox er synlig og stabil før sjekking (unngår race condition)
-    // Increased timeout to 45s for slow CI environments
-    try {
-      await checkbox.waitFor({ state: 'visible', timeout: 45000 });
-
-      // CRITICAL: Set up response listener BEFORE checking
-      // Checkbox triggers immediate API save: POST /api/mottatteopplysninger/{id}
-      const responsePromise = this.page.waitForResponse(
-        response => response.url().includes('/api/mottatteopplysninger/') &&
-                    response.request().method() === 'POST' &&
-                    response.status() === 200,
-        { timeout: 5000 }
-      ).catch(() => null); // Don't fail if API doesn't fire
-
-      await checkbox.check();
-
-      // Wait for immediate API save
-      const response = await responsePromise;
-      if (response) {
-        console.log(`✅ Arbeidsgiver selection saved: ${response.url()} -> ${response.status()}`);
-      } else {
-        console.log('⚠️  No immediate API save detected (checkbox might already be checked)');
+    // Check if already visible
+    const isVisible = await checkbox.isVisible().catch(() => false);
+    if (!isVisible) {
+      // Debug: list available checkboxes
+      const allCheckboxes = await this.page.getByRole('checkbox').all();
+      console.log(`📋 Available checkboxes (${allCheckboxes.length}):`);
+      for (const box of allCheckboxes) {
+        const label = await box.getAttribute('aria-label') ||
+                      await box.getAttribute('name') ||
+                      'unknown';
+        console.log(`   - "${label}"`);
       }
-
-      console.log(`✅ Valgte arbeidsgiver: ${arbeidsgiverNavn}`);
-    } catch (error) {
-      // Debug: Hvis det feiler, vis hva som faktisk finnes på siden
-      console.error(`❌ Kunne ikke finne checkbox "${arbeidsgiverNavn}"`);
-      console.error(`📸 Tar screenshot for debugging...`);
-      await this.page.screenshot({ path: 'debug-missing-checkbox.png', fullPage: true });
-
-      // List alle checkboxer som finnes
-      const checkboxes = await this.page.getByRole('checkbox').all();
-      console.error(`📋 Tilgjengelige checkboxer (${checkboxes.length}):`);
-      for (const cb of checkboxes) {
-        const label = await cb.getAttribute('aria-label') || await cb.getAttribute('name') || 'ingen label';
-        console.error(`   - ${label}`);
-      }
-
-      throw error;
     }
+
+    // Wait for checkbox to be visible
+    console.log(`⏳ Waiting for checkbox "${arbeidsgiverNavn}" to be visible...`);
+    await checkbox.waitFor({ state: 'visible', timeout: 30000 });
+
+    // Set up response listener BEFORE checking (checkbox triggers API save)
+    const responsePromise = this.page.waitForResponse(
+      response => response.url().includes('/api/mottatteopplysninger/') &&
+                  response.request().method() === 'POST' &&
+                  response.status() === 200,
+      { timeout: 5000 }
+    ).catch(() => null);
+
+    await checkbox.check();
+
+    // Wait for API save
+    const response = await responsePromise;
+    if (response) {
+      console.log(`✅ Arbeidsgiver saved: ${response.url()}`);
+    }
+
+    console.log(`✅ Valgte arbeidsgiver: ${arbeidsgiverNavn}\n`);
   }
 
   /**
@@ -292,11 +308,18 @@ export class EuEosBehandlingPage extends BasePage {
   /**
    * Svar "Ja" på første synlige spørsmål
    * Brukes når det bare er ett spørsmål på siden
+   *
+   * FIX: Added longer timeout and network wait for slow CI environments.
    */
   async svarJa(): Promise<void> {
+    // Wait for network to stabilize after step transition
+    await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
+      console.log('⚠️  Network idle timeout (non-critical)');
+    });
+
     const jaRadio = this.page.getByRole('radio', { name: 'Ja' });
-    // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
-    await jaRadio.waitFor({ state: 'visible' });
+    // Vent på at radio-knapp er synlig (increased timeout for slow CI)
+    await jaRadio.waitFor({ state: 'visible', timeout: 30000 });
     await jaRadio.check();
     console.log('✅ Svarte: Ja');
   }
