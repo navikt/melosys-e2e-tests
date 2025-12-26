@@ -362,7 +362,11 @@ export class EuEosBehandlingPage extends BasePage {
    */
   async klikkBekreftOgFortsett(): Promise<void> {
     console.log('🔄 Klikker "Bekreft og fortsett"...');
-    const urlBefore = this.page.url();
+
+    // CRITICAL: Capture current step heading BEFORE clicking
+    const stepHeading = this.page.locator('main h1').first();
+    const headingBefore = await stepHeading.textContent().catch(() => null);
+    console.log(`  Heading før: "${headingBefore}"`);
 
     // Check if button is enabled before clicking
     const isEnabled = await this.bekreftOgFortsettButton.isEnabled();
@@ -400,19 +404,43 @@ export class EuEosBehandlingPage extends BasePage {
       console.log('⚠️  No step transition APIs detected, waiting for React state update');
     }
 
-    // Still wait for React state update
-    await this.page.waitForTimeout(500);
+    // CRITICAL FIX: Wait for step heading to CHANGE before returning
+    // This ensures React has finished rendering the next step
+    if (headingBefore) {
+      const maxWaitTime = 15000; // 15 seconds max
+      const pollInterval = 500;
+      let elapsed = 0;
+      let headingChanged = false;
 
-    // Optional: Wait for network idle as fallback (shorter timeout now)
+      console.log('⏳ Waiting for step heading to change...');
+
+      while (elapsed < maxWaitTime && !headingChanged) {
+        await this.page.waitForTimeout(pollInterval);
+        elapsed += pollInterval;
+
+        const headingNow = await stepHeading.textContent().catch(() => null);
+
+        if (headingNow && headingNow !== headingBefore) {
+          headingChanged = true;
+          console.log(`✅ Step heading changed after ${elapsed}ms`);
+          console.log(`   From: "${headingBefore}"`);
+          console.log(`   To:   "${headingNow}"`);
+        }
+      }
+
+      if (!headingChanged) {
+        console.warn(`⚠️  Step heading did NOT change after ${maxWaitTime}ms!`);
+        console.warn(`   Current heading: "${await stepHeading.textContent().catch(() => 'unknown')}"`);
+        console.warn('   This may cause the next step interaction to fail.');
+      }
+    }
+
+    // Wait for network idle as final safeguard
     await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
       console.log('⚠️  Network idle timeout (non-critical)');
     });
 
-    const urlAfter = this.page.url();
-    console.log(`✅ Klikket Bekreft og fortsett`);
-    console.log(`  URL før:  ${urlBefore}`);
-    console.log(`  URL etter: ${urlAfter}`);
-    console.log(`  URL endret: ${urlBefore !== urlAfter}`);
+    console.log(`✅ Klikket Bekreft og fortsett - step transition complete`);
   }
 
   /**
