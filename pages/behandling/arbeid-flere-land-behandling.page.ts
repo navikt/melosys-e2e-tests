@@ -71,9 +71,10 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
    * IMPORTANT: Checkbox triggers immediate API save when checked!
    * This method waits for that API call to complete.
    *
-   * FIX: Now actively waits for employer API to complete before looking for checkbox.
-   * The employer list is loaded asynchronously after step transition, so we must
-   * wait for the specific API response, not just network idle.
+   * FIX: Uses polling with retries to handle async employer data loading.
+   * The employer list is loaded asynchronously after step transition.
+   * waitForResponse doesn't work reliably because the API might complete
+   * before we start listening.
    *
    * @param arbeidsgiverNavn - Navn på arbeidsgiver (f.eks. 'Ståles Stål AS')
    */
@@ -86,65 +87,53 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
       throw new Error(`NOT on behandling/saksbehandling page! Current URL: ${url}`);
     }
 
-    // CRITICAL FIX: Wait for employer data API to complete FIRST
-    // The checkbox won't appear until the backend returns employer data.
-    // networkidle is not reliable because it might pass before the API is even called.
-    console.log(`⏳ Waiting for employer data API (20s timeout)...`);
-    const apiStart = Date.now();
-
-    const employerApiResponse = await this.page.waitForResponse(
-      response => {
-        const responseUrl = response.url();
-        const isEmployerApi = (
-          responseUrl.includes('/arbeidsforhold') ||
-          responseUrl.includes('/virksomheter') ||
-          responseUrl.includes('/registeropplysninger') ||
-          responseUrl.includes('/mottatteopplysninger')
-        ) && response.status() === 200;
-
-        if (isEmployerApi) {
-          console.log(`📡 Employer API: ${responseUrl} → ${response.status()}`);
-        }
-        return isEmployerApi;
-      },
-      { timeout: 20000 }
-    ).catch(() => {
-      console.log('⚠️  No employer API within 20s - checkbox might already be rendered');
-      return null;
-    });
-
-    if (employerApiResponse) {
-      console.log(`✅ Employer API completed (${Date.now() - apiStart}ms)`);
-    }
-
-    // Wait for React to render after API response
-    await this.page.waitForTimeout(500);
-
-    // Wait for any remaining network activity
-    await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
-      console.log('⚠️  Network idle timeout (non-critical)');
-    });
-
-    // Now look for the checkbox
     const checkbox = this.page.getByRole('checkbox', { name: arbeidsgiverNavn });
 
-    // Check if already visible
-    const isVisible = await checkbox.isVisible().catch(() => false);
-    if (!isVisible) {
-      // Debug: list available checkboxes
-      const allCheckboxes = await this.page.getByRole('checkbox').all();
-      console.log(`📋 Available checkboxes (${allCheckboxes.length}):`);
-      for (const box of allCheckboxes) {
-        const label = await box.getAttribute('aria-label') ||
-                      await box.getAttribute('name') ||
-                      'unknown';
-        console.log(`   - "${label}"`);
+    // ROBUST FIX: Poll for checkbox with retries
+    // This handles both cases: API already completed or still loading
+    const maxAttempts = 10;
+    const pollInterval = 3000; // 3 seconds between attempts
+    let attempt = 0;
+    let isVisible = false;
+
+    while (attempt < maxAttempts && !isVisible) {
+      attempt++;
+      isVisible = await checkbox.isVisible().catch(() => false);
+
+      if (isVisible) {
+        console.log(`✅ Checkbox found on attempt ${attempt}`);
+        break;
+      }
+
+      if (attempt < maxAttempts) {
+        // Log available checkboxes for debugging
+        const allCheckboxes = await this.page.getByRole('checkbox').all();
+        console.log(`⏳ Attempt ${attempt}/${maxAttempts}: Checkbox not visible yet. Found ${allCheckboxes.length} checkboxes.`);
+
+        if (allCheckboxes.length === 0) {
+          console.log(`   Waiting for employer data to load...`);
+        } else {
+          for (const box of allCheckboxes) {
+            const label = await box.getAttribute('aria-label') ||
+                          await box.getAttribute('name') ||
+                          'unknown';
+            console.log(`   - "${label}"`);
+          }
+        }
+
+        // Wait before next attempt
+        await this.page.waitForTimeout(pollInterval);
+
+        // Also wait for any network activity to complete
+        await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
       }
     }
 
-    // Wait for checkbox to be visible (with reduced timeout since we already waited for API)
-    console.log(`⏳ Waiting for checkbox "${arbeidsgiverNavn}" to be visible...`);
-    await checkbox.waitFor({ state: 'visible', timeout: 30000 });
+    if (!isVisible) {
+      // Final attempt with Playwright's built-in wait
+      console.log(`⏳ Final wait for checkbox "${arbeidsgiverNavn}"...`);
+      await checkbox.waitFor({ state: 'visible', timeout: 10000 });
+    }
 
     // Set up response listener BEFORE checking (checkbox triggers API save)
     const responsePromise = this.page.waitForResponse(
