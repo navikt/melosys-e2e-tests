@@ -407,8 +407,8 @@ export class EuEosBehandlingPage extends BasePage {
     // CRITICAL FIX: Wait for step heading to CHANGE before returning
     // This ensures React has finished rendering the next step
     if (headingBefore) {
-      const maxWaitTime = 15000; // 15 seconds max
-      const pollInterval = 500;
+      const maxWaitTime = 5000; // 5 seconds max (reduced from 15s - normally changes within 1-2s)
+      const pollInterval = 250; // Check more frequently
       let elapsed = 0;
       let headingChanged = false;
 
@@ -545,9 +545,11 @@ export class EuEosBehandlingPage extends BasePage {
   /**
    * Svar "Ja" på et spørsmål og gå videre
    * Hjelpemetode for spørsmålssteg
+   *
+   * FIX: Removed duplicate svarJa() call that was causing timeout issues.
+   * Each step only has one "Ja" question to answer.
    */
   async svarJaOgFortsett(): Promise<void> {
-    await this.svarJa();
     await this.svarJa();
     await this.klikkBekreftOgFortsett();
   }

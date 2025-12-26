@@ -285,8 +285,8 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     // CRITICAL FIX: Wait for step heading to CHANGE before returning
     // This ensures React has finished rendering the next step
     if (headingBefore) {
-      const maxWaitTime = 15000; // 15 seconds max
-      const pollInterval = 500;
+      const maxWaitTime = 5000; // 5 seconds max (reduced from 15s - normally changes within 1-2s)
+      const pollInterval = 250; // Check more frequently
       let elapsed = 0;
       let headingChanged = false;
 

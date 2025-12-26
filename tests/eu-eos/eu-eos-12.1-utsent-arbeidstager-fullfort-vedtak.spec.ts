@@ -24,8 +24,8 @@ import {waitForProcessInstances} from '../../helpers/api-helper';
  */
 test.describe('EU/EØS - Komplett arbeidsflyt', () => {
     test('skal fullføre EU/EØS-arbeidsflyt med vedtak', async ({page}) => {
-        // Øk test timeout til 120 sekunder (vedtak kan ta lang tid på CI)
-        test.setTimeout(120000);
+        // Øk test timeout til 180 sekunder (vedtak + step transitions can take time on CI)
+        test.setTimeout(180000);
 
         // Oppsett
         const auth = new AuthHelper(page);
