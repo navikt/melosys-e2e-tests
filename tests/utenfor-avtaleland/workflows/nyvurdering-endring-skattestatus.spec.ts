@@ -13,6 +13,7 @@ import {USER_ID_VALID} from '../../../pages/shared/constants';
 import {UnleashHelper} from "../../../helpers/unleash-helper";
 import {AdminApiHelper, waitForProcessInstances} from '../../../helpers/api-helper';
 import {expect} from "@playwright/test";
+import {TestPeriods, TestPeriodsISO} from '../../../helpers/date-helper';
 
 
 test.describe('Nyvurdering - Endring av skattestatus', () => {
@@ -53,9 +54,10 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
 
         await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).click();
 
-        // Step 3: Fill Medlemskap (2024-only dates for MELOSYS-7689)
-        console.log('📝 Step 3: Filling medlemskap information...');
-        await medlemskap.velgPeriode('01.01.2024', '01.07.2024');
+        // Step 3: Fill Medlemskap (using dynamic dates to avoid year-boundary issues)
+        const period = TestPeriods.standardPeriod;
+        console.log(`📝 Step 3: Filling medlemskap information (${period.start} - ${period.end})...`);
+        await medlemskap.velgPeriode(period.start, period.end);
         await medlemskap.velgLand('Afghanistan');
         await medlemskap.velgTrygdedekning('FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON');
         await medlemskap.klikkBekreftOgFortsett();
@@ -79,13 +81,9 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         console.log('📊 Logging all frontend toggle states:');
         await unleash.logFrontendToggleStates();
 
-        // Step 6: Accept default Resultat Periode values (split periods)
-        console.log('📝 Step 6: Accepting default resultat periode values...');
-
-        // Step 6: Select Resultat Periode
-        console.log('📝 Step 6: Selecting resultat periode...');
-        // await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
-        await resultatPeriode.klikkBekreftOgFortsett()
+        // Step 6: Select Resultat Periode - explicitly set INNVILGET to avoid default "Avslått"
+        console.log('📝 Step 6: Setting resultat periode to INNVILGET...');
+        await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
 
         // Step 7: Fill Trygdeavgift with special options
         console.log('📝 Step 7: Filling trygdeavgift...');
@@ -152,7 +150,7 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         console.log('✅ Workflow completed successfully!');
     });
 
-    test('skal endre skattestatus fra skattepliktig til ikke-skattepliktig via nyvurdering @known-error #MELOSYS-7718', async (
+    test('skal endre skattestatus fra skattepliktig til ikke-skattepliktig via nyvurdering', async (
         {
             page,
             request
@@ -190,9 +188,10 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
 
         await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).click();
 
-        // Step 3: Fill Medlemskap (2024-only dates for MELOSYS-7689)
-        console.log('📝 Step 3: Filling medlemskap information...');
-        await medlemskap.velgPeriode('01.01.2024', '01.07.2024');
+        // Step 3: Fill Medlemskap (using dynamic dates to avoid year-boundary issues)
+        const period = TestPeriods.standardPeriod;
+        console.log(`📝 Step 3: Filling medlemskap information (${period.start} - ${period.end})...`);
+        await medlemskap.velgPeriode(period.start, period.end);
         await medlemskap.velgLand('Afghanistan');
         await medlemskap.velgTrygdedekning('FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON');
         await medlemskap.klikkBekreftOgFortsett();
@@ -216,9 +215,9 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         console.log('📊 Logging all frontend toggle states:');
         await unleash.logFrontendToggleStates();
 
-        // Step 6: Accept default Resultat Periode values (split periods)
-        console.log('📝 Step 6: Accepting default resultat periode values...');
-        await resultatPeriode.klikkBekreftOgFortsett();
+        // Step 6: Select Resultat Periode - explicitly set INNVILGET to avoid default "Avslått"
+        console.log('📝 Step 6: Setting resultat periode to INNVILGET...');
+        await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
 
         // Step 7: Fill Trygdeavgift with special options
         console.log('📝 Step 7: Filling trygdeavgift...');
@@ -288,10 +287,12 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
 
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
 
+        // Use dynamic dates for the API call - search current year to find the test period
+        const apiPeriod = TestPeriodsISO.currentYearPeriod;
         await adminApi.finnIkkeSkattepliktigeSaker(
             request,
-            '2024-01-01',
-            '2024-12-31',
+            apiPeriod.start,
+            apiPeriod.end,
             true // lagProsessinstanser
         );
         const response = await adminApi.waitForIkkeSkattepliktigeSakerJob(
