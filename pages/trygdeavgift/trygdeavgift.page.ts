@@ -89,16 +89,15 @@ export class TrygdeavgiftPage extends BasePage {
    * @param erSkattepliktig - true for "Ja", false for "Nei"
    */
   async velgSkattepliktig(erSkattepliktig: boolean): Promise<void> {
+    console.log(`📝 velgSkattepliktig: Setting to ${erSkattepliktig ? 'Ja' : 'Nei'}...`);
+
     // Wait for the group to be visible
     await this.skattepliktigGroup.waitFor({ state: 'visible', timeout: 5000 });
 
-    // Get the radio button within the group
-    const radio = erSkattepliktig
-      ? this.skattepliktigGroup.getByLabel('Ja')
-      : this.skattepliktigGroup.getByLabel('Nei');
-
-    // Wait for radio button to be enabled
-    await radio.waitFor({ state: 'visible', timeout: 5000 });
+    // Get the label text within the group (not the radio input)
+    // The radio buttons have value SKATTEPLIKTIG (Ja) or IKKE_SKATTEPLIKTIG (Nei)
+    const radioLabel = erSkattepliktig ? 'Ja' : 'Nei';
+    const expectedValue = erSkattepliktig ? 'SKATTEPLIKTIG' : 'IKKE_SKATTEPLIKTIG';
 
     // Set up response listener BEFORE clicking to catch the debounced PUT
     const responsePromise = this.page.waitForResponse(
@@ -108,11 +107,29 @@ export class TrygdeavgiftPage extends BasePage {
       { timeout: 3000 } // 500ms debounce + 2500ms for API
     ).catch(() => null); // Don't fail if no PUT (form might prevent it)
 
-    // Check the radio button (triggers change event)
-    await radio.check();
+    // Get the radio input directly
+    const radioInput = this.skattepliktigGroup.locator(`input[value="${expectedValue}"]`);
+    await radioInput.waitFor({ state: 'attached', timeout: 5000 });
 
-    // Verify it was checked
-    await expect(radio).toBeChecked({ timeout: 5000 });
+    // Click directly on the radio input using force to bypass any overlay
+    await radioInput.click({ force: true });
+    console.log(`   Clicked on radio input with value '${expectedValue}'`);
+
+    // Wait for the DOM to settle after potential React re-render
+    await this.page.waitForTimeout(200);
+
+    // If still not checked, try clicking the label
+    const isChecked = await radioInput.isChecked();
+    if (!isChecked) {
+      console.log(`   Radio not checked after click, trying label click...`);
+      const labelText = this.skattepliktigGroup.getByText(radioLabel, { exact: true });
+      await labelText.click();
+      await this.page.waitForTimeout(200);
+    }
+
+    // Final verification - poll for the checked state
+    await expect(radioInput).toBeChecked({ timeout: 5000 });
+    console.log(`   Radio input with value '${expectedValue}' is now checked`);
 
     // CRITICAL: Wait for the debounced PUT request to fire and complete
     // The form has a 500ms debounce, so we need to wait for that plus the API time
