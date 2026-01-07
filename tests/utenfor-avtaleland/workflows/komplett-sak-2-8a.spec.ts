@@ -62,12 +62,12 @@ test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
         await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
 
         // Step 7: Handle Trygdeavgift page
-        // Note: With dynamic dates, årsavregning warning may or may not appear
-        // depending on whether the period includes dates from previous years
+        // With FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON, we need to fill in skatteforhold and income
         console.log('📝 Step 7: Handling trygdeavgift...');
+        await trygdeavgift.ventPåSideLastet();
 
         // Check if the årsavregning warning is displayed (informational only)
-        const hasAarsavregningWarning = await page.getByText(/tidligere år skal fastsettes på årsavregning/i).isVisible({ timeout: 5000 }).catch(() => false);
+        const hasAarsavregningWarning = await page.getByText(/tidligere år skal fastsettes på årsavregning/i).isVisible({ timeout: 2000 }).catch(() => false);
 
         if (hasAarsavregningWarning) {
             console.log('ℹ️ Årsavregning warning detected - period includes previous year dates');
@@ -75,6 +75,11 @@ test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
             console.log('ℹ️ No årsavregning warning - period is within current year');
         }
 
+        // Fill all required trygdeavgift fields
+        await trygdeavgift.velgSkattepliktig(false);
+        await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
+        await trygdeavgift.velgBetalesAga(false);
+        await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
         await trygdeavgift.klikkBekreftOgFortsett();
 
         // Step 8: Fatt vedtak (without filling text fields)
@@ -125,12 +130,12 @@ test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
         await lovvalg.fyllUtLovvalg();
 
         // Step 6: Handle Trygdeavgift page
-        // Note: With dynamic dates, årsavregning warning may or may not appear
-        // depending on whether the period includes dates from previous years
+        // With FULL_DEKNING_FTRL, we need to fill in skatteforhold and income
         console.log('📝 Step 6: Handling trygdeavgift...');
+        await trygdeavgift.ventPåSideLastet();
 
         // Check if the årsavregning warning is displayed (informational only)
-        const hasAarsavregningWarning = await page.getByText(/tidligere år skal fastsettes på årsavregning/i).isVisible({ timeout: 5000 }).catch(() => false);
+        const hasAarsavregningWarning = await page.getByText(/tidligere år skal fastsettes på årsavregning/i).isVisible({ timeout: 2000 }).catch(() => false);
 
         if (hasAarsavregningWarning) {
             console.log('ℹ️ Årsavregning warning detected - period includes previous year dates');
@@ -138,6 +143,13 @@ test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
             console.log('ℹ️ No årsavregning warning - period is within current year');
         }
 
+        // Fill all required trygdeavgift fields
+        // Note: FULL_DEKNING_FTRL has different income options (no "Inntekt fra utlandet")
+        // Note: For ARBEIDSINNTEKT, "Betales aga?" is shown as "Ikke relevant" (not a radio group)
+        await trygdeavgift.velgSkattepliktig(false);
+        await trygdeavgift.velgInntektskilde('ARBEIDSINNTEKT');
+        // No velgBetalesAga() - field shows "Ikke relevant" for this income type
+        await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
         await trygdeavgift.klikkBekreftOgFortsett();
 
         // Step 7: Make Decision (Fatt vedtak)
