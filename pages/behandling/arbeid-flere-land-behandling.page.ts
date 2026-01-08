@@ -315,7 +315,8 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     const urlBefore = this.page.url();
 
     // CRITICAL: Capture step heading BEFORE clicking to verify transition
-    const headingBefore = await this.page.locator('h1').first().textContent().catch(() => null);
+    // NOTE: Use 'main h1' to avoid capturing "Hopp til hovedinnhold" skip-link heading
+    const headingBefore = await this.page.locator('main h1').first().textContent().catch(() => null);
     console.log(`📍 Step før: "${headingBefore}"`);
 
     // Check if button is enabled before clicking
@@ -361,13 +362,14 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
       try {
         await this.page.waitForFunction(
           (prevHeading) => {
-            const h1 = document.querySelector('h1');
+            // Use 'main h1' to target the step heading, not skip-link heading
+            const h1 = document.querySelector('main h1');
             return h1 && h1.textContent && h1.textContent.trim() !== prevHeading.trim();
           },
           headingBefore,
           { timeout: 15000 }
         );
-        const headingAfter = await this.page.locator('h1').first().textContent().catch(() => 'unknown');
+        const headingAfter = await this.page.locator('main h1').first().textContent().catch(() => 'unknown');
         console.log(`✅ Step byttet: "${headingBefore}" → "${headingAfter}"`);
       } catch {
         console.warn('⚠️  Step heading endret seg ikke innen 15s');
