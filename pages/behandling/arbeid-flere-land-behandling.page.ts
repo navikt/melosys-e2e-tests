@@ -312,12 +312,6 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
    */
   async klikkBekreftOgFortsett(): Promise<void> {
     console.log('🔄 Klikker "Bekreft og fortsett"...');
-    const urlBefore = this.page.url();
-
-    // CRITICAL: Capture step heading BEFORE clicking to verify transition
-    // NOTE: Use 'main h1' to avoid capturing "Hopp til hovedinnhold" skip-link heading
-    const headingBefore = await this.page.locator('main h1').first().textContent().catch(() => null);
-    console.log(`📍 Step før: "${headingBefore}"`);
 
     // Check if button is enabled before clicking
     const isEnabled = await this.bekreftOgFortsettButton.isEnabled();
@@ -352,43 +346,18 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
       if (avklartefaktaResponse) console.log(`   - avklartefakta: ${avklartefaktaResponse.status()}`);
       if (vilkaarResponse) console.log(`   - vilkaar: ${vilkaarResponse.status()}`);
     } else {
-      console.log('⚠️  No step transition APIs detected, waiting for React state update');
+      console.log('⚠️  No step transition APIs detected');
     }
 
-    // CRITICAL FIX: Wait for step heading to change (SPA navigation verification)
-    // This ensures React has actually rendered the next step before we continue
-    if (headingBefore) {
-      console.log('⏳ Venter på at steget bytter...');
-      try {
-        await this.page.waitForFunction(
-          (prevHeading) => {
-            // Use 'main h1' to target the step heading, not skip-link heading
-            const h1 = document.querySelector('main h1');
-            return h1 && h1.textContent && h1.textContent.trim() !== prevHeading.trim();
-          },
-          headingBefore,
-          { timeout: 15000 }
-        );
-        const headingAfter = await this.page.locator('main h1').first().textContent().catch(() => 'unknown');
-        console.log(`✅ Step byttet: "${headingBefore}" → "${headingAfter}"`);
-      } catch {
-        console.warn('⚠️  Step heading endret seg ikke innen 15s');
-        console.warn('   Dette kan indikere at navigasjonen feilet eller at vi er på siste steg');
-        // Still wait a bit for React to settle
-        await this.page.waitForTimeout(1000);
-      }
-    }
+    // Wait for React to process the state update and render next step
+    await this.page.waitForTimeout(500);
 
     // Wait for network idle as fallback
     await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
       console.log('⚠️  Network idle timeout (non-critical)');
     });
 
-    // Log final URL state
-    const urlAfter = this.page.url();
-    const urlChanged = urlBefore !== urlAfter;
-    console.log(`✅ Klikket Bekreft og fortsett`);
-    console.log(`  URL endret: ${urlChanged}`);
+    console.log('✅ Klikket Bekreft og fortsett');
   }
 
   /**
