@@ -314,6 +314,10 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     console.log('🔄 Klikker "Bekreft og fortsett"...');
     const urlBefore = this.page.url();
 
+    // CRITICAL: Capture step heading BEFORE clicking to verify transition
+    const headingBefore = await this.page.locator('h1').first().textContent().catch(() => null);
+    console.log(`📍 Step før: "${headingBefore}"`);
+
     // Check if button is enabled before clicking
     const isEnabled = await this.bekreftOgFortsettButton.isEnabled();
     console.log(`  Knapp aktivert: ${isEnabled}`);
@@ -350,40 +354,39 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
       console.log('⚠️  No step transition APIs detected, waiting for React state update');
     }
 
-    // Still wait for React state update
-    await this.page.waitForTimeout(500);
+    // CRITICAL FIX: Wait for step heading to change (SPA navigation verification)
+    // This ensures React has actually rendered the next step before we continue
+    if (headingBefore) {
+      console.log('⏳ Venter på at steget bytter...');
+      try {
+        await this.page.waitForFunction(
+          (prevHeading) => {
+            const h1 = document.querySelector('h1');
+            return h1 && h1.textContent && h1.textContent.trim() !== prevHeading.trim();
+          },
+          headingBefore,
+          { timeout: 15000 }
+        );
+        const headingAfter = await this.page.locator('h1').first().textContent().catch(() => 'unknown');
+        console.log(`✅ Step byttet: "${headingBefore}" → "${headingAfter}"`);
+      } catch {
+        console.warn('⚠️  Step heading endret seg ikke innen 15s');
+        console.warn('   Dette kan indikere at navigasjonen feilet eller at vi er på siste steg');
+        // Still wait a bit for React to settle
+        await this.page.waitForTimeout(1000);
+      }
+    }
 
-    // Optional: Wait for network idle as fallback (shorter timeout now)
+    // Wait for network idle as fallback
     await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
       console.log('⚠️  Network idle timeout (non-critical)');
     });
 
-    // ENHANCED: Verify URL change and report detailed navigation status
+    // Log final URL state
     const urlAfter = this.page.url();
     const urlChanged = urlBefore !== urlAfter;
-
     console.log(`✅ Klikket Bekreft og fortsett`);
-    console.log(`  URL før:  ${urlBefore}`);
-    console.log(`  URL etter: ${urlAfter}`);
     console.log(`  URL endret: ${urlChanged}`);
-
-    // DIAGNOSTIC: If URL didn't change, log warning
-    if (!urlChanged) {
-      console.warn('⚠️  URL did not change after step transition!');
-      console.warn('   This could indicate:');
-      console.warn('   1. Same-page navigation (step change without URL change)');
-      console.warn('   2. Navigation race condition (next step not initialized yet)');
-      console.warn('   Adding extra wait for page state update...');
-      await this.page.waitForTimeout(1000);
-
-      // Double-check URL after extra wait
-      const urlAfterExtraWait = this.page.url();
-      if (urlAfterExtraWait !== urlBefore) {
-        console.log(`✅ URL changed after extra wait: ${urlAfterExtraWait}`);
-      } else {
-        console.log(`ℹ️  URL still unchanged - this might be normal for same-page navigation`);
-      }
-    }
   }
 
   /**
