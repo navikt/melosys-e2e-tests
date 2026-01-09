@@ -302,15 +302,30 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
   }
 
   /**
-   * Klikk "Bekreft og fortsett" knapp
-   * Venter på at siden er klar etter navigasjon
+   * Klikk "Bekreft og fortsett" knapp og vent på at neste steg er klart
    *
-   * IMPORTANT: This method waits for specific step transition API calls.
-   * Each step transition triggers 5-6 POST requests to save all form data.
+   * IMPORTANT: This method waits for specific step transition API calls AND
+   * optionally waits for specific content to appear on the next step.
    *
-   * Enhanced with URL change detection to identify navigation race conditions.
+   * @param waitForContent - Optional: Selector or text to wait for on next step.
+   *                         This ensures React has finished rendering before proceeding.
+   * @param waitForContentTimeout - Timeout for waiting for content (default: 30000ms)
+   *
+   * @example
+   * // Basic usage - just wait for API and network idle
+   * await behandling.klikkBekreftOgFortsett();
+   *
+   * // Robust usage - wait for specific content on next step
+   * await behandling.klikkBekreftOgFortsett({
+   *   waitForContent: page.getByRole('checkbox', { name: 'Ståles Stål AS' })
+   * });
    */
-  async klikkBekreftOgFortsett(): Promise<void> {
+  async klikkBekreftOgFortsett(options?: {
+    waitForContent?: import('@playwright/test').Locator;
+    waitForContentTimeout?: number;
+  }): Promise<void> {
+    const { waitForContent, waitForContentTimeout = 30000 } = options || {};
+
     console.log('🔄 Klikker "Bekreft og fortsett"...');
 
     // Check if button is enabled before clicking
@@ -349,13 +364,22 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
       console.log('⚠️  No step transition APIs detected');
     }
 
-    // Wait for React to process the state update and render next step
-    await this.page.waitForTimeout(500);
+    // If specific content is provided, wait for it to be visible
+    // This is the MOST ROBUST way to ensure the next step is ready
+    if (waitForContent) {
+      console.log('⏳ Waiting for specific content on next step...');
+      const startTime = Date.now();
+      await waitForContent.waitFor({ state: 'visible', timeout: waitForContentTimeout });
+      console.log(`✅ Content visible after ${Date.now() - startTime}ms`);
+    } else {
+      // Fallback: Wait for React to process the state update and render next step
+      await this.page.waitForTimeout(500);
 
-    // Wait for network idle as fallback
-    await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
-      console.log('⚠️  Network idle timeout (non-critical)');
-    });
+      // Wait for network idle as fallback
+      await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
+        console.log('⚠️  Network idle timeout (non-critical)');
+      });
+    }
 
     console.log('✅ Klikket Bekreft og fortsett');
   }
@@ -434,50 +458,52 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     informasjon: string = 'Dodatkowo'
   ): Promise<void> {
     // Steg 1: Bekreft og fortsett (ingen handling nødvendig)
-    await this.klikkBekreftOgFortsett();
+    // Wait for land radio button to be visible on next step
+    await this.klikkBekreftOgFortsett({
+      waitForContent: this.page.getByRole('radio', { name: land })
+    });
 
     // Steg 2: Velg land
     await this.velgLandRadio(land);
-    await this.klikkBekreftOgFortsett();
 
-    // CRITICAL FIX: Wait for employer data to be loaded before selecting
-    // After step transition, the frontend fetches employer data from backend.
-    // We must wait for these API calls to complete before calling velgArbeidsgiver.
-    console.log('⏳ Waiting for employer data API after step transition...');
-    const employerApiPromise = this.page.waitForResponse(
-      response => (response.url().includes('/arbeidsforhold') ||
-                   response.url().includes('/virksomheter') ||
-                   response.url().includes('/registeropplysninger') ||
-                   response.url().includes('/mottatteopplysninger')) &&
-                  response.status() === 200,
-      { timeout: 15000 }
-    ).catch(() => {
-      console.log('⚠️  No employer API detected within 15s - proceeding anyway');
-      return null;
+    // CRITICAL: Wait for the arbeidsgiver checkbox to be visible on next step
+    // This is the most robust way to prevent race conditions - we wait for the
+    // actual UI element that we need to interact with, not just API responses.
+    await this.klikkBekreftOgFortsett({
+      waitForContent: this.page.getByRole('checkbox', { name: arbeidsgiver })
     });
 
-    const employerResponse = await employerApiPromise;
-    if (employerResponse) {
-      console.log(`✅ Employer data loaded: ${employerResponse.url()} -> ${employerResponse.status()}`);
-      // Give React time to render the employer list after API response
-      await this.page.waitForTimeout(500);
-    }
-
-    // Steg 3: Velg arbeidsgiver
+    // Steg 3: Velg arbeidsgiver (checkbox should already be visible from above wait)
     await this.velgArbeidsgiver(arbeidsgiver);
-    await this.klikkBekreftOgFortsett();
+
+    // Wait for "Arbeid utføres i land som er" checkbox on next step
+    await this.klikkBekreftOgFortsett({
+      waitForContent: this.page.getByRole('checkbox', { name: 'Arbeid utføres i land som er' })
+    });
 
     // Steg 4: Velg arbeid utføres i land som er
     await this.velgArbeidUtføresILandSomEr();
-    await this.klikkBekreftOgFortsett();
+
+    // Wait for "Lønnet arbeid i to eller" radio on next step
+    await this.klikkBekreftOgFortsett({
+      waitForContent: this.page.getByRole('radio', { name: 'Lønnet arbeid i to eller' })
+    });
 
     // Steg 5: Velg lønnet arbeid i to eller flere land
     await this.velgLønnetArbeidIToEllerFlereLand();
-    await this.klikkBekreftOgFortsett();
+
+    // Wait for "% eller mer" radio on next step
+    await this.klikkBekreftOgFortsett({
+      waitForContent: this.page.getByRole('radio', { name: '% eller mer' })
+    });
 
     // Steg 6: Velg prosent eller mer
     await this.velgProsentEllerMer();
-    await this.klikkBekreftOgFortsett();
+
+    // Wait for fritekst field on next step
+    await this.klikkBekreftOgFortsett({
+      waitForContent: this.page.getByRole('textbox', { name: 'Fritekst til begrunnelse' })
+    });
 
     // Steg 7: Fyll inn fritekst-felter
     await this.fyllInnFritekstTilBegrunnelse(begrunnelse);
