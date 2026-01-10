@@ -307,9 +307,10 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
    * IMPORTANT: This method waits for specific step transition API calls AND
    * optionally waits for specific content to appear on the next step.
    *
-   * @param waitForContent - Optional: Selector or text to wait for on next step.
-   *                         This ensures React has finished rendering before proceeding.
-   * @param waitForContentTimeout - Timeout for waiting for content (default: 30000ms)
+   * @param options - Optional configuration for step transition
+   * @param options.waitForContent - Optional Locator to wait for on the next step.
+   *                                 This ensures React has finished rendering before proceeding.
+   * @param options.waitForContentTimeout - Timeout in ms for waiting for content (default: 30000ms)
    *
    * @example
    * // Basic usage - just wait for API and network idle
