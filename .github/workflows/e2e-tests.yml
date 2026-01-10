@@ -22,6 +22,11 @@ on:
         required: false
         type: number
         default: 1
+      disable_retries:
+        description: 'Disable test retries (for accurate race condition detection)'
+        required: false
+        type: boolean
+        default: false
 
   repository_dispatch:
     types:
@@ -385,6 +390,12 @@ jobs:
           if [ "${{ inputs.repeat_each }}" -gt 1 ]; then
             echo "🔄 Running each test ${{ inputs.repeat_each }} times"
             PLAYWRIGHT_CMD="$PLAYWRIGHT_CMD --repeat-each ${{ inputs.repeat_each }}"
+          fi
+
+          # Disable retries if specified (for accurate race condition detection)
+          if [ "${{ inputs.disable_retries }}" = "true" ]; then
+            echo "🚫 Retries disabled"
+            PLAYWRIGHT_CMD="$PLAYWRIGHT_CMD --retries 0"
           fi
 
           echo "🎭 Running: $PLAYWRIGHT_CMD"

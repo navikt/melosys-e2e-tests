@@ -44,6 +44,7 @@ For debugging race conditions or running specific tests multiple times, use the 
 | `collect_coverage` | Collect E2E code coverage | `false` |
 | `test_grep` | Filter tests by pattern (name, file, or tag) | `` (all tests) |
 | `repeat_each` | Run each test N times | `1` |
+| `disable_retries` | Disable test retries (for accurate race condition detection) | `false` |
 
 ### Using GitHub CLI (`gh`)
 
@@ -64,6 +65,12 @@ gh workflow run e2e-tests.yml \
   -f environment="melosys-api:feature-branch" \
   -f test_grep="step-transition" \
   -f repeat_each=15
+
+# Race condition testing (no retries = accurate failure count)
+gh workflow run e2e-tests.yml \
+  -f test_grep="step-transition" \
+  -f repeat_each=10 \
+  -f disable_retries=true
 ```
 
 ### Using Web UI
