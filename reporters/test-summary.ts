@@ -115,7 +115,7 @@ class TestSummaryReporter implements Reporter {
       isKnownError: ti.isKnownError,
       totalAttempts: ti.totalAttempts,
       failedAttempts: ti.failedAttempts,
-      duration: ti.results[ti.results.length - 1].duration,
+      duration: ti.results.reduce((sum, r) => sum + r.duration, 0),
       error: ti.results[ti.results.length - 1].error?.message,
       dockerErrors: ti.dockerErrors,
       processErrors: ti.processErrors

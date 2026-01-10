@@ -12,6 +12,21 @@ on:
         required: false
         type: boolean
         default: false
+      test_grep:
+        description: 'Test filter pattern (e.g., "step-transition", "@smoke", or test file name)'
+        required: false
+        type: string
+        default: ''
+      repeat_each:
+        description: 'Run each test N times (for finding race conditions)'
+        required: false
+        type: number
+        default: 1
+      disable_retries:
+        description: 'Disable test retries (for accurate race condition detection)'
+        required: false
+        type: boolean
+        default: false
 
   repository_dispatch:
     types:
@@ -362,8 +377,31 @@ jobs:
       - name: Run Playwright tests
         id: playwright
         run: |
+          # Build Playwright command with optional filters
+          PLAYWRIGHT_CMD="npx playwright test --project=chromium"
+
+          # Add test filter if specified
+          if [ -n "${{ inputs.test_grep }}" ]; then
+            echo "🔍 Filtering tests with pattern: ${{ inputs.test_grep }}"
+            PLAYWRIGHT_CMD="$PLAYWRIGHT_CMD --grep '${{ inputs.test_grep }}'"
+          fi
+
+          # Add repeat count if specified (for race condition testing)
+          if [ "${{ inputs.repeat_each }}" -gt 1 ]; then
+            echo "🔄 Running each test ${{ inputs.repeat_each }} times"
+            PLAYWRIGHT_CMD="$PLAYWRIGHT_CMD --repeat-each ${{ inputs.repeat_each }}"
+          fi
+
+          # Disable retries if specified (for accurate race condition detection)
+          if [ "${{ inputs.disable_retries }}" = "true" ]; then
+            echo "🚫 Retries disabled"
+            PLAYWRIGHT_CMD="$PLAYWRIGHT_CMD --retries 0"
+          fi
+
+          echo "🎭 Running: $PLAYWRIGHT_CMD"
+
           # Run tests and capture exit code (don't fail immediately)
-          npx playwright test --project=chromium || PLAYWRIGHT_EXIT_CODE=$?
+          eval $PLAYWRIGHT_CMD || PLAYWRIGHT_EXIT_CODE=$?
 
           # Check if test-summary.json was created by reporter
           if [ -f "playwright-report/test-summary.json" ]; then

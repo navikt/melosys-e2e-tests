@@ -32,6 +32,79 @@ See [Repository Dispatch Trigger Guide](./REPOSITORY-DISPATCH-TRIGGER.md) for se
 
 ---
 
+## Running Selected Tests (Race Condition Testing)
+
+For debugging race conditions or running specific tests multiple times, use the `test_grep` and `repeat_each` inputs.
+
+### Workflow Inputs
+
+| Input | Description | Default |
+|-------|-------------|---------|
+| `environment` | Image tags for services | `latest` |
+| `collect_coverage` | Collect E2E code coverage | `false` |
+| `test_grep` | Filter tests by pattern (name, file, or tag) | `` (all tests) |
+| `repeat_each` | Run each test N times | `1` |
+| `disable_retries` | Disable test retries (for accurate race condition detection) | `false` |
+
+### Using GitHub CLI (`gh`)
+
+The `gh` CLI offers the same capabilities as the web UI, plus scriptability:
+
+```bash
+# Run specific test 10 times (for race condition testing)
+gh workflow run e2e-tests.yml -f test_grep="step-transition" -f repeat_each=10
+
+# Run all @smoke tagged tests 5 times
+gh workflow run e2e-tests.yml -f test_grep="@smoke" -f repeat_each=5
+
+# Run specific file 20 times
+gh workflow run e2e-tests.yml -f test_grep="arbeid-flere-land" -f repeat_each=20
+
+# Combine with environment selection
+gh workflow run e2e-tests.yml \
+  -f environment="melosys-api:feature-branch" \
+  -f test_grep="step-transition" \
+  -f repeat_each=15
+
+# Race condition testing (no retries = accurate failure count)
+gh workflow run e2e-tests.yml \
+  -f test_grep="step-transition" \
+  -f repeat_each=10 \
+  -f disable_retries=true
+```
+
+### Using Web UI
+
+1. Go to **Actions** → **E2E Tests** → **Run workflow**
+2. Fill in **test_grep**: `step-transition` (or your pattern)
+3. Fill in **repeat_each**: `10` (number of times to run each test)
+4. Click **Run workflow**
+
+### Intensive Race Condition Testing
+
+For intensive testing, run multiple workflows in sequence:
+
+```bash
+# Run 5 separate workflow runs, each running tests 10 times
+for i in {1..5}; do
+  echo "Starting workflow run $i..."
+  gh workflow run e2e-tests.yml -f test_grep="step-transition" -f repeat_each=10
+  sleep 30  # Avoid rate limiting
+done
+```
+
+### Pattern Examples
+
+| Pattern | What it matches |
+|---------|-----------------|
+| `step-transition` | Tests with "step-transition" in name |
+| `arbeid-flere-land` | Tests in arbeid-flere-land.spec.ts |
+| `@smoke` | Tests tagged with @smoke |
+| `@known-error` | Tests tagged with @known-error |
+| `should complete` | Tests with "should complete" in name |
+
+---
+
 ## Automatic Triggers (repository_dispatch)
 
 ### Overview
