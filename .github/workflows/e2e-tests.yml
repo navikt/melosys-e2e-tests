@@ -245,15 +245,29 @@ jobs:
           echo "✅ JaCoCo agent downloaded to ./jacoco/"
 
       - name: Checkout melosys-api for coverage report generation
+        id: checkout-melosys-api
         if: inputs.collect_coverage
+        continue-on-error: true
         uses: actions/checkout@v4
         with:
           repository: navikt/melosys-api
           path: melosys-api
           token: ${{ secrets.READER_TOKEN }}
 
-      - name: Build melosys-api for coverage class files
+      - name: Check melosys-api checkout result
         if: inputs.collect_coverage
+        run: |
+          if [ "${{ steps.checkout-melosys-api.outcome }}" != "success" ]; then
+            echo "::warning::Failed to checkout melosys-api. Coverage reports will not be generated."
+            echo "::warning::Ensure READER_TOKEN secret is set and has access to navikt/melosys-api"
+            echo "COVERAGE_AVAILABLE=false" >> $GITHUB_ENV
+          else
+            echo "✅ melosys-api checked out successfully"
+            echo "COVERAGE_AVAILABLE=true" >> $GITHUB_ENV
+          fi
+
+      - name: Build melosys-api for coverage class files
+        if: inputs.collect_coverage && env.COVERAGE_AVAILABLE == 'true'
         run: |
           cd melosys-api
           echo "🔨 Building melosys-api to get compiled classes for coverage report..."
@@ -479,7 +493,8 @@ jobs:
           echo "  has-flaky: $HAS_FLAKY"
 
       - name: Dump JaCoCo coverage from melosys-api
-        if: always() && inputs.collect_coverage
+        if: always() && inputs.collect_coverage && env.COVERAGE_AVAILABLE == 'true'
+        continue-on-error: true
         run: |
           echo "📊 Dumping E2E coverage data from melosys-api..."
           java -jar jacoco/jacococli.jar dump \
@@ -490,7 +505,7 @@ jobs:
           ls -lh e2e-coverage.exec
 
       - name: Generate E2E coverage reports
-        if: always() && inputs.collect_coverage
+        if: always() && inputs.collect_coverage && env.COVERAGE_AVAILABLE == 'true'
         run: |
           echo "📈 Generating E2E coverage reports..."
 
@@ -518,7 +533,7 @@ jobs:
 
       - name: E2E Coverage Report
         uses: madrapps/jacoco-report@50d3aff4548aa991e6753342d9ba291084e63848 # v1.7.2
-        if: github.event_name == 'pull_request'
+        if: github.event_name == 'pull_request' && inputs.collect_coverage && env.COVERAGE_AVAILABLE == 'true'
         with:
           paths: 'melosys-api/**/target/site/jacoco/jacoco.xml'
           token: ${{ secrets.GITHUB_TOKEN }}
@@ -529,7 +544,7 @@ jobs:
 
       - name: Upload E2E coverage reports
         uses: actions/upload-artifact@v4
-        if: always() && inputs.collect_coverage
+        if: always() && inputs.collect_coverage && env.COVERAGE_AVAILABLE == 'true'
         with:
           name: e2e-coverage-report
           path: |
@@ -687,8 +702,8 @@ jobs:
             echo "</details>" >> $GITHUB_STEP_SUMMARY
           fi
 
-          # Add E2E coverage summary if coverage collection was enabled
-          if [ "${{ inputs.collect_coverage }}" = "true" ]; then
+          # Add E2E coverage summary if coverage collection was enabled and available
+          if [ "${{ inputs.collect_coverage }}" = "true" ] && [ "${{ env.COVERAGE_AVAILABLE }}" = "true" ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "## 📊 E2E Coverage per Module" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -767,6 +782,17 @@ jobs:
             fi
 
             cd ..
+          elif [ "${{ inputs.collect_coverage }}" = "true" ] && [ "${{ env.COVERAGE_AVAILABLE }}" != "true" ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "## ⚠️ E2E Coverage Not Available" >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "Coverage collection was requested but could not complete." >> $GITHUB_STEP_SUMMARY
+            echo "This is usually because the READER_TOKEN secret is missing or does not have access to navikt/melosys-api." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "To fix this:" >> $GITHUB_STEP_SUMMARY
+            echo "1. Create a GitHub PAT with \`repo\` scope" >> $GITHUB_STEP_SUMMARY
+            echo "2. Add it as a repository secret named \`READER_TOKEN\`" >> $GITHUB_STEP_SUMMARY
+            echo "3. Ensure it has access to navikt/melosys-api" >> $GITHUB_STEP_SUMMARY
           fi
 
       - name: Capture complete docker logs
