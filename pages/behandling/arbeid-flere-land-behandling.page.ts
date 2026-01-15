@@ -513,4 +513,127 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     // Steg 8: Fatt vedtak
     await this.fattVedtak();
   }
+
+  // ============================================================
+  // VIDERESEND SØKNAD (SED A008) METHODS
+  // ============================================================
+  // Disse metodene brukes når søknaden skal videresendes til et
+  // annet land i stedet for at Norge fatter vedtak.
+
+  /**
+   * Velg "Annet" radio-knapp
+   * Brukes når kompetent land er et annet enn Norge
+   */
+  async velgAnnetKompetentLand(): Promise<void> {
+    const radio = this.page.getByRole('radio', { name: 'Annet' });
+    await radio.waitFor({ state: 'visible' });
+    await radio.check();
+    console.log('✅ Valgte: Annet (kompetent land)');
+  }
+
+  /**
+   * Fyll inn kompetent land i fritekst-felt
+   * Feltet har ingen label, brukes med getByLabel('', { exact: true })
+   *
+   * @param land - Land med kode (f.eks. 'Sverige (SE)')
+   */
+  async fyllInnKompetentLand(land: string): Promise<void> {
+    const field = this.page.getByLabel('', { exact: true });
+    await field.click();
+    await field.fill(land);
+    console.log(`✅ Fylte inn kompetent land: ${land}`);
+  }
+
+  /**
+   * Kryss av for "Oppgitt utenlandsk"
+   */
+  async velgOppgittUtenlandsk(): Promise<void> {
+    const checkbox = this.page.getByRole('checkbox', { name: 'Oppgitt utenlandsk' });
+    await checkbox.waitFor({ state: 'visible' });
+    await checkbox.check();
+    console.log('✅ Valgte: Oppgitt utenlandsk');
+  }
+
+  /**
+   * Kryss av for "Ikke registrert bosatt i Norge"
+   */
+  async velgIkkeRegistrertBosattINorge(): Promise<void> {
+    const checkbox = this.page.getByRole('checkbox', { name: 'Ikke registrert bosatt i Norge' });
+    await checkbox.waitFor({ state: 'visible' });
+    await checkbox.check();
+    console.log('✅ Valgte: Ikke registrert bosatt i Norge');
+  }
+
+  /**
+   * Velg utenlandsk institusjon fra dropdown
+   *
+   * @param institusjon - Institusjons-ID (f.eks. 'SE:ACC12600')
+   */
+  async velgUtenlandskInstitusjon(institusjon: string): Promise<void> {
+    const dropdown = this.page.getByLabel('Velg utenlandsk institusjon');
+    await dropdown.waitFor({ state: 'visible' });
+    await dropdown.selectOption(institusjon);
+    console.log(`✅ Valgte utenlandsk institusjon: ${institusjon}`);
+  }
+
+  /**
+   * Klikk "Videresend søknad" knapp
+   * Sender SED A008 til valgt utenlandsk institusjon
+   *
+   * IMPORTANT: This triggers API call to create and send SED A008
+   */
+  async klikkVideresendSøknad(): Promise<void> {
+    const button = this.page.getByRole('button', { name: 'Videresend søknad' });
+    await button.waitFor({ state: 'visible' });
+
+    // Set up response listener BEFORE clicking
+    const responsePromise = this.page.waitForResponse(
+      response => response.url().includes('/api/') &&
+                  response.request().method() === 'POST',
+      { timeout: 30000 }
+    ).catch(() => null);
+
+    await button.click();
+
+    // Wait for API response
+    const response = await responsePromise;
+    if (response) {
+      console.log(`✅ Videresend søknad - API: ${response.url()} -> ${response.status()}`);
+    } else {
+      console.log('⚠️  Videresend søknad - No API response detected');
+    }
+
+    // Wait for network to settle
+    await this.page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {
+      console.log('⚠️  Network idle timeout');
+    });
+
+    console.log('✅ Klikket Videresend søknad');
+  }
+
+  /**
+   * Fullfør "Videresend søknad" (SED A008) flyten
+   * Hjelpemetode for komplett arbeidsflyt der søknaden videresendes
+   *
+   * @param kompetentLand - Land med kode (default: 'Sverige (SE)')
+   * @param institusjon - Institusjons-ID (default: 'SE:ACC12600')
+   */
+  async fyllUtVideresendSøknad(
+    kompetentLand: string = 'Sverige (SE)',
+    institusjon: string = 'SE:ACC12600'
+  ): Promise<void> {
+    // Steg 1: Bekreft og fortsett (ingen handling nødvendig)
+    await this.klikkBekreftOgFortsett();
+
+    // Steg 2: Velg "Annet" kompetent land
+    await this.velgAnnetKompetentLand();
+    await this.fyllInnKompetentLand(kompetentLand);
+    await this.velgOppgittUtenlandsk();
+    await this.velgIkkeRegistrertBosattINorge();
+    await this.klikkBekreftOgFortsett();
+
+    // Steg 3: Velg institusjon og videresend
+    await this.velgUtenlandskInstitusjon(institusjon);
+    await this.klikkVideresendSøknad();
+  }
 }
