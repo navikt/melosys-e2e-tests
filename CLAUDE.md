@@ -335,6 +335,32 @@ The test suite automatically monitors Docker logs from all Melosys services for 
 - All WARN-level logs
 - Logs are filtered per-test using test start/end timestamps
 
+**Configuration (via .env.local):**
+
+When running services in IntelliJ instead of Docker, configure these options:
+
+```bash
+# Skip specific services (common IntelliJ setup)
+SKIP_DOCKER_LOG_SERVICES=melosys-api,melosys-web,melosys-eessi,melosys-mock
+
+# Or skip all Docker log checking
+SKIP_DOCKER_LOG_SERVICES=all
+
+# Alternative: Read from log files instead of Docker
+# Point to directory containing {service}.log files
+LOG_FILES_DIR=/tmp/melosys-logs
+```
+
+**Smart Container Detection:**
+- The fixture automatically checks if containers exist before querying logs
+- Non-existent containers are silently skipped (no error messages)
+- This means running in IntelliJ "just works" without configuration
+
+**For Agent/Automated Testing:**
+- Set `LOG_FILES_DIR` to capture logs from `java -jar` runs
+- Pipe application output to `{service}.log` files in that directory
+- The fixture will parse these files for errors instead of Docker logs
+
 ## Page Object Model (POM) Pattern
 
 **📖 See [docs/pom/MIGRATION-PLAN.md](docs/pom/MIGRATION-PLAN.md) for complete migration guide and strategy.**
