@@ -193,7 +193,7 @@ export class EuEosBehandlingPage extends BasePage {
    */
   async velgLand(landNavn: string): Promise<void> {
     await this.landDropdown.click();
-    await this.page.getByRole('option', { name: landNavn }).click();
+    await this.page.getByRole('option', { name: landNavn, exact: true }).click();
     // Vent litt for at siden skal oppdatere seg (kan trigge visning av andre felter)
     await this.page.waitForTimeout(500);
     console.log(`✅ Valgte land: ${landNavn}`);
