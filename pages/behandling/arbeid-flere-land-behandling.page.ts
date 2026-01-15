@@ -365,21 +365,20 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
       console.log('⚠️  No step transition APIs detected');
     }
 
-    // If specific content is provided, wait for it to be visible
-    // This is the MOST ROBUST way to ensure the next step is ready
+    // ALWAYS wait for network idle - this is critical for data loading (e.g., employer list)
+    // The step transition APIs (avklartefakta/vilkaar) complete before data APIs
+    await this.page.waitForTimeout(500); // Brief pause for React state update
+    await this.page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {
+      console.log('⚠️  Network idle timeout (non-critical)');
+    });
+
+    // If specific content is provided, also wait for it to be visible
+    // This provides additional assurance that the UI has rendered
     if (waitForContent) {
       console.log('⏳ Waiting for specific content on next step...');
       const startTime = Date.now();
       await waitForContent.waitFor({ state: 'visible', timeout: waitForContentTimeout });
       console.log(`✅ Content visible after ${Date.now() - startTime}ms`);
-    } else {
-      // Fallback: Wait for React to process the state update and render next step
-      await this.page.waitForTimeout(500);
-
-      // Wait for network idle as fallback
-      await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
-        console.log('⚠️  Network idle timeout (non-critical)');
-      });
     }
 
     console.log('✅ Klikket Bekreft og fortsett');
