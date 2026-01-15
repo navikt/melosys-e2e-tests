@@ -40,10 +40,12 @@ graph TB
 
     subgraph Backend["⚙️ Backend Services"]
         API[melosys-api<br/>Port 8080<br/>Main API]
+        EESSI[melosys-eessi<br/>Port 8081<br/>EESSI Integration]
         Fakturering[faktureringskomponenten<br/>Port 8084<br/>Billing]
         Dokgen[melosys-dokgen<br/>Port 8888<br/>Document Generation]
         Trygdeavgift[melosys-trygdeavgift-beregning<br/>Port 8095<br/>Tax Calculation]
         Trygdeavtale[melosys-trygdeavtale<br/>Port 8088<br/>Insurance Agreements]
+        Inngangsvilkar[melosys-inngangsvilkar<br/>Port 8089<br/>Entry Conditions]
         FellesKode[felles-kodeverk<br/>Port 8050<br/>Shared Code Tables]
     end
 
@@ -54,8 +56,11 @@ graph TB
     end
 
     subgraph Messaging["📨 Messaging"]
-        Kafka[kafka<br/>Ports 9092, 29092<br/>Event Stream]
-        Zookeeper[zookeeper<br/>Port 2181<br/>Coordination]
+        Kafka[kafka<br/>Ports 9092, 29092<br/>Event Stream - KRaft]
+    end
+
+    subgraph FeatureToggles["🎚️ Feature Toggles"]
+        Unleash[unleash<br/>Port 4242<br/>Feature Flags]
     end
 
     subgraph MockServices["🎭 Mock Services"]
@@ -80,20 +85,25 @@ graph TB
     API --> Fakturering
     API --> Dokgen
     API --> Trygdeavgift
+    API --> Inngangsvilkar
     API --> FellesKode
     API --> Mock
     API --> OAuth
     API --> OAuthSTS
+    API --> Unleash
 
+    EESSI --> Postgres
+    EESSI --> Kafka
+    EESSI --> Mock
     Fakturering --> Postgres
     Fakturering --> Kafka
+    Fakturering --> Unleash
     Trygdeavgift --> Postgres
     Trygdeavgift --> Kafka
     Trygdeavtale --> Postgres
     Trygdeavtale --> OAuth
+    Inngangsvilkar --> Postgres
     FellesKode --> PostgresFK
-
-    Kafka --> Zookeeper
 
     style Tests fill:#5B9BD5,stroke:#2E5C8A,color:#000
     style HelperLayer fill:#82B366,stroke:#4A7C3B,color:#000
@@ -101,6 +111,7 @@ graph TB
     style Backend fill:#FF9800,stroke:#C77700,color:#000
     style Databases fill:#26A69A,stroke:#1A7A6E,color:#fff
     style Messaging fill:#F4A460,stroke:#C97F3E,color:#000
+    style FeatureToggles fill:#7986CB,stroke:#3F51B5,color:#fff
     style MockServices fill:#9575CD,stroke:#5E3A99,color:#fff
 
     style TestFiles fill:#4A90E2,stroke:#2E5C8A,color:#fff
@@ -110,6 +121,9 @@ graph TB
     style DBHelper fill:#66BB6A,stroke:#388E3C,color:#fff
     style Web fill:#9C27B0,stroke:#6A1B9A,color:#fff
     style API fill:#FF9800,stroke:#EF6C00,color:#000
+    style EESSI fill:#FF9800,stroke:#EF6C00,color:#000
+    style Inngangsvilkar fill:#FF9800,stroke:#EF6C00,color:#000
+    style Unleash fill:#7986CB,stroke:#3F51B5,color:#fff
     style Oracle fill:#26A69A,stroke:#00897B,color:#fff
 ```
 
@@ -125,22 +139,27 @@ graph LR
 
     subgraph CoreServices["⚙️ Core Backend Services"]
         API["melosys-api<br/>:8080<br/>(Main API)"]
+        EESSI["melosys-eessi<br/>:8081<br/>(EESSI Integration)"]
         Fakturering["faktureringskomponenten<br/>:8084"]
         Dokgen["melosys-dokgen<br/>:8888"]
         Trygdeavgift["melosys-trygdeavgift<br/>:8095"]
         Trygdeavtale["melosys-trygdeavtale<br/>:8088"]
+        Inngangsvilkar["melosys-inngangsvilkar<br/>:8089"]
         FellesKode["felles-kodeverk<br/>:8050"]
     end
 
     subgraph DataLayer["💾 Data Layer"]
         Oracle["Oracle DB<br/>:1521<br/>(melosys)"]
-        Postgres["PostgreSQL<br/>:5432<br/>(fakturering, trygdeavgift)"]
+        Postgres["PostgreSQL<br/>:5432<br/>(eessi, fakturering,<br/>trygdeavgift, unleash)"]
         PostgresFK["PostgreSQL FK<br/>:5433<br/>(kodeverk)"]
     end
 
     subgraph EventLayer["📨 Event Layer"]
-        Kafka["Kafka<br/>:9092, :29092"]
-        Zookeeper["Zookeeper<br/>:2181"]
+        Kafka["Kafka (KRaft)<br/>:9092, :29092"]
+    end
+
+    subgraph FeatureToggleLayer["🎚️ Feature Toggles"]
+        Unleash["Unleash<br/>:4242"]
     end
 
     subgraph AuthLayer["🔐 Auth Layer"]
@@ -149,7 +168,7 @@ graph LR
     end
 
     subgraph MockLayer["🎭 Mock Layer"]
-        Mock["melosys-mock<br/>:8083, :8389<br/>(PDL, SAF, AAREG, EREG,<br/>Oppgave, etc.)"]
+        Mock["melosys-mock<br/>:8083, :8389<br/>(PDL, SAF, AAREG, EREG,<br/>Oppgave, EUX, etc.)"]
     end
 
     Web --> API
@@ -162,31 +181,41 @@ graph LR
     API --> Fakturering
     API --> Dokgen
     API --> Trygdeavgift
+    API --> Inngangsvilkar
     API --> FellesKode
+    API --> Unleash
 
+    EESSI --> Postgres
+    EESSI --> Kafka
+    EESSI --> Mock
     Fakturering --> Postgres
     Fakturering --> Kafka
+    Fakturering --> Unleash
     Trygdeavgift --> Postgres
     Trygdeavgift --> Kafka
     Trygdeavtale --> Postgres
     Trygdeavtale --> OAuth
+    Inngangsvilkar --> Postgres
     FellesKode --> PostgresFK
-    Kafka --> Zookeeper
+    Unleash --> Postgres
 
     style Frontend fill:#AB47BC,stroke:#6A2C70,color:#fff
     style CoreServices fill:#FF9800,stroke:#C77700,color:#000
     style DataLayer fill:#26A69A,stroke:#1A7A6E,color:#fff
     style EventLayer fill:#F4A460,stroke:#C97F3E,color:#000
+    style FeatureToggleLayer fill:#7986CB,stroke:#3F51B5,color:#fff
     style AuthLayer fill:#5B9BD5,stroke:#2E5C8A,color:#fff
     style MockLayer fill:#9575CD,stroke:#5E3A99,color:#fff
 
     style Web fill:#9C27B0,stroke:#6A1B9A,color:#fff
     style API fill:#FF9800,stroke:#EF6C00,color:#000
+    style EESSI fill:#FF9800,stroke:#EF6C00,color:#000
+    style Inngangsvilkar fill:#FF9800,stroke:#EF6C00,color:#000
     style Oracle fill:#26A69A,stroke:#00897B,color:#fff
     style Postgres fill:#26A69A,stroke:#00897B,color:#fff
     style PostgresFK fill:#26A69A,stroke:#00897B,color:#fff
     style Kafka fill:#F4A460,stroke:#C97F3E,color:#000
-    style Zookeeper fill:#E8A87C,stroke:#C97F3E,color:#000
+    style Unleash fill:#7986CB,stroke:#3F51B5,color:#fff
     style OAuth fill:#5B9BD5,stroke:#2E5C8A,color:#fff
     style OAuthSTS fill:#5B9BD5,stroke:#2E5C8A,color:#fff
     style Mock fill:#9575CD,stroke:#5E3A99,color:#fff

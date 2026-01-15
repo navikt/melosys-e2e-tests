@@ -245,20 +245,34 @@ test('my test with unleash', async ({ page, request }) => {
 
 ### Docker Services Architecture
 
-The test suite depends on a full Docker Compose stack. **Locally**, use `../melosys-docker-compose`. **CI** uses `docker-compose.yml` in this repo. Key services:
+The test suite depends on a full Docker Compose stack (17 services). **Locally**, use `../melosys-docker-compose`. **CI** uses `docker-compose.yml` in this repo. Key services:
 
-- **melosys-web** (port 3000) - Frontend application
-- **melosys-api** (port 8080) - Backend API
+**Frontend:**
+- **melosys-web** (port 3000) - Frontend application (Nginx + React)
+
+**Core Backend Services:**
+- **melosys-api** (port 8080) - Main backend API
 - **melosys-eessi** (port 8081) - EESSI integration service (EU social security exchange)
-- **melosys-oracle** (port 1521) - Oracle database
-- **postgres** (port 5432) - PostgreSQL database (for faktureringskomponenten, trygdeavgift, melosys-eessi, and Unleash)
-- **kafka** - Message queue (KRaft mode)
-- **mock-oauth2-server** (ports 8082, 8086) - OAuth authentication
-- **unleash** (port 4242) - Feature toggle server (shared by all services)
 - **faktureringskomponenten** (port 8084) - Billing component
 - **melosys-dokgen** (port 8888) - Document generation
 - **melosys-trygdeavgift-beregning** (port 8095) - Tax calculation
-- **melosys-mock** (port 8083) - Mock external services
+- **melosys-trygdeavtale** (port 8088) - Insurance agreements
+- **melosys-inngangsvilkar** (port 8089) - Entry conditions evaluation
+- **felles-kodeverk** (port 8050) - Shared code tables
+
+**Databases:**
+- **melosys-oracle** (port 1521) - Oracle database (main melosys data)
+- **postgres** (port 5432) - PostgreSQL (eessi, fakturering, trygdeavgift, trygdeavtale, inngangsvilkar, unleash)
+- **postgres_felleskodeverk** (port 5433) - PostgreSQL (code tables)
+
+**Messaging & Feature Toggles:**
+- **kafka** (ports 9092, 29092) - Message queue (KRaft mode - no Zookeeper)
+- **unleash** (port 4242) - Feature toggle server (shared by all services)
+
+**Authentication & Mocks:**
+- **mock-oauth2-server** (port 8082) - OAuth ISSO authentication
+- **mock-oauth2-server-sts** (port 8086) - OAuth STS authentication
+- **melosys-mock** (port 8083) - Mock external services (PDL, SAF, AAREG, EREG, Oppgave, EUX, etc.)
 
 All services must be healthy before tests run. The GitHub Actions workflow waits for `http://localhost:3000/melosys/` to be responsive.
 
