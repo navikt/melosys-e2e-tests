@@ -615,6 +615,11 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
    * Fullfør "Videresend søknad" (SED A008) flyten
    * Hjelpemetode for komplett arbeidsflyt der søknaden videresendes
    *
+   * Steg:
+   * 1. Inngang - Bekreft og fortsett
+   * 2. Bosted - Velg "Annet" og fyll inn kompetent land, checkboxer, bekreft
+   * 3. Videresending av søknad - Velg institusjon og videresend
+   *
    * @param kompetentLand - Land med kode (default: 'Sverige (SE)')
    * @param institusjon - Institusjons-ID (default: 'SE:ACC12600')
    */
@@ -622,17 +627,52 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     kompetentLand: string = 'Sverige (SE)',
     institusjon: string = 'SE:ACC12600'
   ): Promise<void> {
-    // Steg 1: Bekreft og fortsett (ingen handling nødvendig)
+    // Steg 1: Inngang - Bekreft og fortsett
+    console.log('📋 Steg 1/3: Inngang');
     await this.klikkBekreftOgFortsett();
 
-    // Steg 2: Velg "Annet" kompetent land
+    // Steg 2: Bosted - Velg "Annet" kompetent land og checkboxer
+    console.log('📋 Steg 2/3: Bosted - velg kompetent land');
     await this.velgAnnetKompetentLand();
     await this.fyllInnKompetentLand(kompetentLand);
     await this.velgOppgittUtenlandsk();
     await this.velgIkkeRegistrertBosattINorge();
-    await this.klikkBekreftOgFortsett();
 
-    // Steg 3: Velg institusjon og videresend
+    // Click button and wait explicitly for step 3 to appear
+    console.log('📋 Klikker Bekreft og fortsett for å gå til steg 3...');
+    const bekreftButton = this.page.getByRole('button', { name: 'Bekreft og fortsett' });
+    await bekreftButton.click();
+
+    // Steg 3: Videresending av søknad - Velg institusjon og videresend
+    console.log('📋 Steg 3/3: Videresending av søknad');
+
+    // Wait for the institution dropdown to be visible - this indicates we're on step 3
+    const dropdown = this.page.getByLabel('Velg utenlandsk institusjon');
+    console.log('⏳ Venter på at institusjon-dropdown blir synlig...');
+
+    try {
+      await dropdown.waitFor({ state: 'visible', timeout: 30000 });
+      console.log('✅ Institusjon-dropdown er synlig');
+    } catch (error) {
+      // Debug: Take screenshot and check page content
+      console.error('❌ Institusjon-dropdown ble ikke synlig innen timeout');
+      const pageTitle = await this.page.locator('main h1, main h2').first().textContent().catch(() => 'unknown');
+      console.error(`📄 Nåværende sidetittel: "${pageTitle}"`);
+      console.error(`🔗 URL: ${this.page.url()}`);
+
+      // Check if "Bekreft og fortsett" button is still visible (meaning we didn't transition)
+      const buttonStillVisible = await bekreftButton.isVisible().catch(() => false);
+      if (buttonStillVisible) {
+        console.error('⚠️  "Bekreft og fortsett" er fortsatt synlig - steget byttet ikke!');
+        console.error('   Forsøker å klikke på nytt...');
+        await bekreftButton.click();
+        await this.page.waitForTimeout(2000);
+        await dropdown.waitFor({ state: 'visible', timeout: 15000 });
+      } else {
+        throw error;
+      }
+    }
+
     await this.velgUtenlandskInstitusjon(institusjon);
     await this.klikkVideresendSøknad();
   }
