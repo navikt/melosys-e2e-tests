@@ -119,3 +119,70 @@ export async function createJournalforingOppgaver(
     return false;
   }
 }
+
+/**
+ * Response from creating a journalpost for a sak
+ */
+export interface JournalpostForSakResponse {
+  journalpostId: string;
+  fagsakId: string;
+  dokumentInfoIds: string[];
+}
+
+/**
+ * Options for creating a journalpost linked to a fagsak
+ */
+export interface CreateJournalpostForSakOptions {
+  /** The saksnummer (e.g., "MEL-95") */
+  fagsakId: string;
+  /** The bruker's fødselsnummer */
+  brukerIdent: string;
+  /** Optional title for the document */
+  tittel?: string;
+}
+
+/**
+ * Create a journalpost (with document) linked to a specific fagsak.
+ *
+ * This is needed for flows that require documents attached to the sak,
+ * such as "Videresend søknad" which requires at least one vedlegg.
+ *
+ * @param request - Playwright APIRequestContext
+ * @param options - Configuration options including fagsakId and brukerIdent
+ * @returns Response with journalpostId and dokumentInfoIds
+ *
+ * @example
+ * // Create a journalpost for sak MEL-95
+ * const result = await createJournalpostForSak(request, {
+ *   fagsakId: 'MEL-95',
+ *   brukerIdent: '30056928150'
+ * });
+ * console.log('Created journalpost:', result.journalpostId);
+ * console.log('Document IDs:', result.dokumentInfoIds);
+ */
+export async function createJournalpostForSak(
+  request: APIRequestContext,
+  options: CreateJournalpostForSakOptions
+): Promise<JournalpostForSakResponse> {
+  const payload = {
+    fagsakId: options.fagsakId,
+    brukerIdent: options.brukerIdent,
+    tittel: options.tittel ?? 'Søknad om A1 for utsendte arbeidstakere',
+  };
+
+  const response = await request.post('http://localhost:8083/testdata/journalpost', {
+    data: payload,
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  if (!response.ok()) {
+    const errorText = await response.text();
+    throw new Error(`Failed to create journalpost for sak: ${response.status()} - ${errorText}`);
+  }
+
+  const result: JournalpostForSakResponse = await response.json();
+  console.log(`✅ Created journalpost ${result.journalpostId} for sak ${result.fagsakId}`);
+  console.log(`   Documents: ${result.dokumentInfoIds.join(', ')}`);
+
+  return result;
+}

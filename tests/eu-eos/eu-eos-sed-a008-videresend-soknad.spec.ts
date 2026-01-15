@@ -1,4 +1,4 @@
-import { test } from '../../fixtures';
+import { test, expect } from '../../fixtures';
 import { AuthHelper } from '../../helpers/auth-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
@@ -6,6 +6,7 @@ import { EuEosBehandlingPage } from '../../pages/behandling/eu-eos-behandling.pa
 import { ArbeidFlereLandBehandlingPage } from '../../pages/behandling/arbeid-flere-land-behandling.page';
 import { USER_ID_VALID, EU_EOS_LAND } from '../../pages/shared/constants';
 import { waitForProcessInstances } from '../../helpers/api-helper';
+import { createJournalpostForSak } from '../../helpers/mock-helper';
 
 /**
  * EU/EØS SED A008 - Videresend søknad
@@ -77,14 +78,56 @@ test.describe('EU/EØS SED A008 - Videresend søknad', () => {
     await opprettSak.leggBehandlingIMine();
     await opprettSak.klikkOpprettNyBehandling();
 
-    // Vent på prosessinstanser og last siden på nytt
+    // Vent på prosessinstanser
     console.log('📝 Venter på prosessinstanser...');
     await waitForProcessInstances(page.request, 30);
-    await hovedside.goto();
 
-    // Naviger til behandling
+    // === HENT SAKSNUMMER FRA FAGSAK-SIDEN ===
+    // Etter opprettelse navigeres vi til hovedsiden, så vi må klikke på fagsaken
+    await page.waitForLoadState('networkidle');
+    await hovedside.goto();
+    await page.waitForLoadState('networkidle');
+
+    // Klikk på personlenken for å gå til fagsak
+    console.log('🔗 Klikker på fagsak-lenken...');
     await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).click();
     await page.waitForLoadState('networkidle');
+
+    const fagsakUrl = page.url();
+    console.log(`🔗 Fagsak URL: ${fagsakUrl}`);
+
+    // Extract saksnummer from URL
+    // URL format: /melosys/EU_EOS/saksbehandling/MEL-103/?behandlingID=120
+    // Or: /melosys/fagsaker/MEL-103/...
+    let saksnummer: string | null = null;
+    const urlMatch = fagsakUrl.match(/(MEL-\d+)/);
+    if (urlMatch) {
+      saksnummer = urlMatch[1];
+    }
+
+    if (!saksnummer) {
+      console.log('⚠️ Kunne ikke hente saksnummer fra URL');
+      await page.screenshot({ path: 'test-results/debug-saksnummer-not-found.png' });
+      throw new Error('Saksnummer ikke funnet i fagsak URL');
+    }
+    console.log(`📋 Saksnummer hentet: ${saksnummer}`);
+
+    // === OPPRETT JOURNALPOST MED DOKUMENT ===
+    // Videresend søknad krever minst ett vedlegg
+    console.log('📎 Oppretter journalpost med dokument for saken...');
+    const journalpostResult = await createJournalpostForSak(page.request, {
+      fagsakId: saksnummer,
+      brukerIdent: USER_ID_VALID,
+      tittel: 'Søknad om A1 for utsendte arbeidstakere'
+    });
+    console.log(`✅ Journalpost opprettet: ${journalpostResult.journalpostId}`);
+
+    // Vi er allerede på behandlingssiden fra tidligere klikk
+    // Reload siden for å få med de nye dokumentene
+    console.log('🔄 Laster siden på nytt for å hente dokumenter...');
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    console.log(`🔗 Nå på behandling: ${page.url()}`);
 
     // === STEG 2-8: Fullfør videresend-flyten med POM ===
     console.log('📋 Starter videresend-flyt med POM');

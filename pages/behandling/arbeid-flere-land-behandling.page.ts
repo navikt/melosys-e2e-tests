@@ -577,6 +577,83 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
   }
 
   /**
+   * Legg til vedlegg fra "Dokumenter tilknyttet behandlingen"
+   *
+   * Åpner vedlegg-dialogen og velger et dokument fra listen.
+   * Videresend søknad krever minst ett vedlegg.
+   */
+  async leggTilVedlegg(): Promise<void> {
+    console.log('📎 Legger til vedlegg...');
+
+    // Wait for page to stabilize after institution selection
+    await this.page.waitForLoadState('networkidle');
+    await this.page.waitForTimeout(1000);
+
+    // Debug: Log current page state
+    const currentHeading = await this.page.locator('main h1').first().textContent().catch(() => 'unknown');
+    console.log(`📄 Current page heading: "${currentHeading}"`);
+    console.log(`🔗 Current URL: ${this.page.url()}`);
+
+    // Verify we're on step 3 (Videresending av søknad)
+    const step3Indicator = this.page.locator('text=Videresending av søknad');
+    const isOnStep3 = await step3Indicator.isVisible().catch(() => false);
+    console.log(`📋 Er på steg 3 (Videresending): ${isOnStep3}`);
+
+    // Klikk "Legg til vedlegg" knappen
+    // First, try to find the button with different selectors
+    let leggTilButton = this.page.getByRole('button', { name: /Legg til vedlegg/i });
+    let isVisible = await leggTilButton.isVisible().catch(() => false);
+
+    if (!isVisible) {
+      console.log('⏳ "Legg til vedlegg" knapp ikke synlig, prøver alternativ selector...');
+      // Try finding by text content
+      leggTilButton = this.page.locator('button:has-text("Legg til vedlegg")');
+      isVisible = await leggTilButton.isVisible().catch(() => false);
+    }
+
+    if (!isVisible) {
+      // List all buttons on the page for debugging
+      const allButtons = await this.page.getByRole('button').allTextContents();
+      console.log(`🔘 Tilgjengelige knapper: ${allButtons.join(', ')}`);
+      throw new Error('Fant ikke "Legg til vedlegg" knappen');
+    }
+
+    await leggTilButton.waitFor({ state: 'visible', timeout: 10000 });
+    await leggTilButton.click();
+    console.log('✅ Klikket "Legg til vedlegg"');
+
+    // Vent på at dialogen åpnes
+    await this.page.waitForTimeout(500);
+
+    // Finn og klikk på første checkbox i "Dokumenter tilknyttet behandlingen" seksjonen
+    // Listen viser dokumenter fra journalposter tilknyttet saken
+    const dokumentCheckboxer = this.page.locator('dialog, [role="dialog"]').getByRole('checkbox');
+    const count = await dokumentCheckboxer.count();
+    console.log(`📄 Fant ${count} dokumenter i dialogen`);
+
+    if (count === 0) {
+      // Ingen dokumenter funnet - sjekk innholdet
+      const dialogText = await this.page.locator('dialog, [role="dialog"]').textContent().catch(() => 'unknown');
+      console.error('❌ Ingen dokumenter tilgjengelig');
+      console.error(`📋 Dialog innhold: ${dialogText}`);
+      throw new Error('Ingen dokumenter tilgjengelig for vedlegg');
+    }
+
+    // Velg første dokument
+    await dokumentCheckboxer.first().check();
+    console.log('✅ Valgte første dokument som vedlegg');
+
+    // Lukk dialogen ved å klikke "Lukk" eller "Velg"
+    const lukkButton = this.page.locator('dialog, [role="dialog"]').getByRole('button', { name: /Lukk|Velg|OK/i });
+    if (await lukkButton.isVisible().catch(() => false)) {
+      await lukkButton.click();
+      console.log('✅ Lukket vedlegg-dialogen');
+    }
+
+    await this.page.waitForTimeout(500);
+  }
+
+  /**
    * Klikk "Videresend søknad" knapp
    * Sender SED A008 til valgt utenlandsk institusjon
    *
@@ -618,7 +695,10 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
    * Steg:
    * 1. Inngang - Bekreft og fortsett
    * 2. Bosted - Velg "Annet" og fyll inn kompetent land, checkboxer, bekreft
-   * 3. Videresending av søknad - Velg institusjon og videresend
+   * 3. Videresending av søknad - Velg institusjon, legg til vedlegg, og videresend
+   *
+   * IMPORTANT: Saken må ha minst én journalpost med dokument tilknyttet FØR denne
+   * metoden kalles. Bruk `createJournalpostForSak()` fra mock-helper for å opprette.
    *
    * @param kompetentLand - Land med kode (default: 'Sverige (SE)')
    * @param institusjon - Institusjons-ID (default: 'SE:ACC12600')
@@ -643,7 +723,7 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     const bekreftButton = this.page.getByRole('button', { name: 'Bekreft og fortsett' });
     await bekreftButton.click();
 
-    // Steg 3: Videresending av søknad - Velg institusjon og videresend
+    // Steg 3: Videresending av søknad - Velg institusjon, vedlegg, og videresend
     console.log('📋 Steg 3/3: Videresending av søknad');
 
     // Wait for the institution dropdown to be visible - this indicates we're on step 3
@@ -673,7 +753,13 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
       }
     }
 
+    // Velg institusjon
     await this.velgUtenlandskInstitusjon(institusjon);
+
+    // Legg til vedlegg (påkrevd for videresend søknad)
+    await this.leggTilVedlegg();
+
+    // Videresend søknaden
     await this.klikkVideresendSøknad();
   }
 }
