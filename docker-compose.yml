@@ -246,7 +246,7 @@ services:
       DOKUMENTPRODUKSJON_V3_URL: http://melosys-mock.melosys.docker-internal:8083/soap/services/dokumentproduksjon/v3
       JOURNALPOSTAPI_V1_URL: http://melosys-mock.melosys.docker-internal:8083/rest/journalpostapi/v1
       KODEVERKAPI_V1_URL: http://felles-kodeverk.melosys.docker-internal:8050/api
-      MELOSYSEESSI_URL: http://melosys-eessi.melosys.docker-internal:8081/api
+      MELOSYSEESSI_URL: http://melosys-eessi.melosys.docker-internal:8081
       OPPGAVEAPI_V1_URL: http://melosys-mock.melosys.docker-internal:8083/api/v1
       PDL_URL: http://melosys-mock.melosys.docker-internal:8083/graphql
       REST_STS_URL: http://host.docker.internal.sts:8086/reststs
