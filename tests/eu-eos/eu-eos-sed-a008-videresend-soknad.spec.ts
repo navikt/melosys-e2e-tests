@@ -31,7 +31,7 @@ import { createJournalpostForSak } from '../../helpers/mock-helper';
  * for å verifisere og feilsøke funksjonaliteten.
  */
 test.describe('EU/EØS SED A008 - Videresend søknad', () => {
-  test('skal videresende søknad til Sverige @known-error', async ({ page }) => {
+  test('skal videresende søknad til Sverige', async ({ page }) => {
     // Øk test timeout til 120 sekunder
     test.setTimeout(120000);
 
