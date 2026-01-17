@@ -73,30 +73,49 @@ test.describe('EU/EØS 13.1 - Arbeid i flere land (Selvstendig variant)', () => 
     // Vent på at behandlingssiden har lastet
     await page.waitForLoadState('networkidle');
 
-    // Fullfør behandling - steg-for-steg for å demonstrere alle metodene
+    // Fullfør behandling - steg-for-steg med content-based waits for å unngå race conditions
+    // CRITICAL: Hver klikkBekreftOgFortsett() må vente på spesifikt UI-element på neste steg
 
     // Steg 1: Bekreft første steg (periode og land er allerede fylt)
-    await behandling.klikkBekreftOgFortsett();
+    // Vent på at "Norge" radio-knapp blir synlig på neste steg (Bosted)
+    await behandling.klikkBekreftOgFortsett({
+      waitForContent: page.getByRole('radio', { name: 'Norge' })
+    });
 
     // Steg 2: Velg hovedland (Norge)
     await behandling.velgLandRadio('Norge');
-    await behandling.klikkBekreftOgFortsett();
+    // Vent på at arbeidsgiver-checkbox blir synlig på neste steg (Virksomhet)
+    await behandling.klikkBekreftOgFortsett({
+      waitForContent: page.getByRole('checkbox', { name: 'Ståles Stål AS' })
+    });
 
     // Steg 3: Velg arbeidsgiver
     await behandling.velgArbeidsgiver('Ståles Stål AS');
-    await behandling.klikkBekreftOgFortsett();
+    // Vent på at "Arbeid utføres i land som er" checkbox blir synlig
+    await behandling.klikkBekreftOgFortsett({
+      waitForContent: page.getByRole('checkbox', { name: 'Arbeid utføres i land som er' })
+    });
 
     // Steg 4: Svar på arbeidslokasjon-spørsmål
     await behandling.velgArbeidUtføresILandSomEr();
-    await behandling.klikkBekreftOgFortsett();
+    // Vent på at "Selvstendig næringsvirksomhet" radio blir synlig
+    await behandling.klikkBekreftOgFortsett({
+      waitForContent: page.getByRole('radio', { name: 'Selvstendig næringsvirksomhet i to eller flere land', exact: true })
+    });
 
     // Steg 5: Velg arbeidstype (Selvstendig næringsvirksomhet)
     await behandling.velgSelvstendigNæringsvirksomhetIToEllerFlereLand();
-    await behandling.klikkBekreftOgFortsett();
+    // Vent på at "% eller mer" radio blir synlig
+    await behandling.klikkBekreftOgFortsett({
+      waitForContent: page.getByRole('radio', { name: '% eller mer' })
+    });
 
     // Steg 6: Velg prosentandel
     await behandling.velgProsentEllerMer();
-    await behandling.klikkBekreftOgFortsett();
+    // Vent på at fritekst-felt blir synlig
+    await behandling.klikkBekreftOgFortsett({
+      waitForContent: page.getByRole('textbox', { name: 'Fritekst til begrunnelse' })
+    });
 
     // Steg 7: Fyll inn fritekst-felter
     await behandling.fyllInnFritekstTilBegrunnelse('lol');
