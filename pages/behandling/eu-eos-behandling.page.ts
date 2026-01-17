@@ -82,6 +82,9 @@ export class EuEosBehandlingPage extends BasePage {
     name: 'Fatt vedtak'
   });
 
+  // Institution selection dropdown (Vedtak step)
+  private readonly institusjonDropdown = this.page.getByLabel('Velg utenlandsk institusjon som skal motta SED');
+
   // Step headings - used to verify which step we're on
   private readonly stepHeading = this.page.locator('main h1').first();
 
@@ -193,7 +196,7 @@ export class EuEosBehandlingPage extends BasePage {
    */
   async velgLand(landNavn: string): Promise<void> {
     await this.landDropdown.click();
-    await this.page.getByRole('option', { name: landNavn }).click();
+    await this.page.getByRole('option', { name: landNavn, exact: true }).click();
     // Vent litt for at siden skal oppdatere seg (kan trigge visning av andre felter)
     await this.page.waitForTimeout(500);
     console.log(`✅ Valgte land: ${landNavn}`);
@@ -484,6 +487,50 @@ export class EuEosBehandlingPage extends BasePage {
   }
 
   /**
+   * Velg mottaker-institusjon fra dropdown på vedtak-steget
+   * Denne må velges før "Fatt vedtak" kan klikkes
+   *
+   * @param institusjon - Institusjons-verdi (f.eks. 'DK:72', 'SE:ACC12600')
+   *                      Hvis ikke angitt, velges første tilgjengelige institusjon
+   */
+  async velgMottakerInstitusjon(institusjon?: string): Promise<void> {
+    // Wait for the dropdown to be visible and populated
+    await this.institusjonDropdown.waitFor({ state: 'visible', timeout: 10000 });
+
+    // Wait for dropdown to be populated with options (API call fetches institutions)
+    await this.page.waitForResponse(
+      response => response.url().includes('/api/eessi/') &&
+                  response.url().includes('/mottakerinstitusjoner') &&
+                  response.status() === 200,
+      { timeout: 10000 }
+    ).catch(() => {
+      console.log('⚠️  Mottakerinstitusjoner API not detected, dropdown may be pre-populated');
+    });
+
+    // Small wait for dropdown to render options
+    await this.page.waitForTimeout(500);
+
+    if (institusjon) {
+      // Select specific institution
+      await this.institusjonDropdown.selectOption(institusjon);
+      console.log(`✅ Valgte mottaker-institusjon: ${institusjon}`);
+    } else {
+      // Select first available institution (not the "Velg..." placeholder)
+      const options = await this.institusjonDropdown.locator('option').all();
+      for (const option of options) {
+        const value = await option.getAttribute('value');
+        const text = await option.textContent();
+        if (value && value !== '' && text && !text.includes('Velg')) {
+          await this.institusjonDropdown.selectOption(value);
+          console.log(`✅ Valgte første tilgjengelige mottaker-institusjon: ${text} (${value})`);
+          return;
+        }
+      }
+      throw new Error('Ingen tilgjengelige institusjoner i dropdown');
+    }
+  }
+
+  /**
    * Klikk "Fatt vedtak" knapp for å fullføre behandlingen
    * EU/EØS fatter vedtak direkte uten egen vedtaksside
    *
@@ -595,10 +642,17 @@ export class EuEosBehandlingPage extends BasePage {
   /**
    * Innvilg søknad og fatt vedtak
    * Hjelpemetode for siste steg
+   *
+   * @param institusjon - Institusjons-verdi for mottaker av SED (f.eks. 'DK:72')
+   *                      Hvis ikke angitt, velges første tilgjengelige institusjon
    */
-  async innvilgeOgFattVedtak(): Promise<void> {
+  async innvilgeOgFattVedtak(institusjon?: string): Promise<void> {
     await this.innvilgeSøknad();
     await this.klikkBekreftOgFortsett();
+
+    // Velg mottaker-institusjon før vi kan fatte vedtak
+    await this.velgMottakerInstitusjon(institusjon);
+
     await this.fattVedtak();
   }
 
