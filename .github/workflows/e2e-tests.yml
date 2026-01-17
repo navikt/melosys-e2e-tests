@@ -38,6 +38,7 @@ on:
       - melosys-trygdeavtale-published
       - melosys-inngangsvilkar-published
       - melosys-eessi-published
+      - melosys-mock-published
 
 permissions:
   contents: read
