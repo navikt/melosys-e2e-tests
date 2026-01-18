@@ -406,6 +406,58 @@ The original approach with **specific API waits + content-based wait** is optima
 3. Use Playwright's built-in retry mechanism for the remaining flakiness
 4. Do NOT add more explicit waits - they make things worse
 
+## Frontend Fix: Serialize API Calls (2026-01-18)
+
+After identifying that melosys-web's `Stegvelger.jsx` fires 6 parallel API calls, we tested serializing them.
+
+### Fix Applied
+
+```javascript
+// BEFORE: Parallel calls causing race conditions
+await Promise.all([
+  this.props.oppdaterVilkaar(vilkaar.hent()),
+  this.props.oppdaterAvklartefakta(avklartefakta.hent()),
+  this.props.oppdaterLovvalgperioder(perioderStegState),
+  this.props.oppdaterAnmodningsPerioder(perioderStegState),
+  this.props.oppdaterUtpekingsperioder(perioderStegState),
+  this.props.oppdaterAnmodningsperiodesvar(anmodningsperiodesvar.hent()),
+]);
+
+// AFTER: Serialized calls - each completes before next starts
+await this.props.oppdaterVilkaar(vilkaar.hent());
+await this.props.oppdaterAvklartefakta(avklartefakta.hent());
+await this.props.oppdaterLovvalgperioder(perioderStegState);
+await this.props.oppdaterAnmodningsPerioder(perioderStegState);
+await this.props.oppdaterUtpekingsperioder(perioderStegState);
+await this.props.oppdaterAnmodningsperiodesvar(anmodningsperiodesvar.hent());
+```
+
+### Test Results
+
+| Configuration | Pass Rate | Notes |
+|---------------|-----------|-------|
+| Backend fix only (hashcode-3) | 80% | @Version field fix |
+| **Web fix only (serialize-fix-1)** | **90%** | Serialized API calls |
+| Both fixes combined | 90% | No additional improvement |
+
+### Conclusion
+
+The frontend fix **improved pass rate from 80% to 90%** by eliminating the race condition at its source. The serialization ensures:
+
+1. Each API call completes before the next starts
+2. No concurrent modifications to the same entities
+3. Predictable step transition timing
+
+### Recommendation
+
+**Merge the frontend fix to melosys-web master.** The serialization:
+- Fixes the root cause of race conditions
+- Has minimal UX impact (step transitions take ~100ms longer)
+- Works independently of backend changes
+
+Test image: `melosys-web:serialize-fix-1`
+Branch: `fix/serialize-step-api-calls-v2` in melosys-web
+
 ## Contacts
 
 - E2E Tests: Team Melosys
