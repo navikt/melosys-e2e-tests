@@ -325,7 +325,7 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     waitForContent?: import('@playwright/test').Locator;
     waitForContentTimeout?: number;
   }): Promise<void> {
-    const { waitForContent, waitForContentTimeout = 30000 } = options || {};
+    const { waitForContent, waitForContentTimeout = 45000 } = options || {};
 
     console.log('🔄 Klikker "Bekreft og fortsett"...');
 
@@ -333,65 +333,10 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     const isEnabled = await this.bekreftOgFortsettButton.isEnabled();
     console.log(`  Knapp aktivert: ${isEnabled}`);
 
-    // CRITICAL: Set up response listeners BEFORE clicking
-    // melosys-web's Stegvelger.jsx triggers:
-    //   1. Promise.all([6 parallel APIs]) - avklartefakta, vilkaar, lovvalgsperioder, etc.
-    //   2. THEN sequentially: oppdaterMottatteOpplysninger()
-    //   3. THEN React state update and re-render
-    // We MUST wait for oppdaterMottatteOpplysninger (the LAST API) to complete!
-
-    const avklartefaktaPromise = this.page.waitForResponse(
-      response => response.url().includes('/api/avklartefakta/') &&
-                  response.request().method() === 'POST' &&
-                  response.status() === 200,
-      { timeout: 10000 }
-    ).catch(() => null);
-
-    const vilkaarPromise = this.page.waitForResponse(
-      response => response.url().includes('/api/vilkaar/') &&
-                  response.request().method() === 'POST' &&
-                  response.status() === 200,
-      { timeout: 10000 }
-    ).catch(() => null);
-
-    // CRITICAL: This is the FINAL API call that triggers AFTER Promise.all()
-    // It's the signal that all step data has been saved and React will re-render
-    const mottatteOpplysningerPromise = this.page.waitForResponse(
-      response => response.url().includes('/api/mottatteopplysninger/') &&
-                  response.request().method() === 'POST' &&
-                  response.status() === 200,
-      { timeout: 15000 } // Longer timeout - this is sequential after 6 parallel calls
-    ).catch(() => null);
-
+    // Click the button and rely on content-based wait for step transition verification
+    // SIMPLIFIED APPROACH: Complex API waits were making tests LESS stable (80% → 60%)
+    // Playwright's built-in wait/retry in waitFor() is more reliable than explicit API waits
     await this.bekreftOgFortsettButton.click();
-
-    // Wait for critical APIs to complete (if they fire)
-    const [avklartefaktaResponse, vilkaarResponse, mottatteResponse] = await Promise.all([
-      avklartefaktaPromise,
-      vilkaarPromise,
-      mottatteOpplysningerPromise
-    ]);
-
-    console.log('✅ Step transition APIs completed:');
-    if (avklartefaktaResponse) console.log(`   - avklartefakta: ${avklartefaktaResponse.status()}`);
-    if (vilkaarResponse) console.log(`   - vilkaar: ${vilkaarResponse.status()}`);
-    if (mottatteResponse) console.log(`   - mottatteopplysninger: ${mottatteResponse.status()} (FINAL)`);
-    if (!avklartefaktaResponse && !vilkaarResponse && !mottatteResponse) {
-      console.log('⚠️  No step transition APIs detected');
-    }
-
-    // CRITICAL: Always wait for network idle after clicking "Bekreft og fortsett"
-    // melosys-web's Stegvelger.jsx triggers 6 parallel API calls via Promise.all()
-    // We must wait for ALL of them to complete before checking for next step content
-    console.log('⏳ Waiting for network idle (all API calls to complete)...');
-    await this.page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {
-      console.log('⚠️  Network idle timeout (15s exceeded)');
-    });
-
-    // Small delay for React to process state updates and render the next step
-    // This is necessary because React batches state updates and renders asynchronously
-    // After mottatteopplysninger completes, React schedules a state update - give it time
-    await this.page.waitForTimeout(1000);
 
     // If specific content is provided, wait for it to be visible
     // This is the MOST ROBUST way to ensure the next step is ready
