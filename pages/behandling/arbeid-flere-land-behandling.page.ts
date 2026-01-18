@@ -334,34 +334,49 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     console.log(`  Knapp aktivert: ${isEnabled}`);
 
     // CRITICAL: Set up response listeners BEFORE clicking
-    // Wait for the two most important step transition APIs
+    // melosys-web's Stegvelger.jsx triggers:
+    //   1. Promise.all([6 parallel APIs]) - avklartefakta, vilkaar, lovvalgsperioder, etc.
+    //   2. THEN sequentially: oppdaterMottatteOpplysninger()
+    //   3. THEN React state update and re-render
+    // We MUST wait for oppdaterMottatteOpplysninger (the LAST API) to complete!
+
     const avklartefaktaPromise = this.page.waitForResponse(
       response => response.url().includes('/api/avklartefakta/') &&
                   response.request().method() === 'POST' &&
                   response.status() === 200,
       { timeout: 10000 }
-    ).catch(() => null); // Don't fail if not present in this step
+    ).catch(() => null);
 
     const vilkaarPromise = this.page.waitForResponse(
       response => response.url().includes('/api/vilkaar/') &&
                   response.request().method() === 'POST' &&
                   response.status() === 200,
       { timeout: 10000 }
-    ).catch(() => null); // Don't fail if not present in this step
+    ).catch(() => null);
+
+    // CRITICAL: This is the FINAL API call that triggers AFTER Promise.all()
+    // It's the signal that all step data has been saved and React will re-render
+    const mottatteOpplysningerPromise = this.page.waitForResponse(
+      response => response.url().includes('/api/mottatteopplysninger/') &&
+                  response.request().method() === 'POST' &&
+                  response.status() === 200,
+      { timeout: 15000 } // Longer timeout - this is sequential after 6 parallel calls
+    ).catch(() => null);
 
     await this.bekreftOgFortsettButton.click();
 
     // Wait for critical APIs to complete (if they fire)
-    const [avklartefaktaResponse, vilkaarResponse] = await Promise.all([
+    const [avklartefaktaResponse, vilkaarResponse, mottatteResponse] = await Promise.all([
       avklartefaktaPromise,
-      vilkaarPromise
+      vilkaarPromise,
+      mottatteOpplysningerPromise
     ]);
 
-    if (avklartefaktaResponse || vilkaarResponse) {
-      console.log('✅ Step transition APIs completed:');
-      if (avklartefaktaResponse) console.log(`   - avklartefakta: ${avklartefaktaResponse.status()}`);
-      if (vilkaarResponse) console.log(`   - vilkaar: ${vilkaarResponse.status()}`);
-    } else {
+    console.log('✅ Step transition APIs completed:');
+    if (avklartefaktaResponse) console.log(`   - avklartefakta: ${avklartefaktaResponse.status()}`);
+    if (vilkaarResponse) console.log(`   - vilkaar: ${vilkaarResponse.status()}`);
+    if (mottatteResponse) console.log(`   - mottatteopplysninger: ${mottatteResponse.status()} (FINAL)`);
+    if (!avklartefaktaResponse && !vilkaarResponse && !mottatteResponse) {
       console.log('⚠️  No step transition APIs detected');
     }
 
@@ -375,7 +390,8 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
 
     // Small delay for React to process state updates and render the next step
     // This is necessary because React batches state updates and renders asynchronously
-    await this.page.waitForTimeout(500);
+    // After mottatteopplysninger completes, React schedules a state update - give it time
+    await this.page.waitForTimeout(1000);
 
     // If specific content is provided, wait for it to be visible
     // This is the MOST ROBUST way to ensure the next step is ready
