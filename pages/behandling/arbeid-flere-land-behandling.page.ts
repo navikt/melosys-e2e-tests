@@ -325,7 +325,7 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     waitForContent?: import('@playwright/test').Locator;
     waitForContentTimeout?: number;
   }): Promise<void> {
-    const { waitForContent, waitForContentTimeout = 45000 } = options || {};
+    const { waitForContent, waitForContentTimeout = 30000 } = options || {};
 
     console.log('🔄 Klikker "Bekreft og fortsett"...');
 
@@ -333,10 +333,37 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     const isEnabled = await this.bekreftOgFortsettButton.isEnabled();
     console.log(`  Knapp aktivert: ${isEnabled}`);
 
-    // Click the button and rely on content-based wait for step transition verification
-    // SIMPLIFIED APPROACH: Complex API waits were making tests LESS stable (80% → 60%)
-    // Playwright's built-in wait/retry in waitFor() is more reliable than explicit API waits
+    // CRITICAL: Set up response listeners BEFORE clicking
+    // Wait for the two most important step transition APIs
+    const avklartefaktaPromise = this.page.waitForResponse(
+      response => response.url().includes('/api/avklartefakta/') &&
+                  response.request().method() === 'POST' &&
+                  response.status() === 200,
+      { timeout: 10000 }
+    ).catch(() => null); // Don't fail if not present in this step
+
+    const vilkaarPromise = this.page.waitForResponse(
+      response => response.url().includes('/api/vilkaar/') &&
+                  response.request().method() === 'POST' &&
+                  response.status() === 200,
+      { timeout: 10000 }
+    ).catch(() => null); // Don't fail if not present in this step
+
     await this.bekreftOgFortsettButton.click();
+
+    // Wait for critical APIs to complete (if they fire)
+    const [avklartefaktaResponse, vilkaarResponse] = await Promise.all([
+      avklartefaktaPromise,
+      vilkaarPromise
+    ]);
+
+    if (avklartefaktaResponse || vilkaarResponse) {
+      console.log('✅ Step transition APIs completed:');
+      if (avklartefaktaResponse) console.log(`   - avklartefakta: ${avklartefaktaResponse.status()}`);
+      if (vilkaarResponse) console.log(`   - vilkaar: ${vilkaarResponse.status()}`);
+    } else {
+      console.log('⚠️  No step transition APIs detected');
+    }
 
     // If specific content is provided, wait for it to be visible
     // This is the MOST ROBUST way to ensure the next step is ready
@@ -345,6 +372,14 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
       const startTime = Date.now();
       await waitForContent.waitFor({ state: 'visible', timeout: waitForContentTimeout });
       console.log(`✅ Content visible after ${Date.now() - startTime}ms`);
+    } else {
+      // Fallback: Wait for React to process the state update and render next step
+      await this.page.waitForTimeout(500);
+
+      // Wait for network idle as fallback
+      await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
+        console.log('⚠️  Network idle timeout (non-critical)');
+      });
     }
 
     console.log('✅ Klikket Bekreft og fortsett');
