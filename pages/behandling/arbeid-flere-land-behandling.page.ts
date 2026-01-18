@@ -403,14 +403,13 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     // Steg 2: Velg land
     await this.velgLandRadio(land);
 
-    // CRITICAL: Wait for the arbeidsgiver checkbox to be visible on next step
-    // This is the most robust way to prevent race conditions - we wait for the
-    // actual UI element that we need to interact with, not just API responses.
-    await this.klikkBekreftOgFortsett({
-      waitForContent: this.page.getByRole('checkbox', { name: arbeidsgiver })
-    });
+    // Steg 3: Navigate to arbeidsgiver step
+    // NOTE: Don't use waitForContent here - let velgArbeidsgiver handle it with retry logic
+    // The checkbox sometimes doesn't appear due to race conditions, and velgArbeidsgiver
+    // will refresh the page and retry if needed
+    await this.klikkBekreftOgFortsett();
 
-    // Steg 3: Velg arbeidsgiver (checkbox should already be visible from above wait)
+    // Steg 3: Velg arbeidsgiver (with retry + page refresh if checkbox doesn't appear)
     await this.velgArbeidsgiver(arbeidsgiver);
 
     // Wait for "Arbeid utføres i land som er" checkbox on next step
