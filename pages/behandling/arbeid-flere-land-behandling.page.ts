@@ -365,6 +365,18 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
       console.log('⚠️  No step transition APIs detected');
     }
 
+    // CRITICAL: Always wait for network idle after clicking "Bekreft og fortsett"
+    // melosys-web's Stegvelger.jsx triggers 6 parallel API calls via Promise.all()
+    // We must wait for ALL of them to complete before checking for next step content
+    console.log('⏳ Waiting for network idle (all API calls to complete)...');
+    await this.page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {
+      console.log('⚠️  Network idle timeout (15s exceeded)');
+    });
+
+    // Small delay for React to process state updates and render the next step
+    // This is necessary because React batches state updates and renders asynchronously
+    await this.page.waitForTimeout(500);
+
     // If specific content is provided, wait for it to be visible
     // This is the MOST ROBUST way to ensure the next step is ready
     if (waitForContent) {
@@ -372,14 +384,6 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
       const startTime = Date.now();
       await waitForContent.waitFor({ state: 'visible', timeout: waitForContentTimeout });
       console.log(`✅ Content visible after ${Date.now() - startTime}ms`);
-    } else {
-      // Fallback: Wait for React to process the state update and render next step
-      await this.page.waitForTimeout(500);
-
-      // Wait for network idle as fallback
-      await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
-        console.log('⚠️  Network idle timeout (non-critical)');
-      });
     }
 
     console.log('✅ Klikket Bekreft og fortsett');
