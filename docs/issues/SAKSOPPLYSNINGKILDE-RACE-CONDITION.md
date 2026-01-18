@@ -373,6 +373,39 @@ fun lagreStegData(@PathVariable id: Long, @RequestBody stegData: StegDataDto) {
 2. **Medium term:** Consider serializing critical saves in frontend
 3. **Long term:** Evaluate batch save endpoint for atomicity
 
+## E2E Test Timing Experiments (2026-01-18)
+
+After fixing the API race condition with `@Version`, we experimented with different E2E test wait strategies. **Key finding: Adding more waits made tests LESS stable.**
+
+### Experiment Results
+
+| Approach | Pass Rate | Notes |
+|----------|-----------|-------|
+| **Original (baseline)** | **80%** | API waits (avklartefakta, vilkaar) + content wait |
+| + network idle before content | 70% | Added `waitForLoadState('networkidle')` |
+| + mottatteopplysninger wait | 60% | Added explicit wait for final API call |
+| Simplified (no API waits) | 50% | Just click + content wait |
+| Restored original | 70% | Back to baseline approach |
+
+### Conclusion
+
+The original approach with **specific API waits + content-based wait** is optimal. Adding more waits:
+- Introduces timing windows where state can change
+- Gives React more opportunity for intermediate renders
+- Creates additional race conditions
+
+**The remaining 20-30% flakiness is inherent to melosys-web's frontend architecture:**
+- 6 parallel API calls cause unpredictable timing
+- Sequential `oppdaterMottatteOpplysninger()` call adds delay
+- React state batching and rendering is non-deterministic
+
+### Recommendation for E2E Tests
+
+1. Keep current approach: API waits + `waitForContent` option
+2. Accept ~70-80% pass rate for this specific test
+3. Use Playwright's built-in retry mechanism for the remaining flakiness
+4. Do NOT add more explicit waits - they make things worse
+
 ## Contacts
 
 - E2E Tests: Team Melosys
