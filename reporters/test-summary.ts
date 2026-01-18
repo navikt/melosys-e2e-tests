@@ -103,8 +103,14 @@ class TestSummaryReporter implements Reporter {
     // Prepare data for shared summary generator
     const tests = Array.from(this.testsByKey.values());
 
+    // Check if retries were disabled (set by workflow when disable_retries input is true)
+    const retriesDisabled = process.env.RETRIES_DISABLED === 'true';
+
     // Calculate actual CI status (excluding known-error tests from failure count)
-    const realFailures = tests.filter(t => t.finalStatus === 'failed').length;
+    // When retries are disabled, flaky tests count as failures
+    const failed = tests.filter(t => t.finalStatus === 'failed').length;
+    const flaky = tests.filter(t => t.finalStatus === 'flaky').length;
+    const realFailures = retriesDisabled ? (failed + flaky) : failed;
     const ciStatus = realFailures > 0 ? 'failed' : 'passed';
 
     // Convert internal TestInfo to TestData format
@@ -144,7 +150,8 @@ class TestSummaryReporter implements Reporter {
       startTime: result.startTime,
       duration: result.duration,
       tests: testData,
-      tags: Object.keys(tags).length > 0 ? tags : undefined
+      tags: Object.keys(tags).length > 0 ? tags : undefined,
+      retriesDisabled: retriesDisabled || undefined
     };
 
     // Generate summary using shared module

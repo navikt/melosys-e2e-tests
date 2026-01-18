@@ -43,6 +43,7 @@ export interface TestSummaryData {
   duration: number;
   tests: TestData[];
   tags?: Record<string, string>; // Docker image tags used in the test run
+  retriesDisabled?: boolean; // When true, flaky tests are treated as failures
 }
 
 /**

@@ -648,6 +648,96 @@ describe('Summary Generator', () => {
 
   });
 
+  describe('Retries Disabled Mode', () => {
+
+    test('should mark CI as failed when flaky and retriesDisabled is true', () => {
+      const data: TestSummaryData = {
+        status: 'passed', // This will be recalculated by generateMarkdownSummary
+        duration: 10000,
+        tests: [
+          createTest({ title: 'test1', status: 'passed' }),
+          createTest({ title: 'flaky test', status: 'flaky', totalAttempts: 10, failedAttempts: 1 }),
+        ],
+        retriesDisabled: true
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      // With retriesDisabled, flaky tests count as failures
+      assert(result.includes('**Status:** failed'));
+      assert(result.includes('⚠️ **Retries disabled:** 1 flaky test(s) are treated as failures'));
+    });
+
+    test('should mark CI as passed when flaky and retriesDisabled is false', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [
+          createTest({ title: 'test1', status: 'passed' }),
+          createTest({ title: 'flaky test', status: 'flaky', totalAttempts: 3, failedAttempts: 1 }),
+        ],
+        retriesDisabled: false
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      // Without retriesDisabled, flaky tests don't count as failures
+      assert(result.includes('**Status:** passed'));
+      assert(!result.includes('⚠️ **Retries disabled:**'));
+    });
+
+    test('should show correct attempts text when retriesDisabled is true', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [
+          createTest({ title: 'test1', status: 'passed', totalAttempts: 10 }),
+        ],
+        retriesDisabled: true
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      // Should not say "retries" when retries are disabled
+      assert(result.includes('repeat_each enabled, retries disabled'));
+      assert(!result.includes('including 9 retries'));
+    });
+
+    test('should show retries text when retriesDisabled is false', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [
+          createTest({ title: 'test1', status: 'passed', totalAttempts: 3 }),
+        ],
+        retriesDisabled: false
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      // Should say "retries" when retries are enabled
+      assert(result.includes('including 2 retries'));
+    });
+
+    test('should not show retries text when only 1 attempt', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [
+          createTest({ title: 'test1', status: 'passed', totalAttempts: 1 }),
+        ],
+        retriesDisabled: false
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      // Should not mention retries when there are no extra attempts
+      assert(result.includes('**Total Attempts:** 1\n'));
+      assert(!result.includes('retries'));
+    });
+
+  });
+
 });
 
 /**

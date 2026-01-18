@@ -442,6 +442,7 @@ jobs:
           fi
         env:
           CI: true
+          RETRIES_DISABLED: ${{ inputs.disable_retries == true }}
 
       - name: Set test status outputs
         id: test-status

@@ -46,7 +46,8 @@ export function generateMarkdownSummary(
   const totalAttempts = tests.reduce((sum, t) => sum + t.totalAttempts, 0);
 
   // Calculate actual CI status (excluding known-error tests from failure count)
-  const realFailures = failed; // Only count non-known-error failures
+  // When retries are disabled, flaky tests are treated as failures
+  const realFailures = data.retriesDisabled ? (failed + flaky) : failed;
   const ciStatus = realFailures > 0 ? 'failed' : 'passed';
 
   let md = '# E2E Test Summary\n\n';
@@ -82,12 +83,26 @@ export function generateMarkdownSummary(
   }
 
   md += `- **Total Tests:** ${totalTests}\n`;
-  md += `- **Total Attempts:** ${totalAttempts} (including ${totalAttempts - totalTests} retries)\n`;
+
+  // Format attempts message based on whether retries are disabled
+  const extraAttempts = totalAttempts - totalTests;
+  if (extraAttempts === 0) {
+    md += `- **Total Attempts:** ${totalAttempts}\n`;
+  } else if (data.retriesDisabled) {
+    md += `- **Total Attempts:** ${totalAttempts} (repeat_each enabled, retries disabled)\n`;
+  } else {
+    md += `- **Total Attempts:** ${totalAttempts} (including ${extraAttempts} retries)\n`;
+  }
+
   md += `- **Duration:** ${Math.round(data.duration / 1000)}s\n`;
   md += `- **Status:** ${ciStatus}\n\n`;
 
   if (knownErrorFailed + knownErrorPassed > 0) {
     md += `> **Note:** ${knownErrorFailed + knownErrorPassed} test(s) marked as @known-error do not affect CI status.\n\n`;
+  }
+
+  if (data.retriesDisabled && flaky > 0) {
+    md += `> ⚠️ **Retries disabled:** ${flaky} flaky test(s) are treated as failures.\n\n`;
   }
 
   // Test results table
