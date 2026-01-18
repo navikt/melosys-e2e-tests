@@ -1,13 +1,21 @@
 # SaksopplysningKilde Race Condition Analysis
 
 **Date:** 2026-01-17
-**Status:** Open - Needs fix in melosys-api
+**Updated:** 2026-01-17 (added frontend analysis)
+**Status:** API fix complete (hashcode-3), frontend pattern documented
 **Severity:** Medium (causes flaky E2E tests)
-**Related PRs:** navikt/melosys-api#3167 (incomplete fix)
+**Related PRs:**
+- navikt/melosys-api#3167 (@DynamicUpdate - incomplete)
+- navikt/melosys-api hashcode-3 (@Version field - complete)
 
 ## Summary
 
-E2E tests intermittently fail with an optimistic locking exception in `SaksopplysningKilde`. The fix attempted in PR #3167 (`@DynamicUpdate`) is insufficient to resolve the issue.
+E2E tests intermittently fail with an optimistic locking exception in `SaksopplysningKilde`.
+
+**Root Cause:** melosys-web triggers **6 parallel API calls** when "Bekreft og fortsett" is clicked, all modifying the same behandling entity graph. This creates race conditions in the backend.
+
+**API Fix:** Adding `@Version` field eliminated the API errors.
+**Remaining Issue:** Step transition timing - tests check for UI elements before React renders the next step.
 
 ## Error Message
 
@@ -229,7 +237,144 @@ In melosys-api repository:
 - PR #3166: Similar fix for OppgaveService
 - PR #3160: Similar fix for Behandlingsresultat (MELOSYS-7718)
 
+## Frontend Analysis: melosys-web API Call Pattern
+
+### Discovery
+
+When "Bekreft og fortsett" is clicked, melosys-web triggers **6 parallel API calls** via `Promise.all()`:
+
+**File:** `src/felleskomponenter/stegvelger/Stegvelger.jsx` (lines 206-232)
+
+```javascript
+publiserStegdata = async () => {
+  const { sakstype } = this.props;
+  const { stegStores } = this.state;
+  const { vilkaar, avklartefakta, anmodningsperiodesvar } = stegStores;
+
+  if (sakstype === MKV.Koder.sakstyper.FTRL) {
+    await Promise.all([this.props.oppdaterVilkaar(vilkaar.hent())]);
+  } else {
+    // EU/EØS - 6 PARALLEL API CALLS!
+    await Promise.all([
+      this.props.oppdaterVilkaar(vilkaar.hent()),           // POST /api/vilkaar/:id
+      this.props.oppdaterAvklartefakta(avklartefakta.hent()), // POST /api/avklartefakta/:id
+      this.props.oppdaterLovvalgperioder(perioderStegState),  // POST /api/lovvalgsperioder/:id
+      this.props.oppdaterAnmodningsPerioder(perioderStegState), // POST /api/anmodningsperioder/:id
+      this.props.oppdaterUtpekingsperioder(perioderStegState),  // POST /api/utpekingsperioder/:id
+      this.props.oppdaterAnmodningsperiodesvar(anmodningsperiodesvar.hent()), // POST /api/anmodningsperiodesvar/:id
+    ]);
+  }
+
+  this.props.oppdaterMottatteOpplysninger(); // POST /api/mottatteopplysninger/:id
+  this.oppdaterAktuelleSteg(aktivtStegNummer);
+};
+```
+
+### Impact on Backend
+
+Each of these operations:
+1. Loads the behandling entity graph (including `Saksopplysning` → `SaksopplysningKilde`)
+2. Modifies some fields
+3. Saves (CASCADE to children due to `CascadeType.ALL`)
+
+When run in parallel:
+- Thread A loads entity version 1
+- Thread B loads entity version 1
+- Thread A saves (version becomes 2)
+- Thread B tries to save with stale version 1 → **OptimisticLockingException**
+
+### Network Timeline (captured from E2E tests)
+
+```
+T+0ms    Click "Bekreft og fortsett"
+T+10ms   POST /api/vilkaar/123 (starts)
+T+12ms   POST /api/avklartefakta/123 (starts)
+T+15ms   POST /api/lovvalgsperioder/123 (starts)
+T+18ms   POST /api/anmodningsperioder/123 (starts)
+T+20ms   POST /api/utpekingsperioder/123 (starts)
+T+22ms   POST /api/anmodningsperiodesvar/123 (starts)
+T+150ms  POST /api/vilkaar/123 (completes - 200)
+T+180ms  POST /api/avklartefakta/123 (completes - 200)
+T+200ms  POST /api/anmodningsperioder/123 (FAILS - 500 OptimisticLock)  <-- RACE!
+T+220ms  POST /api/lovvalgsperioder/123 (completes - 200)
+...
+T+500ms  POST /api/mottatteopplysninger/123 (starts - after Promise.all)
+T+800ms  React state update triggers re-render
+T+850ms  Step heading changes to next step
+```
+
+### Why @Version Fixed the API Error
+
+With `@Version` field on `SaksopplysningKilde`:
+- Each entity has explicit version tracking
+- Concurrent modifications fail fast with clear error
+- Hibernate knows exactly which version is expected
+- No more "Row was updated or deleted" mysteries
+
+### Remaining Timing Issue
+
+Even with API errors fixed, the test can still fail because:
+1. `Promise.all()` completes (all 6 calls done)
+2. `oppdaterMottatteOpplysninger()` is called
+3. React state update is scheduled
+4. **E2E test immediately checks for next step elements**
+5. React hasn't rendered yet → timeout
+
+### Solution Options
+
+#### Option 1: E2E Test - Wait for Step Heading (Implemented ✅)
+
+```typescript
+// In arbeid-flere-land-behandling.page.ts
+await behandling.klikkBekreftOgFortsett({
+  waitForContent: page.getByRole('checkbox', { name: 'Ståles Stål AS' })
+});
+```
+
+This waits for the specific UI element on the next step before proceeding.
+
+#### Option 2: Frontend - Serialize Critical Saves
+
+```javascript
+// Instead of parallel, serialize the saves that touch same entities
+publiserStegdata = async () => {
+  // Group 1: Core data
+  await this.props.oppdaterVilkaar(vilkaar.hent());
+  await this.props.oppdaterAvklartefakta(avklartefakta.hent());
+
+  // Group 2: Period data (can be parallel within group)
+  await Promise.all([
+    this.props.oppdaterLovvalgperioder(perioderStegState),
+    this.props.oppdaterAnmodningsPerioder(perioderStegState),
+    this.props.oppdaterUtpekingsperioder(perioderStegState),
+  ]);
+
+  // Group 3: Final
+  await this.props.oppdaterAnmodningsperiodesvar(anmodningsperiodesvar.hent());
+  await this.props.oppdaterMottatteOpplysninger();
+};
+```
+
+#### Option 3: Backend - Batch Save Endpoint
+
+Create a single endpoint that saves all step data atomically:
+
+```kotlin
+@PostMapping("/api/behandling/{id}/steg")
+fun lagreStegData(@PathVariable id: Long, @RequestBody stegData: StegDataDto) {
+  // Single transaction, no race conditions
+  behandlingService.lagreStegData(id, stegData)
+}
+```
+
+### Recommendation
+
+1. **Short term:** Use `waitForContent` in E2E tests (already implemented)
+2. **Medium term:** Consider serializing critical saves in frontend
+3. **Long term:** Evaluate batch save endpoint for atomicity
+
 ## Contacts
 
 - E2E Tests: Team Melosys
 - melosys-api: Team Melosys
+- melosys-web: Team Melosys
