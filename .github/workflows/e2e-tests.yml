@@ -224,15 +224,15 @@ jobs:
           echo ""
           echo "📋 Docker Image Tags (non-latest only):"
           NON_LATEST_FOUND=false
-          [ "$MELOSYS_API_TAG" != "latest" ] && echo "  melosys-api: $MELOSYS_API_TAG" && NON_LATEST_FOUND=true
-          [ "$MELOSYS_WEB_TAG" != "latest" ] && echo "  melosys-web: $MELOSYS_WEB_TAG" && NON_LATEST_FOUND=true
-          [ "$FAKTURERINGSKOMPONENTEN_TAG" != "latest" ] && echo "  faktureringskomponenten: $FAKTURERINGSKOMPONENTEN_TAG" && NON_LATEST_FOUND=true
-          [ "$MELOSYS_TRYGDEAVGIFT_TAG" != "latest" ] && echo "  melosys-trygdeavgift-beregning: $MELOSYS_TRYGDEAVGIFT_TAG" && NON_LATEST_FOUND=true
-          [ "$MELOSYS_TRYGDEAVTALE_TAG" != "latest" ] && echo "  melosys-trygdeavtale: $MELOSYS_TRYGDEAVTALE_TAG" && NON_LATEST_FOUND=true
-          [ "$MELOSYS_INNGANGSVILKAR_TAG" != "latest" ] && echo "  melosys-inngangsvilkar: $MELOSYS_INNGANGSVILKAR_TAG" && NON_LATEST_FOUND=true
-          [ "$MELOSYS_EESSI_TAG" != "latest" ] && echo "  melosys-eessi: $MELOSYS_EESSI_TAG" && NON_LATEST_FOUND=true
-          [ "$MELOSYS_MOCK_TAG" != "latest" ] && echo "  melosys-mock: $MELOSYS_MOCK_TAG" && NON_LATEST_FOUND=true
-          [ "$NON_LATEST_FOUND" = false ] && echo "  (all services using latest)"
+          [ "$MELOSYS_API_TAG" != "latest" ] && echo "  melosys-api: $MELOSYS_API_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_WEB_TAG" != "latest" ] && echo "  melosys-web: $MELOSYS_WEB_TAG" && NON_LATEST_FOUND=true || true
+          [ "$FAKTURERINGSKOMPONENTEN_TAG" != "latest" ] && echo "  faktureringskomponenten: $FAKTURERINGSKOMPONENTEN_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_TRYGDEAVGIFT_TAG" != "latest" ] && echo "  melosys-trygdeavgift-beregning: $MELOSYS_TRYGDEAVGIFT_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_TRYGDEAVTALE_TAG" != "latest" ] && echo "  melosys-trygdeavtale: $MELOSYS_TRYGDEAVTALE_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_INNGANGSVILKAR_TAG" != "latest" ] && echo "  melosys-inngangsvilkar: $MELOSYS_INNGANGSVILKAR_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_EESSI_TAG" != "latest" ] && echo "  melosys-eessi: $MELOSYS_EESSI_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_MOCK_TAG" != "latest" ] && echo "  melosys-mock: $MELOSYS_MOCK_TAG" && NON_LATEST_FOUND=true || true
+          [ "$NON_LATEST_FOUND" = false ] && echo "  (all services using latest)" || true
 
       - name: Set environment variables for GitHub Actions
         run: |
