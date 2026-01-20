@@ -577,7 +577,7 @@ describe('Summary Generator', () => {
 
   describe('Docker Image Tags', () => {
 
-    test('should display tags section when tags are provided', () => {
+    test('should display only non-latest tags', () => {
       const data: TestSummaryData = {
         status: 'passed',
         duration: 10000,
@@ -593,31 +593,33 @@ describe('Summary Generator', () => {
 
       assert(result.includes('## 🏷️ Docker Image Tags'));
       assert(result.includes('**melosys-api:** `v1.2.3`'));
-      assert(result.includes('**melosys-web:** `latest`'));
+      assert(!result.includes('**melosys-web:** `latest`')); // latest should NOT be shown
       assert(result.includes('**faktureringskomponenten:** `dev-branch-abc123`'));
     });
 
-    test('should sort tags alphabetically', () => {
+    test('should sort non-latest tags alphabetically', () => {
       const data: TestSummaryData = {
         status: 'passed',
         duration: 10000,
         tests: [],
         tags: {
-          'zzz-service': 'latest',
+          'zzz-service': 'v2.0.0',
           'aaa-service': 'v1.0.0',
-          'mmm-service': 'dev'
+          'mmm-service': 'dev',
+          'bbb-service': 'latest' // should be excluded
         }
       };
 
       const result = generateMarkdownSummary(data);
 
-      // Find indices to ensure alphabetical order
+      // Find indices to ensure alphabetical order (only non-latest)
       const aaaIndex = result.indexOf('**aaa-service:**');
       const mmmIndex = result.indexOf('**mmm-service:**');
       const zzzIndex = result.indexOf('**zzz-service:**');
 
       assert(aaaIndex < mmmIndex);
       assert(mmmIndex < zzzIndex);
+      assert(!result.includes('**bbb-service:**')); // latest should be excluded
     });
 
     test('should not display tags section when no tags provided', () => {
@@ -639,6 +641,23 @@ describe('Summary Generator', () => {
         duration: 10000,
         tests: [],
         tags: {}
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      assert(!result.includes('## 🏷️ Docker Image Tags'));
+    });
+
+    test('should not display tags section when all tags are latest', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [],
+        tags: {
+          'melosys-api': 'latest',
+          'melosys-web': 'latest',
+          'faktureringskomponenten': 'latest'
+        }
       };
 
       const result = generateMarkdownSummary(data);

@@ -112,6 +112,7 @@ jobs:
             MELOSYS_TRYGDEAVTALE_TAG="latest"
             MELOSYS_INNGANGSVILKAR_TAG="latest"
             MELOSYS_EESSI_TAG="latest"
+            MELOSYS_MOCK_TAG="latest"
 
             # Override with specific tag based on which service triggered
             if [ "${{ github.event.action }}" = "melosys-api-published" ]; then
@@ -141,6 +142,10 @@ jobs:
             if [ "${{ github.event.action }}" = "melosys-eessi-published" ]; then
               MELOSYS_EESSI_TAG="${{ github.event.client_payload.image_tag }}"
             fi
+
+            if [ "${{ github.event.action }}" = "melosys-mock-published" ]; then
+              MELOSYS_MOCK_TAG="${{ github.event.client_payload.image_tag }}"
+            fi
           else
             # Manual trigger via workflow_dispatch
             echo "👆 Manually triggered via workflow_dispatch"
@@ -154,6 +159,7 @@ jobs:
             MELOSYS_TRYGDEAVTALE_TAG="latest"
             MELOSYS_INNGANGSVILKAR_TAG="latest"
             MELOSYS_EESSI_TAG="latest"
+            MELOSYS_MOCK_TAG="latest"
 
             # Check if input contains service:tag format (has colon)
             if [[ "$INPUT_ENV" == *":"* ]]; then
@@ -190,6 +196,9 @@ jobs:
                   melosys-eessi)
                     MELOSYS_EESSI_TAG="$tag"
                     ;;
+                  melosys-mock)
+                    MELOSYS_MOCK_TAG="$tag"
+                    ;;
                   *)
                     echo "  ⚠️  Unknown service: $service (ignored)"
                     ;;
@@ -210,16 +219,20 @@ jobs:
           echo "melosys_trygdeavtale_tag=$MELOSYS_TRYGDEAVTALE_TAG" >> $GITHUB_OUTPUT
           echo "melosys_inngangsvilkar_tag=$MELOSYS_INNGANGSVILKAR_TAG" >> $GITHUB_OUTPUT
           echo "melosys_eessi_tag=$MELOSYS_EESSI_TAG" >> $GITHUB_OUTPUT
+          echo "melosys_mock_tag=$MELOSYS_MOCK_TAG" >> $GITHUB_OUTPUT
 
           echo ""
-          echo "📋 Image tags to be used:"
-          echo "  melosys-api: $MELOSYS_API_TAG"
-          echo "  melosys-web: $MELOSYS_WEB_TAG"
-          echo "  faktureringskomponenten: $FAKTURERINGSKOMPONENTEN_TAG"
-          echo "  melosys-trygdeavgift-beregning: $MELOSYS_TRYGDEAVGIFT_TAG"
-          echo "  melosys-trygdeavtale: $MELOSYS_TRYGDEAVTALE_TAG"
-          echo "  melosys-inngangsvilkar: $MELOSYS_INNGANGSVILKAR_TAG"
-          echo "  melosys-eessi: $MELOSYS_EESSI_TAG"
+          echo "📋 Docker Image Tags (non-latest only):"
+          NON_LATEST_FOUND=false
+          [ "$MELOSYS_API_TAG" != "latest" ] && echo "  melosys-api: $MELOSYS_API_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_WEB_TAG" != "latest" ] && echo "  melosys-web: $MELOSYS_WEB_TAG" && NON_LATEST_FOUND=true || true
+          [ "$FAKTURERINGSKOMPONENTEN_TAG" != "latest" ] && echo "  faktureringskomponenten: $FAKTURERINGSKOMPONENTEN_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_TRYGDEAVGIFT_TAG" != "latest" ] && echo "  melosys-trygdeavgift-beregning: $MELOSYS_TRYGDEAVGIFT_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_TRYGDEAVTALE_TAG" != "latest" ] && echo "  melosys-trygdeavtale: $MELOSYS_TRYGDEAVTALE_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_INNGANGSVILKAR_TAG" != "latest" ] && echo "  melosys-inngangsvilkar: $MELOSYS_INNGANGSVILKAR_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_EESSI_TAG" != "latest" ] && echo "  melosys-eessi: $MELOSYS_EESSI_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_MOCK_TAG" != "latest" ] && echo "  melosys-mock: $MELOSYS_MOCK_TAG" && NON_LATEST_FOUND=true || true
+          [ "$NON_LATEST_FOUND" = false ] && echo "  (all services using latest)" || true
 
       - name: Set environment variables for GitHub Actions
         run: |
@@ -232,6 +245,7 @@ jobs:
           echo "MELOSYS_TRYGDEAVTALE_TAG=${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }}" >> $GITHUB_ENV
           echo "MELOSYS_INNGANGSVILKAR_TAG=${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }}" >> $GITHUB_ENV
           echo "MELOSYS_EESSI_TAG=${{ steps.image-tags.outputs.melosys_eessi_tag }}" >> $GITHUB_ENV
+          echo "MELOSYS_MOCK_TAG=${{ steps.image-tags.outputs.melosys_mock_tag }}" >> $GITHUB_ENV
 
       - name: Download JaCoCo agent for E2E coverage
         if: inputs.collect_coverage
@@ -277,7 +291,7 @@ jobs:
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-eessi:${{ steps.image-tags.outputs.melosys_eessi_tag }} &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:latest &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/felles-kodeverk:latest &
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-mock:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-docker-compose-mock:${{ steps.image-tags.outputs.melosys_mock_tag }} &
           docker pull --platform linux/amd64 gvenzl/oracle-xe:18.4.0-slim &
           docker pull --platform linux/amd64 postgres:13-alpine &
           docker pull --platform linux/amd64 confluentinc/cp-kafka:7.8.0 &
@@ -299,6 +313,7 @@ jobs:
           MELOSYS_TRYGDEAVTALE_TAG: ${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }}
           MELOSYS_INNGANGSVILKAR_TAG: ${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }}
           MELOSYS_EESSI_TAG: ${{ steps.image-tags.outputs.melosys_eessi_tag }}
+          MELOSYS_MOCK_TAG: ${{ steps.image-tags.outputs.melosys_mock_tag }}
           JACOCO_AGENT_OPTS: ${{ inputs.collect_coverage && '-javaagent:/jacoco/jacocoagent.jar=output=tcpserver,address=*,port=6300' || '' }}
 
       - name: Wait for services to be healthy
