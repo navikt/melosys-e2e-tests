@@ -56,17 +56,23 @@ export function generateMarkdownSummary(
     md += `**Generated:** ${new Date().toISOString()}\n\n`;
   }
 
-  // Display Docker image tags if available
+  // Display Docker image tags if available (only non-latest tags)
   if (data.tags && Object.keys(data.tags).length > 0) {
-    md += `## 🏷️ Docker Image Tags\n\n`;
     const tags = data.tags;
 
-    // Sort tags alphabetically for consistent display
-    const sortedKeys = Object.keys(tags).sort();
-    for (const key of sortedKeys) {
-      md += `- **${key}:** \`${tags[key]}\`\n`;
+    // Filter to only non-latest tags
+    const nonLatestTags = Object.entries(tags).filter(([_, value]) => value !== 'latest');
+
+    if (nonLatestTags.length > 0) {
+      md += `## 🏷️ Docker Image Tags\n\n`;
+
+      // Sort tags alphabetically for consistent display
+      const sortedTags = nonLatestTags.sort((a, b) => a[0].localeCompare(b[0]));
+      for (const [key, value] of sortedTags) {
+        md += `- **${key}:** \`${value}\`\n`;
+      }
+      md += '\n';
     }
-    md += '\n';
   }
 
   md += `## Overall Results\n\n`;
