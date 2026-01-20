@@ -393,6 +393,11 @@ jobs:
       - name: Run Playwright tests
         id: playwright
         run: |
+          # Record test start time for docker log analysis
+          TEST_START_TIME=$(date -u +"%Y-%m-%dT%H:%M:%SZ")
+          echo "TEST_START_TIME=$TEST_START_TIME" >> $GITHUB_OUTPUT
+          echo "⏰ Test start time: $TEST_START_TIME"
+
           # Build Playwright command with optional filters
           PLAYWRIGHT_CMD="npx playwright test --project=chromium"
 
@@ -630,35 +635,74 @@ jobs:
           # Add docker log check results
           echo "## 🐳 Docker Log Analysis" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "_Checking logs from last 15 minutes_" >> $GITHUB_STEP_SUMMARY
+          echo "_Checking logs from entire test run (since ${{ steps.playwright.outputs.TEST_START_TIME }})_" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          # Check for errors and warnings in melosys-api logs (15 minute window to catch startup issues)
-          ERROR_COUNT=$(docker logs melosys-api --since 15m 2>&1 | grep -cE "ERROR|\[1;31mERROR\[0;39m" || echo "0")
-          WARN_COUNT=$(docker logs melosys-api --since 15m 2>&1 | grep -cE "WARN|\[31mWARN\[0;39m" || echo "0")
+          # List of monitored services (same as in docker-logs.ts)
+          MONITORED_SERVICES="melosys-api melosys-web melosys-mock melosys-eessi faktureringskomponenten melosys-dokgen melosys-trygdeavgift-beregning melosys-trygdeavtale melosys-inngangsvilkar"
 
-          echo "| Type | Count |" >> $GITHUB_STEP_SUMMARY
-          echo "|------|-------|" >> $GITHUB_STEP_SUMMARY
-          echo "| ❌ Errors | $ERROR_COUNT |" >> $GITHUB_STEP_SUMMARY
-          echo "| ⚠️ Warnings | $WARN_COUNT |" >> $GITHUB_STEP_SUMMARY
+          # Use test start time for log filtering
+          SINCE_TIME="${{ steps.playwright.outputs.TEST_START_TIME }}"
+
+          # Check all services and collect results
+          TOTAL_ERRORS=0
+          TOTAL_WARNINGS=0
+          SERVICES_WITH_ERRORS=""
+
+          echo "| Service | Errors | Warnings |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|----------|" >> $GITHUB_STEP_SUMMARY
+
+          for SERVICE in $MONITORED_SERVICES; do
+            # Check if container exists and is running
+            if docker ps --filter "name=^${SERVICE}$" --format "{{.Names}}" | grep -q "^${SERVICE}$"; then
+              ERROR_COUNT=$(docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 | grep -cE "ERROR|\[1;31mERROR" || echo "0")
+              WARN_COUNT=$(docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 | grep -cE "WARN|\[31mWARN" || echo "0")
+
+              if [ "$ERROR_COUNT" -gt 0 ]; then
+                echo "| ❌ $SERVICE | $ERROR_COUNT | $WARN_COUNT |" >> $GITHUB_STEP_SUMMARY
+                SERVICES_WITH_ERRORS="$SERVICES_WITH_ERRORS $SERVICE"
+              elif [ "$WARN_COUNT" -gt 0 ]; then
+                echo "| ⚠️ $SERVICE | $ERROR_COUNT | $WARN_COUNT |" >> $GITHUB_STEP_SUMMARY
+              else
+                echo "| ✅ $SERVICE | 0 | 0 |" >> $GITHUB_STEP_SUMMARY
+              fi
+
+              TOTAL_ERRORS=$((TOTAL_ERRORS + ERROR_COUNT))
+              TOTAL_WARNINGS=$((TOTAL_WARNINGS + WARN_COUNT))
+            fi
+          done
+
           echo "" >> $GITHUB_STEP_SUMMARY
 
-          if [ "$ERROR_COUNT" -gt 0 ] || [ "$WARN_COUNT" -gt 0 ]; then
-            echo "<details><summary>📋 View error/warning samples (click to expand)</summary>" >> $GITHUB_STEP_SUMMARY
+          # Show error/warning samples grouped by service
+          if [ "$TOTAL_ERRORS" -gt 0 ] || [ "$TOTAL_WARNINGS" -gt 0 ]; then
+            echo "### Error/Warning Samples" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            docker logs melosys-api --since 15m 2>&1 | grep -E "ERROR|WARN" | tail -20 >> $GITHUB_STEP_SUMMARY || echo "No samples available" >> $GITHUB_STEP_SUMMARY
-            echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-            echo "</details>" >> $GITHUB_STEP_SUMMARY
+
+            for SERVICE in $MONITORED_SERVICES; do
+              if docker ps --filter "name=^${SERVICE}$" --format "{{.Names}}" | grep -q "^${SERVICE}$"; then
+                SERVICE_ERRORS=$(docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 | grep -E "ERROR|WARN" | wc -l | tr -d ' ')
+                if [ "$SERVICE_ERRORS" -gt 0 ]; then
+                  echo "<details><summary>🐳 <strong>$SERVICE</strong> ($SERVICE_ERRORS error/warning lines)</summary>" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                  echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+                  # Clean ANSI codes from output using sed
+                  docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 | grep -E "ERROR|WARN" | tail -20 | sed 's/\x1b\[[0-9;]*m//g' | sed 's/\[[0-9;]*m//g' >> $GITHUB_STEP_SUMMARY || echo "No samples available" >> $GITHUB_STEP_SUMMARY
+                  echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+                  echo "</details>" >> $GITHUB_STEP_SUMMARY
+                  echo "" >> $GITHUB_STEP_SUMMARY
+                fi
+              fi
+            done
           else
-            echo "✅ No errors or warnings in the last 15 minutes" >> $GITHUB_STEP_SUMMARY
+            echo "✅ No errors or warnings detected during test run" >> $GITHUB_STEP_SUMMARY
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "<details><summary>📝 Recent log activity (last 30 lines)</summary>" >> $GITHUB_STEP_SUMMARY
+          echo "<details><summary>📝 Recent melosys-api log activity (last 30 lines)</summary>" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          docker logs melosys-api --tail 30 2>&1 >> $GITHUB_STEP_SUMMARY
+          docker logs melosys-api --tail 30 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | sed 's/\[[0-9;]*m//g' >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "</details>" >> $GITHUB_STEP_SUMMARY
 

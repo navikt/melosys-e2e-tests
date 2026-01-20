@@ -25,6 +25,23 @@ interface DockerLogError {
   source: 'docker' | 'file';
 }
 
+/**
+ * Clean ANSI escape codes and other terminal formatting from a string.
+ */
+function cleanAnsiCodes(text: string): string {
+  return text
+    // Standard ANSI escape sequences (hex and unicode escape)
+    .replace(/\x1b\[[0-9;]*m/g, '')
+    .replace(/\u001b\[[0-9;]*m/g, '')
+    // Broken encoding showing as replacement character (�)
+    .replace(/�\[[0-9;]*m/g, '')
+    // Literal bracket color codes (e.g., [1;31mERROR[0;39m)
+    .replace(/\[([0-9;]+)m/g, '')
+    // Clean up any leftover escape sequences
+    .replace(/\x1b\[[\d;]*[A-Za-z]/g, '')
+    .replace(/\u001b\[[\d;]*[A-Za-z]/g, '');
+}
+
 interface ErrorCategories {
   sqlErrors: DockerLogError[];
   connectionErrors: DockerLogError[];
@@ -266,7 +283,8 @@ export const dockerLogsFixture = base.extend<{ dockerLogChecker: void }>({
             console.log(`  📊 SQL Errors (${categories.sqlErrors.length}):`);
             errorSummary += `  📊 SQL Errors (${categories.sqlErrors.length}):\n`;
             categories.sqlErrors.forEach(err => {
-              const msg = `    [${err.timestamp}] ${err.message.substring(0, 120)}`;
+              const cleanMsg = cleanAnsiCodes(err.message).substring(0, 120);
+              const msg = `    [${err.timestamp}] ${cleanMsg}`;
               console.log(msg);
               errorSummary += msg + '\n';
             });
@@ -276,7 +294,8 @@ export const dockerLogsFixture = base.extend<{ dockerLogChecker: void }>({
             console.log(`  🔌 Connection Errors (${categories.connectionErrors.length}):`);
             errorSummary += `  🔌 Connection Errors (${categories.connectionErrors.length}):\n`;
             categories.connectionErrors.forEach(err => {
-              const msg = `    [${err.timestamp}] ${err.message.substring(0, 120)}`;
+              const cleanMsg = cleanAnsiCodes(err.message).substring(0, 120);
+              const msg = `    [${err.timestamp}] ${cleanMsg}`;
               console.log(msg);
               errorSummary += msg + '\n';
             });
@@ -286,7 +305,8 @@ export const dockerLogsFixture = base.extend<{ dockerLogChecker: void }>({
             console.log(`  ❌ Other Errors (${categories.otherErrors.length}):`);
             errorSummary += `  ❌ Other Errors (${categories.otherErrors.length}):\n`;
             categories.otherErrors.forEach(err => {
-              const msg = `    [${err.timestamp}] ${err.message.substring(0, 120)}`;
+              const cleanMsg = cleanAnsiCodes(err.message).substring(0, 120);
+              const msg = `    [${err.timestamp}] ${cleanMsg}`;
               console.log(msg);
               errorSummary += msg + '\n';
             });

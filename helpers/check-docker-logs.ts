@@ -7,6 +7,23 @@ export interface DockerLogError {
 }
 
 /**
+ * Clean ANSI escape codes and other terminal formatting from a string.
+ */
+function cleanAnsiCodes(text: string): string {
+  return text
+    // Standard ANSI escape sequences (hex and unicode escape)
+    .replace(/\x1b\[[0-9;]*m/g, '')
+    .replace(/\u001b\[[0-9;]*m/g, '')
+    // Broken encoding showing as replacement character (�)
+    .replace(/�\[[0-9;]*m/g, '')
+    // Literal bracket color codes (e.g., [1;31mERROR[0;39m)
+    .replace(/\[([0-9;]+)m/g, '')
+    // Clean up any leftover escape sequences
+    .replace(/\x1b\[[\d;]*[A-Za-z]/g, '')
+    .replace(/\u001b\[[\d;]*[A-Za-z]/g, '');
+}
+
+/**
  * Checks docker logs for a container and extracts errors
  * @param containerName Name of the docker container
  * @param sinceMinutes How many minutes back to check logs (default: 5)
@@ -117,7 +134,8 @@ export function formatErrorReport(
   if (categories.sqlErrors.length > 0) {
     lines.push(`📊 SQL Errors (${categories.sqlErrors.length}):`);
     categories.sqlErrors.slice(0, 3).forEach(err => {
-      lines.push(`  [${err.timestamp}] ${err.message.substring(0, 120)}...`);
+      const cleanMsg = cleanAnsiCodes(err.message).substring(0, 120);
+      lines.push(`  [${err.timestamp}] ${cleanMsg}...`);
     });
     if (categories.sqlErrors.length > 3) {
       lines.push(`  ... and ${categories.sqlErrors.length - 3} more SQL errors`);
@@ -128,7 +146,8 @@ export function formatErrorReport(
   if (categories.connectionErrors.length > 0) {
     lines.push(`🔌 Connection Errors (${categories.connectionErrors.length}):`);
     categories.connectionErrors.slice(0, 3).forEach(err => {
-      lines.push(`  [${err.timestamp}] ${err.message.substring(0, 120)}...`);
+      const cleanMsg = cleanAnsiCodes(err.message).substring(0, 120);
+      lines.push(`  [${err.timestamp}] ${cleanMsg}...`);
     });
     if (categories.connectionErrors.length > 3) {
       lines.push(`  ... and ${categories.connectionErrors.length - 3} more connection errors`);
@@ -139,7 +158,8 @@ export function formatErrorReport(
   if (categories.otherErrors.length > 0) {
     lines.push(`❌ Other Errors (${categories.otherErrors.length}):`);
     categories.otherErrors.slice(0, 3).forEach(err => {
-      lines.push(`  [${err.timestamp}] ${err.message.substring(0, 120)}...`);
+      const cleanMsg = cleanAnsiCodes(err.message).substring(0, 120);
+      lines.push(`  [${err.timestamp}] ${cleanMsg}...`);
     });
     if (categories.otherErrors.length > 3) {
       lines.push(`  ... and ${categories.otherErrors.length - 3} more errors`);

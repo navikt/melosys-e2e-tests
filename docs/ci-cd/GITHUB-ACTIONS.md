@@ -233,23 +233,33 @@ Failed tests:
 ### 🐳 Docker Log Analysis
 
 **Shows:**
-- Time window checked (last 15 minutes)
-- ERROR count
-- WARN count
-- Expandable error samples (last 20)
-- Recent log activity (last 30 lines)
+- Time window checked (entire test run duration)
+- ERROR and WARN counts per service
+- All monitored services in a table format
+- Expandable error/warning samples grouped by service
 
-**Example expandable section:**
+**Monitored Services:**
+- melosys-api, melosys-web, melosys-mock, melosys-eessi
+- faktureringskomponenten, melosys-dokgen
+- melosys-trygdeavgift-beregning, melosys-trygdeavtale, melosys-inngangsvilkar
+
+**Example service table:**
 ```
-📊 SQL Errors (2):
-  [18:45:27.362] ORA-00942: tabellen eller utsnittet finnes ikke...
-  [18:45:28.123] SQL Error: 942, SQLState: 42000...
-
-🔌 Connection Errors (1):
-  [18:45:30.005] HikariPool-1 - Exception during pool initialization...
+| Service | Errors | Warnings |
+|---------|--------|----------|
+| ❌ melosys-api | 3 | 1 |
+| ✅ melosys-web | 0 | 0 |
+| ⚠️ melosys-eessi | 0 | 2 |
 ```
 
-**Click to expand and view actual error messages!**
+**Example expandable error section:**
+```
+🐳 melosys-api (4 error/warning lines)
+  [18:45:27.362] ORA-00942: tabellen eller utsnittet finnes ikke
+  [18:45:28.123] SQL Error: 942, SQLState: 42000
+```
+
+**Click to expand each service and view error details with clean formatting (ANSI codes removed)!**
 
 ---
 
