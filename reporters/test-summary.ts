@@ -136,6 +136,8 @@ class TestSummaryReporter implements Reporter {
       { key: 'melosys-trygdeavgift-beregning', envVar: 'MELOSYS_TRYGDEAVGIFT_TAG' },
       { key: 'melosys-trygdeavtale', envVar: 'MELOSYS_TRYGDEAVTALE_TAG' },
       { key: 'melosys-inngangsvilkar', envVar: 'MELOSYS_INNGANGSVILKAR_TAG' },
+      { key: 'melosys-eessi', envVar: 'MELOSYS_EESSI_TAG' },
+      { key: 'melosys-mock', envVar: 'MELOSYS_MOCK_TAG' },
     ];
 
     for (const { key, envVar } of tagEnvVars) {
