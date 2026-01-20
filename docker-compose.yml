@@ -145,7 +145,7 @@ services:
 
   melosys-mock:
     container_name: melosys-mock
-    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-mock:${MELOSYS_MOCK_TAG:-latest}
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-docker-compose-mock:${MELOSYS_MOCK_TAG:-latest}
     ports:
       - "8083:8083"
       - "8389:8389"

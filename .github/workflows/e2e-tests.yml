@@ -291,7 +291,7 @@ jobs:
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-eessi:${{ steps.image-tags.outputs.melosys_eessi_tag }} &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:latest &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/felles-kodeverk:latest &
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-mock:${{ steps.image-tags.outputs.melosys_mock_tag }} &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-docker-compose-mock:${{ steps.image-tags.outputs.melosys_mock_tag }} &
           docker pull --platform linux/amd64 gvenzl/oracle-xe:18.4.0-slim &
           docker pull --platform linux/amd64 postgres:13-alpine &
           docker pull --platform linux/amd64 confluentinc/cp-kafka:7.8.0 &
