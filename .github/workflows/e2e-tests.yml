@@ -654,9 +654,10 @@ jobs:
 
           for SERVICE in $MONITORED_SERVICES; do
             # Get logs and count errors/warnings
+            # Match ERROR/WARN as log level (not substring) to avoid matching JSON like {"errorCount": 0}
             LOGS=$(docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 || echo "")
-            ERROR_COUNT=$(echo "$LOGS" | grep -ciE "ERROR" 2>/dev/null || true)
-            WARN_COUNT=$(echo "$LOGS" | grep -ciE "WARN" 2>/dev/null || true)
+            ERROR_COUNT=$(echo "$LOGS" | grep -cE '(\[.*m)?ERROR(\[.*m)?\s' 2>/dev/null || true)
+            WARN_COUNT=$(echo "$LOGS" | grep -cE '(\[.*m)?WARN(\[.*m)?\s' 2>/dev/null || true)
             # Ensure counts are valid integers (grep -c returns empty on no match with || true)
             ERROR_COUNT=${ERROR_COUNT:-0}
             WARN_COUNT=${WARN_COUNT:-0}
@@ -689,8 +690,10 @@ jobs:
             for SERVICE in $MONITORED_SERVICES; do
               # Get logs once for this service
               SERVICE_LOGS=$(docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 || echo "")
-              SERVICE_ERROR_COUNT=$(echo "$SERVICE_LOGS" | grep -ciE "ERROR" 2>/dev/null || true)
-              SERVICE_WARN_COUNT=$(echo "$SERVICE_LOGS" | grep -ciE "WARN" 2>/dev/null || true)
+              # Match ERROR/WARN as log level (not substring) - pattern: [ANSI]ERROR[ANSI] followed by space
+              # This prevents matching JSON like {"errorCount": 0}
+              SERVICE_ERROR_COUNT=$(echo "$SERVICE_LOGS" | grep -cE '(\[.*m)?ERROR(\[.*m)?\s' 2>/dev/null || true)
+              SERVICE_WARN_COUNT=$(echo "$SERVICE_LOGS" | grep -cE '(\[.*m)?WARN(\[.*m)?\s' 2>/dev/null || true)
               # Ensure counts are valid integers
               SERVICE_ERROR_COUNT=$(echo "${SERVICE_ERROR_COUNT:-0}" | tr -d '[:space:]')
               SERVICE_WARN_COUNT=$(echo "${SERVICE_WARN_COUNT:-0}" | tr -d '[:space:]')
@@ -700,13 +703,18 @@ jobs:
               if [ "$SERVICE_TOTAL" -gt 0 ]; then
                 echo "<details><summary>🐳 <strong>$SERVICE</strong> ($SERVICE_ERROR_COUNT errors, $SERVICE_WARN_COUNT warnings)</summary>" >> $GITHUB_STEP_SUMMARY
                 echo "" >> $GITHUB_STEP_SUMMARY
-                # Show unique errors grouped by type (filter out stack trace lines starting with "at " or whitespace)
+                # Show unique errors grouped by type
+                # 1. Match ERROR as log level (not substring)
+                # 2. Clean ANSI codes
+                # 3. Filter out stack traces (lines starting with whitespace + "at ", "Suppressed:", "Caused by:")
+                # 4. Extract message after " - " (Spring Boot log separator: timestamp LEVEL logger - message)
                 if [ "$SERVICE_ERROR_COUNT" -gt 0 ]; then
                   echo "**Errors by type:**" >> $GITHUB_STEP_SUMMARY
                   echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-                  echo "$SERVICE_LOGS" | grep -iE "ERROR" | sed 's/\x1b\[[0-9;]*m//g' | sed 's/\[[0-9;]*m//g' | \
-                    grep -vE "^\s+at |^\s+Suppressed:|^\s+Caused by:" | \
-                    sed 's/^.*ERROR[^|]*| //' | sed 's/^.*ERROR //' | \
+                  echo "$SERVICE_LOGS" | grep -E '(\[.*m)?ERROR(\[.*m)?\s' | \
+                    sed 's/\x1b\[[0-9;]*m//g' | sed 's/\[[0-9;]*m//g' | \
+                    grep -vE '^\s+at |^\s+Suppressed:|^\s+Caused by:' | \
+                    sed 's/^.* - //' | \
                     cut -c1-100 | sort | uniq -c | sort -rn | head -10 >> $GITHUB_STEP_SUMMARY
                   echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
                   echo "" >> $GITHUB_STEP_SUMMARY
@@ -714,9 +722,10 @@ jobs:
                 if [ "$SERVICE_WARN_COUNT" -gt 0 ]; then
                   echo "**Warnings by type (sample):**" >> $GITHUB_STEP_SUMMARY
                   echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-                  echo "$SERVICE_LOGS" | grep -iE "WARN" | sed 's/\x1b\[[0-9;]*m//g' | sed 's/\[[0-9;]*m//g' | \
-                    grep -vE "^\s+at |^\s+Suppressed:|^\s+Caused by:" | \
-                    sed 's/^.*WARN[^|]*| //' | sed 's/^.*WARN //' | \
+                  echo "$SERVICE_LOGS" | grep -E '(\[.*m)?WARN(\[.*m)?\s' | \
+                    sed 's/\x1b\[[0-9;]*m//g' | sed 's/\[[0-9;]*m//g' | \
+                    grep -vE '^\s+at |^\s+Suppressed:|^\s+Caused by:' | \
+                    sed 's/^.* - //' | \
                     cut -c1-100 | sort | uniq -c | sort -rn | head -10 >> $GITHUB_STEP_SUMMARY
                   echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
                 fi
