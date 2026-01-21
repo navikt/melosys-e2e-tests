@@ -644,41 +644,27 @@ jobs:
           # Use test start time for log filtering
           SINCE_TIME="${{ steps.playwright.outputs.TEST_START_TIME }}"
 
-          # Debug: Show all running containers
-          echo "Running containers:" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          docker ps --format "{{.Names}}" >> $GITHUB_STEP_SUMMARY
-          echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-
           # Check all services and collect results
           TOTAL_ERRORS=0
           TOTAL_WARNINGS=0
-          SERVICES_WITH_ERRORS=""
 
-          echo "| Service | Status | Errors | Warnings |" >> $GITHUB_STEP_SUMMARY
-          echo "|---------|--------|--------|----------|" >> $GITHUB_STEP_SUMMARY
+          echo "| Service | Errors | Warnings |" >> $GITHUB_STEP_SUMMARY
+          echo "|---------|--------|----------|" >> $GITHUB_STEP_SUMMARY
 
           for SERVICE in $MONITORED_SERVICES; do
-            # Check if container exists (use exact name match since container_name is set in docker-compose)
-            if docker ps --format "{{.Names}}" | grep -qE "^${SERVICE}$"; then
-              ERROR_COUNT=$(docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 | grep -ciE "ERROR" || echo "0")
-              WARN_COUNT=$(docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 | grep -ciE "WARN" || echo "0")
+            ERROR_COUNT=$(docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 | grep -ciE "ERROR" || echo "0")
+            WARN_COUNT=$(docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 | grep -ciE "WARN" || echo "0")
 
-              if [ "$ERROR_COUNT" -gt 0 ]; then
-                echo "| $SERVICE | ❌ | $ERROR_COUNT | $WARN_COUNT |" >> $GITHUB_STEP_SUMMARY
-                SERVICES_WITH_ERRORS="$SERVICES_WITH_ERRORS $SERVICE"
-              elif [ "$WARN_COUNT" -gt 0 ]; then
-                echo "| $SERVICE | ⚠️ | $ERROR_COUNT | $WARN_COUNT |" >> $GITHUB_STEP_SUMMARY
-              else
-                echo "| $SERVICE | ✅ | 0 | 0 |" >> $GITHUB_STEP_SUMMARY
-              fi
-
-              TOTAL_ERRORS=$((TOTAL_ERRORS + ERROR_COUNT))
-              TOTAL_WARNINGS=$((TOTAL_WARNINGS + WARN_COUNT))
+            if [ "$ERROR_COUNT" -gt 0 ]; then
+              echo "| ❌ $SERVICE | $ERROR_COUNT | $WARN_COUNT |" >> $GITHUB_STEP_SUMMARY
+            elif [ "$WARN_COUNT" -gt 0 ]; then
+              echo "| ⚠️ $SERVICE | $ERROR_COUNT | $WARN_COUNT |" >> $GITHUB_STEP_SUMMARY
             else
-              echo "| $SERVICE | ⏸️ not running | - | - |" >> $GITHUB_STEP_SUMMARY
+              echo "| ✅ $SERVICE | 0 | 0 |" >> $GITHUB_STEP_SUMMARY
             fi
+
+            TOTAL_ERRORS=$((TOTAL_ERRORS + ERROR_COUNT))
+            TOTAL_WARNINGS=$((TOTAL_WARNINGS + WARN_COUNT))
           done
 
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -689,31 +675,28 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
 
             for SERVICE in $MONITORED_SERVICES; do
-              # Use exact name match since container_name is set in docker-compose
-              if docker ps --format "{{.Names}}" | grep -qE "^${SERVICE}$"; then
-                SERVICE_ERROR_COUNT=$(docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 | grep -ciE "ERROR" || echo "0")
-                SERVICE_WARN_COUNT=$(docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 | grep -ciE "WARN" || echo "0")
-                SERVICE_TOTAL=$((SERVICE_ERROR_COUNT + SERVICE_WARN_COUNT))
-                if [ "$SERVICE_TOTAL" -gt 0 ]; then
-                  echo "<details><summary>🐳 <strong>$SERVICE</strong> ($SERVICE_ERROR_COUNT errors, $SERVICE_WARN_COUNT warnings)</summary>" >> $GITHUB_STEP_SUMMARY
-                  echo "" >> $GITHUB_STEP_SUMMARY
-                  # Show errors first (up to 10), then warnings (up to 10)
-                  if [ "$SERVICE_ERROR_COUNT" -gt 0 ]; then
-                    echo "**Errors:**" >> $GITHUB_STEP_SUMMARY
-                    echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-                    docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 | grep -iE "ERROR" | head -10 | sed 's/\x1b\[[0-9;]*m//g' | sed 's/\[[0-9;]*m//g' >> $GITHUB_STEP_SUMMARY || echo "No errors" >> $GITHUB_STEP_SUMMARY
-                    echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-                    echo "" >> $GITHUB_STEP_SUMMARY
-                  fi
-                  if [ "$SERVICE_WARN_COUNT" -gt 0 ]; then
-                    echo "**Warnings (sample):**" >> $GITHUB_STEP_SUMMARY
-                    echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-                    docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 | grep -iE "WARN" | head -10 | sed 's/\x1b\[[0-9;]*m//g' | sed 's/\[[0-9;]*m//g' >> $GITHUB_STEP_SUMMARY || echo "No warnings" >> $GITHUB_STEP_SUMMARY
-                    echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-                  fi
-                  echo "</details>" >> $GITHUB_STEP_SUMMARY
+              SERVICE_ERROR_COUNT=$(docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 | grep -ciE "ERROR" || echo "0")
+              SERVICE_WARN_COUNT=$(docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 | grep -ciE "WARN" || echo "0")
+              SERVICE_TOTAL=$((SERVICE_ERROR_COUNT + SERVICE_WARN_COUNT))
+              if [ "$SERVICE_TOTAL" -gt 0 ]; then
+                echo "<details><summary>🐳 <strong>$SERVICE</strong> ($SERVICE_ERROR_COUNT errors, $SERVICE_WARN_COUNT warnings)</summary>" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
+                # Show errors first (up to 10), then warnings (up to 10)
+                if [ "$SERVICE_ERROR_COUNT" -gt 0 ]; then
+                  echo "**Errors:**" >> $GITHUB_STEP_SUMMARY
+                  echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+                  docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 | grep -iE "ERROR" | head -10 | sed 's/\x1b\[[0-9;]*m//g' | sed 's/\[[0-9;]*m//g' >> $GITHUB_STEP_SUMMARY || echo "No errors" >> $GITHUB_STEP_SUMMARY
+                  echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
                   echo "" >> $GITHUB_STEP_SUMMARY
                 fi
+                if [ "$SERVICE_WARN_COUNT" -gt 0 ]; then
+                  echo "**Warnings (sample):**" >> $GITHUB_STEP_SUMMARY
+                  echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+                  docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 | grep -iE "WARN" | head -10 | sed 's/\x1b\[[0-9;]*m//g' | sed 's/\[[0-9;]*m//g' >> $GITHUB_STEP_SUMMARY || echo "No warnings" >> $GITHUB_STEP_SUMMARY
+                  echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
+                fi
+                echo "</details>" >> $GITHUB_STEP_SUMMARY
+                echo "" >> $GITHUB_STEP_SUMMARY
               fi
             done
           else
@@ -724,11 +707,7 @@ jobs:
           echo "<details><summary>📝 Recent melosys-api log activity (last 30 lines)</summary>" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-          if docker ps --format "{{.Names}}" | grep -qE "^melosys-api$"; then
-            docker logs melosys-api --tail 30 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | sed 's/\[[0-9;]*m//g' >> $GITHUB_STEP_SUMMARY
-          else
-            echo "Container not found" >> $GITHUB_STEP_SUMMARY
-          fi
+          docker logs melosys-api --tail 30 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | sed 's/\[[0-9;]*m//g' >> $GITHUB_STEP_SUMMARY
           echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
           echo "</details>" >> $GITHUB_STEP_SUMMARY
 
