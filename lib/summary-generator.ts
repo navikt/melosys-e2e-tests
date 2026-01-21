@@ -16,6 +16,27 @@ import * as path from 'path';
 import { TestSummaryData, TestData, DockerError, SummaryOptions } from './types';
 
 /**
+ * Clean ANSI escape codes and other terminal formatting from a string.
+ * Handles:
+ * - Standard ANSI escape sequences: \x1b[...m or \u001b[...m
+ * - Broken encoding showing as replacement character: �[...]
+ * - Spring Boot coloring patterns like [1;31m that appear as literal text
+ */
+function cleanAnsiCodes(text: string): string {
+  return text
+    // Standard ANSI escape sequences (hex and unicode escape)
+    .replace(/\x1b\[[0-9;]*m/g, '')
+    .replace(/\u001b\[[0-9;]*m/g, '')
+    // Broken encoding showing as replacement character (�)
+    .replace(/�\[[0-9;]*m/g, '')
+    // Literal bracket color codes that sometimes appear in logs (e.g., [1;31mERROR[0;39m)
+    .replace(/\[([0-9;]+)m/g, '')
+    // Clean up any leftover escape sequences
+    .replace(/\x1b\[[\d;]*[A-Za-z]/g, '')
+    .replace(/\u001b\[[\d;]*[A-Za-z]/g, '');
+}
+
+/**
  * Generate markdown summary from test data
  *
  * @param data - Test result data (from JSON or reporter)
@@ -357,29 +378,35 @@ function generateFailedTestsSection(failedTests: TestData[]): string {
     md += `**Duration:** ${Math.round(testInfo.duration / 1000)}s\n\n`;
 
     if (testInfo.error) {
-      md += `**Error:**\n\`\`\`\n${testInfo.error}\n\`\`\`\n\n`;
+      const cleanError = cleanAnsiCodes(testInfo.error);
+      md += `**Error:**\n\`\`\`\n${cleanError}\n\`\`\`\n\n`;
     }
 
     // Process instance errors
     if (testInfo.processErrors && testInfo.processErrors !== testInfo.error) {
-      md += `**Process Instance Failures:**\n\`\`\`\n${testInfo.processErrors}\n\`\`\`\n\n`;
+      const cleanProcessError = cleanAnsiCodes(testInfo.processErrors);
+      md += `**Process Instance Failures:**\n\`\`\`\n${cleanProcessError}\n\`\`\`\n\n`;
     }
 
     // Docker log errors
     if (testInfo.dockerErrors && testInfo.dockerErrors.length > 0) {
       md += `**Docker Log Errors:**\n\n`;
       for (const { service, errors } of testInfo.dockerErrors) {
-        md += `- 🐳 **${service}** (${errors.length} error(s))\n`;
-        // Show first 3 unique errors
+        md += `<details>\n`;
+        md += `<summary>🐳 <strong>${service}</strong> (${errors.length} error(s))</summary>\n\n`;
+        // Show unique errors with full messages in expandable section
         const uniqueErrors = deduplicateErrors(errors);
-        for (const err of uniqueErrors.slice(0, 3)) {
-          md += `  - \`[${err.timestamp}]\` ${err.message.substring(0, 100)}\n`;
+        md += `\`\`\`\n`;
+        for (const err of uniqueErrors.slice(0, 10)) {
+          const cleanMessage = cleanAnsiCodes(err.message);
+          md += `[${err.timestamp}] ${cleanMessage}\n\n`;
         }
-        if (uniqueErrors.length > 3) {
-          md += `  - _(${uniqueErrors.length - 3} more unique errors...)_\n`;
+        if (uniqueErrors.length > 10) {
+          md += `... and ${uniqueErrors.length - 10} more unique error(s)\n`;
         }
+        md += `\`\`\`\n`;
+        md += `</details>\n\n`;
       }
-      md += '\n';
     }
 
     md += '---\n\n';
@@ -458,24 +485,24 @@ function generateDockerErrorsSummary(dockerErrors: DockerError[]): string {
     .sort((a, b) => b[1].length - a[1].length);
 
   for (const [service, errors] of sorted) {
-    md += `### ${service}: ${errors.length} error(s)\n\n`;
-
-    // Show first 5 unique errors
     const uniqueErrors = deduplicateErrors(errors);
-    const errorsToShow = uniqueErrors.slice(0, 5);
 
-    for (const err of errorsToShow) {
-      // Clean up the message - remove ANSI codes and truncate
-      const cleanMessage = err.message
-        .replace(/\x1b\[[0-9;]*m/g, '') // Remove ANSI color codes
-        .substring(0, 200);
-      md += `- \`[${err.timestamp}]\` ${cleanMessage}\n`;
+    md += `<details>\n`;
+    md += `<summary><strong>${service}</strong>: ${errors.length} error(s) (${uniqueErrors.length} unique)</summary>\n\n`;
+    md += `\`\`\`\n`;
+
+    // Show up to 10 unique errors with full messages
+    for (const err of uniqueErrors.slice(0, 10)) {
+      const cleanMessage = cleanAnsiCodes(err.message);
+      md += `[${err.timestamp}] ${cleanMessage}\n\n`;
     }
 
-    if (uniqueErrors.length > 5) {
-      md += `- _...and ${uniqueErrors.length - 5} more unique error(s)_\n`;
+    if (uniqueErrors.length > 10) {
+      md += `... and ${uniqueErrors.length - 10} more unique error(s)\n`;
     }
-    md += '\n';
+
+    md += `\`\`\`\n`;
+    md += `</details>\n\n`;
   }
 
   return md;
