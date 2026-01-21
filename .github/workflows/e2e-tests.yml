@@ -652,10 +652,19 @@ jobs:
           echo "|---------|--------|----------|" >> $GITHUB_STEP_SUMMARY
 
           for SERVICE in $MONITORED_SERVICES; do
-            # Get logs and count errors/warnings (use subshell to prevent script exit on docker logs failure)
-            LOGS=$(docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 || true)
-            ERROR_COUNT=$(echo "$LOGS" | grep -ciE "ERROR" || echo "0")
-            WARN_COUNT=$(echo "$LOGS" | grep -ciE "WARN" || echo "0")
+            # Get logs and count errors/warnings
+            LOGS=$(docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 || echo "")
+            ERROR_COUNT=$(echo "$LOGS" | grep -ciE "ERROR" 2>/dev/null || true)
+            WARN_COUNT=$(echo "$LOGS" | grep -ciE "WARN" 2>/dev/null || true)
+            # Ensure counts are valid integers (grep -c returns empty on no match with || true)
+            ERROR_COUNT=${ERROR_COUNT:-0}
+            WARN_COUNT=${WARN_COUNT:-0}
+            # Remove any whitespace/newlines
+            ERROR_COUNT=$(echo "$ERROR_COUNT" | tr -d '[:space:]')
+            WARN_COUNT=$(echo "$WARN_COUNT" | tr -d '[:space:]')
+            # Default to 0 if still empty
+            [ -z "$ERROR_COUNT" ] && ERROR_COUNT=0
+            [ -z "$WARN_COUNT" ] && WARN_COUNT=0
 
             if [ "$ERROR_COUNT" -gt 0 ]; then
               echo "| ❌ $SERVICE | $ERROR_COUNT | $WARN_COUNT |" >> $GITHUB_STEP_SUMMARY
@@ -677,10 +686,15 @@ jobs:
             echo "" >> $GITHUB_STEP_SUMMARY
 
             for SERVICE in $MONITORED_SERVICES; do
-              # Get logs once for this service (use || true to prevent exit on failure)
-              SERVICE_LOGS=$(docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 || true)
-              SERVICE_ERROR_COUNT=$(echo "$SERVICE_LOGS" | grep -ciE "ERROR" || echo "0")
-              SERVICE_WARN_COUNT=$(echo "$SERVICE_LOGS" | grep -ciE "WARN" || echo "0")
+              # Get logs once for this service
+              SERVICE_LOGS=$(docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 || echo "")
+              SERVICE_ERROR_COUNT=$(echo "$SERVICE_LOGS" | grep -ciE "ERROR" 2>/dev/null || true)
+              SERVICE_WARN_COUNT=$(echo "$SERVICE_LOGS" | grep -ciE "WARN" 2>/dev/null || true)
+              # Ensure counts are valid integers
+              SERVICE_ERROR_COUNT=$(echo "${SERVICE_ERROR_COUNT:-0}" | tr -d '[:space:]')
+              SERVICE_WARN_COUNT=$(echo "${SERVICE_WARN_COUNT:-0}" | tr -d '[:space:]')
+              [ -z "$SERVICE_ERROR_COUNT" ] && SERVICE_ERROR_COUNT=0
+              [ -z "$SERVICE_WARN_COUNT" ] && SERVICE_WARN_COUNT=0
               SERVICE_TOTAL=$((SERVICE_ERROR_COUNT + SERVICE_WARN_COUNT))
               if [ "$SERVICE_TOTAL" -gt 0 ]; then
                 echo "<details><summary>🐳 <strong>$SERVICE</strong> ($SERVICE_ERROR_COUNT errors, $SERVICE_WARN_COUNT warnings)</summary>" >> $GITHUB_STEP_SUMMARY
