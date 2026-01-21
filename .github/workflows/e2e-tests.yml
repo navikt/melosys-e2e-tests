@@ -560,6 +560,7 @@ jobs:
           retention-days: 30
 
       - name: Generate test summary
+        id: summary
         if: always()
         run: |
           echo "## 🎭 Playwright Test Results" >> $GITHUB_STEP_SUMMARY
@@ -728,10 +729,17 @@ jobs:
             echo "✅ No errors or warnings detected during test run" >> $GITHUB_STEP_SUMMARY
           fi
 
-          # Add download reminder if there were errors
+          # Save docker logs and set output if there were errors
           if [ "$TOTAL_ERRORS" -gt 0 ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "> 📥 **Download full logs:** Complete logs for all services are available in the \`playwright-results\` artifact under \`playwright-report/*-complete.log\`" >> $GITHUB_STEP_SUMMARY
+            echo "> 📥 **Download full logs:** Complete logs available in the \`docker-logs\` artifact" >> $GITHUB_STEP_SUMMARY
+
+            # Save complete logs for each service with errors
+            mkdir -p docker-logs
+            for SERVICE in $MONITORED_SERVICES; do
+              docker logs "$SERVICE" --since "$SINCE_TIME" 2>&1 | sed 's/\x1b\[[0-9;]*m//g' | sed 's/\[[0-9;]*m//g' > "docker-logs/${SERVICE}.log" || true
+            done
+            echo "DOCKER_ERRORS=true" >> $GITHUB_OUTPUT
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -919,6 +927,14 @@ jobs:
             playwright-report/metrics-summary.md
             playwright-report/metrics-coverage.json
           retention-days: 30
+
+      - name: Upload docker logs (if errors found)
+        uses: actions/upload-artifact@v4
+        if: always() && steps.summary.outputs.DOCKER_ERRORS == 'true'
+        with:
+          name: docker-logs
+          path: docker-logs/
+          retention-days: 7
 
       - name: Upload test videos
         uses: actions/upload-artifact@v4
