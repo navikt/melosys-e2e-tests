@@ -699,26 +699,39 @@ jobs:
               if [ "$SERVICE_TOTAL" -gt 0 ]; then
                 echo "<details><summary>🐳 <strong>$SERVICE</strong> ($SERVICE_ERROR_COUNT errors, $SERVICE_WARN_COUNT warnings)</summary>" >> $GITHUB_STEP_SUMMARY
                 echo "" >> $GITHUB_STEP_SUMMARY
-                # Show errors first (up to 10), then warnings (up to 10)
+                # Show unique errors grouped by type (extract error class/message pattern)
                 if [ "$SERVICE_ERROR_COUNT" -gt 0 ]; then
-                  echo "**Errors:**" >> $GITHUB_STEP_SUMMARY
+                  echo "**Errors by type:**" >> $GITHUB_STEP_SUMMARY
                   echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-                  echo "$SERVICE_LOGS" | grep -iE "ERROR" | head -10 | sed 's/\x1b\[[0-9;]*m//g' | sed 's/\[[0-9;]*m//g' >> $GITHUB_STEP_SUMMARY
+                  # Extract unique error patterns and count occurrences
+                  echo "$SERVICE_LOGS" | grep -iE "ERROR" | sed 's/\x1b\[[0-9;]*m//g' | sed 's/\[[0-9;]*m//g' | \
+                    sed 's/^.*ERROR[^|]*| //' | sed 's/^.*ERROR //' | \
+                    cut -c1-100 | sort | uniq -c | sort -rn | head -10 >> $GITHUB_STEP_SUMMARY
                   echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
                   echo "" >> $GITHUB_STEP_SUMMARY
                 fi
                 if [ "$SERVICE_WARN_COUNT" -gt 0 ]; then
-                  echo "**Warnings (sample):**" >> $GITHUB_STEP_SUMMARY
+                  echo "**Warnings by type (sample):**" >> $GITHUB_STEP_SUMMARY
                   echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-                  echo "$SERVICE_LOGS" | grep -iE "WARN" | head -10 | sed 's/\x1b\[[0-9;]*m//g' | sed 's/\[[0-9;]*m//g' >> $GITHUB_STEP_SUMMARY
+                  echo "$SERVICE_LOGS" | grep -iE "WARN" | sed 's/\x1b\[[0-9;]*m//g' | sed 's/\[[0-9;]*m//g' | \
+                    sed 's/^.*WARN[^|]*| //' | sed 's/^.*WARN //' | \
+                    cut -c1-100 | sort | uniq -c | sort -rn | head -10 >> $GITHUB_STEP_SUMMARY
                   echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
                 fi
+                echo "" >> $GITHUB_STEP_SUMMARY
+                echo "📥 _Full logs available in artifacts: \`playwright-report/${SERVICE}-complete.log\`_" >> $GITHUB_STEP_SUMMARY
                 echo "</details>" >> $GITHUB_STEP_SUMMARY
                 echo "" >> $GITHUB_STEP_SUMMARY
               fi
             done
           else
             echo "✅ No errors or warnings detected during test run" >> $GITHUB_STEP_SUMMARY
+          fi
+
+          # Add download reminder if there were errors
+          if [ "$TOTAL_ERRORS" -gt 0 ]; then
+            echo "" >> $GITHUB_STEP_SUMMARY
+            echo "> 📥 **Download full logs:** Complete logs for all services are available in the \`playwright-results\` artifact under \`playwright-report/*-complete.log\`" >> $GITHUB_STEP_SUMMARY
           fi
 
           echo "" >> $GITHUB_STEP_SUMMARY
