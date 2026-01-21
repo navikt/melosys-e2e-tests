@@ -700,12 +700,12 @@ jobs:
               if [ "$SERVICE_TOTAL" -gt 0 ]; then
                 echo "<details><summary>🐳 <strong>$SERVICE</strong> ($SERVICE_ERROR_COUNT errors, $SERVICE_WARN_COUNT warnings)</summary>" >> $GITHUB_STEP_SUMMARY
                 echo "" >> $GITHUB_STEP_SUMMARY
-                # Show unique errors grouped by type (extract error class/message pattern)
+                # Show unique errors grouped by type (filter out stack trace lines starting with "at " or whitespace)
                 if [ "$SERVICE_ERROR_COUNT" -gt 0 ]; then
                   echo "**Errors by type:**" >> $GITHUB_STEP_SUMMARY
                   echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
-                  # Extract unique error patterns and count occurrences
                   echo "$SERVICE_LOGS" | grep -iE "ERROR" | sed 's/\x1b\[[0-9;]*m//g' | sed 's/\[[0-9;]*m//g' | \
+                    grep -vE "^\s+at |^\s+Suppressed:|^\s+Caused by:" | \
                     sed 's/^.*ERROR[^|]*| //' | sed 's/^.*ERROR //' | \
                     cut -c1-100 | sort | uniq -c | sort -rn | head -10 >> $GITHUB_STEP_SUMMARY
                   echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
@@ -715,12 +715,11 @@ jobs:
                   echo "**Warnings by type (sample):**" >> $GITHUB_STEP_SUMMARY
                   echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
                   echo "$SERVICE_LOGS" | grep -iE "WARN" | sed 's/\x1b\[[0-9;]*m//g' | sed 's/\[[0-9;]*m//g' | \
+                    grep -vE "^\s+at |^\s+Suppressed:|^\s+Caused by:" | \
                     sed 's/^.*WARN[^|]*| //' | sed 's/^.*WARN //' | \
                     cut -c1-100 | sort | uniq -c | sort -rn | head -10 >> $GITHUB_STEP_SUMMARY
                   echo "\`\`\`" >> $GITHUB_STEP_SUMMARY
                 fi
-                echo "" >> $GITHUB_STEP_SUMMARY
-                echo "📥 _Full logs available in artifacts: \`playwright-report/${SERVICE}-complete.log\`_" >> $GITHUB_STEP_SUMMARY
                 echo "</details>" >> $GITHUB_STEP_SUMMARY
                 echo "" >> $GITHUB_STEP_SUMMARY
               fi
