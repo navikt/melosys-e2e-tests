@@ -1,5 +1,6 @@
 import { Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+import { waitForProcessInstances } from '../../helpers/api-helper';
 
 /**
  * Page Object for Trygdeavtale Arbeidssted (Workplace) section
@@ -113,8 +114,25 @@ export class TrygdeavtaleArbeidsstedPage extends BasePage {
    * For Trygdeavtale, this directly submits without a separate vedtak page
    */
   async fattVedtak(): Promise<void> {
+    // Set up response listener BEFORE clicking
+    const responsePromise = this.page.waitForResponse(
+      response => response.url().includes('/api/saksflyt/vedtak/') &&
+                  response.url().includes('/fatt') &&
+                  response.request().method() === 'POST' &&
+                  (response.status() === 200 || response.status() === 204),
+      { timeout: 60000 }
+    );
+
     await this.fattVedtakButton.click();
-    console.log('✅ Submitted vedtak');
+
+    // Wait for vedtak creation to complete
+    const response = await responsePromise;
+    console.log(`✅ Vedtak fattet - API completed: ${response.url()} -> ${response.status()}`);
+
+    // CRITICAL: Wait for async saga to complete
+    console.log('⏳ Waiting for vedtak saga to complete...');
+    await waitForProcessInstances(this.page.request, 30);
+    console.log('✅ Vedtak saga completed');
   }
 
   /**

@@ -1,6 +1,7 @@
 import { Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 import { ArbeidFlereLandBehandlingAssertions } from './arbeid-flere-land-behandling.assertions';
+import { waitForProcessInstances } from '../../helpers/api-helper';
 
 /**
  * Page Object for EU/EØS "Arbeid i flere land" behandling workflow
@@ -441,6 +442,14 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     // Wait for vedtak creation to complete
     const response = await responsePromise;
     console.log(`✅ Vedtak fattet - API completed: ${response.url()} -> ${response.status()}`);
+
+    // CRITICAL: Wait for async saga (HENT_REGISTEROPPLYSNINGER) to complete
+    // The /fatt endpoint returns 204 immediately but triggers a saga that runs async.
+    // Without this wait, cleanup may start while saga is still running, causing
+    // ObjectOptimisticLockingFailureException on SaksopplysningKilde.
+    console.log('⏳ Waiting for vedtak saga to complete...');
+    await waitForProcessInstances(this.page.request, 30);
+    console.log('✅ Vedtak saga completed');
   }
 
   /**

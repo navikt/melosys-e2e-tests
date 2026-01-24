@@ -2,6 +2,7 @@ import { mergeTests } from '@playwright/test';
 import { cleanupFixture } from './cleanup';
 import { dockerLogsFixture } from './docker-logs';
 import { test as knownErrorFixture } from './known-error';
+import { apiTraceFixture } from './api-trace';
 
 /**
  * Main test fixture - combines all fixtures for E2E tests
@@ -11,6 +12,7 @@ import { test as knownErrorFixture } from './known-error';
  * - Automatic mock service cleanup before and after each test
  * - Docker log error checking after each test
  * - Automatic detection of @known-error tagged tests (expected failures)
+ * - API trace recording (enabled via RECORD_API_TRACE=true)
  *
  * Usage in tests:
  *   import { test, expect } from '../fixtures';
@@ -21,9 +23,10 @@ import { test as knownErrorFixture } from './known-error';
  * - Automatic cleanup after test completes
  * - Docker log error reporting
  * - Known error handling (@known-error tag support)
+ * - API request tracing (when RECORD_API_TRACE=true)
  */
 
-export const test = mergeTests(cleanupFixture, dockerLogsFixture, knownErrorFixture);
+export const test = mergeTests(cleanupFixture, dockerLogsFixture, knownErrorFixture, apiTraceFixture);
 export { expect } from '@playwright/test';
 
 /**
@@ -32,3 +35,4 @@ export { expect } from '@playwright/test';
 export { cleanupFixture } from './cleanup';
 export { dockerLogsFixture } from './docker-logs';
 export { test as knownErrorFixture } from './known-error';
+export { apiTraceFixture } from './api-trace';
