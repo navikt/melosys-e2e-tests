@@ -1,4 +1,4 @@
-import { test, expect } from '../../fixtures';
+import { test } from '../../fixtures';
 import { AuthHelper } from '../../helpers/auth-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
@@ -54,20 +54,7 @@ test.describe('EU/EØS SED A008 - Videresend søknad', () => {
     await opprettSak.velgSakstema('MEDLEMSKAP_LOVVALG');
     await opprettSak.velgBehandlingstema('ARBEID_FLERE_LAND');
 
-    // Velg periode med datepicker (dagens dato + 1 dag)
-    const today = new Date();
-    const dayOfWeek = ['søndag', 'mandag', 'tirsdag', 'onsdag', 'torsdag', 'fredag', 'lørdag'];
-    const todayDayName = dayOfWeek[today.getDay()];
-    const tomorrowDate = new Date(today);
-    tomorrowDate.setDate(today.getDate() + 1);
-    const tomorrowDayName = dayOfWeek[tomorrowDate.getDay()];
-
-    await page.getByRole('textbox', { name: 'Fra' }).click();
-    await page.getByRole('button', { name: 'Åpne datovelger' }).first().click();
-    await page.getByRole('button', { name: `${todayDayName} ${today.getDate()}` }).click();
-
-    await page.getByRole('button', { name: 'Åpne datovelger' }).nth(1).click();
-    await page.getByRole('button', { name: `${tomorrowDayName} ${tomorrowDate.getDate()}` }).click();
+    await euEosBehandling.fyllInnFraTilDato('01.01.2024', '31.12.2025');
 
     // Velg land: Norge og Sverige
     await euEosBehandling.velgLand(EU_EOS_LAND.NORGE);
