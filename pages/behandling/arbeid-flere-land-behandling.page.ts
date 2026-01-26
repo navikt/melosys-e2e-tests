@@ -760,6 +760,6 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     await this.leggTilVedlegg();
 
     // Videresend søknaden
-    // await this.klikkVideresendSøknad();
+    await this.klikkVideresendSøknad();
   }
 }
