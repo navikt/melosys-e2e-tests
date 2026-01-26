@@ -458,23 +458,27 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     begrunnelse: string = 'Lorem ipsum',
     informasjon: string = 'Dodatkowo'
   ): Promise<void> {
-    // Steg 1: Bekreft og fortsett (ingen handling nødvendig)
-    // Wait for land radio button to be visible on next step
-    await this.klikkBekreftOgFortsett({
-      waitForContent: this.page.getByRole('radio', { name: land })
-    });
+    // EU/EØS behandlinger har en tabbet UI med Inngang, Bosted, Virksomhet
+    // "Bekreft og fortsett" navigerer automatisk til neste steg
 
-    // Steg 2: Velg land
+    // Steg 1: Inngang - Bekreft inngangsvilkår
+    console.log('📋 Steg 1: Inngang - Bekreft inngangsvilkår');
+    await this.klikkBekreftOgFortsett();
+
+    // Steg 2: Bosted - Velg bostedsland
+    console.log('📋 Steg 2: Bosted - Velg bostedsland');
     await this.velgLandRadio(land);
+    await this.klikkBekreftOgFortsett();
 
-    // CRITICAL: Wait for the arbeidsgiver checkbox to be visible on next step
-    // This is the most robust way to prevent race conditions - we wait for the
-    // actual UI element that we need to interact with, not just API responses.
-    await this.klikkBekreftOgFortsett({
-      waitForContent: this.page.getByRole('checkbox', { name: arbeidsgiver })
-    });
+    // Steg 3: Virksomhet - vent på at checkbox blir synlig
+    console.log('📋 Steg 3: Virksomhet - Velg arbeidsgiver');
 
-    // Steg 3: Velg arbeidsgiver (checkbox should already be visible from above wait)
+    // Vent på at Virksomhet-seksjonen er fullstendig lastet med arbeidsgiver-checkbox
+    const arbeidsgiverCheckbox = this.page.getByRole('checkbox', { name: arbeidsgiver });
+    console.log(`⏳ Venter på arbeidsgiver checkbox "${arbeidsgiver}"...`);
+    await arbeidsgiverCheckbox.waitFor({ state: 'visible', timeout: 30000 });
+    console.log('✅ Arbeidsgiver checkbox synlig');
+
     await this.velgArbeidsgiver(arbeidsgiver);
 
     // Wait for "Arbeid utføres i land som er" checkbox on next step
