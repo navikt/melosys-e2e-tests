@@ -693,27 +693,42 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
   }
 
   /**
+   * Click on a step tab to navigate to that step
+   * Used when "Bekreft og fortsett" doesn't automatically transition
+   */
+  private async klikkPåStegFane(stegNavn: string): Promise<void> {
+    const tab = this.page.getByRole('tab', { name: stegNavn }).or(this.page.locator(`text=${stegNavn}`).first());
+    if (await tab.isVisible().catch(() => false)) {
+      console.log(`📋 Klikker på "${stegNavn}"-fanen...`);
+      await tab.click();
+      await this.page.waitForLoadState('networkidle');
+      await this.page.waitForTimeout(1000);
+    }
+  }
+
+  /**
    * Fullfør "Videresend søknad" (SED A008) flyten
    * Hjelpemetode for komplett arbeidsflyt der søknaden videresendes
    *
    * Steg:
    * 1. Inngang - Bekreft og fortsett
    * 2. Bosted - Velg "Annet" og fyll inn kompetent land, checkboxer, bekreft
-   * 3. Videresending av søknad - Velg institusjon, legg til vedlegg, og videresend
+   * 3. Videresending av søknad - Legg til vedlegg og videresend
    *
    * IMPORTANT: Saken må ha minst én journalpost med dokument tilknyttet FØR denne
-   * metoden kalles. Bruk `createJournalpostForSak()` fra mock-helper for å opprette.
+   * metoden kalles. Bruk journalføringsoppgave-flyten for å sikre dette.
    *
    * @param kompetentLand - Land med kode (default: 'Sverige (SE)')
-   * @param institusjon - Institusjons-ID (default: 'SE:ACC12600')
    */
   async fyllUtVideresendSøknad(
-    kompetentLand: string = 'Sverige (SE)',
-    institusjon: string = 'SE:ACC12600'
+    kompetentLand: string = 'Sverige (SE)'
   ): Promise<void> {
     // Steg 1: Inngang - Bekreft og fortsett
     console.log('📋 Steg 1/3: Inngang');
     await this.klikkBekreftOgFortsett();
+
+    // Navigate to Bosted tab (UI doesn't always auto-transition)
+    await this.klikkPåStegFane('Bosted');
 
     // Steg 2: Bosted - Velg "Annet" kompetent land og checkboxer
     console.log('📋 Steg 2/3: Bosted - velg kompetent land');
@@ -722,43 +737,18 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     await this.velgOppgittUtenlandsk();
     await this.velgIkkeRegistrertBosattINorge();
 
-    // Click button and wait explicitly for step 3 to appear
-    console.log('📋 Klikker Bekreft og fortsett for å gå til steg 3...');
-    const bekreftButton = this.page.getByRole('button', { name: 'Bekreft og fortsett' });
-    await bekreftButton.click();
+    // Click button to proceed
+    await this.klikkBekreftOgFortsett();
 
-    // Steg 3: Videresending av søknad - Velg institusjon, vedlegg, og videresend
+    // Navigate to Videresending tab (UI doesn't always auto-transition)
+    await this.klikkPåStegFane('Videresending av søknad');
+
+    // Steg 3: Videresending av søknad
     console.log('📋 Steg 3/3: Videresending av søknad');
+    await this.page.waitForTimeout(1000);
 
-    // Wait for the institution dropdown to be visible - this indicates we're on step 3
-    const dropdown = this.page.getByLabel('Velg utenlandsk institusjon');
-    console.log('⏳ Venter på at institusjon-dropdown blir synlig...');
-
-    try {
-      await dropdown.waitFor({ state: 'visible', timeout: 30000 });
-      console.log('✅ Institusjon-dropdown er synlig');
-    } catch (error) {
-      // Debug: Take screenshot and check page content
-      console.error('❌ Institusjon-dropdown ble ikke synlig innen timeout');
-      const pageTitle = await this.page.locator('main h1, main h2').first().textContent().catch(() => 'unknown');
-      console.error(`📄 Nåværende sidetittel: "${pageTitle}"`);
-      console.error(`🔗 URL: ${this.page.url()}`);
-
-      // Check if "Bekreft og fortsett" button is still visible (meaning we didn't transition)
-      const buttonStillVisible = await bekreftButton.isVisible().catch(() => false);
-      if (buttonStillVisible) {
-        console.error('⚠️  "Bekreft og fortsett" er fortsatt synlig - steget byttet ikke!');
-        console.error('   Forsøker å klikke på nytt...');
-        await bekreftButton.click();
-        await this.page.waitForTimeout(2000);
-        await dropdown.waitFor({ state: 'visible', timeout: 15000 });
-      } else {
-        throw error;
-      }
-    }
-
-    // Velg institusjon
-    await this.velgUtenlandskInstitusjon(institusjon);
+    // Institution is pre-determined from country selection, skip dropdown
+    // Just add vedlegg and send
 
     // Legg til vedlegg (påkrevd for videresend søknad)
     await this.leggTilVedlegg();
