@@ -581,6 +581,35 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
   }
 
   /**
+   * Velg institusjon som skal motta SED
+   * Dropdown-label er dynamisk basert på landet (f.eks. "Velg institusjon i Sverige som skal motta SED")
+   *
+   * @param land - Landnavn for dropdown (f.eks. 'Sverige')
+   * @param institusjon - Institusjons-ID eller visningsnavn (f.eks. 'SE:ACC12600' eller 'Försäkringskassan')
+   */
+  async velgInstitusjonSomSkalMottaSed(land: string, institusjon?: string): Promise<void> {
+    // Dynamic label based on country
+    const dropdown = this.page.getByLabel(`Velg institusjon i ${land} som skal motta SED`);
+    await dropdown.waitFor({ state: 'visible', timeout: 10000 });
+
+    if (institusjon) {
+      // Select specific institution
+      await dropdown.selectOption(institusjon);
+      console.log(`✅ Valgte institusjon: ${institusjon} i ${land}`);
+    } else {
+      // Select first available option (skip "Velg...")
+      const options = await dropdown.locator('option').allTextContents();
+      const validOptions = options.filter(opt => opt !== 'Velg...' && opt.trim() !== '');
+      if (validOptions.length > 0) {
+        await dropdown.selectOption({ label: validOptions[0] });
+        console.log(`✅ Valgte første institusjon: ${validOptions[0]} i ${land}`);
+      } else {
+        throw new Error(`Ingen institusjoner tilgjengelig for ${land}`);
+      }
+    }
+  }
+
+  /**
    * Legg til vedlegg fra "Dokumenter tilknyttet behandlingen"
    *
    * Åpner vedlegg-dialogen og velger et dokument fra listen.

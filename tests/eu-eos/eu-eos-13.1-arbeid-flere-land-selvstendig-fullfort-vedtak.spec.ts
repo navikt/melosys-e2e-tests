@@ -102,8 +102,8 @@ test.describe('EU/EØS 13.1 - Arbeid i flere land (Selvstendig variant)', () => 
     await behandling.fyllInnFritekstTilBegrunnelse('lol');
     await behandling.fyllInnYtterligereInformasjon('foo-bar');
 
-    // Steg 8: Velg SED-dokument (SED A003) via popup
-    // await behandling.velgSedDokument('SED A003');  Dette feiler nå, siden vi ikke har eessi
+    // Steg 8: Velg institusjon som skal motta SED
+    await behandling.velgInstitusjonSomSkalMottaSed('Sverige');
 
     // Steg 9: Fatt vedtak
     await behandling.fattVedtak();
