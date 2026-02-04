@@ -11,7 +11,9 @@ permissions:
 jobs:
   trigger-copilot-analysis:
     runs-on: ubuntu-latest
-    if: github.event.label.name == 'copilot-analyze'
+    if: false  # Disabled: CoPilot integration not working - see docs/copilot-analysis-experiment.md
+    # Original condition (preserved for when re-enabled):
+    # if: github.event.label.name == 'copilot-analyze'
 
     steps:
       - name: Add Copilot analysis comment
