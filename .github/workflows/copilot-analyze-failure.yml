@@ -1,8 +1,10 @@
 name: Copilot Analyze Failure
 
 on:
-  issues:
-    types: [labeled]
+  # Disabled: CoPilot integration not working - see docs/copilot-analysis-experiment.md
+  # issues:
+  #   types: [labeled]
+  workflow_dispatch:  # Manual trigger only
 
 permissions:
   contents: read
@@ -11,8 +13,7 @@ permissions:
 jobs:
   trigger-copilot-analysis:
     runs-on: ubuntu-latest
-    if: false  # Disabled: CoPilot integration not working - see docs/copilot-analysis-experiment.md
-    # Original condition (preserved for when re-enabled):
+    # Original condition (for when issues trigger is re-enabled):
     # if: github.event.label.name == 'copilot-analyze'
 
     steps:
