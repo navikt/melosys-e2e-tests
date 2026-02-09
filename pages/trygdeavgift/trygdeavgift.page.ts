@@ -371,6 +371,34 @@ export class TrygdeavgiftPage extends BasePage {
   }
 
   /**
+   * Fill Skatteforhold fra dato field
+   * This field appears for certain combinations of skattepliktig and inntektskilde
+   * (e.g., skattepliktig=Nei with ARBEIDSINNTEKT)
+   *
+   * @param dato - Date in format DD.MM.YYYY (e.g., "01.10.2025")
+   */
+  async fyllInnSkatteforholdFraDato(dato: string): Promise<void> {
+    const field = this.page.getByRole('textbox', { name: 'Skatteforhold' });
+    await field.waitFor({ state: 'visible', timeout: 5000 });
+    await field.fill(dato);
+    console.log(`✅ Filled Skatteforhold fra dato: ${dato}`);
+  }
+
+  /**
+   * Fill Inntektsperiode fra dato field
+   * This field appears for certain combinations of skattepliktig and inntektskilde
+   * (e.g., skattepliktig=Nei with ARBEIDSINNTEKT)
+   *
+   * @param dato - Date in format DD.MM.YYYY (e.g., "01.10.2025")
+   */
+  async fyllInnInntektsperiodeFraDato(dato: string): Promise<void> {
+    const field = this.page.getByRole('textbox', { name: 'Inntektsperiode' });
+    await field.waitFor({ state: 'visible', timeout: 5000 });
+    await field.fill(dato);
+    console.log(`✅ Filled Inntektsperiode fra dato: ${dato}`);
+  }
+
+  /**
    * Click "Bekreft og fortsett" button
    */
   async klikkBekreftOgFortsett(): Promise<void> {
