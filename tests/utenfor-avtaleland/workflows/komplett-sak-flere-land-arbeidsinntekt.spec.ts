@@ -6,11 +6,14 @@ import {MedlemskapPage} from '../../../pages/behandling/medlemskap.page';
 import {ArbeidsforholdPage} from '../../../pages/behandling/arbeidsforhold.page';
 import {LovvalgPage} from '../../../pages/behandling/lovvalg.page';
 import {ResultatPeriodePage} from '../../../pages/behandling/resultat-periode.page';
+import {BehandlingPage} from '../../../pages/behandling/behandling.page';
 import {TrygdeavgiftPage} from '../../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../../pages/shared/constants';
 import {UnleashHelper} from '../../../helpers/unleash-helper';
 import {TestPeriods} from '../../../helpers/date-helper';
+import {waitForProcessInstances} from '../../../helpers/api-helper';
+import {withFaktureringDatabase} from '../../../helpers/pg-db-helper';
 
 /**
  * Komplett saksflyt for FTRL-sak med flere land og arbeidsinntekt fra Norge
@@ -22,6 +25,8 @@ import {TestPeriods} from '../../../helpers/date-helper';
  * - Trygdeavgift: Ikke-skattepliktig, arbeidsinntekt fra Norge
  *   inkludert skatteforhold og inntektsperiode datoer
  * - Vedtak: Fullføring av saksflyt
+ * - Faktura: Sett alle rader til BESTILT
+ * - Nyvurdering: Endre skattestatus til skattepliktig
  */
 test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
     test('skal fullføre sak med flere land, ikke-skattepliktig og arbeidsinntekt fra Norge', async ({
@@ -41,6 +46,7 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         const arbeidsforhold = new ArbeidsforholdPage(page);
         const lovvalg = new LovvalgPage(page);
         const resultatPeriode = new ResultatPeriodePage(page);
+        const behandling = new BehandlingPage(page);
         const trygdeavgift = new TrygdeavgiftPage(page);
         const vedtak = new VedtakPage(page);
 
@@ -92,6 +98,39 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         // Step 8: Vedtak
         console.log('Step 8: Making decision...');
         await vedtak.klikkFattVedtak();
+
+        // Step 9: Wait for processes and set faktura to BESTILT
+        console.log('Step 9: Waiting for processes and updating faktura...');
+        await waitForProcessInstances(page.request, 30);
+
+        await withFaktureringDatabase(async (db) => {
+            const updated = await db.execute("UPDATE faktura SET status = 'BESTILT'");
+            console.log(`Updated ${updated} faktura rows to BESTILT`);
+        });
+
+        // Step 10: Create nyvurdering - endre skattestatus til skattepliktig
+        console.log('Step 10: Creating nyvurdering...');
+        await hovedside.klikkOpprettNySak();
+        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
+
+        console.log('Step 11: Waiting for behandling creation...');
+        await waitForProcessInstances(page.request, 30);
+
+        // Step 12: Open the new active behandling
+        console.log('Step 12: Opening new behandling...');
+        await hovedside.goto();
+        await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).first().click();
+
+        // Step 13: Navigate to Trygdeavgift and change skattepliktig to Ja
+        console.log('Step 13: Changing skattepliktig to Ja...');
+        await behandling.gåTilTrygdeavgift();
+        await trygdeavgift.velgSkattepliktig(true);
+        await trygdeavgift.klikkBekreftOgFortsett();
+
+        // Step 14: Fatt vedtak for nyvurdering
+        console.log('Step 14: Submitting vedtak for nyvurdering...');
+        await page.waitForLoadState('networkidle');
+        await vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING');
 
         console.log('Workflow completed successfully!');
     });
