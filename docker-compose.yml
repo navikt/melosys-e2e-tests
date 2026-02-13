@@ -450,6 +450,7 @@ services:
       - mock-oauth2-server-sts
       - melosys-mock
       - postgres
+      - unleash
     ports:
       - "8081:8081"
     environment:
@@ -515,7 +516,8 @@ services:
       # Cron job (disabled - run only Jan 1 at 00:00)
       CRON_JOB_LUKK_BUC: "0 0 0 1 1 *"
       # Unleash
-      UNLEASH_SERVER_API_TOKEN: fake
+      UNLEASH_SERVER_API_URL: "http://unleash.melosys.docker-internal:4242"
+      UNLEASH_SERVER_API_TOKEN: "*:development.unleash-insecure-client-api-token"
     networks:
       melosys.docker-internal:
         aliases:
