@@ -158,6 +158,8 @@ export interface CreateJfrOppgaveOptions {
   medVedlegg?: boolean;
   /** Assigned resource/user ID (default: Z990693 - testuser) */
   tilordnetRessurs?: string;
+  /** Fødselsnummer for bruker. If not set, uses first person in PersonRepo */
+  brukerIdent?: string;
 }
 
 /**
@@ -181,13 +183,17 @@ export async function createJournalforingOppgaver(
   request: APIRequestContext,
   options: CreateJfrOppgaveOptions = {}
 ): Promise<boolean> {
-  const payload = {
+  const payload: Record<string, unknown> = {
     antall: options.antall ?? 1,
     forVirksomhet: options.forVirksomhet ?? false,
     medLogiskVedlegg: options.medLogiskVedlegg ?? false,
     medVedlegg: options.medVedlegg ?? false,
     tilordnetRessurs: options.tilordnetRessurs ?? 'Z990693', // testuser
   };
+
+  if (options.brukerIdent) {
+    payload.brukerIdent = options.brukerIdent;
+  }
 
   try {
     const response = await request.post('http://localhost:8083/testdata/jfr-oppgave', {
