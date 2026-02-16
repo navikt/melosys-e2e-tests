@@ -125,7 +125,11 @@ export class JournalforingPage extends BasePage {
     // Try dropdown first
     const hasDropdown = await this.saksnummerDropdown.isVisible().catch(() => false);
     if (hasDropdown) {
-      await this.saksnummerDropdown.selectOption({ label: new RegExp(saksnr) });
+      const options = await this.saksnummerDropdown.locator('option').allTextContents();
+      const match = options.find(o => o.includes(saksnr));
+      if (match) {
+        await this.saksnummerDropdown.selectOption({ label: match });
+      }
       return;
     }
 

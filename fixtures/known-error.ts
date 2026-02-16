@@ -24,7 +24,7 @@ import { test as base } from '@playwright/test';
  * });
  * ```
  */
-export const test = base.extend({
+export const test = base.extend<{ autoTestFixture: void }>({
   // Auto-detect @known-error tag in test title
   autoTestFixture: [async ({}, use, testInfo) => {
     // Check if test title contains @known-error tag (case-insensitive)

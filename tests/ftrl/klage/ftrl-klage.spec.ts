@@ -131,7 +131,11 @@ test.describe('FTRL Klage', () => {
     if (hasBehandlingstype) {
       // Select KLAGE if available
       try {
-        await behandlingstypeDropdown.selectOption({ label: /Klage/i });
+        const options = await behandlingstypeDropdown.locator('option').allTextContents();
+        const klageOption = options.find(o => /Klage/i.test(o));
+        if (klageOption) {
+          await behandlingstypeDropdown.selectOption({ label: klageOption });
+        }
         console.log('   Selected KLAGE behandlingstype');
       } catch {
         console.log('   KLAGE option not available in dropdown');

@@ -158,7 +158,7 @@ export class DatabaseHelper {
           }
         } catch (error) {
           if (!silent) {
-            console.log(`⚠️  Could not clean ${tableName}: ${error.message || error}`);
+            console.log(`⚠️  Could not clean ${tableName}: ${(error as Error).message || error}`);
           }
         }
       }
@@ -233,7 +233,7 @@ export class DatabaseHelper {
           tablesWithData.push({ name: tableName, count: count });
         }
       } catch (error) {
-        console.log(`⚠️  Could not query ${tableName}: ${error.message || error}`);
+        console.log(`⚠️  Could not query ${tableName}: ${(error as Error).message || error}`);
       }
     }
 
