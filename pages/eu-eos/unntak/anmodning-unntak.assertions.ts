@@ -69,8 +69,8 @@ export class AnmodningUnntakAssertions {
    * Verify exception period is set
    */
   async verifiserPeriodeValgt(fra: string, til: string): Promise<void> {
-    const fraElement = this.page.getByDisplayValue(fra);
-    const tilElement = this.page.getByDisplayValue(til);
+    const fraElement = this.page.locator(`input[value="${fra}"]`);
+    const tilElement = this.page.locator(`input[value="${til}"]`);
 
     await expect(fraElement).toBeVisible({ timeout: 5000 }).catch(() => {
       console.log('Note: Fra date field not visible');

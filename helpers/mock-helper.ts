@@ -125,7 +125,7 @@ export async function clearMockData(request: APIRequestContext): Promise<MockCle
 
     return data;
   } catch (error) {
-    console.log(`⚠️  Could not clear mock data: ${error.message || error}`);
+    console.log(`⚠️  Could not clear mock data: ${(error as Error).message || error}`);
     throw error;
   }
 }

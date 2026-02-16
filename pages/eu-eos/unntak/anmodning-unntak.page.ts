@@ -115,7 +115,11 @@ export class AnmodningUnntakPage extends BasePage {
     const hasDropdown = await this.landDropdown.isVisible().catch(() => false);
 
     if (hasDropdown) {
-      await this.landDropdown.selectOption({ label: new RegExp(land, 'i') });
+      const options = await this.landDropdown.locator('option').allTextContents();
+      const match = options.find(o => new RegExp(land, 'i').test(o));
+      if (match) {
+        await this.landDropdown.selectOption({ label: match });
+      }
     } else {
       // Try input field
       const hasInput = await this.mottakerLandInput.isVisible().catch(() => false);
@@ -138,7 +142,11 @@ export class AnmodningUnntakPage extends BasePage {
 
     if (hasDropdown) {
       await this.waitForDropdownToPopulate(this.institusjonDropdown);
-      await this.institusjonDropdown.selectOption({ label: new RegExp(institusjon, 'i') });
+      const options = await this.institusjonDropdown.locator('option').allTextContents();
+      const match = options.find(o => new RegExp(institusjon, 'i').test(o));
+      if (match) {
+        await this.institusjonDropdown.selectOption({ label: match });
+      }
       console.log(`✅ Selected institution: ${institusjon}`);
     } else {
       console.log('ℹ️ Institution dropdown not visible');

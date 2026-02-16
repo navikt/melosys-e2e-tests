@@ -8,7 +8,7 @@
     "strict": true,
     "skipLibCheck": true,
     "resolveJsonModule": true,
-    "types": ["node", "@playwright/test", "vitest/globals"]
+    "types": ["node", "@playwright/test"]
   },
   "include": [
     "tests/**/*",
@@ -17,7 +17,8 @@
     "reporters/**/*",
     "scripts/**/*",
     "fixtures/**/*",
-    "pages/**/*"
+    "pages/**/*",
+    "types.d.ts"
   ],
   "exclude": ["node_modules"]
 }

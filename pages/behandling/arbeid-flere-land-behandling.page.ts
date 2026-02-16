@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import { Page, type Response as PlaywrightResponse } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 import { ArbeidFlereLandBehandlingAssertions } from './arbeid-flere-land-behandling.assertions';
 
@@ -98,7 +98,7 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     let employerApiCalled = false;
     const employerApis: string[] = [];
 
-    const apiListener = (response: Response) => {
+    const apiListener = (response: PlaywrightResponse) => {
       const responseUrl = response.url();
       // Monitor for potential employer list endpoints
       if (responseUrl.includes('/arbeidsforhold') ||
