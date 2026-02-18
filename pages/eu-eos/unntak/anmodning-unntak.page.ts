@@ -47,10 +47,11 @@ export class AnmodningUnntakPage extends BasePage {
   private readonly lagreButton = this.page.getByRole('button', { name: /Lagre/i });
 
   // Send brevene form (within behandling flow)
+  // Note: Scoped to the section containing "Send brevene" to avoid strict mode violations
+  // when "Legg til begrunnelse" appears multiple times (e.g., via full behandling path)
   private readonly artikkelDropdown = this.page.getByLabel('Artikkelen det søkes unntak');
-  private readonly begrunnelseDropdown = this.page.getByLabel('Legg til begrunnelse');
-  private readonly ytterligereInfoField = this.page.getByRole('textbox', { name: 'Ytterligere informasjon til' });
   private readonly sendBreveneButton = this.page.getByRole('button', { name: 'Send brevene' });
+  private readonly ytterligereInfoField = this.page.getByRole('textbox', { name: 'Ytterligere informasjon til' });
 
   // Status/Result
   private readonly anmodningStatusText = this.page.locator('[class*="status"], [data-testid*="status"]');
@@ -244,7 +245,10 @@ export class AnmodningUnntakPage extends BasePage {
    * @param begrunnelse - Justification value (e.g., 'KORTVARIG_PERIODE_RETUR_NORSK_AG')
    */
   async velgBegrunnelseDropdown(begrunnelse: string): Promise<void> {
-    await this.begrunnelseDropdown.selectOption(begrunnelse);
+    // Use .last() to pick the unntak form's dropdown when multiple
+    // "Legg til begrunnelse" exist (e.g., via full behandling path has two)
+    const begrunnelseDropdown = this.page.getByLabel('Legg til begrunnelse').last();
+    await begrunnelseDropdown.selectOption(begrunnelse);
     console.log(`✅ Valgte begrunnelse: ${begrunnelse}`);
   }
 

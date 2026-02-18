@@ -393,6 +393,29 @@ export class EuEosBehandlingPage extends BasePage {
   }
 
   /**
+   * Velg "Nei, jeg vil vurdere" radio-knapp
+   * Brukes for å vurdere saken videre (fører til begrunnelse-steg)
+   */
+  async velgNeiVilVurdere(): Promise<void> {
+    const radio = this.page.getByRole('radio', { name: 'Nei, jeg vil vurdere' });
+    await radio.waitFor({ state: 'visible' });
+    await radio.check();
+    console.log('✅ Valgte: Nei, jeg vil vurdere');
+  }
+
+  /**
+   * Legg til begrunnelse for vurdering (combobox + "Legg til" knapp)
+   * @param tekst - Begrunnelsestekst (f.eks. 'Erstatter en annen utsendt person...')
+   */
+  async leggTilBegrunnelseForVurdering(tekst: string): Promise<void> {
+    const combobox = this.page.getByRole('combobox', { name: 'Legg til begrunnelse for at' });
+    await combobox.click();
+    await combobox.fill(tekst);
+    await this.page.getByRole('button', { name: 'Legg til' }).click();
+    console.log(`✅ La til begrunnelse: ${tekst.substring(0, 50)}...`);
+  }
+
+  /**
    * Klikk "Bekreft og fortsett" knapp
    * Venter på at siden er klar etter navigasjon
    *

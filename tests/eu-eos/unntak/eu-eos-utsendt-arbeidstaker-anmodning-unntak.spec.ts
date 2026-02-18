@@ -17,27 +17,25 @@ import {
 /**
  * EU/EØS Utsendt arbeidstaker - Anmodning om unntak via behandlingsflyt
  *
- * Tester full arbeidsflyt:
- * 1. Opprett EU/EØS sak med "Utsendt arbeidstaker"
- * 2. Naviger til sak og gå gjennom behandlingssteg
- * 3. Velg "Yrkesaktiv, direkte til" for å gå rett til unntak
- * 4. Velg arbeidsgiver
- * 5. Fyll ut unntak-skjema og send brevene
+ * To varianter:
+ * 1. "Direkte til" - Velg "Yrkesaktiv, direkte til" som hopper rett til unntak
+ * 2. "Via full behandling" - Gå gjennom alle behandlingssteg, velg "Nei, jeg vil
+ *    vurdere" med begrunnelse, deretter send unntak-brevene
  */
 test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
 
-  test('skal opprette sak og sende anmodning om unntak via behandlingsflyt', async ({ page }) => {
-    test.setTimeout(120000);
-
+  /**
+   * Helper: Opprett EU/EØS sak og naviger til behandling
+   */
+  async function opprettSakOgNavigerTilBehandling(page: any) {
     const auth = new AuthHelper(page);
     await auth.login();
 
     const hovedside = new HovedsidePage(page);
     const opprettSak = new OpprettNySakPage(page);
     const behandling = new EuEosBehandlingPage(page);
-    const unntak = new AnmodningUnntakPage(page);
 
-    // === STEG 1: Opprett EU/EØS sak med "Utsendt arbeidstaker" ===
+    // Opprett EU/EØS sak med "Utsendt arbeidstaker"
     console.log('Steg 1: Oppretter EU/EØS sak');
     await hovedside.goto();
     await hovedside.klikkOpprettNySak();
@@ -59,31 +57,83 @@ test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
     await waitForProcessInstances(page.request, 30);
     await hovedside.goto();
 
-    // === STEG 3: Naviger til behandling ===
+    // Naviger til behandling
     console.log('Steg 3: Navigerer til behandling');
     await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).click();
     await page.waitForLoadState('networkidle');
 
-    // === STEG 4: Bekreft inngangsvilkår ===
+    // Bekreft inngangsvilkår
     console.log('Steg 4: Bekrefter inngangsvilkår');
     await behandling.klikkBekreftOgFortsett();
 
-    // === STEG 5: Velg yrkesaktiv, direkte til ===
+    return { hovedside, opprettSak, behandling };
+  }
+
+  test('direkte til - skal sende anmodning om unntak', async ({ page }) => {
+    test.setTimeout(120000);
+
+    const { behandling } = await opprettSakOgNavigerTilBehandling(page);
+    const unntak = new AnmodningUnntakPage(page);
+
+    // === Velg yrkesaktiv, direkte til ===
     console.log('Steg 5: Velger yrkesaktiv, direkte til');
     await behandling.velgYrkesaktiv();
     await behandling.velgYrkesaktivDirekteTil();
     await behandling.klikkBekreftOgFortsett();
 
-    // === STEG 6: Velg arbeidsgiver ===
+    // === Velg arbeidsgiver ===
     console.log('Steg 6: Velger arbeidsgiver');
     await behandling.velgArbeidsgiverOgFortsett('Ståles Stål AS');
 
-    // === STEG 7: Fyll ut og send brevene ===
+    // === Fyll ut og send brevene ===
     console.log('Steg 7: Fyller ut unntak og sender brevene');
     await unntak.fyllUtOgSendBrevene({
       artikkel: 'FO_883_2004_ART11_3A',
       begrunnelse: 'KORTVARIG_PERIODE_RETUR_NORSK_AG',
-      ytterligereInfo: 'E2E test - anmodning om unntak',
+      ytterligereInfo: 'E2E test - direkte til unntak',
+    });
+  });
+
+  test('via full behandling - skal sende anmodning om unntak', async ({ page }) => {
+    test.setTimeout(120000);
+
+    const { behandling } = await opprettSakOgNavigerTilBehandling(page);
+    const unntak = new AnmodningUnntakPage(page);
+
+    // === Velg yrkesaktiv (uten "direkte til") ===
+    console.log('Steg 5: Velger yrkesaktiv');
+    await behandling.velgYrkesaktiv();
+    await behandling.klikkBekreftOgFortsett();
+
+    // === Velg arbeidsgiver ===
+    console.log('Steg 6: Velger arbeidsgiver');
+    await behandling.velgArbeidsgiverOgFortsett('Ståles Stål AS');
+
+    // === Velg lønnet arbeid ===
+    console.log('Steg 7: Velger lønnet arbeid');
+    await behandling.velgArbeidstype(true);
+
+    // === Svar Ja på to spørsmål ===
+    console.log('Steg 8: Svarer Ja på spørsmål');
+    await behandling.svarJaOgFortsett();
+    await behandling.svarJaOgFortsett();
+
+    // === Velg "Nei, jeg vil vurdere" med begrunnelse ===
+    console.log('Steg 9: Velger nei, vil vurdere med begrunnelse');
+    await behandling.velgNeiVilVurdere();
+    await behandling.leggTilBegrunnelseForVurdering(
+      'Erstatter en annen utsendt person, samlet periode over 24 md.'
+    );
+    await behandling.klikkBekreftOgFortsett();
+
+    // Rammeavtale om fjernarbeid (TWFA) 
+
+    // === Fyll ut og send brevene ===
+    console.log('Steg 10: Fyller ut unntak og sender brevene');
+    await unntak.fyllUtOgSendBrevene({
+      artikkel: 'FO_883_2004_ART11_3A',
+      begrunnelse: 'ERSTATTER_EN_ANNEN_UNDER_5_AAR',
+      ytterligereInfo: 'E2E test - via full behandling',
     });
   });
 });
