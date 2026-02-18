@@ -278,8 +278,12 @@ export class AnmodningUnntakPage extends BasePage {
     artikkel: string;
     begrunnelse: string;
     ytterligereInfo?: string;
+    twfa?: boolean;
   }): Promise<void> {
     await this.velgArtikkelForUnntak(config.artikkel);
+    if (config.twfa) {
+      await this.hukAvTWFA();
+    }
     await this.velgBegrunnelseDropdown(config.begrunnelse);
     if (config.ytterligereInfo) {
       await this.fyllYtterligereInformasjon(config.ytterligereInfo);
