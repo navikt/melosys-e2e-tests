@@ -17,9 +17,10 @@ import {
 /**
  * EU/EØS Utsendt arbeidstaker - Anmodning om unntak via behandlingsflyt
  *
- * To varianter:
- * 1. "Direkte til" - Velg "Yrkesaktiv, direkte til" som hopper rett til unntak
- * 2. "Via full behandling" - Gå gjennom alle behandlingssteg, velg "Nei, jeg vil
+ * Tre varianter:
+ * 1. "Direkte til art.11(3)(a)" - Velg "Yrkesaktiv, direkte til", artikkel 11(3)(a)
+ * 2. "Direkte til art.13(1)(a)" - Velg "Yrkesaktiv, direkte til", artikkel 13(1)(a)
+ * 3. "Via full behandling" - Gå gjennom alle behandlingssteg, velg "Nei, jeg vil
  *    vurdere" med begrunnelse, deretter send unntak-brevene
  */
 test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
@@ -94,6 +95,31 @@ test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
     });
   });
 
+  test('direkte til art.13(1)(a) - skal sende anmodning om unntak', async ({ page }) => {
+    test.setTimeout(120000);
+
+    const { behandling } = await opprettSakOgNavigerTilBehandling(page);
+    const unntak = new AnmodningUnntakPage(page);
+    
+    // === Velg yrkesaktiv, direkte til ===
+    console.log('Steg 5: Velger yrkesaktiv, direkte til');
+    await behandling.velgYrkesaktiv();
+    await behandling.velgYrkesaktivDirekteTil();
+    await behandling.klikkBekreftOgFortsett();
+
+    // === Velg arbeidsgiver ===
+    console.log('Steg 6: Velger arbeidsgiver');
+    await behandling.velgArbeidsgiverOgFortsett('Ståles Stål AS');
+
+    // === Fyll ut og send brevene ===
+    console.log('Steg 7: Fyller ut unntak og sender brevene');
+    await unntak.fyllUtOgSendBrevene({
+      artikkel: 'FO_883_2004_ART13_1A',
+      begrunnelse: 'DELTIDSARBEID_I_UTLANDET_MOTTAR_AAP',
+      ytterligereInfo: 'E2E test - direkte til art.13(1)(a)',
+    });
+  });
+
   test('via full behandling - skal sende anmodning om unntak', async ({ page }) => {
     test.setTimeout(120000);
 
@@ -126,7 +152,7 @@ test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
     );
     await behandling.klikkBekreftOgFortsett();
 
-    // Rammeavtale om fjernarbeid (TWFA) 
+    // Rammeavtale om fjernarbeid (TWFA) - en med og uten
 
     // === Fyll ut og send brevene ===
     console.log('Steg 10: Fyller ut unntak og sender brevene');
