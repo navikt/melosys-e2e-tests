@@ -50,6 +50,10 @@ export class EuEosBehandlingPage extends BasePage {
     exact: true
   });
 
+  private readonly yrkesaktivDirekteTilRadio = this.page.getByRole('radio', {
+    name: 'Yrkesaktiv, direkte til'
+  });
+
   private readonly selvstendigRadio = this.page.getByRole('radio', {
     name: 'Selvstendig',
     exact: true
@@ -226,6 +230,16 @@ export class EuEosBehandlingPage extends BasePage {
     await this.yrkesaktivRadio.waitFor({ state: 'visible' });
     await this.yrkesaktivRadio.check();
     console.log('✅ Valgte: Yrkesaktiv');
+  }
+
+  /**
+   * Velg "Yrkesaktiv, direkte til" radio-knapp
+   * Brukes for utsendt arbeidstaker der man går direkte til unntak/brev-steg
+   */
+  async velgYrkesaktivDirekteTil(): Promise<void> {
+    await this.yrkesaktivDirekteTilRadio.waitFor({ state: 'visible' });
+    await this.yrkesaktivDirekteTilRadio.check();
+    console.log('✅ Valgte: Yrkesaktiv, direkte til');
   }
 
   /**

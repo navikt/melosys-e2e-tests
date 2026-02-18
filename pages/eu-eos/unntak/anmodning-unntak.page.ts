@@ -46,6 +46,12 @@ export class AnmodningUnntakPage extends BasePage {
   private readonly bekreftOgFortsettButton = this.page.getByRole('button', { name: /Bekreft og fortsett/i });
   private readonly lagreButton = this.page.getByRole('button', { name: /Lagre/i });
 
+  // Send brevene form (within behandling flow)
+  private readonly artikkelDropdown = this.page.getByLabel('Artikkelen det søkes unntak');
+  private readonly begrunnelseDropdown = this.page.getByLabel('Legg til begrunnelse');
+  private readonly ytterligereInfoField = this.page.getByRole('textbox', { name: 'Ytterligere informasjon til' });
+  private readonly sendBreveneButton = this.page.getByRole('button', { name: 'Send brevene' });
+
   // Status/Result
   private readonly anmodningStatusText = this.page.locator('[class*="status"], [data-testid*="status"]');
 
@@ -171,6 +177,16 @@ export class AnmodningUnntakPage extends BasePage {
   }
 
   /**
+   * Check the TWFA (Rammeavtale om fjernarbeid) checkbox.
+   * Only visible when CDM 4.4 toggle is enabled and article 13(1)(a) is selected.
+   */
+  async hukAvTWFA(): Promise<void> {
+    const twfaCheckbox = this.page.getByRole('checkbox', { name: /Rammeavtale om fjernarbeid|TWFA/i });
+    await twfaCheckbox.check();
+    console.log('✅ Checked TWFA checkbox');
+  }
+
+  /**
    * Complete workflow: Send Article 16 exception request
    */
   async sendArtikkel16Anmodning(config: {
@@ -178,12 +194,18 @@ export class AnmodningUnntakPage extends BasePage {
     begrunnelse: string;
     mottakerLand: string;
     institusjon?: string;
+    erFjernarbeidTWFA?: boolean;
   }): Promise<void> {
     if (config.periode) {
       await this.velgPeriode(config.periode.fra, config.periode.til);
     }
 
     await this.fyllBegrunnelse(config.begrunnelse);
+
+    if (config.erFjernarbeidTWFA) {
+      await this.hukAvTWFA();
+    }
+
     await this.velgMottakerLand(config.mottakerLand);
 
     if (config.institusjon) {
@@ -206,6 +228,59 @@ export class AnmodningUnntakPage extends BasePage {
     ]).catch(() => {
       console.log('ℹ️ Standard form elements not found - page structure may differ');
     });
+  }
+
+  /**
+   * Select the article for exception request (within behandling flow)
+   * @param artikkel - Article value (e.g., 'FO_883_2004_ART11_3A')
+   */
+  async velgArtikkelForUnntak(artikkel: string): Promise<void> {
+    await this.artikkelDropdown.selectOption(artikkel);
+    console.log(`✅ Valgte artikkel for unntak: ${artikkel}`);
+  }
+
+  /**
+   * Select justification from dropdown (within behandling flow)
+   * @param begrunnelse - Justification value (e.g., 'KORTVARIG_PERIODE_RETUR_NORSK_AG')
+   */
+  async velgBegrunnelseDropdown(begrunnelse: string): Promise<void> {
+    await this.begrunnelseDropdown.selectOption(begrunnelse);
+    console.log(`✅ Valgte begrunnelse: ${begrunnelse}`);
+  }
+
+  /**
+   * Fill in additional information text field
+   * @param tekst - Additional information text
+   */
+  async fyllYtterligereInformasjon(tekst: string): Promise<void> {
+    await this.ytterligereInfoField.click();
+    await this.ytterligereInfoField.fill(tekst);
+    console.log(`✅ Fylte inn ytterligere informasjon`);
+  }
+
+  /**
+   * Click "Send brevene" button to submit the exception request
+   */
+  async klikkSendBrevene(): Promise<void> {
+    await this.sendBreveneButton.click();
+    await this.page.waitForLoadState('networkidle');
+    console.log(`✅ Klikket "Send brevene"`);
+  }
+
+  /**
+   * Complete the "Send brevene" form within the behandling flow
+   */
+  async fyllUtOgSendBrevene(config: {
+    artikkel: string;
+    begrunnelse: string;
+    ytterligereInfo?: string;
+  }): Promise<void> {
+    await this.velgArtikkelForUnntak(config.artikkel);
+    await this.velgBegrunnelseDropdown(config.begrunnelse);
+    if (config.ytterligereInfo) {
+      await this.fyllYtterligereInformasjon(config.ytterligereInfo);
+    }
+    await this.klikkSendBrevene();
   }
 
   /**
