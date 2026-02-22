@@ -274,9 +274,10 @@ export class AnmodningUnntakPage extends BasePage {
   }
 
   /**
-   * Complete the "Send brevene" form within the behandling flow
+   * Fill the "Send brevene" form WITHOUT clicking Send.
+   * Use this when you need to take a SED snapshot before sending.
    */
-  async fyllUtOgSendBrevene(config: {
+  async fyllUtBrevSkjema(config: {
     artikkel: string;
     begrunnelse: string;
     ytterligereInfo?: string;
@@ -290,6 +291,18 @@ export class AnmodningUnntakPage extends BasePage {
     if (config.ytterligereInfo) {
       await this.fyllYtterligereInformasjon(config.ytterligereInfo);
     }
+  }
+
+  /**
+   * Complete the "Send brevene" form within the behandling flow
+   */
+  async fyllUtOgSendBrevene(config: {
+    artikkel: string;
+    begrunnelse: string;
+    ytterligereInfo?: string;
+    twfa?: boolean;
+  }): Promise<void> {
+    await this.fyllUtBrevSkjema(config);
     await this.klikkSendBrevene();
   }
 

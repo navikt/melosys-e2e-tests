@@ -6,6 +6,7 @@ import { EuEosBehandlingPage } from '../../../pages/behandling/eu-eos-behandling
 import { AnmodningUnntakPage } from '../../../pages/eu-eos/unntak/anmodning-unntak.page';
 import { waitForProcessInstances } from '../../../helpers/api-helper';
 import { UnleashHelper } from '../../../helpers/unleash-helper';
+import { fetchStoredSedDocuments, findNewNavFormatSed } from '../../../helpers/mock-helper';
 import {
   USER_ID_VALID,
   SAKSTYPER,
@@ -18,12 +19,14 @@ import {
 /**
  * EU/EØS Utsendt arbeidstaker - Anmodning om unntak via behandlingsflyt
  *
- * Fire varianter:
- * 1. "Direkte til art.11(3)(a)" - Velg "Yrkesaktiv, direkte til", artikkel 11(3)(a)
- * 2. "Direkte til art.13(1)(a)" - Velg "Yrkesaktiv, direkte til", artikkel 13(1)(a)
- * 3. "Direkte til art.13(1)(a) med TWFA" - Som #2, men med Rammeavtale om fjernarbeid
- * 4. "Via full behandling" - Gå gjennom alle behandlingssteg, velg "Nei, jeg vil
- *    vurdere" med begrunnelse, deretter send unntak-brevene
+ * Fem varianter:
+ * 1. "Direkte til art.11(3)(a)" - CDM 4.4, artikkel 11(3)(a)
+ * 2. "Direkte til art.13(1)(a)" - CDM 4.4, artikkel 13(1)(a)
+ * 3. "Direkte til art.13(1)(a) med TWFA" - CDM 4.4, med Rammeavtale om fjernarbeid
+ * 4. "Via full behandling" - CDM 4.4, gjennom alle behandlingssteg
+ * 5. "Direkte til CDM 4.3" - CDM 4.3 (toggle av), artikkel 11(3)(a)
+ *
+ * Alle varianter verifiserer SED A001-innhold fra RINA-mock.
  */
 test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
 
@@ -72,8 +75,12 @@ test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
     return { hovedside, opprettSak, behandling };
   }
 
-  test('direkte til - skal sende anmodning om unntak', async ({ page }) => {
+  test('direkte til - skal sende anmodning om unntak', async ({ page, request }) => {
     test.setTimeout(120000);
+
+    // Eksplisitt CDM 4.4
+    const unleash = new UnleashHelper(request);
+    await unleash.enableFeature('melosys.cdm-4-4');
 
     const { behandling } = await opprettSakOgNavigerTilBehandling(page);
     const unntak = new AnmodningUnntakPage(page);
@@ -88,17 +95,32 @@ test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
     console.log('Steg 6: Velger arbeidsgiver');
     await behandling.velgArbeidsgiverOgFortsett('Ståles Stål AS');
 
-    // === Fyll ut og send brevene ===
+    // === Fyll ut brevskjema, snapshot, send ===
     console.log('Steg 7: Fyller ut unntak og sender brevene');
-    await unntak.fyllUtOgSendBrevene({
+    await unntak.fyllUtBrevSkjema({
       artikkel: 'FO_883_2004_ART11_3A',
       begrunnelse: 'KORTVARIG_PERIODE_RETUR_NORSK_AG',
       ytterligereInfo: 'E2E test - direkte til unntak',
     });
+
+    const docsBefore = await fetchStoredSedDocuments(request, 'A001');
+    await unntak.klikkSendBrevene();
+
+    // === Verifiser SED A001 ===
+    const sedContent = await findNewNavFormatSed(request, 'A001', docsBefore);
+    console.log(`SED A001 innhold: ${JSON.stringify(sedContent, null, 2)}`);
+
+    expect(sedContent.sed).toBe('A001');
+    expect(sedContent.sedVer).toBe('4');
+    expect(sedContent.sedGVer).toBe('4');
   });
 
-  test('direkte til art.13(1)(a) - skal sende anmodning om unntak', async ({ page }) => {
+  test('direkte til art.13(1)(a) - skal sende anmodning om unntak', async ({ page, request }) => {
     test.setTimeout(120000);
+
+    // Eksplisitt CDM 4.4
+    const unleash = new UnleashHelper(request);
+    await unleash.enableFeature('melosys.cdm-4-4');
 
     const { behandling } = await opprettSakOgNavigerTilBehandling(page);
     const unntak = new AnmodningUnntakPage(page);
@@ -113,13 +135,24 @@ test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
     console.log('Steg 6: Velger arbeidsgiver');
     await behandling.velgArbeidsgiverOgFortsett('Ståles Stål AS');
 
-    // === Fyll ut og send brevene ===
+    // === Fyll ut brevskjema, snapshot, send ===
     console.log('Steg 7: Fyller ut unntak og sender brevene');
-    await unntak.fyllUtOgSendBrevene({
+    await unntak.fyllUtBrevSkjema({
       artikkel: 'FO_883_2004_ART13_1A',
       begrunnelse: 'DELTIDSARBEID_I_UTLANDET_MOTTAR_AAP',
       ytterligereInfo: 'E2E test - direkte til art.13(1)(a)',
     });
+
+    const docsBefore = await fetchStoredSedDocuments(request, 'A001');
+    await unntak.klikkSendBrevene();
+
+    // === Verifiser SED A001 ===
+    const sedContent = await findNewNavFormatSed(request, 'A001', docsBefore);
+    console.log(`SED A001 innhold: ${JSON.stringify(sedContent, null, 2)}`);
+
+    expect(sedContent.sed).toBe('A001');
+    expect(sedContent.sedVer).toBe('4');
+    expect(sedContent.sedGVer).toBe('4');
   });
 
   test('direkte til art.13(1)(a) med TWFA - skal sende anmodning om unntak', async ({ page, request }) => {
@@ -142,18 +175,33 @@ test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
     console.log('Steg 6: Velger arbeidsgiver');
     await behandling.velgArbeidsgiverOgFortsett('Ståles Stål AS');
 
-    // === Fyll ut med TWFA og send brevene ===
+    // === Fyll ut med TWFA, snapshot, send ===
     console.log('Steg 7: Fyller ut unntak med TWFA og sender brevene');
-    await unntak.fyllUtOgSendBrevene({
+    await unntak.fyllUtBrevSkjema({
       artikkel: 'FO_883_2004_ART13_1A',
       twfa: true,
       begrunnelse: 'HJEMMEKONTOR_MEDFOELGENDE',
       ytterligereInfo: 'E2E test - direkte til art.13(1)(a) med TWFA',
     });
+
+    const docsBefore = await fetchStoredSedDocuments(request, 'A001');
+    await unntak.klikkSendBrevene();
+
+    // === Verifiser SED A001 ===
+    const sedContent = await findNewNavFormatSed(request, 'A001', docsBefore);
+    console.log(`SED A001 innhold: ${JSON.stringify(sedContent, null, 2)}`);
+
+    expect(sedContent.sed).toBe('A001');
+    expect(sedContent.sedVer).toBe('4');
+    expect(sedContent.sedGVer).toBe('4');
   });
 
-  test('via full behandling - skal sende anmodning om unntak', async ({ page }) => {
+  test('via full behandling - skal sende anmodning om unntak', async ({ page, request }) => {
     test.setTimeout(120000);
+
+    // Eksplisitt CDM 4.4
+    const unleash = new UnleashHelper(request);
+    await unleash.enableFeature('melosys.cdm-4-4');
 
     const { behandling } = await opprettSakOgNavigerTilBehandling(page);
     const unntak = new AnmodningUnntakPage(page);
@@ -184,14 +232,63 @@ test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
     );
     await behandling.klikkBekreftOgFortsett();
 
-    // Rammeavtale om fjernarbeid (TWFA) - en med og uten
-
-    // === Fyll ut og send brevene ===
+    // === Fyll ut brevskjema, snapshot, send ===
     console.log('Steg 10: Fyller ut unntak og sender brevene');
-    await unntak.fyllUtOgSendBrevene({
+    await unntak.fyllUtBrevSkjema({
       artikkel: 'FO_883_2004_ART11_3A',
       begrunnelse: 'ERSTATTER_EN_ANNEN_UNDER_5_AAR',
       ytterligereInfo: 'E2E test - via full behandling',
     });
+
+    const docsBefore = await fetchStoredSedDocuments(request, 'A001');
+    await unntak.klikkSendBrevene();
+
+    // === Verifiser SED A001 ===
+    const sedContent = await findNewNavFormatSed(request, 'A001', docsBefore);
+    console.log(`SED A001 innhold: ${JSON.stringify(sedContent, null, 2)}`);
+
+    expect(sedContent.sed).toBe('A001');
+    expect(sedContent.sedVer).toBe('4');
+    expect(sedContent.sedGVer).toBe('4');
+  });
+
+  test('direkte til CDM 4.3 - skal sende anmodning om unntak', async ({ page, request }) => {
+    test.setTimeout(120000);
+
+    // Deaktiver CDM 4.4 -> bruker CDM 4.3
+    const unleash = new UnleashHelper(request);
+    await unleash.disableFeature('melosys.cdm-4-4');
+
+    const { behandling } = await opprettSakOgNavigerTilBehandling(page);
+    const unntak = new AnmodningUnntakPage(page);
+
+    // === Velg yrkesaktiv, direkte til ===
+    console.log('Steg 5: Velger yrkesaktiv, direkte til');
+    await behandling.velgYrkesaktiv();
+    await behandling.velgYrkesaktivDirekteTil();
+    await behandling.klikkBekreftOgFortsett();
+
+    // === Velg arbeidsgiver ===
+    console.log('Steg 6: Velger arbeidsgiver');
+    await behandling.velgArbeidsgiverOgFortsett('Ståles Stål AS');
+
+    // === Fyll ut brevskjema, snapshot, send ===
+    console.log('Steg 7: Fyller ut unntak og sender brevene (CDM 4.3)');
+    await unntak.fyllUtBrevSkjema({
+      artikkel: 'FO_883_2004_ART11_3A',
+      begrunnelse: 'KORTVARIG_PERIODE_RETUR_NORSK_AG',
+      ytterligereInfo: 'E2E test - direkte til CDM 4.3',
+    });
+
+    const docsBefore = await fetchStoredSedDocuments(request, 'A001');
+    await unntak.klikkSendBrevene();
+
+    // === Verifiser SED A001 (CDM 4.3) ===
+    const sedContent = await findNewNavFormatSed(request, 'A001', docsBefore);
+    console.log(`SED A001 CDM 4.3 innhold: ${JSON.stringify(sedContent, null, 2)}`);
+
+    expect(sedContent.sed).toBe('A001');
+    expect(sedContent.sedVer).toBe('3');
+    expect(sedContent.sedGVer).toBe('4');
   });
 });
