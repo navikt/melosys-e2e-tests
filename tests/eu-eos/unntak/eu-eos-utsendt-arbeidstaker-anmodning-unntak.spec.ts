@@ -249,7 +249,9 @@ test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
     // === Velg yrkesaktiv (uten "direkte til") ===
     console.log('Steg 5: Velger yrkesaktiv');
     await behandling.velgYrkesaktiv();
-    await behandling.klikkBekreftOgFortsett();
+    await behandling.klikkBekreftOgFortsett({
+      waitForContent: page.getByRole('checkbox', { name: 'Ståles Stål AS' }),
+    });
 
     // === Velg arbeidsgiver ===
     console.log('Steg 6: Velger arbeidsgiver');
