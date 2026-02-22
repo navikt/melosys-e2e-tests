@@ -693,11 +693,11 @@ export class EuEosBehandlingPage extends BasePage {
    *
    * @param arbeidsgiverNavn - Navn på arbeidsgiver (default: 'Ståles Stål AS')
    */
-  async velgArbeidsgiverOgFortsett(arbeidsgiverNavn: string = 'Ståles Stål AS'): Promise<void> {
+  async velgArbeidsgiverOgFortsett(arbeidsgiverNavn: string = 'Ståles Stål AS', options?: {
+    waitForContent?: import('@playwright/test').Locator;
+  }): Promise<void> {
     await this.velgArbeidsgiver(arbeidsgiverNavn);
-    await this.klikkBekreftOgFortsett({
-      waitForContent: this.lønnetArbeidRadio,
-    });
+    await this.klikkBekreftOgFortsett(options ? { waitForContent: options.waitForContent } : undefined);
   }
 
   /**

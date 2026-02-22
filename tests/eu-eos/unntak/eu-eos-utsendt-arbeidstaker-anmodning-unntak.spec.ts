@@ -255,7 +255,9 @@ test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
 
     // === Velg arbeidsgiver ===
     console.log('Steg 6: Velger arbeidsgiver');
-    await behandling.velgArbeidsgiverOgFortsett('Ståles Stål AS');
+    await behandling.velgArbeidsgiverOgFortsett('Ståles Stål AS', {
+      waitForContent: page.getByRole('radio', { name: 'Lønnet arbeid' }),
+    });
 
     // === Velg lønnet arbeid ===
     console.log('Steg 7: Velger lønnet arbeid');
