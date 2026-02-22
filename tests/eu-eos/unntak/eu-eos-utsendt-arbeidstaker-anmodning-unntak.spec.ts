@@ -19,12 +19,13 @@ import {
 /**
  * EU/EØS Utsendt arbeidstaker - Anmodning om unntak via behandlingsflyt
  *
- * Fem varianter:
+ * Seks varianter:
  * 1. "Direkte til art.11(3)(a)" - CDM 4.4, artikkel 11(3)(a)
  * 2. "Direkte til art.13(1)(a)" - CDM 4.4, artikkel 13(1)(a)
  * 3. "Direkte til art.13(1)(a) med TWFA" - CDM 4.4, med Rammeavtale om fjernarbeid
  * 4. "Via full behandling" - CDM 4.4, gjennom alle behandlingssteg
- * 5. "Direkte til CDM 4.3" - CDM 4.3 (toggle av), artikkel 11(3)(a)
+ * 5. "Direkte til CDM 4.3 art.11(3)(a)" - CDM 4.3 (toggle av)
+ * 6. "Direkte til CDM 4.3 art.13(1)(a)" - CDM 4.3 (toggle av), verifiserer rammeavtale=null
  *
  * Alle varianter verifiserer SED A001-innhold fra RINA-mock.
  */
@@ -368,6 +369,63 @@ test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
 
     // Ingen TWFA og ingen forordning8832004
     expect(medlemskap.rammeavtale).toBeNull();
+
+    // Arbeidsgiver
+    expect(nav.arbeidsgiver?.[0]?.navn).toBe('Ståles Stål AS');
+  });
+
+  test('direkte til art.13(1)(a) CDM 4.3 - skal sende anmodning om unntak', async ({ page, request }) => {
+    test.setTimeout(120000);
+
+    // Deaktiver CDM 4.4 -> bruker CDM 4.3
+    const unleash = new UnleashHelper(request);
+    await unleash.disableFeature('melosys.cdm-4-4');
+
+    const { behandling } = await opprettSakOgNavigerTilBehandling(page);
+    const unntak = new AnmodningUnntakPage(page);
+
+    // === Velg yrkesaktiv, direkte til ===
+    console.log('Steg 5: Velger yrkesaktiv, direkte til');
+    await behandling.velgYrkesaktiv();
+    await behandling.velgYrkesaktivDirekteTil();
+    await behandling.klikkBekreftOgFortsett();
+
+    // === Velg arbeidsgiver ===
+    console.log('Steg 6: Velger arbeidsgiver');
+    await behandling.velgArbeidsgiverOgFortsett('Ståles Stål AS');
+
+    // === Fyll ut brevskjema, snapshot, send ===
+    console.log('Steg 7: Fyller ut unntak og sender brevene (CDM 4.3, art.13(1)(a))');
+    await unntak.fyllUtBrevSkjema({
+      artikkel: 'FO_883_2004_ART13_1A',
+      begrunnelse: 'DELTIDSARBEID_I_UTLANDET_MOTTAR_AAP',
+      ytterligereInfo: 'E2E test - direkte til art.13(1)(a) CDM 4.3',
+    });
+
+    const docsBefore = await fetchStoredSedDocuments(request, 'A001');
+    await unntak.klikkSendBrevene();
+
+    // === Verifiser SED A001 (CDM 4.3, art.13(1)(a)) ===
+    const sedContent = await findNewNavFormatSed(request, 'A001', docsBefore);
+    const nav = sedContent.nav as Record<string, any>;
+    const medlemskap = sedContent.medlemskap as Record<string, any>;
+
+    expect(sedContent.sed).toBe('A001');
+    expect(sedContent.sedVer).toBe('3');
+    expect(sedContent.sedGVer).toBe('4');
+
+    // CDM 4.3: artikkel under unntak (IKKE under forordning8832004)
+    expect(medlemskap.unntak?.grunnlag?.artikkel).toBe('13_1_a');
+    expect(medlemskap.forordning8832004).toBeNull();
+
+    // CDM 4.3: rammeavtale er null (i motsetning til CDM 4.4 som har fjernarbeid=nei)
+    expect(medlemskap.rammeavtale).toBeNull();
+
+    // Begrunnelse, periode, ytterligereInfo
+    expect(medlemskap.unntak?.begrunnelse).toBeTruthy();
+    expect(medlemskap.soeknadsperiode?.startdato).toBe('2026-01-01');
+    expect(medlemskap.soeknadsperiode?.sluttdato).toBe('2027-01-01');
+    expect(nav.ytterligereinformasjon).toBe('E2E test - direkte til art.13(1)(a) CDM 4.3');
 
     // Arbeidsgiver
     expect(nav.arbeidsgiver?.[0]?.navn).toBe('Ståles Stål AS');
