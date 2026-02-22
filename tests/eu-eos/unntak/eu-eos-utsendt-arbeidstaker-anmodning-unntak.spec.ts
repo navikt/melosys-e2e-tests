@@ -106,13 +106,29 @@ test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
     const docsBefore = await fetchStoredSedDocuments(request, 'A001');
     await unntak.klikkSendBrevene();
 
-    // === Verifiser SED A001 ===
+    // === Verifiser SED A001 (CDM 4.4, art.11(3)(a)) ===
     const sedContent = await findNewNavFormatSed(request, 'A001', docsBefore);
-    console.log(`SED A001 innhold: ${JSON.stringify(sedContent, null, 2)}`);
+    const nav = sedContent.nav as Record<string, any>;
+    const medlemskap = sedContent.medlemskap as Record<string, any>;
 
     expect(sedContent.sed).toBe('A001');
     expect(sedContent.sedVer).toBe('4');
     expect(sedContent.sedGVer).toBe('4');
+
+    // CDM 4.4: artikkel under forordning8832004
+    expect(medlemskap.forordning8832004?.unntak?.grunnlag?.artikkel).toBe('11_3_a');
+
+    // Begrunnelse, periode, ytterligereInfo
+    expect(medlemskap.unntak?.begrunnelse).toBeTruthy();
+    expect(medlemskap.soeknadsperiode?.startdato).toBe('2026-01-01');
+    expect(medlemskap.soeknadsperiode?.sluttdato).toBe('2027-01-01');
+    expect(nav.ytterligereinformasjon).toBe('E2E test - direkte til unntak');
+
+    // Ingen TWFA
+    expect(medlemskap.rammeavtale).toBeNull();
+
+    // Arbeidsgiver
+    expect(nav.arbeidsgiver?.[0]?.navn).toBe('Ståles Stål AS');
   });
 
   test('direkte til art.13(1)(a) - skal sende anmodning om unntak', async ({ page, request }) => {
@@ -146,13 +162,29 @@ test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
     const docsBefore = await fetchStoredSedDocuments(request, 'A001');
     await unntak.klikkSendBrevene();
 
-    // === Verifiser SED A001 ===
+    // === Verifiser SED A001 (CDM 4.4, art.13(1)(a)) ===
     const sedContent = await findNewNavFormatSed(request, 'A001', docsBefore);
-    console.log(`SED A001 innhold: ${JSON.stringify(sedContent, null, 2)}`);
+    const nav = sedContent.nav as Record<string, any>;
+    const medlemskap = sedContent.medlemskap as Record<string, any>;
 
     expect(sedContent.sed).toBe('A001');
     expect(sedContent.sedVer).toBe('4');
     expect(sedContent.sedGVer).toBe('4');
+
+    // CDM 4.4: artikkel under forordning8832004
+    expect(medlemskap.forordning8832004?.unntak?.grunnlag?.artikkel).toBe('13_1_a');
+
+    // Begrunnelse, periode, ytterligereInfo
+    expect(medlemskap.unntak?.begrunnelse).toBeTruthy();
+    expect(medlemskap.soeknadsperiode?.startdato).toBe('2026-01-01');
+    expect(medlemskap.soeknadsperiode?.sluttdato).toBe('2027-01-01');
+    expect(nav.ytterligereinformasjon).toBe('E2E test - direkte til art.13(1)(a)');
+
+    // TWFA ikke avhuket -> fjernarbeid=nei
+    expect(medlemskap.rammeavtale?.fjernarbeid?.EESSIYesNoType).toBe('nei');
+
+    // Arbeidsgiver
+    expect(nav.arbeidsgiver?.[0]?.navn).toBe('Ståles Stål AS');
   });
 
   test('direkte til art.13(1)(a) med TWFA - skal sende anmodning om unntak', async ({ page, request }) => {
@@ -187,13 +219,29 @@ test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
     const docsBefore = await fetchStoredSedDocuments(request, 'A001');
     await unntak.klikkSendBrevene();
 
-    // === Verifiser SED A001 ===
+    // === Verifiser SED A001 (CDM 4.4, art.13(1)(a) med TWFA) ===
     const sedContent = await findNewNavFormatSed(request, 'A001', docsBefore);
-    console.log(`SED A001 innhold: ${JSON.stringify(sedContent, null, 2)}`);
+    const nav = sedContent.nav as Record<string, any>;
+    const medlemskap = sedContent.medlemskap as Record<string, any>;
 
     expect(sedContent.sed).toBe('A001');
     expect(sedContent.sedVer).toBe('4');
     expect(sedContent.sedGVer).toBe('4');
+
+    // CDM 4.4: artikkel under forordning8832004
+    expect(medlemskap.forordning8832004?.unntak?.grunnlag?.artikkel).toBe('13_1_a');
+
+    // TWFA aktivert
+    expect(medlemskap.rammeavtale?.fjernarbeid?.EESSIYesNoType).toBe('ja');
+
+    // Begrunnelse, periode, ytterligereInfo
+    expect(medlemskap.unntak?.begrunnelse).toBeTruthy();
+    expect(medlemskap.soeknadsperiode?.startdato).toBe('2026-01-01');
+    expect(medlemskap.soeknadsperiode?.sluttdato).toBe('2027-01-01');
+    expect(nav.ytterligereinformasjon).toBe('E2E test - direkte til art.13(1)(a) med TWFA');
+
+    // Arbeidsgiver
+    expect(nav.arbeidsgiver?.[0]?.navn).toBe('Ståles Stål AS');
   });
 
   test('via full behandling - skal sende anmodning om unntak', async ({ page, request }) => {
@@ -243,13 +291,29 @@ test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
     const docsBefore = await fetchStoredSedDocuments(request, 'A001');
     await unntak.klikkSendBrevene();
 
-    // === Verifiser SED A001 ===
+    // === Verifiser SED A001 (CDM 4.4, art.11(3)(a) via full behandling) ===
     const sedContent = await findNewNavFormatSed(request, 'A001', docsBefore);
-    console.log(`SED A001 innhold: ${JSON.stringify(sedContent, null, 2)}`);
+    const nav = sedContent.nav as Record<string, any>;
+    const medlemskap = sedContent.medlemskap as Record<string, any>;
 
     expect(sedContent.sed).toBe('A001');
     expect(sedContent.sedVer).toBe('4');
     expect(sedContent.sedGVer).toBe('4');
+
+    // CDM 4.4: artikkel under forordning8832004
+    expect(medlemskap.forordning8832004?.unntak?.grunnlag?.artikkel).toBe('11_3_a');
+
+    // Begrunnelse, periode, ytterligereInfo
+    expect(medlemskap.unntak?.begrunnelse).toBeTruthy();
+    expect(medlemskap.soeknadsperiode?.startdato).toBe('2026-01-01');
+    expect(medlemskap.soeknadsperiode?.sluttdato).toBe('2027-01-01');
+    expect(nav.ytterligereinformasjon).toBe('E2E test - via full behandling');
+
+    // Ingen TWFA
+    expect(medlemskap.rammeavtale).toBeNull();
+
+    // Arbeidsgiver
+    expect(nav.arbeidsgiver?.[0]?.navn).toBe('Ståles Stål AS');
   });
 
   test('direkte til CDM 4.3 - skal sende anmodning om unntak', async ({ page, request }) => {
@@ -283,12 +347,29 @@ test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
     const docsBefore = await fetchStoredSedDocuments(request, 'A001');
     await unntak.klikkSendBrevene();
 
-    // === Verifiser SED A001 (CDM 4.3) ===
+    // === Verifiser SED A001 (CDM 4.3, art.11(3)(a)) ===
     const sedContent = await findNewNavFormatSed(request, 'A001', docsBefore);
-    console.log(`SED A001 CDM 4.3 innhold: ${JSON.stringify(sedContent, null, 2)}`);
+    const nav = sedContent.nav as Record<string, any>;
+    const medlemskap = sedContent.medlemskap as Record<string, any>;
 
     expect(sedContent.sed).toBe('A001');
     expect(sedContent.sedVer).toBe('3');
     expect(sedContent.sedGVer).toBe('4');
+
+    // CDM 4.3: artikkel under unntak (IKKE under forordning8832004)
+    expect(medlemskap.unntak?.grunnlag?.artikkel).toBe('11_3_a');
+    expect(medlemskap.forordning8832004).toBeNull();
+
+    // Begrunnelse, periode, ytterligereInfo
+    expect(medlemskap.unntak?.begrunnelse).toBeTruthy();
+    expect(medlemskap.soeknadsperiode?.startdato).toBe('2026-01-01');
+    expect(medlemskap.soeknadsperiode?.sluttdato).toBe('2027-01-01');
+    expect(nav.ytterligereinformasjon).toBe('E2E test - direkte til CDM 4.3');
+
+    // Ingen TWFA og ingen forordning8832004
+    expect(medlemskap.rammeavtale).toBeNull();
+
+    // Arbeidsgiver
+    expect(nav.arbeidsgiver?.[0]?.navn).toBe('Ståles Stål AS');
   });
 });
