@@ -182,7 +182,8 @@ export class AnmodningUnntakPage extends BasePage {
    * Only visible when CDM 4.4 toggle is enabled and article 13(1)(a) is selected.
    */
   async hukAvTWFA(): Promise<void> {
-    const twfaCheckbox = this.page.getByRole('checkbox', { name: /Rammeavtale om fjernarbeid|TWFA/i });
+    const twfaCheckbox = this.page.getByRole('checkbox', { name: /Rammeavtale om fjernarbeid/i });
+    await twfaCheckbox.waitFor({ state: 'visible', timeout: 10000 });
     await twfaCheckbox.check();
     console.log('✅ Checked TWFA checkbox');
   }
@@ -237,6 +238,7 @@ export class AnmodningUnntakPage extends BasePage {
    */
   async velgArtikkelForUnntak(artikkel: string): Promise<void> {
     await this.artikkelDropdown.selectOption(artikkel);
+    await this.page.waitForLoadState('networkidle');
     console.log(`✅ Valgte artikkel for unntak: ${artikkel}`);
   }
 

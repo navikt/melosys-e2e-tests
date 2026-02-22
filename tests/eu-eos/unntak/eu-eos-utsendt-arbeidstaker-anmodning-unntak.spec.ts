@@ -5,6 +5,7 @@ import { OpprettNySakPage } from '../../../pages/opprett-ny-sak/opprett-ny-sak.p
 import { EuEosBehandlingPage } from '../../../pages/behandling/eu-eos-behandling.page';
 import { AnmodningUnntakPage } from '../../../pages/eu-eos/unntak/anmodning-unntak.page';
 import { waitForProcessInstances } from '../../../helpers/api-helper';
+import { UnleashHelper } from '../../../helpers/unleash-helper';
 import {
   USER_ID_VALID,
   SAKSTYPER,
@@ -121,8 +122,12 @@ test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
     });
   });
 
-  test('direkte til art.13(1)(a) med TWFA - skal sende anmodning om unntak', async ({ page }) => {
+  test('direkte til art.13(1)(a) med TWFA - skal sende anmodning om unntak', async ({ page, request }) => {
     test.setTimeout(120000);
+
+    // TWFA checkbox requires CDM 4.4 toggle
+    const unleash = new UnleashHelper(request);
+    await unleash.enableFeature('melosys.cdm-4-4');
 
     const { behandling } = await opprettSakOgNavigerTilBehandling(page);
     const unntak = new AnmodningUnntakPage(page);
