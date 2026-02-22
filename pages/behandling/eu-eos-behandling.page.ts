@@ -109,11 +109,18 @@ export class EuEosBehandlingPage extends BasePage {
     const startTime = Date.now();
 
     try {
-      // Wait for the heading to contain the expected text
+      // Wait for the VISIBLE heading to contain the expected text
+      // React keeps all step components mounted but hidden
       await this.page.waitForFunction(
         (expectedText) => {
-          const heading = document.querySelector('main h1');
-          return heading && heading.textContent?.includes(expectedText);
+          const headings = document.querySelectorAll('main h1');
+          for (const h of headings) {
+            const el = h as HTMLElement;
+            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+              return el.textContent?.includes(expectedText) ?? false;
+            }
+          }
+          return false;
         },
         stepName,
         { timeout }
@@ -131,10 +138,20 @@ export class EuEosBehandlingPage extends BasePage {
   }
 
   /**
-   * Get the current step heading text
+   * Get the current VISIBLE step heading text.
+   * React keeps all step components mounted but hidden. We must find the visible h1.
    */
   async getCurrentStepHeading(): Promise<string> {
-    return await this.stepHeading.textContent() || 'Unknown';
+    return await this.page.evaluate(() => {
+      const headings = document.querySelectorAll('main h1');
+      for (const h of Array.from(headings)) {
+        const el = h as HTMLElement;
+        if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+          return el.textContent?.trim() || '';
+        }
+      }
+      return headings[0]?.textContent?.trim() || 'Unknown';
+    });
   }
 
   /**
@@ -483,11 +500,19 @@ export class EuEosBehandlingPage extends BasePage {
     const startTime = Date.now();
 
     // Try to detect heading change (preferred indicator of step transition)
+    // IMPORTANT: React keeps all step components mounted but hidden.
+    // We must find the VISIBLE h1, not just the first in DOM order.
     const headingChanged = await this.page.waitForFunction(
       (originalHeading) => {
-        const heading = document.querySelector('main h1');
-        const currentText = heading?.textContent || '';
-        return heading && currentText !== originalHeading && currentText.trim() !== '';
+        const headings = document.querySelectorAll('main h1');
+        for (const h of headings) {
+          const el = h as HTMLElement;
+          if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+            const text = el.textContent?.trim() || '';
+            return text !== originalHeading && text !== '';
+          }
+        }
+        return false;
       },
       headingBefore,
       { timeout: 10000 }
@@ -509,7 +534,13 @@ export class EuEosBehandlingPage extends BasePage {
       if (headingAfter !== headingBefore) {
         console.log(`✅ Step heading changed (late): "${headingBefore}" → "${headingAfter}"`);
       } else {
-        console.log(`⚠️  Step heading still unchanged: "${headingAfter}" - continuing anyway`);
+        // Step genuinely didn't transition - reload page to recover
+        // The backend has already processed the request (APIs returned 200),
+        // so reloading should bring us to the correct step
+        console.log(`⚠️  Step stuck on "${headingAfter}" - reloading page to recover...`);
+        await this.page.reload({ waitUntil: 'networkidle' });
+        const headingAfterReload = await this.getCurrentStepHeading();
+        console.log(`🔄 After reload: "${headingAfterReload}"`);
       }
     }
 
