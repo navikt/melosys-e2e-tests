@@ -46,13 +46,14 @@ function colorStatus(status: number): string {
 
 /**
  * Convert a recorded URL (browser-side) to a backend URL.
- * Browser calls: http://localhost:3000/api/...  (Nginx strips /melosys prefix)
- * Backend calls: http://localhost:8080/api/...
+ * Browser records: http://localhost:3000/melosys/api/...
+ * Backend expects: http://localhost:8080/api/...
+ * Strip the /melosys prefix since the backend doesn't use it.
  */
 function toBackendUrl(recordedUrl: string, baseUrl: string): string {
   const url = new URL(recordedUrl);
-  // Paths are already /api/... (Nginx at :3000 strips /melosys)
-  return `${baseUrl}${url.pathname}${url.search}`;
+  const pathname = url.pathname.replace(/^\/melosys/, '');
+  return `${baseUrl}${pathname}${url.search}`;
 }
 
 /**

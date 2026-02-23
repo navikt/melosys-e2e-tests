@@ -11,7 +11,7 @@ export interface RecordedRequest {
   pathname: string;
   query: Record<string, string>;
   headers: Record<string, string>;
-  body: unknown | null;
+  body: unknown;
 }
 
 export interface RecordedResponse {

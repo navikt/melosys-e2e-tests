@@ -44,16 +44,16 @@ function extractHeaders(headers: Record<string, string>): Record<string, string>
 }
 
 /**
- * Safely parse response body as JSON or text.
+ * Safely parse a raw body buffer as JSON or text.
  */
-async function safeParseBody(response: APIResponse): Promise<unknown> {
+function safeParseBody(body: Buffer, contentType: string): unknown {
   try {
-    const contentType = response.headers()['content-type'] || '';
+    const text = body.toString('utf-8');
+    if (text.length === 0) return null;
     if (contentType.includes('application/json')) {
-      return await response.json();
+      return JSON.parse(text);
     }
-    const text = await response.text();
-    return text.length > 0 ? text : null;
+    return text;
   } catch {
     return null;
   }
@@ -109,15 +109,18 @@ export class ApiRecorder {
       const response = await route.fetch();
       const durationMs = Date.now() - requestTime;
 
+      // Capture body once to avoid double-consumption
+      const body = await response.body();
+
       // Record the exchange
-      const exchange = await this.captureExchange(request, response, requestTime, durationMs);
+      const exchange = this.captureExchange(request, response, body, requestTime, durationMs);
       this.exchanges.push(exchange);
 
       // Continue with the real response
       await route.fulfill({
         status: response.status(),
         headers: response.headers(),
-        body: await response.body(),
+        body,
       });
     } catch (error) {
       console.warn(`[Recorder] Failed to capture ${request.method()} ${request.url()}: ${error}`);
@@ -128,12 +131,13 @@ export class ApiRecorder {
   /**
    * Capture a request/response exchange with timing information.
    */
-  private async captureExchange(
+  private captureExchange(
     request: Request,
     response: APIResponse,
+    responseBody: Buffer,
     requestTime: number,
     durationMs: number
-  ): Promise<RecordedExchange> {
+  ): RecordedExchange {
     const url = new URL(request.url());
 
     // Parse request body
@@ -148,7 +152,8 @@ export class ApiRecorder {
     }
 
     // Parse response body (no normalization - we want raw data)
-    const responseBody = await safeParseBody(response);
+    const contentType = response.headers()['content-type'] || '';
+    const parsedResponseBody = safeParseBody(responseBody, contentType);
 
     const recordedRequest: RecordedRequest = {
       method: request.method(),
@@ -163,7 +168,7 @@ export class ApiRecorder {
       status: response.status(),
       statusText: response.statusText(),
       headers: extractHeaders(response.headers()),
-      body: responseBody,
+      body: parsedResponseBody,
     };
 
     return {
