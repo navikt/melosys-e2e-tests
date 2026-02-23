@@ -18,6 +18,7 @@
     "scripts/**/*",
     "fixtures/**/*",
     "pages/**/*",
+    "recording/**/*",
     "types.d.ts"
   ],
   "exclude": ["node_modules"]

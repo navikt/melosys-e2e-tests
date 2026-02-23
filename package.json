@@ -9,6 +9,8 @@
     "test:debug": "playwright test --debug",
     "test:ui": "playwright test --ui",
     "test:unit": "node --require ts-node/register --test lib/**/*.test.ts",
+    "test:record": "RECORD_API=true playwright test",
+    "replay": "ts-node scripts/replay-api-calls.ts",
 
     "generate-summary": "ts-node scripts/generate-summary-from-json.ts",
     "codegen": "playwright codegen http://localhost:3000/melosys/",
