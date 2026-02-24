@@ -64,18 +64,20 @@ async function createSakAndGetIds(authToken: string): Promise<{ behandlingId: st
     throw new Error(`Failed to create sak: ${createResp.status} ${body}`);
   }
 
-  // Wait for async processing
-  await new Promise(r => setTimeout(r, 2000));
+  // Poll for oppgave (async processing can take longer on CI)
+  let oppgave: { behandling: { behandlingID: number }; hovedpartIdent: string } | undefined;
+  for (let attempt = 0; attempt < 15; attempt++) {
+    await new Promise(r => setTimeout(r, 2000));
+    const oppgaverResp = await fetch(`${BASE_URL}/api/oppgaver/oversikt`, { headers });
+    const oppgaver = await oppgaverResp.json() as {
+      saksbehandling: Array<{ behandling: { behandlingID: number }; hovedpartIdent: string }>;
+    };
+    oppgave = oppgaver.saksbehandling.find(o => o.hovedpartIdent === BRUKER_ID);
+    if (oppgave) break;
+  }
 
-  // Find the new sak via oppgaver (same way the frontend discovers it)
-  const oppgaverResp = await fetch(`${BASE_URL}/api/oppgaver/oversikt`, { headers });
-  const oppgaver = await oppgaverResp.json() as {
-    saksbehandling: Array<{ behandling: { behandlingID: number }; hovedpartIdent: string }>;
-  };
-
-  const oppgave = oppgaver.saksbehandling.find(o => o.hovedpartIdent === BRUKER_ID);
   if (!oppgave) {
-    throw new Error(`No oppgave found for bruker ${BRUKER_ID}. Oppgaver: ${JSON.stringify(oppgaver)}`);
+    throw new Error(`No oppgave found for bruker ${BRUKER_ID} after 30s polling`);
   }
 
   const behandlingId = String(oppgave.behandling.behandlingID);
