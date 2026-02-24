@@ -62,51 +62,47 @@ Both threads remove and recreate `Saksopplysning`/`SaksopplysningKilde` entities
 
 ### Sequence Diagram (Normal - Passing)
 
-```
-Browser                   Backend (HTTP)              Backend (Async Thread)
-  │                            │                            │
-  │ POST mottatteopplysninger  │                            │
-  │──────────────────────────▶│                            │
-  │                            │ process + return 200       │
-  │◀──────────────────────────│                            │
-  │                            │ spawn async ──────────────▶│
-  │                            │                            │ RegisteropplysningerService
-  │                            │                            │ (hent Medlemskap)
-  │                            │                            │ ✅ commit OK
-  │                            │                            │
-  │  ... 200ms+ passes ...     │                            │
-  │                            │                            │
-  │ POST vedtak/fatt           │                            │
-  │──────────────────────────▶│                            │
-  │                            │ RegisteropplysningerService│
-  │                            │ (hent Medlemskap)          │
-  │                            │ ✅ commit OK (no conflict) │
-  │◀──────────────────────────│                            │
-  │           204 No Content   │                            │
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant H as Backend (HTTP)
+    participant A as Backend (Async Thread)
+
+    B->>H: POST /api/mottatteopplysninger/{id}
+    H-->>B: 200 OK
+    H-)A: spawn async thread
+    A->>A: RegisteropplysningerService<br/>(hent Medlemskap)
+    A->>A: ✅ commit OK
+
+    Note over B,A: 200ms+ passes — async thread finishes
+
+    B->>H: POST /api/saksflyt/vedtak/{id}/fatt
+    H->>H: RegisteropplysningerService<br/>(hent Medlemskap)
+    H->>H: ✅ commit OK (no conflict)
+    H-->>B: 204 No Content
 ```
 
 ### Sequence Diagram (Race - Failing)
 
-```
-Browser                   Backend (HTTP)              Backend (Async Thread)
-  │                            │                            │
-  │ POST mottatteopplysninger  │                            │
-  │──────────────────────────▶│                            │
-  │                            │ process + return 200       │
-  │◀──────────────────────────│                            │
-  │                            │ spawn async ──────────────▶│
-  │                            │                            │ RegisteropplysningerService
-  │ POST vedtak/fatt           │                            │ (hent Medlemskap)
-  │──────────────────────────▶│                            │ ⏳ still running...
-  │                            │ RegisteropplysningerService│
-  │                            │ (hent Medlemskap)          │
-  │                            │     ╲                      │     ╱
-  │                            │      ╲   BOTH modify      │    ╱
-  │                            │       ╲  SaksopplysningKilde  ╱
-  │                            │        ╲                  ╱
-  │                            │         💥 OptimisticLockingFailureException
-  │◀──────────────────────────│                            │
-  │           500 Error        │                            │
+```mermaid
+sequenceDiagram
+    participant B as Browser
+    participant H as Backend (HTTP)
+    participant A as Backend (Async Thread)
+
+    B->>H: POST /api/mottatteopplysninger/{id}
+    H-->>B: 200 OK
+    H-)A: spawn async thread
+    A->>A: RegisteropplysningerService<br/>(hent Medlemskap)
+
+    Note over B,A: Only ~100ms passes — async thread still running!
+
+    B->>H: POST /api/saksflyt/vedtak/{id}/fatt
+    H->>H: RegisteropplysningerService<br/>(hent Medlemskap)
+
+    Note over H,A: BOTH modify SaksopplysningKilde simultaneously
+
+    H--xB: 💥 500 OptimisticLockingFailureException
 ```
 
 ### Evidence from Recordings
