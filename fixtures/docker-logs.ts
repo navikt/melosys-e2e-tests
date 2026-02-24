@@ -43,6 +43,7 @@ function cleanAnsiCodes(text: string): string {
 }
 
 interface ErrorCategories {
+  raceConditionErrors: DockerLogError[];
   sqlErrors: DockerLogError[];
   connectionErrors: DockerLogError[];
   otherErrors: DockerLogError[];
@@ -84,6 +85,23 @@ function parseLogLinesForErrors(lines: string[], source: 'docker' | 'file'): Doc
       errors.push({
         timestamp,
         level: 'ERROR',
+        message: line.trim(),
+        source
+      });
+    }
+    // Detect race condition indicators (SaksopplysningKilde / OptimisticLocking)
+    else if (
+      line.includes('OptimisticLockingFailureException') ||
+      line.includes('StaleObjectStateException') ||
+      line.includes('SaksopplysningKilde') ||
+      line.includes('Row was updated or deleted by another transaction')
+    ) {
+      const timestampMatch = line.match(/(\d{2}:\d{2}:\d{2}\.\d{3})/);
+      const timestamp = timestampMatch ? timestampMatch[1] : 'unknown';
+
+      errors.push({
+        timestamp,
+        level: line.includes('ERROR') ? 'ERROR' : 'WARN',
         message: line.trim(),
         source
       });
@@ -178,6 +196,7 @@ function getDockerLogsSince(containerName: string, since: Date): DockerLogError[
 
 function categorizeErrors(errors: DockerLogError[]): ErrorCategories {
   const categories: ErrorCategories = {
+    raceConditionErrors: [],
     sqlErrors: [],
     connectionErrors: [],
     otherErrors: []
@@ -185,6 +204,13 @@ function categorizeErrors(errors: DockerLogError[]): ErrorCategories {
 
   for (const error of errors) {
     if (
+      error.message.includes('OptimisticLockingFailureException') ||
+      error.message.includes('StaleObjectStateException') ||
+      error.message.includes('SaksopplysningKilde') ||
+      error.message.includes('Row was updated or deleted by another transaction')
+    ) {
+      categories.raceConditionErrors.push(error);
+    } else if (
       error.message.includes('SQL') ||
       error.message.includes('ORA-') ||
       error.message.includes('tabellen eller utsnittet finnes ikke')
@@ -278,6 +304,17 @@ export const dockerLogsFixture = base.extend<{ dockerLogChecker: void }>({
           errorSummary += `🐳 ${service} (${errors.length} error(s)):\n`;
 
           const categories = categorizeErrors(errors);
+
+          if (categories.raceConditionErrors.length > 0) {
+            console.log(`  🏁 Race Condition Errors (${categories.raceConditionErrors.length}):`);
+            errorSummary += `  🏁 Race Condition Errors (${categories.raceConditionErrors.length}):\n`;
+            categories.raceConditionErrors.forEach(err => {
+              const cleanMsg = cleanAnsiCodes(err.message).substring(0, 200);
+              const msg = `    [${err.timestamp}] ${cleanMsg}`;
+              console.log(msg);
+              errorSummary += msg + '\n';
+            });
+          }
 
           if (categories.sqlErrors.length > 0) {
             console.log(`  📊 SQL Errors (${categories.sqlErrors.length}):`);

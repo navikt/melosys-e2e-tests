@@ -73,6 +73,13 @@ function sanitizeFileName(name: string): string {
     .substring(0, 100);
 }
 
+/** Patterns that indicate race-condition-relevant API calls */
+const RACE_CONDITION_PATTERNS = [
+  /\/oppfriskning\//,
+  /\/saksopplysninger/,
+  /\/registeropplysninger/,
+];
+
 export class ApiRecorder {
   private exchanges: RecordedExchange[] = [];
   private testFile: string;
@@ -115,6 +122,9 @@ export class ApiRecorder {
       // Record the exchange
       const exchange = this.captureExchange(request, response, body, requestTime, durationMs);
       this.exchanges.push(exchange);
+
+      // High-visibility logging for race-condition-relevant calls
+      this.logIfRaceRelevant(exchange);
 
       // Continue with the real response
       await route.fulfill({
@@ -181,6 +191,32 @@ export class ApiRecorder {
     };
   }
 
+  /**
+   * Log high-visibility warning for API calls that may trigger the SaksopplysningKilde race condition.
+   */
+  private logIfRaceRelevant(exchange: RecordedExchange): void {
+    const pathname = exchange.request.pathname;
+    const isRelevant = RACE_CONDITION_PATTERNS.some(p => p.test(pathname));
+    if (!isRelevant) return;
+
+    const status = exchange.response.status;
+    const statusIcon = status >= 400 ? '💥' : '⚡';
+    console.log(
+      `\n${statusIcon} [RACE-RELEVANT] ${exchange.request.method} ${pathname}\n` +
+      `   ⏱️  T+${exchange.elapsedMs}ms | Duration: ${exchange.durationMs}ms | Status: ${status}\n` +
+      `   📋 Index: #${exchange.index}`
+    );
+  }
+
+  /**
+   * Get all exchanges matching race-condition-relevant patterns.
+   */
+  getRaceRelevantExchanges(): RecordedExchange[] {
+    return this.exchanges.filter(e =>
+      RACE_CONDITION_PATTERNS.some(p => p.test(e.request.pathname))
+    );
+  }
+
   get exchangeCount(): number {
     return this.exchanges.length;
   }
@@ -203,18 +239,34 @@ export class ApiRecorder {
     const fileName = `${sanitizeFileName(this.testName)}.json`;
     const outputPath = join(recordingsDir, fileName);
 
+    const raceRelevant = this.getRaceRelevantExchanges();
+
     const recording: ApiRecording = {
-      version: '1.0',
+      version: '1.1',
       recordedAt: new Date().toISOString(),
       testFile: this.testFile,
       testName: this.testName,
       testDurationMs: Date.now() - this.startTime,
       exchangeCount: this.exchanges.length,
+      raceConditionSummary: {
+        relevantCallCount: raceRelevant.length,
+        calls: raceRelevant.map(e => ({
+          index: e.index,
+          method: e.request.method,
+          pathname: e.request.pathname,
+          elapsedMs: e.elapsedMs,
+          durationMs: e.durationMs,
+          status: e.response.status,
+        })),
+      },
       exchanges: this.exchanges,
     };
 
     writeFileSync(outputPath, JSON.stringify(recording, null, 2));
     console.log(`[Recorder] Saved ${this.exchanges.length} exchanges to ${outputPath}`);
+    if (raceRelevant.length > 0) {
+      console.log(`[Recorder] ⚡ ${raceRelevant.length} race-relevant calls detected`);
+    }
     return outputPath;
   }
 }

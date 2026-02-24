@@ -34,6 +34,22 @@ export interface RecordedExchange {
   response: RecordedResponse;
 }
 
+export interface RaceConditionCall {
+  index: number;
+  method: string;
+  pathname: string;
+  elapsedMs: number;
+  durationMs: number;
+  status: number;
+}
+
+export interface RaceConditionSummary {
+  /** Number of API calls matching race-condition-relevant patterns */
+  relevantCallCount: number;
+  /** Details of each relevant call */
+  calls: RaceConditionCall[];
+}
+
 export interface ApiRecording {
   version: string;
   recordedAt: string;
@@ -43,5 +59,7 @@ export interface ApiRecording {
   testDurationMs: number;
   /** Number of exchanges captured */
   exchangeCount: number;
+  /** Summary of calls that may trigger the SaksopplysningKilde race condition */
+  raceConditionSummary?: RaceConditionSummary;
   exchanges: RecordedExchange[];
 }

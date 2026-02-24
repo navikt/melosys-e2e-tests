@@ -1,16 +1,20 @@
 {
-  "version": "1.0",
-  "recordedAt": "2026-02-23T21:17:06.104Z",
+  "version": "1.1",
+  "recordedAt": "2026-02-24T10:18:45.075Z",
   "testFile": "/Users/rune/source/nav/melosys-e2e-tests/tests/eu-eos/eu-eos-arbeid-flere-land.spec.ts",
   "testName": "skal fullføre arbeid i flere land-arbeidsflyt",
-  "testDurationMs": 18640,
+  "testDurationMs": 18611,
   "exchangeCount": 84,
+  "raceConditionSummary": {
+    "relevantCallCount": 0,
+    "calls": []
+  },
   "exchanges": [
     {
       "index": 0,
-      "timestamp": "2026-02-23T21:16:48.076Z",
-      "elapsedMs": 612,
-      "durationMs": 12,
+      "timestamp": "2026-02-24T10:18:27.109Z",
+      "elapsedMs": 645,
+      "durationMs": 11,
       "request": {
         "method": "GET",
         "url": "http://localhost:3000/api/saksbehandling/sakstyper/hent-lovlige-kombinasjoner/?",
@@ -46,9 +50,9 @@
     },
     {
       "index": 1,
-      "timestamp": "2026-02-23T21:16:48.077Z",
-      "elapsedMs": 613,
-      "durationMs": 14,
+      "timestamp": "2026-02-24T10:18:27.111Z",
+      "elapsedMs": 647,
+      "durationMs": 12,
       "request": {
         "method": "GET",
         "url": "http://localhost:3000/api/featuretoggle?features=melosys.ftrl.begrense_periode_vedtak&features=melosys.11_3_a_Norge_er_utpekt&features=melosys.pensjonist&features=melosys.pensjonist_eos&features=standardvedlegg_eget_vedlegg_avtaleland&features=melosys.arsavregning&features=melosys.arsavregning.uten.flyt&features=melosys.faktureringskomponenten.ikke-tidligere-perioder&features=melosys.eos_fakturering_av_trygdeavgift&features=melosys.faktureringskomponent.vis_referanse&features=melosys.cdm-4-4",
@@ -85,9 +89,9 @@
     },
     {
       "index": 2,
-      "timestamp": "2026-02-23T21:16:48.077Z",
-      "elapsedMs": 613,
-      "durationMs": 22,
+      "timestamp": "2026-02-24T10:18:27.110Z",
+      "elapsedMs": 646,
+      "durationMs": 20,
       "request": {
         "method": "GET",
         "url": "http://localhost:3000/api/oppgaver/oversikt",
@@ -113,9 +117,9 @@
     },
     {
       "index": 3,
-      "timestamp": "2026-02-23T21:16:49.314Z",
-      "elapsedMs": 1850,
-      "durationMs": 7,
+      "timestamp": "2026-02-24T10:18:28.275Z",
+      "elapsedMs": 1811,
+      "durationMs": 6,
       "request": {
         "method": "GET",
         "url": "http://localhost:3000/api/saksbehandling/sakstyper/hent-lovlige-kombinasjoner/?",
@@ -151,9 +155,9 @@
     },
     {
       "index": 4,
-      "timestamp": "2026-02-23T21:16:49.315Z",
-      "elapsedMs": 1851,
-      "durationMs": 7,
+      "timestamp": "2026-02-24T10:18:28.276Z",
+      "elapsedMs": 1812,
+      "durationMs": 5,
       "request": {
         "method": "GET",
         "url": "http://localhost:3000/api/featuretoggle?features=melosys.ftrl.begrense_periode_vedtak&features=melosys.11_3_a_Norge_er_utpekt&features=melosys.pensjonist&features=melosys.pensjonist_eos&features=standardvedlegg_eget_vedlegg_avtaleland&features=melosys.arsavregning&features=melosys.arsavregning.uten.flyt&features=melosys.faktureringskomponenten.ikke-tidligere-perioder&features=melosys.eos_fakturering_av_trygdeavgift&features=melosys.faktureringskomponent.vis_referanse&features=melosys.cdm-4-4",
@@ -190,9 +194,9 @@
     },
     {
       "index": 5,
-      "timestamp": "2026-02-23T21:16:49.314Z",
-      "elapsedMs": 1850,
-      "durationMs": 12,
+      "timestamp": "2026-02-24T10:18:28.276Z",
+      "elapsedMs": 1812,
+      "durationMs": 8,
       "request": {
         "method": "GET",
         "url": "http://localhost:3000/api/oppgaver/oversikt",
@@ -218,8 +222,8 @@
     },
     {
       "index": 6,
-      "timestamp": "2026-02-23T21:16:49.468Z",
-      "elapsedMs": 2004,
+      "timestamp": "2026-02-24T10:18:28.435Z",
+      "elapsedMs": 1971,
       "durationMs": 20,
       "request": {
         "method": "GET",
@@ -1252,9 +1256,9 @@
     },
     {
       "index": 7,
-      "timestamp": "2026-02-23T21:16:49.789Z",
-      "elapsedMs": 2325,
-      "durationMs": 12,
+      "timestamp": "2026-02-24T10:18:28.758Z",
+      "elapsedMs": 2294,
+      "durationMs": 10,
       "request": {
         "method": "POST",
         "url": "http://localhost:3000/api/fagsaker/sok",
@@ -1282,9 +1286,9 @@
     },
     {
       "index": 8,
-      "timestamp": "2026-02-23T21:16:49.857Z",
-      "elapsedMs": 2393,
-      "durationMs": 4,
+      "timestamp": "2026-02-24T10:18:28.825Z",
+      "elapsedMs": 2361,
+      "durationMs": 5,
       "request": {
         "method": "GET",
         "url": "http://localhost:3000/api/saksbehandling/sakstyper/hent-lovlige-kombinasjoner/?",
@@ -1320,8 +1324,8 @@
     },
     {
       "index": 9,
-      "timestamp": "2026-02-23T21:16:49.894Z",
-      "elapsedMs": 2430,
+      "timestamp": "2026-02-24T10:18:28.868Z",
+      "elapsedMs": 2404,
       "durationMs": 5,
       "request": {
         "method": "GET",
@@ -1361,9 +1365,9 @@
     },
     {
       "index": 10,
-      "timestamp": "2026-02-23T21:16:50.030Z",
-      "elapsedMs": 2566,
-      "durationMs": 3,
+      "timestamp": "2026-02-24T10:18:29.005Z",
+      "elapsedMs": 2541,
+      "durationMs": 4,
       "request": {
         "method": "GET",
         "url": "http://localhost:3000/api/saksbehandling/behandlingstemaer/hent-lovlige-kombinasjoner/?hovedpart=BRUKER&sakstype=EU_EOS&sakstema=MEDLEMSKAP_LOVVALG",
@@ -1427,8 +1431,8 @@
     },
     {
       "index": 11,
-      "timestamp": "2026-02-23T21:16:50.161Z",
-      "elapsedMs": 2697,
+      "timestamp": "2026-02-24T10:18:29.135Z",
+      "elapsedMs": 2671,
       "durationMs": 4,
       "request": {
         "method": "GET",
@@ -1474,9 +1478,9 @@
     },
     {
       "index": 12,
-      "timestamp": "2026-02-23T21:16:50.224Z",
-      "elapsedMs": 2760,
-      "durationMs": 3,
+      "timestamp": "2026-02-24T10:18:29.204Z",
+      "elapsedMs": 2740,
+      "durationMs": 4,
       "request": {
         "method": "GET",
         "url": "http://localhost:3000/api/saksbehandling/behandlingsaarsaktyper/hent-lovlige-kombinasjoner/?behandlingstype=F%C3%98RSTEGANG",
@@ -1518,9 +1522,9 @@
     },
     {
       "index": 13,
-      "timestamp": "2026-02-23T21:16:53.547Z",
-      "elapsedMs": 6083,
-      "durationMs": 14,
+      "timestamp": "2026-02-24T10:18:32.500Z",
+      "elapsedMs": 6036,
+      "durationMs": 17,
       "request": {
         "method": "POST",
         "url": "http://localhost:3000/api/fagsaker",
@@ -1535,7 +1539,7 @@
           "behandlingstema": "ARBEID_FLERE_LAND",
           "behandlingstype": "FØRSTEGANG",
           "skalTilordnes": true,
-          "mottaksdato": "2026-02-23",
+          "mottaksdato": "2026-02-24",
           "behandlingsaarsakType": "SØKNAD",
           "hovedpart": "BRUKER",
           "brukerID": "30056928150",
@@ -1566,8 +1570,8 @@
     },
     {
       "index": 14,
-      "timestamp": "2026-02-23T21:16:53.578Z",
-      "elapsedMs": 6114,
+      "timestamp": "2026-02-24T10:18:32.533Z",
+      "elapsedMs": 6069,
       "durationMs": 6,
       "request": {
         "method": "GET",
@@ -1604,9 +1608,9 @@
     },
     {
       "index": 15,
-      "timestamp": "2026-02-23T21:16:53.579Z",
-      "elapsedMs": 6115,
-      "durationMs": 10,
+      "timestamp": "2026-02-24T10:18:32.534Z",
+      "elapsedMs": 6070,
+      "durationMs": 8,
       "request": {
         "method": "GET",
         "url": "http://localhost:3000/api/oppgaver/oversikt",
@@ -1632,9 +1636,9 @@
     },
     {
       "index": 16,
-      "timestamp": "2026-02-23T21:16:54.898Z",
-      "elapsedMs": 7434,
-      "durationMs": 6,
+      "timestamp": "2026-02-24T10:18:33.821Z",
+      "elapsedMs": 7357,
+      "durationMs": 8,
       "request": {
         "method": "GET",
         "url": "http://localhost:3000/api/saksbehandling/sakstyper/hent-lovlige-kombinasjoner/?",
@@ -1670,9 +1674,9 @@
     },
     {
       "index": 17,
-      "timestamp": "2026-02-23T21:16:54.900Z",
-      "elapsedMs": 7436,
-      "durationMs": 4,
+      "timestamp": "2026-02-24T10:18:33.822Z",
+      "elapsedMs": 7358,
+      "durationMs": 7,
       "request": {
         "method": "GET",
         "url": "http://localhost:3000/api/featuretoggle?features=melosys.ftrl.begrense_periode_vedtak&features=melosys.11_3_a_Norge_er_utpekt&features=melosys.pensjonist&features=melosys.pensjonist_eos&features=standardvedlegg_eget_vedlegg_avtaleland&features=melosys.arsavregning&features=melosys.arsavregning.uten.flyt&features=melosys.faktureringskomponenten.ikke-tidligere-perioder&features=melosys.eos_fakturering_av_trygdeavgift&features=melosys.faktureringskomponent.vis_referanse&features=melosys.cdm-4-4",
@@ -1709,9 +1713,9 @@
     },
     {
       "index": 18,
-      "timestamp": "2026-02-23T21:16:54.899Z",
-      "elapsedMs": 7435,
-      "durationMs": 19,
+      "timestamp": "2026-02-24T10:18:33.822Z",
+      "elapsedMs": 7358,
+      "durationMs": 23,
       "request": {
         "method": "GET",
         "url": "http://localhost:3000/api/oppgaver/oversikt",
@@ -1733,7 +1737,7 @@
           "journalforing": [],
           "saksbehandling": [
             {
-              "aktivTil": "2026-05-24",
+              "aktivTil": "2026-05-25",
               "ansvarligID": "Z123456",
               "oppgaveID": "2",
               "prioritet": "NORM",
@@ -1741,7 +1745,7 @@
               "hovedpartIdent": "30056928150",
               "versjon": 1,
               "behandling": {
-                "behandlingID": 46,
+                "behandlingID": 62,
                 "behandlingstype": {
                   "kode": "FØRSTEGANG",
                   "term": "Førstegangsbehandling"
@@ -1755,11 +1759,11 @@
                   "term": "Behandlingen er opprettet"
                 },
                 "erUnderOppdatering": false,
-                "registrertDato": "2026-02-23T21:16:53.598351Z",
-                "endretDato": "2026-02-23T21:16:54.267970Z",
+                "registrertDato": "2026-02-24T10:18:32.547402Z",
+                "endretDato": "2026-02-24T10:18:33.205772Z",
                 "svarFrist": null
               },
-              "saksnummer": "MEL-46",
+              "saksnummer": "MEL-62",
               "sakstype": {
                 "kode": "EU_EOS",
                 "term": "EU/EØS-land"
@@ -1779,7 +1783,7 @@
                 "fom": "2024-01-01",
                 "tom": "2025-12-31"
               },
-              "oppgaveBeskrivelse": "--- 23.02.2026 22:16 (srvmelosys, Melosys) ---\n Arbeid og/eller selvstendig virksomhet i flere land - MEL-46\n",
+              "oppgaveBeskrivelse": "--- 24.02.2026 11:18 (srvmelosys, Melosys) ---\n Arbeid og/eller selvstendig virksomhet i flere land - MEL-62\n",
               "sisteNotat": null
             }
           ]
@@ -1788,13 +1792,13 @@
     },
     {
       "index": 19,
-      "timestamp": "2026-02-23T21:16:55.049Z",
-      "elapsedMs": 7585,
-      "durationMs": 11,
+      "timestamp": "2026-02-24T10:18:33.947Z",
+      "elapsedMs": 7483,
+      "durationMs": 18,
       "request": {
         "method": "GET",
-        "url": "http://localhost:3000/api/fagsaker/MEL-46",
-        "pathname": "/api/fagsaker/MEL-46",
+        "url": "http://localhost:3000/api/fagsaker/MEL-62",
+        "pathname": "/api/fagsaker/MEL-62",
         "query": {},
         "headers": {
           "accept": "application/json",
@@ -1809,8 +1813,8 @@
           "content-type": "application/json"
         },
         "body": {
-          "saksnummer": "MEL-46",
-          "gsakSaksnummer": 5626970,
+          "saksnummer": "MEL-62",
+          "gsakSaksnummer": 8716670,
           "sakstema": {
             "kode": "MEDLEMSKAP_LOVVALG",
             "term": "Medlemskap og lovvalg"
@@ -1824,21 +1828,21 @@
             "term": "Saken er opprettet"
           },
           "betalingsvalg": null,
-          "registrertDato": "2026-02-23T21:16:53.591636Z",
-          "endretDato": "2026-02-23T21:16:53.697220Z",
+          "registrertDato": "2026-02-24T10:18:32.536706Z",
+          "endretDato": "2026-02-24T10:18:32.619438Z",
           "hovedpartRolle": "BRUKER"
         }
       }
     },
     {
       "index": 20,
-      "timestamp": "2026-02-23T21:16:55.063Z",
-      "elapsedMs": 7599,
-      "durationMs": 58,
+      "timestamp": "2026-02-24T10:18:33.967Z",
+      "elapsedMs": 7503,
+      "durationMs": 81,
       "request": {
         "method": "GET",
-        "url": "http://localhost:3000/api/behandlinger/46",
-        "pathname": "/api/behandlinger/46",
+        "url": "http://localhost:3000/api/behandlinger/62",
+        "pathname": "/api/behandlinger/62",
         "query": {},
         "headers": {
           "accept": "application/json",
@@ -1853,7 +1857,7 @@
           "content-type": "application/json"
         },
         "body": {
-          "behandlingID": 46,
+          "behandlingID": 62,
           "oppsummering": {
             "behandlingsstatus": {
               "kode": "UNDER_BEHANDLING",
@@ -1867,12 +1871,12 @@
               "kode": "ARBEID_FLERE_LAND",
               "term": "Arbeid og/eller selvstendig virksomhet i flere land"
             },
-            "registrertDato": "2026-02-23T21:16:53.598351Z",
-            "endretDato": "2026-02-23T21:16:54.267970Z",
+            "registrertDato": "2026-02-24T10:18:32.547402Z",
+            "endretDato": "2026-02-24T10:18:33.205772Z",
             "endretAvNavn": "Lokal Testbruker",
-            "sisteOpplysningerHentetDato": "2026-02-23T21:16:53.841107Z",
+            "sisteOpplysningerHentetDato": "2026-02-24T10:18:32.791256Z",
             "svarFrist": null,
-            "behandlingsfrist": "2026-05-24",
+            "behandlingsfrist": "2026-05-25",
             "behandlingsresultattype": {
               "kode": "IKKE_FASTSATT",
               "term": "Ikke fastsatt"
@@ -1884,7 +1888,7 @@
                 "arbeidsforholdID": "123",
                 "arbeidsforholdIDnav": 123,
                 "ansettelsesPeriode": {
-                  "fom": "2021-02-23",
+                  "fom": "2021-02-24",
                   "tom": null
                 },
                 "arbeidsforholdstype": "ordinaertArbeidsforhold",
@@ -1900,13 +1904,13 @@
                       "term": "KONSULENT"
                     },
                     "gyldighetsperiode": {
-                      "fom": "2021-02-23",
+                      "fom": "2021-02-24",
                       "tom": null
                     },
                     "avtaltArbeidstimerPerUke": 37.5,
                     "stillingsprosent": 100,
                     "beregnetAntallTimerPrUke": 37.5,
-                    "endringsdatoStillingsprosent": "2021-02-23",
+                    "endringsdatoStillingsprosent": "2021-02-24",
                     "skipsregister": null,
                     "skipstype": null,
                     "maritimArbeidsavtale": false,
@@ -1922,16 +1926,16 @@
                 "arbeidstakerID": "30056928150",
                 "opplysningspliktigtype": "ORGANISASJON",
                 "opplysningspliktigID": "999999999",
-                "opprettelsestidspunkt": "2026-02-23T21:16:53.798258Z",
-                "sistBekreftet": "2026-02-23T21:16:53.798263Z",
+                "opprettelsestidspunkt": "2026-02-24T10:18:32.749758Z",
+                "sistBekreftet": "2026-02-24T10:18:32.749763Z",
                 "Aordning": null,
                 "timerTimelonnet": []
               }
             ],
             "organisasjoner": [
               {
-                "orgnr": "888888888",
-                "navn": "Steinars Stein AS",
+                "orgnr": "999999999",
+                "navn": "Ståles Stål AS",
                 "oppstartdato": null,
                 "organisasjonsform": "Aksjeselskap",
                 "forretningsadresse": {
@@ -1958,8 +1962,8 @@
                 }
               },
               {
-                "orgnr": "999999999",
-                "navn": "Ståles Stål AS",
+                "orgnr": "888888888",
+                "navn": "Steinars Stein AS",
                 "oppstartdato": null,
                 "organisasjonsform": "Aksjeselskap",
                 "forretningsadresse": {
@@ -2882,13 +2886,13 @@
     },
     {
       "index": 21,
-      "timestamp": "2026-02-23T21:16:55.125Z",
-      "elapsedMs": 7661,
-      "durationMs": 30,
+      "timestamp": "2026-02-24T10:18:34.053Z",
+      "elapsedMs": 7589,
+      "durationMs": 36,
       "request": {
         "method": "GET",
-        "url": "http://localhost:3000/api/behandlinger/46/resultat",
-        "pathname": "/api/behandlinger/46/resultat",
+        "url": "http://localhost:3000/api/behandlinger/62/resultat",
+        "pathname": "/api/behandlinger/62/resultat",
         "query": {},
         "headers": {
           "accept": "application/json",
@@ -2920,13 +2924,13 @@
     },
     {
       "index": 22,
-      "timestamp": "2026-02-23T21:16:55.158Z",
-      "elapsedMs": 7694,
-      "durationMs": 10,
+      "timestamp": "2026-02-24T10:18:34.093Z",
+      "elapsedMs": 7629,
+      "durationMs": 12,
       "request": {
         "method": "GET",
-        "url": "http://localhost:3000/api/mottatteopplysninger/46",
-        "pathname": "/api/mottatteopplysninger/46",
+        "url": "http://localhost:3000/api/mottatteopplysninger/62",
+        "pathname": "/api/mottatteopplysninger/62",
         "query": {},
         "headers": {
           "accept": "application/json",
@@ -3048,19 +3052,19 @@
             }
           },
           "type": "SØKNAD_A1_YRKESAKTIVE_EØS",
-          "mottaksdato": "2026-02-23"
+          "mottaksdato": "2026-02-24"
         }
       }
     },
     {
       "index": 23,
-      "timestamp": "2026-02-23T21:16:55.171Z",
-      "elapsedMs": 7707,
-      "durationMs": 12,
+      "timestamp": "2026-02-24T10:18:34.109Z",
+      "elapsedMs": 7645,
+      "durationMs": 14,
       "request": {
         "method": "GET",
-        "url": "http://localhost:3000/api/fagsaker/MEL-46/dokumenter",
-        "pathname": "/api/fagsaker/MEL-46/dokumenter",
+        "url": "http://localhost:3000/api/fagsaker/MEL-62/dokumenter",
+        "pathname": "/api/fagsaker/MEL-62/dokumenter",
         "query": {},
         "headers": {
           "accept": "application/json",
@@ -3079,13 +3083,13 @@
     },
     {
       "index": 24,
-      "timestamp": "2026-02-23T21:16:55.188Z",
-      "elapsedMs": 7724,
-      "durationMs": 8,
+      "timestamp": "2026-02-24T10:18:34.132Z",
+      "elapsedMs": 7668,
+      "durationMs": 10,
       "request": {
         "method": "GET",
-        "url": "http://localhost:3000/api/anmodningsperioder/46",
-        "pathname": "/api/anmodningsperioder/46",
+        "url": "http://localhost:3000/api/anmodningsperioder/62",
+        "pathname": "/api/anmodningsperioder/62",
         "query": {},
         "headers": {
           "accept": "application/json",
@@ -3106,18 +3110,147 @@
     },
     {
       "index": 25,
-      "timestamp": "2026-02-23T21:16:55.269Z",
-      "elapsedMs": 7805,
-      "durationMs": 17,
+      "timestamp": "2026-02-24T10:18:34.215Z",
+      "elapsedMs": 7751,
+      "durationMs": 8,
       "request": {
         "method": "GET",
-        "url": "http://localhost:3000/api/saksbehandling/behandlingstemaer/hent-lovlige-kombinasjoner/?hovedpart=BRUKER&sakstype=EU_EOS&sakstema=MEDLEMSKAP_LOVVALG&aktivBehandlingID=46",
+        "url": "http://localhost:3000/api/saksbehandling/sakstemaer/hent-lovlige-kombinasjoner/?hovedpart=BRUKER&sakstype=EU_EOS&saksnummer=MEL-62",
+        "pathname": "/api/saksbehandling/sakstemaer/hent-lovlige-kombinasjoner/",
+        "query": {
+          "hovedpart": "BRUKER",
+          "sakstype": "EU_EOS",
+          "saksnummer": "MEL-62"
+        },
+        "headers": {
+          "accept": "application/json",
+          "authorization": "[REDACTED]"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": [
+          {
+            "kode": "MEDLEMSKAP_LOVVALG",
+            "term": "Medlemskap og lovvalg"
+          },
+          {
+            "kode": "UNNTAK",
+            "term": "Unntak"
+          },
+          {
+            "kode": "TRYGDEAVGIFT",
+            "term": "Trygdeavgift"
+          }
+        ]
+      }
+    },
+    {
+      "index": 26,
+      "timestamp": "2026-02-24T10:18:34.215Z",
+      "elapsedMs": 7751,
+      "durationMs": 9,
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:3000/api/saksbehandling/sakstyper/hent-lovlige-kombinasjoner/?saksnummer=MEL-62",
+        "pathname": "/api/saksbehandling/sakstyper/hent-lovlige-kombinasjoner/",
+        "query": {
+          "saksnummer": "MEL-62"
+        },
+        "headers": {
+          "accept": "application/json",
+          "authorization": "[REDACTED]"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": [
+          {
+            "kode": "EU_EOS",
+            "term": "EU/EØS-land"
+          },
+          {
+            "kode": "TRYGDEAVTALE",
+            "term": "Avtaleland"
+          },
+          {
+            "kode": "FTRL",
+            "term": "Utenfor avtaleland"
+          }
+        ]
+      }
+    },
+    {
+      "index": 27,
+      "timestamp": "2026-02-24T10:18:34.216Z",
+      "elapsedMs": 7752,
+      "durationMs": 10,
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:3000/api/saksbehandling/MEL-62/behandlingstyper/kombinasjoner-for-endring/?hovedpart=BRUKER&sakstype=EU_EOS&sakstema=MEDLEMSKAP_LOVVALG&behandlingstema=ARBEID_FLERE_LAND",
+        "pathname": "/api/saksbehandling/MEL-62/behandlingstyper/kombinasjoner-for-endring/",
+        "query": {
+          "hovedpart": "BRUKER",
+          "sakstype": "EU_EOS",
+          "sakstema": "MEDLEMSKAP_LOVVALG",
+          "behandlingstema": "ARBEID_FLERE_LAND"
+        },
+        "headers": {
+          "accept": "application/json",
+          "authorization": "[REDACTED]"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": [
+          {
+            "kode": "FØRSTEGANG",
+            "term": "Førstegangsbehandling"
+          },
+          {
+            "kode": "NY_VURDERING",
+            "term": "Ny vurdering"
+          },
+          {
+            "kode": "KLAGE",
+            "term": "Klage"
+          },
+          {
+            "kode": "HENVENDELSE",
+            "term": "Henvendelse"
+          }
+        ]
+      }
+    },
+    {
+      "index": 28,
+      "timestamp": "2026-02-24T10:18:34.215Z",
+      "elapsedMs": 7751,
+      "durationMs": 12,
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:3000/api/saksbehandling/behandlingstemaer/hent-lovlige-kombinasjoner/?hovedpart=BRUKER&sakstype=EU_EOS&sakstema=MEDLEMSKAP_LOVVALG&aktivBehandlingID=62",
         "pathname": "/api/saksbehandling/behandlingstemaer/hent-lovlige-kombinasjoner/",
         "query": {
           "hovedpart": "BRUKER",
           "sakstype": "EU_EOS",
           "sakstema": "MEDLEMSKAP_LOVVALG",
-          "aktivBehandlingID": "46"
+          "aktivBehandlingID": "62"
         },
         "headers": {
           "accept": "application/json",
@@ -3172,103 +3305,14 @@
       }
     },
     {
-      "index": 26,
-      "timestamp": "2026-02-23T21:16:55.267Z",
-      "elapsedMs": 7803,
-      "durationMs": 21,
+      "index": 29,
+      "timestamp": "2026-02-24T10:18:34.216Z",
+      "elapsedMs": 7752,
+      "durationMs": 13,
       "request": {
         "method": "GET",
-        "url": "http://localhost:3000/api/saksbehandling/sakstemaer/hent-lovlige-kombinasjoner/?hovedpart=BRUKER&sakstype=EU_EOS&saksnummer=MEL-46",
-        "pathname": "/api/saksbehandling/sakstemaer/hent-lovlige-kombinasjoner/",
-        "query": {
-          "hovedpart": "BRUKER",
-          "sakstype": "EU_EOS",
-          "saksnummer": "MEL-46"
-        },
-        "headers": {
-          "accept": "application/json",
-          "authorization": "[REDACTED]"
-        },
-        "body": null
-      },
-      "response": {
-        "status": 200,
-        "statusText": "OK",
-        "headers": {
-          "content-type": "application/json"
-        },
-        "body": [
-          {
-            "kode": "MEDLEMSKAP_LOVVALG",
-            "term": "Medlemskap og lovvalg"
-          },
-          {
-            "kode": "UNNTAK",
-            "term": "Unntak"
-          },
-          {
-            "kode": "TRYGDEAVGIFT",
-            "term": "Trygdeavgift"
-          }
-        ]
-      }
-    },
-    {
-      "index": 27,
-      "timestamp": "2026-02-23T21:16:55.269Z",
-      "elapsedMs": 7805,
-      "durationMs": 21,
-      "request": {
-        "method": "GET",
-        "url": "http://localhost:3000/api/saksbehandling/MEL-46/behandlingstyper/kombinasjoner-for-endring/?hovedpart=BRUKER&sakstype=EU_EOS&sakstema=MEDLEMSKAP_LOVVALG&behandlingstema=ARBEID_FLERE_LAND",
-        "pathname": "/api/saksbehandling/MEL-46/behandlingstyper/kombinasjoner-for-endring/",
-        "query": {
-          "hovedpart": "BRUKER",
-          "sakstype": "EU_EOS",
-          "sakstema": "MEDLEMSKAP_LOVVALG",
-          "behandlingstema": "ARBEID_FLERE_LAND"
-        },
-        "headers": {
-          "accept": "application/json",
-          "authorization": "[REDACTED]"
-        },
-        "body": null
-      },
-      "response": {
-        "status": 200,
-        "statusText": "OK",
-        "headers": {
-          "content-type": "application/json"
-        },
-        "body": [
-          {
-            "kode": "FØRSTEGANG",
-            "term": "Førstegangsbehandling"
-          },
-          {
-            "kode": "NY_VURDERING",
-            "term": "Ny vurdering"
-          },
-          {
-            "kode": "KLAGE",
-            "term": "Klage"
-          },
-          {
-            "kode": "HENVENDELSE",
-            "term": "Henvendelse"
-          }
-        ]
-      }
-    },
-    {
-      "index": 28,
-      "timestamp": "2026-02-23T21:16:55.270Z",
-      "elapsedMs": 7806,
-      "durationMs": 20,
-      "request": {
-        "method": "GET",
-        "url": "http://localhost:3000/api/brev/utkast/46",
-        "pathname": "/api/brev/utkast/46",
+        "url": "http://localhost:3000/api/brev/utkast/62",
+        "pathname": "/api/brev/utkast/62",
         "query": {},
         "headers": {
           "accept": "application/json",
@@ -3286,54 +3330,14 @@
       }
     },
     {
-      "index": 29,
-      "timestamp": "2026-02-23T21:16:55.266Z",
-      "elapsedMs": 7802,
-      "durationMs": 25,
-      "request": {
-        "method": "GET",
-        "url": "http://localhost:3000/api/saksbehandling/sakstyper/hent-lovlige-kombinasjoner/?saksnummer=MEL-46",
-        "pathname": "/api/saksbehandling/sakstyper/hent-lovlige-kombinasjoner/",
-        "query": {
-          "saksnummer": "MEL-46"
-        },
-        "headers": {
-          "accept": "application/json",
-          "authorization": "[REDACTED]"
-        },
-        "body": null
-      },
-      "response": {
-        "status": 200,
-        "statusText": "OK",
-        "headers": {
-          "content-type": "application/json"
-        },
-        "body": [
-          {
-            "kode": "EU_EOS",
-            "term": "EU/EØS-land"
-          },
-          {
-            "kode": "TRYGDEAVTALE",
-            "term": "Avtaleland"
-          },
-          {
-            "kode": "FTRL",
-            "term": "Utenfor avtaleland"
-          }
-        ]
-      }
-    },
-    {
       "index": 30,
-      "timestamp": "2026-02-23T21:16:55.270Z",
-      "elapsedMs": 7806,
-      "durationMs": 22,
+      "timestamp": "2026-02-24T10:18:34.216Z",
+      "elapsedMs": 7752,
+      "durationMs": 19,
       "request": {
         "method": "GET",
-        "url": "http://localhost:3000/api/behandlinger/46/aarsak/mottaksdato",
-        "pathname": "/api/behandlinger/46/aarsak/mottaksdato",
+        "url": "http://localhost:3000/api/behandlinger/62/aarsak/mottaksdato",
+        "pathname": "/api/behandlinger/62/aarsak/mottaksdato",
         "query": {},
         "headers": {
           "accept": "application/json",
@@ -3348,44 +3352,19 @@
           "content-type": "application/json"
         },
         "body": {
-          "mottaksdato": "2026-02-23"
+          "mottaksdato": "2026-02-24"
         }
       }
     },
     {
       "index": 31,
-      "timestamp": "2026-02-23T21:16:55.270Z",
-      "elapsedMs": 7806,
-      "durationMs": 122,
+      "timestamp": "2026-02-24T10:18:34.213Z",
+      "elapsedMs": 7749,
+      "durationMs": 97,
       "request": {
         "method": "GET",
-        "url": "http://localhost:3000/api/behandlinger/46/trygdeavgift",
-        "pathname": "/api/behandlinger/46/trygdeavgift",
-        "query": {},
-        "headers": {
-          "accept": "application/json",
-          "authorization": "[REDACTED]"
-        },
-        "body": null
-      },
-      "response": {
-        "status": 200,
-        "statusText": "OK",
-        "headers": {
-          "content-type": "application/json"
-        },
-        "body": []
-      }
-    },
-    {
-      "index": 32,
-      "timestamp": "2026-02-23T21:16:55.265Z",
-      "elapsedMs": 7801,
-      "durationMs": 128,
-      "request": {
-        "method": "GET",
-        "url": "http://localhost:3000/api/fagsaker/MEL-46/trygdeavgift/oppsummering",
-        "pathname": "/api/fagsaker/MEL-46/trygdeavgift/oppsummering",
+        "url": "http://localhost:3000/api/fagsaker/MEL-62/trygdeavgift/oppsummering",
+        "pathname": "/api/fagsaker/MEL-62/trygdeavgift/oppsummering",
         "query": {},
         "headers": {
           "accept": "application/json",
@@ -3405,14 +3384,14 @@
       }
     },
     {
-      "index": 33,
-      "timestamp": "2026-02-23T21:16:55.406Z",
-      "elapsedMs": 7942,
-      "durationMs": 7,
+      "index": 32,
+      "timestamp": "2026-02-24T10:18:34.217Z",
+      "elapsedMs": 7753,
+      "durationMs": 93,
       "request": {
         "method": "GET",
-        "url": "http://localhost:3000/api/anmodningsperioder/46",
-        "pathname": "/api/anmodningsperioder/46",
+        "url": "http://localhost:3000/api/behandlinger/62/trygdeavgift",
+        "pathname": "/api/behandlinger/62/trygdeavgift",
         "query": {},
         "headers": {
           "accept": "application/json",
@@ -3426,20 +3405,18 @@
         "headers": {
           "content-type": "application/json"
         },
-        "body": {
-          "anmodningsperioder": []
-        }
+        "body": []
       }
     },
     {
-      "index": 34,
-      "timestamp": "2026-02-23T21:16:55.404Z",
-      "elapsedMs": 7940,
-      "durationMs": 11,
+      "index": 33,
+      "timestamp": "2026-02-24T10:18:34.329Z",
+      "elapsedMs": 7865,
+      "durationMs": 10,
       "request": {
         "method": "GET",
-        "url": "http://localhost:3000/api/behandlinger/46/tidligere-medlemsperioder",
-        "pathname": "/api/behandlinger/46/tidligere-medlemsperioder",
+        "url": "http://localhost:3000/api/behandlinger/62/tidligere-medlemsperioder",
+        "pathname": "/api/behandlinger/62/tidligere-medlemsperioder",
         "query": {},
         "headers": {
           "accept": "application/json",
@@ -3459,14 +3436,41 @@
       }
     },
     {
-      "index": 35,
-      "timestamp": "2026-02-23T21:16:55.405Z",
-      "elapsedMs": 7941,
-      "durationMs": 11,
+      "index": 34,
+      "timestamp": "2026-02-24T10:18:34.330Z",
+      "elapsedMs": 7866,
+      "durationMs": 9,
       "request": {
         "method": "GET",
-        "url": "http://localhost:3000/api/lovvalgsperioder/46",
-        "pathname": "/api/lovvalgsperioder/46",
+        "url": "http://localhost:3000/api/anmodningsperioder/62",
+        "pathname": "/api/anmodningsperioder/62",
+        "query": {},
+        "headers": {
+          "accept": "application/json",
+          "authorization": "[REDACTED]"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": {
+          "anmodningsperioder": []
+        }
+      }
+    },
+    {
+      "index": 35,
+      "timestamp": "2026-02-24T10:18:34.330Z",
+      "elapsedMs": 7866,
+      "durationMs": 10,
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:3000/api/lovvalgsperioder/62",
+        "pathname": "/api/lovvalgsperioder/62",
         "query": {},
         "headers": {
           "accept": "application/json",
@@ -3485,38 +3489,13 @@
     },
     {
       "index": 36,
-      "timestamp": "2026-02-23T21:16:55.405Z",
-      "elapsedMs": 7941,
-      "durationMs": 12,
+      "timestamp": "2026-02-24T10:18:34.330Z",
+      "elapsedMs": 7866,
+      "durationMs": 10,
       "request": {
         "method": "GET",
-        "url": "http://localhost:3000/api/avklartefakta/46",
-        "pathname": "/api/avklartefakta/46",
-        "query": {},
-        "headers": {
-          "accept": "application/json",
-          "authorization": "[REDACTED]"
-        },
-        "body": null
-      },
-      "response": {
-        "status": 200,
-        "statusText": "OK",
-        "headers": {
-          "content-type": "application/json"
-        },
-        "body": []
-      }
-    },
-    {
-      "index": 37,
-      "timestamp": "2026-02-23T21:16:55.406Z",
-      "elapsedMs": 7942,
-      "durationMs": 12,
-      "request": {
-        "method": "GET",
-        "url": "http://localhost:3000/api/utpekingsperioder/46",
-        "pathname": "/api/utpekingsperioder/46",
+        "url": "http://localhost:3000/api/utpekingsperioder/62",
+        "pathname": "/api/utpekingsperioder/62",
         "query": {},
         "headers": {
           "accept": "application/json",
@@ -3536,14 +3515,39 @@
       }
     },
     {
-      "index": 38,
-      "timestamp": "2026-02-23T21:16:55.405Z",
-      "elapsedMs": 7941,
-      "durationMs": 17,
+      "index": 37,
+      "timestamp": "2026-02-24T10:18:34.330Z",
+      "elapsedMs": 7866,
+      "durationMs": 11,
       "request": {
         "method": "GET",
-        "url": "http://localhost:3000/api/vilkaar/46",
-        "pathname": "/api/vilkaar/46",
+        "url": "http://localhost:3000/api/avklartefakta/62",
+        "pathname": "/api/avklartefakta/62",
+        "query": {},
+        "headers": {
+          "accept": "application/json",
+          "authorization": "[REDACTED]"
+        },
+        "body": null
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": []
+      }
+    },
+    {
+      "index": 38,
+      "timestamp": "2026-02-24T10:18:34.330Z",
+      "elapsedMs": 7866,
+      "durationMs": 16,
+      "request": {
+        "method": "GET",
+        "url": "http://localhost:3000/api/vilkaar/62",
+        "pathname": "/api/vilkaar/62",
         "query": {},
         "headers": {
           "accept": "application/json",
@@ -3570,13 +3574,13 @@
     },
     {
       "index": 39,
-      "timestamp": "2026-02-23T21:16:56.068Z",
-      "elapsedMs": 8604,
-      "durationMs": 30,
+      "timestamp": "2026-02-24T10:18:34.994Z",
+      "elapsedMs": 8530,
+      "durationMs": 31,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/avklartefakta/46",
-        "pathname": "/api/avklartefakta/46",
+        "url": "http://localhost:3000/api/avklartefakta/62",
+        "pathname": "/api/avklartefakta/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -3596,13 +3600,13 @@
     },
     {
       "index": 40,
-      "timestamp": "2026-02-23T21:16:56.115Z",
-      "elapsedMs": 8651,
-      "durationMs": 20,
+      "timestamp": "2026-02-24T10:18:35.043Z",
+      "elapsedMs": 8579,
+      "durationMs": 29,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/vilkaar/46",
-        "pathname": "/api/vilkaar/46",
+        "url": "http://localhost:3000/api/vilkaar/62",
+        "pathname": "/api/vilkaar/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -3630,13 +3634,13 @@
     },
     {
       "index": 41,
-      "timestamp": "2026-02-23T21:16:56.147Z",
-      "elapsedMs": 8683,
-      "durationMs": 12,
+      "timestamp": "2026-02-24T10:18:35.084Z",
+      "elapsedMs": 8620,
+      "durationMs": 15,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/utpekingsperioder/46",
-        "pathname": "/api/utpekingsperioder/46",
+        "url": "http://localhost:3000/api/anmodningsperioder/62",
+        "pathname": "/api/anmodningsperioder/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -3644,7 +3648,7 @@
           "authorization": "[REDACTED]"
         },
         "body": {
-          "utpekingsperioder": []
+          "anmodningsperioder": []
         }
       },
       "response": {
@@ -3654,19 +3658,19 @@
           "content-type": "application/json"
         },
         "body": {
-          "utpekingsperioder": []
+          "anmodningsperioder": []
         }
       }
     },
     {
       "index": 42,
-      "timestamp": "2026-02-23T21:16:56.146Z",
-      "elapsedMs": 8682,
+      "timestamp": "2026-02-24T10:18:35.085Z",
+      "elapsedMs": 8621,
       "durationMs": 14,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/anmodningsperioder/46",
-        "pathname": "/api/anmodningsperioder/46",
+        "url": "http://localhost:3000/api/utpekingsperioder/62",
+        "pathname": "/api/utpekingsperioder/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -3674,7 +3678,7 @@
           "authorization": "[REDACTED]"
         },
         "body": {
-          "anmodningsperioder": []
+          "utpekingsperioder": []
         }
       },
       "response": {
@@ -3684,19 +3688,19 @@
           "content-type": "application/json"
         },
         "body": {
-          "anmodningsperioder": []
+          "utpekingsperioder": []
         }
       }
     },
     {
       "index": 43,
-      "timestamp": "2026-02-23T21:16:56.178Z",
-      "elapsedMs": 8714,
-      "durationMs": 10,
+      "timestamp": "2026-02-24T10:18:35.121Z",
+      "elapsedMs": 8657,
+      "durationMs": 12,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/mottatteopplysninger/46",
-        "pathname": "/api/mottatteopplysninger/46",
+        "url": "http://localhost:3000/api/mottatteopplysninger/62",
+        "pathname": "/api/mottatteopplysninger/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -3925,19 +3929,19 @@
             }
           },
           "type": "SØKNAD_A1_YRKESAKTIVE_EØS",
-          "mottaksdato": "2026-02-23"
+          "mottaksdato": "2026-02-24"
         }
       }
     },
     {
       "index": 44,
-      "timestamp": "2026-02-23T21:16:56.272Z",
-      "elapsedMs": 8808,
-      "durationMs": 11,
+      "timestamp": "2026-02-24T10:18:35.221Z",
+      "elapsedMs": 8757,
+      "durationMs": 12,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/mottatteopplysninger/46",
-        "pathname": "/api/mottatteopplysninger/46",
+        "url": "http://localhost:3000/api/mottatteopplysninger/62",
+        "pathname": "/api/mottatteopplysninger/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -4166,19 +4170,19 @@
             }
           },
           "type": "SØKNAD_A1_YRKESAKTIVE_EØS",
-          "mottaksdato": "2026-02-23"
+          "mottaksdato": "2026-02-24"
         }
       }
     },
     {
       "index": 45,
-      "timestamp": "2026-02-23T21:16:56.921Z",
-      "elapsedMs": 9457,
-      "durationMs": 33,
+      "timestamp": "2026-02-24T10:18:35.850Z",
+      "elapsedMs": 9386,
+      "durationMs": 64,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/avklartefakta/46",
-        "pathname": "/api/avklartefakta/46",
+        "url": "http://localhost:3000/api/avklartefakta/62",
+        "pathname": "/api/avklartefakta/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -4220,13 +4224,13 @@
     },
     {
       "index": 46,
-      "timestamp": "2026-02-23T21:16:56.973Z",
-      "elapsedMs": 9509,
-      "durationMs": 24,
+      "timestamp": "2026-02-24T10:18:35.935Z",
+      "elapsedMs": 9471,
+      "durationMs": 35,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/vilkaar/46",
-        "pathname": "/api/vilkaar/46",
+        "url": "http://localhost:3000/api/vilkaar/62",
+        "pathname": "/api/vilkaar/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -4254,13 +4258,13 @@
     },
     {
       "index": 47,
-      "timestamp": "2026-02-23T21:16:57.010Z",
-      "elapsedMs": 9546,
-      "durationMs": 15,
+      "timestamp": "2026-02-24T10:18:35.986Z",
+      "elapsedMs": 9522,
+      "durationMs": 18,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/anmodningsperioder/46",
-        "pathname": "/api/anmodningsperioder/46",
+        "url": "http://localhost:3000/api/utpekingsperioder/62",
+        "pathname": "/api/utpekingsperioder/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -4268,7 +4272,7 @@
           "authorization": "[REDACTED]"
         },
         "body": {
-          "anmodningsperioder": []
+          "utpekingsperioder": []
         }
       },
       "response": {
@@ -4278,19 +4282,19 @@
           "content-type": "application/json"
         },
         "body": {
-          "anmodningsperioder": []
+          "utpekingsperioder": []
         }
       }
     },
     {
       "index": 48,
-      "timestamp": "2026-02-23T21:16:57.010Z",
-      "elapsedMs": 9546,
-      "durationMs": 15,
+      "timestamp": "2026-02-24T10:18:35.985Z",
+      "elapsedMs": 9521,
+      "durationMs": 21,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/utpekingsperioder/46",
-        "pathname": "/api/utpekingsperioder/46",
+        "url": "http://localhost:3000/api/anmodningsperioder/62",
+        "pathname": "/api/anmodningsperioder/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -4298,7 +4302,7 @@
           "authorization": "[REDACTED]"
         },
         "body": {
-          "utpekingsperioder": []
+          "anmodningsperioder": []
         }
       },
       "response": {
@@ -4308,19 +4312,19 @@
           "content-type": "application/json"
         },
         "body": {
-          "utpekingsperioder": []
+          "anmodningsperioder": []
         }
       }
     },
     {
       "index": 49,
-      "timestamp": "2026-02-23T21:16:57.047Z",
-      "elapsedMs": 9583,
-      "durationMs": 12,
+      "timestamp": "2026-02-24T10:18:36.026Z",
+      "elapsedMs": 9562,
+      "durationMs": 14,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/mottatteopplysninger/46",
-        "pathname": "/api/mottatteopplysninger/46",
+        "url": "http://localhost:3000/api/mottatteopplysninger/62",
+        "pathname": "/api/mottatteopplysninger/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -4549,19 +4553,19 @@
             }
           },
           "type": "SØKNAD_A1_YRKESAKTIVE_EØS",
-          "mottaksdato": "2026-02-23"
+          "mottaksdato": "2026-02-24"
         }
       }
     },
     {
       "index": 50,
-      "timestamp": "2026-02-23T21:17:03.666Z",
-      "elapsedMs": 16202,
-      "durationMs": 55,
+      "timestamp": "2026-02-24T10:18:42.628Z",
+      "elapsedMs": 16164,
+      "durationMs": 60,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/avklartefakta/46",
-        "pathname": "/api/avklartefakta/46",
+        "url": "http://localhost:3000/api/avklartefakta/62",
+        "pathname": "/api/avklartefakta/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -4620,13 +4624,13 @@
         "body": [
           {
             "fakta": [
-              "NO"
+              "EE"
             ],
-            "referanse": "BOSTEDSLAND",
-            "subjektID": null,
+            "referanse": "ARBEIDSLAND",
+            "subjektID": "EE",
             "begrunnelseKoder": [],
             "begrunnelseFritekst": null,
-            "avklartefaktaKode": "BOSTEDSLAND"
+            "avklartefaktaKode": "ARBEIDSLAND"
           },
           {
             "fakta": [
@@ -4640,10 +4644,10 @@
           },
           {
             "fakta": [
-              "EE"
+              "NO"
             ],
             "referanse": "ARBEIDSLAND",
-            "subjektID": "EE",
+            "subjektID": "NO",
             "begrunnelseKoder": [],
             "begrunnelseFritekst": null,
             "avklartefaktaKode": "ARBEIDSLAND"
@@ -4652,24 +4656,24 @@
             "fakta": [
               "NO"
             ],
-            "referanse": "ARBEIDSLAND",
-            "subjektID": "NO",
+            "referanse": "BOSTEDSLAND",
+            "subjektID": null,
             "begrunnelseKoder": [],
             "begrunnelseFritekst": null,
-            "avklartefaktaKode": "ARBEIDSLAND"
+            "avklartefaktaKode": "BOSTEDSLAND"
           }
         ]
       }
     },
     {
       "index": 51,
-      "timestamp": "2026-02-23T21:17:03.741Z",
-      "elapsedMs": 16277,
-      "durationMs": 33,
+      "timestamp": "2026-02-24T10:18:42.708Z",
+      "elapsedMs": 16244,
+      "durationMs": 31,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/vilkaar/46",
-        "pathname": "/api/vilkaar/46",
+        "url": "http://localhost:3000/api/vilkaar/62",
+        "pathname": "/api/vilkaar/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -4697,13 +4701,13 @@
     },
     {
       "index": 52,
-      "timestamp": "2026-02-23T21:17:03.788Z",
-      "elapsedMs": 16324,
-      "durationMs": 19,
+      "timestamp": "2026-02-24T10:18:42.753Z",
+      "elapsedMs": 16289,
+      "durationMs": 20,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/anmodningsperioder/46",
-        "pathname": "/api/anmodningsperioder/46",
+        "url": "http://localhost:3000/api/anmodningsperioder/62",
+        "pathname": "/api/anmodningsperioder/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -4727,13 +4731,13 @@
     },
     {
       "index": 53,
-      "timestamp": "2026-02-23T21:17:03.789Z",
-      "elapsedMs": 16325,
-      "durationMs": 18,
+      "timestamp": "2026-02-24T10:18:42.754Z",
+      "elapsedMs": 16290,
+      "durationMs": 19,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/utpekingsperioder/46",
-        "pathname": "/api/utpekingsperioder/46",
+        "url": "http://localhost:3000/api/utpekingsperioder/62",
+        "pathname": "/api/utpekingsperioder/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -4757,13 +4761,13 @@
     },
     {
       "index": 54,
-      "timestamp": "2026-02-23T21:17:03.833Z",
-      "elapsedMs": 16369,
-      "durationMs": 12,
+      "timestamp": "2026-02-24T10:18:42.799Z",
+      "elapsedMs": 16335,
+      "durationMs": 9,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/mottatteopplysninger/46",
-        "pathname": "/api/mottatteopplysninger/46",
+        "url": "http://localhost:3000/api/mottatteopplysninger/62",
+        "pathname": "/api/mottatteopplysninger/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -4992,19 +4996,19 @@
             }
           },
           "type": "SØKNAD_A1_YRKESAKTIVE_EØS",
-          "mottaksdato": "2026-02-23"
+          "mottaksdato": "2026-02-24"
         }
       }
     },
     {
       "index": 55,
-      "timestamp": "2026-02-23T21:17:04.113Z",
-      "elapsedMs": 16649,
-      "durationMs": 66,
+      "timestamp": "2026-02-24T10:18:43.099Z",
+      "elapsedMs": 16635,
+      "durationMs": 75,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/avklartefakta/46",
-        "pathname": "/api/avklartefakta/46",
+        "url": "http://localhost:3000/api/avklartefakta/62",
+        "pathname": "/api/avklartefakta/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -5093,16 +5097,6 @@
           },
           {
             "fakta": [
-              "TRUE"
-            ],
-            "referanse": "VIRKSOMHET",
-            "subjektID": "999999999",
-            "begrunnelseKoder": [],
-            "begrunnelseFritekst": null,
-            "avklartefaktaKode": "VIRKSOMHET"
-          },
-          {
-            "fakta": [
               "EE"
             ],
             "referanse": "ARBEIDSLAND",
@@ -5120,19 +5114,29 @@
             "begrunnelseKoder": [],
             "begrunnelseFritekst": null,
             "avklartefaktaKode": "ARBEIDSLAND"
+          },
+          {
+            "fakta": [
+              "TRUE"
+            ],
+            "referanse": "VIRKSOMHET",
+            "subjektID": "999999999",
+            "begrunnelseKoder": [],
+            "begrunnelseFritekst": null,
+            "avklartefaktaKode": "VIRKSOMHET"
           }
         ]
       }
     },
     {
       "index": 56,
-      "timestamp": "2026-02-23T21:17:04.192Z",
-      "elapsedMs": 16728,
-      "durationMs": 46,
+      "timestamp": "2026-02-24T10:18:43.188Z",
+      "elapsedMs": 16724,
+      "durationMs": 36,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/vilkaar/46",
-        "pathname": "/api/vilkaar/46",
+        "url": "http://localhost:3000/api/vilkaar/62",
+        "pathname": "/api/vilkaar/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -5160,13 +5164,13 @@
     },
     {
       "index": 57,
-      "timestamp": "2026-02-23T21:17:04.254Z",
-      "elapsedMs": 16790,
-      "durationMs": 23,
+      "timestamp": "2026-02-24T10:18:43.237Z",
+      "elapsedMs": 16773,
+      "durationMs": 34,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/anmodningsperioder/46",
-        "pathname": "/api/anmodningsperioder/46",
+        "url": "http://localhost:3000/api/anmodningsperioder/62",
+        "pathname": "/api/anmodningsperioder/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -5190,13 +5194,13 @@
     },
     {
       "index": 58,
-      "timestamp": "2026-02-23T21:17:04.255Z",
-      "elapsedMs": 16791,
-      "durationMs": 22,
+      "timestamp": "2026-02-24T10:18:43.239Z",
+      "elapsedMs": 16775,
+      "durationMs": 33,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/utpekingsperioder/46",
-        "pathname": "/api/utpekingsperioder/46",
+        "url": "http://localhost:3000/api/utpekingsperioder/62",
+        "pathname": "/api/utpekingsperioder/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -5220,13 +5224,13 @@
     },
     {
       "index": 59,
-      "timestamp": "2026-02-23T21:17:04.293Z",
-      "elapsedMs": 16829,
-      "durationMs": 10,
+      "timestamp": "2026-02-24T10:18:43.288Z",
+      "elapsedMs": 16824,
+      "durationMs": 13,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/mottatteopplysninger/46",
-        "pathname": "/api/mottatteopplysninger/46",
+        "url": "http://localhost:3000/api/mottatteopplysninger/62",
+        "pathname": "/api/mottatteopplysninger/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -5455,19 +5459,19 @@
             }
           },
           "type": "SØKNAD_A1_YRKESAKTIVE_EØS",
-          "mottaksdato": "2026-02-23"
+          "mottaksdato": "2026-02-24"
         }
       }
     },
     {
       "index": 60,
-      "timestamp": "2026-02-23T21:17:04.543Z",
-      "elapsedMs": 17079,
-      "durationMs": 40,
+      "timestamp": "2026-02-24T10:18:43.563Z",
+      "elapsedMs": 17099,
+      "durationMs": 48,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/avklartefakta/46",
-        "pathname": "/api/avklartefakta/46",
+        "url": "http://localhost:3000/api/avklartefakta/62",
+        "pathname": "/api/avklartefakta/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -5566,19 +5570,9 @@
           },
           {
             "fakta": [
-              "NO"
+              "TRUE"
             ],
-            "referanse": "ARBEIDSLAND",
-            "subjektID": "NO",
-            "begrunnelseKoder": [],
-            "begrunnelseFritekst": null,
-            "avklartefaktaKode": "ARBEIDSLAND"
-          },
-          {
-            "fakta": [
-              "ORDINAER_ARBEIDSTAKER"
-            ],
-            "referanse": "YRKESAKTIVITET",
+            "referanse": "ARBEID_UTFORES_I_OPPGITT_LAND",
             "subjektID": null,
             "begrunnelseKoder": [],
             "begrunnelseFritekst": null,
@@ -5596,9 +5590,19 @@
           },
           {
             "fakta": [
-              "TRUE"
+              "NO"
             ],
-            "referanse": "ARBEID_UTFORES_I_OPPGITT_LAND",
+            "referanse": "ARBEIDSLAND",
+            "subjektID": "NO",
+            "begrunnelseKoder": [],
+            "begrunnelseFritekst": null,
+            "avklartefaktaKode": "ARBEIDSLAND"
+          },
+          {
+            "fakta": [
+              "ORDINAER_ARBEIDSTAKER"
+            ],
+            "referanse": "YRKESAKTIVITET",
             "subjektID": null,
             "begrunnelseKoder": [],
             "begrunnelseFritekst": null,
@@ -5609,13 +5613,13 @@
     },
     {
       "index": 61,
-      "timestamp": "2026-02-23T21:17:04.595Z",
-      "elapsedMs": 17131,
-      "durationMs": 33,
+      "timestamp": "2026-02-24T10:18:43.634Z",
+      "elapsedMs": 17170,
+      "durationMs": 27,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/vilkaar/46",
-        "pathname": "/api/vilkaar/46",
+        "url": "http://localhost:3000/api/vilkaar/62",
+        "pathname": "/api/vilkaar/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -5643,13 +5647,13 @@
     },
     {
       "index": 62,
-      "timestamp": "2026-02-23T21:17:04.648Z",
-      "elapsedMs": 17184,
-      "durationMs": 22,
+      "timestamp": "2026-02-24T10:18:43.680Z",
+      "elapsedMs": 17216,
+      "durationMs": 17,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/anmodningsperioder/46",
-        "pathname": "/api/anmodningsperioder/46",
+        "url": "http://localhost:3000/api/anmodningsperioder/62",
+        "pathname": "/api/anmodningsperioder/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -5673,13 +5677,13 @@
     },
     {
       "index": 63,
-      "timestamp": "2026-02-23T21:17:04.649Z",
-      "elapsedMs": 17185,
-      "durationMs": 22,
+      "timestamp": "2026-02-24T10:18:43.680Z",
+      "elapsedMs": 17216,
+      "durationMs": 18,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/utpekingsperioder/46",
-        "pathname": "/api/utpekingsperioder/46",
+        "url": "http://localhost:3000/api/utpekingsperioder/62",
+        "pathname": "/api/utpekingsperioder/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -5703,13 +5707,13 @@
     },
     {
       "index": 64,
-      "timestamp": "2026-02-23T21:17:04.700Z",
-      "elapsedMs": 17236,
-      "durationMs": 13,
+      "timestamp": "2026-02-24T10:18:43.725Z",
+      "elapsedMs": 17261,
+      "durationMs": 10,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/mottatteopplysninger/46",
-        "pathname": "/api/mottatteopplysninger/46",
+        "url": "http://localhost:3000/api/mottatteopplysninger/62",
+        "pathname": "/api/mottatteopplysninger/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -5938,15 +5942,15 @@
             }
           },
           "type": "SØKNAD_A1_YRKESAKTIVE_EØS",
-          "mottaksdato": "2026-02-23"
+          "mottaksdato": "2026-02-24"
         }
       }
     },
     {
       "index": 65,
-      "timestamp": "2026-02-23T21:17:04.901Z",
-      "elapsedMs": 17437,
-      "durationMs": 12,
+      "timestamp": "2026-02-24T10:18:43.894Z",
+      "elapsedMs": 17430,
+      "durationMs": 17,
       "request": {
         "method": "GET",
         "url": "http://localhost:3000/api/eessi/mottakerinstitusjoner/LA_BUC_02?landkoder=EE",
@@ -5971,13 +5975,13 @@
     },
     {
       "index": 66,
-      "timestamp": "2026-02-23T21:17:04.902Z",
-      "elapsedMs": 17438,
-      "durationMs": 22,
+      "timestamp": "2026-02-24T10:18:43.894Z",
+      "elapsedMs": 17430,
+      "durationMs": 25,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/lovvalgsperioder/46",
-        "pathname": "/api/lovvalgsperioder/46",
+        "url": "http://localhost:3000/api/lovvalgsperioder/62",
+        "pathname": "/api/lovvalgsperioder/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -6024,13 +6028,13 @@
     },
     {
       "index": 67,
-      "timestamp": "2026-02-23T21:17:05.058Z",
-      "elapsedMs": 17594,
-      "durationMs": 32,
+      "timestamp": "2026-02-24T10:18:44.062Z",
+      "elapsedMs": 17598,
+      "durationMs": 31,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/lovvalgsperioder/46",
-        "pathname": "/api/lovvalgsperioder/46",
+        "url": "http://localhost:3000/api/lovvalgsperioder/62",
+        "pathname": "/api/lovvalgsperioder/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -6077,13 +6081,13 @@
     },
     {
       "index": 68,
-      "timestamp": "2026-02-23T21:17:05.058Z",
-      "elapsedMs": 17594,
-      "durationMs": 48,
+      "timestamp": "2026-02-24T10:18:44.062Z",
+      "elapsedMs": 17598,
+      "durationMs": 44,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/avklartefakta/46",
-        "pathname": "/api/avklartefakta/46",
+        "url": "http://localhost:3000/api/avklartefakta/62",
+        "pathname": "/api/avklartefakta/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -6172,19 +6176,9 @@
         "body": [
           {
             "fakta": [
-              "TRUE"
+              "OVER_25_PROSENT"
             ],
-            "referanse": "VIRKSOMHET",
-            "subjektID": "999999999",
-            "begrunnelseKoder": [],
-            "begrunnelseFritekst": null,
-            "avklartefaktaKode": "VIRKSOMHET"
-          },
-          {
-            "fakta": [
-              "ORDINAER_ARBEIDSTAKER"
-            ],
-            "referanse": "YRKESAKTIVITET",
+            "referanse": "AKTIVITET_I_NORGE",
             "subjektID": null,
             "begrunnelseKoder": [],
             "begrunnelseFritekst": null,
@@ -6202,13 +6196,13 @@
           },
           {
             "fakta": [
-              "NO"
+              "TRUE"
             ],
-            "referanse": "ARBEIDSLAND",
-            "subjektID": "NO",
+            "referanse": "VIRKSOMHET",
+            "subjektID": "999999999",
             "begrunnelseKoder": [],
             "begrunnelseFritekst": null,
-            "avklartefaktaKode": "ARBEIDSLAND"
+            "avklartefaktaKode": "VIRKSOMHET"
           },
           {
             "fakta": [
@@ -6222,13 +6216,13 @@
           },
           {
             "fakta": [
-              "OVER_25_PROSENT"
+              "NO"
             ],
-            "referanse": "AKTIVITET_I_NORGE",
-            "subjektID": null,
+            "referanse": "ARBEIDSLAND",
+            "subjektID": "NO",
             "begrunnelseKoder": [],
             "begrunnelseFritekst": null,
-            "avklartefaktaKode": null
+            "avklartefaktaKode": "ARBEIDSLAND"
           },
           {
             "fakta": [
@@ -6239,19 +6233,29 @@
             "begrunnelseKoder": [],
             "begrunnelseFritekst": null,
             "avklartefaktaKode": "BOSTEDSLAND"
+          },
+          {
+            "fakta": [
+              "ORDINAER_ARBEIDSTAKER"
+            ],
+            "referanse": "YRKESAKTIVITET",
+            "subjektID": null,
+            "begrunnelseKoder": [],
+            "begrunnelseFritekst": null,
+            "avklartefaktaKode": null
           }
         ]
       }
     },
     {
       "index": 69,
-      "timestamp": "2026-02-23T21:17:05.120Z",
-      "elapsedMs": 17656,
+      "timestamp": "2026-02-24T10:18:44.119Z",
+      "elapsedMs": 17655,
       "durationMs": 23,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/vilkaar/46",
-        "pathname": "/api/vilkaar/46",
+        "url": "http://localhost:3000/api/vilkaar/62",
+        "pathname": "/api/vilkaar/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -6279,13 +6283,13 @@
     },
     {
       "index": 70,
-      "timestamp": "2026-02-23T21:17:05.156Z",
-      "elapsedMs": 17692,
+      "timestamp": "2026-02-24T10:18:44.155Z",
+      "elapsedMs": 17691,
       "durationMs": 14,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/utpekingsperioder/46",
-        "pathname": "/api/utpekingsperioder/46",
+        "url": "http://localhost:3000/api/anmodningsperioder/62",
+        "pathname": "/api/anmodningsperioder/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -6293,7 +6297,7 @@
           "authorization": "[REDACTED]"
         },
         "body": {
-          "utpekingsperioder": []
+          "anmodningsperioder": []
         }
       },
       "response": {
@@ -6303,19 +6307,19 @@
           "content-type": "application/json"
         },
         "body": {
-          "utpekingsperioder": []
+          "anmodningsperioder": []
         }
       }
     },
     {
       "index": 71,
-      "timestamp": "2026-02-23T21:17:05.155Z",
-      "elapsedMs": 17691,
-      "durationMs": 15,
+      "timestamp": "2026-02-24T10:18:44.156Z",
+      "elapsedMs": 17692,
+      "durationMs": 14,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/anmodningsperioder/46",
-        "pathname": "/api/anmodningsperioder/46",
+        "url": "http://localhost:3000/api/utpekingsperioder/62",
+        "pathname": "/api/utpekingsperioder/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -6323,7 +6327,7 @@
           "authorization": "[REDACTED]"
         },
         "body": {
-          "anmodningsperioder": []
+          "utpekingsperioder": []
         }
       },
       "response": {
@@ -6333,19 +6337,19 @@
           "content-type": "application/json"
         },
         "body": {
-          "anmodningsperioder": []
+          "utpekingsperioder": []
         }
       }
     },
     {
       "index": 72,
-      "timestamp": "2026-02-23T21:17:05.185Z",
-      "elapsedMs": 17721,
+      "timestamp": "2026-02-24T10:18:44.187Z",
+      "elapsedMs": 17723,
       "durationMs": 7,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/mottatteopplysninger/46",
-        "pathname": "/api/mottatteopplysninger/46",
+        "url": "http://localhost:3000/api/mottatteopplysninger/62",
+        "pathname": "/api/mottatteopplysninger/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -6574,19 +6578,19 @@
             }
           },
           "type": "SØKNAD_A1_YRKESAKTIVE_EØS",
-          "mottaksdato": "2026-02-23"
+          "mottaksdato": "2026-02-24"
         }
       }
     },
     {
       "index": 73,
-      "timestamp": "2026-02-23T21:17:05.387Z",
-      "elapsedMs": 17923,
-      "durationMs": 12,
+      "timestamp": "2026-02-24T10:18:44.396Z",
+      "elapsedMs": 17932,
+      "durationMs": 18,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/mottatteopplysninger/46",
-        "pathname": "/api/mottatteopplysninger/46",
+        "url": "http://localhost:3000/api/mottatteopplysninger/62",
+        "pathname": "/api/mottatteopplysninger/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -6815,19 +6819,19 @@
             }
           },
           "type": "SØKNAD_A1_YRKESAKTIVE_EØS",
-          "mottaksdato": "2026-02-23"
+          "mottaksdato": "2026-02-24"
         }
       }
     },
     {
       "index": 74,
-      "timestamp": "2026-02-23T21:17:05.862Z",
-      "elapsedMs": 18398,
-      "durationMs": 14,
+      "timestamp": "2026-02-24T10:18:44.844Z",
+      "elapsedMs": 18380,
+      "durationMs": 13,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/mottatteopplysninger/46",
-        "pathname": "/api/mottatteopplysninger/46",
+        "url": "http://localhost:3000/api/mottatteopplysninger/62",
+        "pathname": "/api/mottatteopplysninger/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -7056,19 +7060,19 @@
             }
           },
           "type": "SØKNAD_A1_YRKESAKTIVE_EØS",
-          "mottaksdato": "2026-02-23"
+          "mottaksdato": "2026-02-24"
         }
       }
     },
     {
       "index": 75,
-      "timestamp": "2026-02-23T21:17:05.863Z",
-      "elapsedMs": 18399,
-      "durationMs": 15,
+      "timestamp": "2026-02-24T10:18:44.845Z",
+      "elapsedMs": 18381,
+      "durationMs": 14,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/behandlinger/46/tidligere-medlemsperioder",
-        "pathname": "/api/behandlinger/46/tidligere-medlemsperioder",
+        "url": "http://localhost:3000/api/behandlinger/62/tidligere-medlemsperioder",
+        "pathname": "/api/behandlinger/62/tidligere-medlemsperioder",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -7092,13 +7096,13 @@
     },
     {
       "index": 76,
-      "timestamp": "2026-02-23T21:17:05.862Z",
-      "elapsedMs": 18398,
-      "durationMs": 28,
+      "timestamp": "2026-02-24T10:18:44.845Z",
+      "elapsedMs": 18381,
+      "durationMs": 26,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/vilkaar/46",
-        "pathname": "/api/vilkaar/46",
+        "url": "http://localhost:3000/api/vilkaar/62",
+        "pathname": "/api/vilkaar/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -7126,13 +7130,13 @@
     },
     {
       "index": 77,
-      "timestamp": "2026-02-23T21:17:05.863Z",
-      "elapsedMs": 18399,
-      "durationMs": 38,
+      "timestamp": "2026-02-24T10:18:44.845Z",
+      "elapsedMs": 18381,
+      "durationMs": 37,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/avklartefakta/46",
-        "pathname": "/api/avklartefakta/46",
+        "url": "http://localhost:3000/api/avklartefakta/62",
+        "pathname": "/api/avklartefakta/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -7140,56 +7144,6 @@
           "authorization": "[REDACTED]"
         },
         "body": [
-          {
-            "fakta": [
-              "TRUE"
-            ],
-            "referanse": "VIRKSOMHET",
-            "subjektID": "999999999",
-            "begrunnelseKoder": [],
-            "begrunnelseFritekst": null,
-            "avklartefaktaKode": "VIRKSOMHET"
-          },
-          {
-            "fakta": [
-              "ORDINAER_ARBEIDSTAKER"
-            ],
-            "referanse": "YRKESAKTIVITET",
-            "subjektID": null,
-            "begrunnelseKoder": [],
-            "begrunnelseFritekst": null,
-            "avklartefaktaKode": null
-          },
-          {
-            "fakta": [
-              "EE"
-            ],
-            "referanse": "ARBEIDSLAND",
-            "subjektID": "EE",
-            "begrunnelseKoder": [],
-            "begrunnelseFritekst": null,
-            "avklartefaktaKode": "ARBEIDSLAND"
-          },
-          {
-            "fakta": [
-              "NO"
-            ],
-            "referanse": "ARBEIDSLAND",
-            "subjektID": "NO",
-            "begrunnelseKoder": [],
-            "begrunnelseFritekst": null,
-            "avklartefaktaKode": "ARBEIDSLAND"
-          },
-          {
-            "fakta": [
-              "TRUE"
-            ],
-            "referanse": "ARBEID_UTFORES_I_OPPGITT_LAND",
-            "subjektID": null,
-            "begrunnelseKoder": [],
-            "begrunnelseFritekst": null,
-            "avklartefaktaKode": null
-          },
           {
             "fakta": [
               "OVER_25_PROSENT"
@@ -7202,55 +7156,6 @@
           },
           {
             "fakta": [
-              "NO"
-            ],
-            "referanse": "BOSTEDSLAND",
-            "subjektID": null,
-            "begrunnelseKoder": [],
-            "begrunnelseFritekst": null,
-            "avklartefaktaKode": "BOSTEDSLAND"
-          }
-        ]
-      },
-      "response": {
-        "status": 200,
-        "statusText": "OK",
-        "headers": {
-          "content-type": "application/json"
-        },
-        "body": [
-          {
-            "fakta": [
-              "TRUE"
-            ],
-            "referanse": "ARBEID_UTFORES_I_OPPGITT_LAND",
-            "subjektID": null,
-            "begrunnelseKoder": [],
-            "begrunnelseFritekst": null,
-            "avklartefaktaKode": null
-          },
-          {
-            "fakta": [
-              "ORDINAER_ARBEIDSTAKER"
-            ],
-            "referanse": "YRKESAKTIVITET",
-            "subjektID": null,
-            "begrunnelseKoder": [],
-            "begrunnelseFritekst": null,
-            "avklartefaktaKode": null
-          },
-          {
-            "fakta": [
-              "NO"
-            ],
-            "referanse": "ARBEIDSLAND",
-            "subjektID": "NO",
-            "begrunnelseKoder": [],
-            "begrunnelseFritekst": null,
-            "avklartefaktaKode": "ARBEIDSLAND"
-          },
-          {
-            "fakta": [
               "EE"
             ],
             "referanse": "ARBEIDSLAND",
@@ -7271,6 +7176,26 @@
           },
           {
             "fakta": [
+              "TRUE"
+            ],
+            "referanse": "ARBEID_UTFORES_I_OPPGITT_LAND",
+            "subjektID": null,
+            "begrunnelseKoder": [],
+            "begrunnelseFritekst": null,
+            "avklartefaktaKode": null
+          },
+          {
+            "fakta": [
+              "NO"
+            ],
+            "referanse": "ARBEIDSLAND",
+            "subjektID": "NO",
+            "begrunnelseKoder": [],
+            "begrunnelseFritekst": null,
+            "avklartefaktaKode": "ARBEIDSLAND"
+          },
+          {
+            "fakta": [
               "NO"
             ],
             "referanse": "BOSTEDSLAND",
@@ -7278,6 +7203,85 @@
             "begrunnelseKoder": [],
             "begrunnelseFritekst": null,
             "avklartefaktaKode": "BOSTEDSLAND"
+          },
+          {
+            "fakta": [
+              "ORDINAER_ARBEIDSTAKER"
+            ],
+            "referanse": "YRKESAKTIVITET",
+            "subjektID": null,
+            "begrunnelseKoder": [],
+            "begrunnelseFritekst": null,
+            "avklartefaktaKode": null
+          }
+        ]
+      },
+      "response": {
+        "status": 200,
+        "statusText": "OK",
+        "headers": {
+          "content-type": "application/json"
+        },
+        "body": [
+          {
+            "fakta": [
+              "NO"
+            ],
+            "referanse": "BOSTEDSLAND",
+            "subjektID": null,
+            "begrunnelseKoder": [],
+            "begrunnelseFritekst": null,
+            "avklartefaktaKode": "BOSTEDSLAND"
+          },
+          {
+            "fakta": [
+              "TRUE"
+            ],
+            "referanse": "ARBEID_UTFORES_I_OPPGITT_LAND",
+            "subjektID": null,
+            "begrunnelseKoder": [],
+            "begrunnelseFritekst": null,
+            "avklartefaktaKode": null
+          },
+          {
+            "fakta": [
+              "TRUE"
+            ],
+            "referanse": "VIRKSOMHET",
+            "subjektID": "999999999",
+            "begrunnelseKoder": [],
+            "begrunnelseFritekst": null,
+            "avklartefaktaKode": "VIRKSOMHET"
+          },
+          {
+            "fakta": [
+              "ORDINAER_ARBEIDSTAKER"
+            ],
+            "referanse": "YRKESAKTIVITET",
+            "subjektID": null,
+            "begrunnelseKoder": [],
+            "begrunnelseFritekst": null,
+            "avklartefaktaKode": null
+          },
+          {
+            "fakta": [
+              "EE"
+            ],
+            "referanse": "ARBEIDSLAND",
+            "subjektID": "EE",
+            "begrunnelseKoder": [],
+            "begrunnelseFritekst": null,
+            "avklartefaktaKode": "ARBEIDSLAND"
+          },
+          {
+            "fakta": [
+              "NO"
+            ],
+            "referanse": "ARBEIDSLAND",
+            "subjektID": "NO",
+            "begrunnelseKoder": [],
+            "begrunnelseFritekst": null,
+            "avklartefaktaKode": "ARBEIDSLAND"
           },
           {
             "fakta": [
@@ -7294,13 +7298,13 @@
     },
     {
       "index": 78,
-      "timestamp": "2026-02-23T21:17:05.920Z",
-      "elapsedMs": 18456,
+      "timestamp": "2026-02-24T10:18:44.906Z",
+      "elapsedMs": 18442,
       "durationMs": 13,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/utpekingsperioder/46",
-        "pathname": "/api/utpekingsperioder/46",
+        "url": "http://localhost:3000/api/utpekingsperioder/62",
+        "pathname": "/api/utpekingsperioder/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -7324,13 +7328,13 @@
     },
     {
       "index": 79,
-      "timestamp": "2026-02-23T21:17:05.919Z",
-      "elapsedMs": 18455,
+      "timestamp": "2026-02-24T10:18:44.906Z",
+      "elapsedMs": 18442,
       "durationMs": 14,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/anmodningsperioder/46",
-        "pathname": "/api/anmodningsperioder/46",
+        "url": "http://localhost:3000/api/anmodningsperioder/62",
+        "pathname": "/api/anmodningsperioder/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -7354,13 +7358,13 @@
     },
     {
       "index": 80,
-      "timestamp": "2026-02-23T21:17:05.919Z",
-      "elapsedMs": 18455,
-      "durationMs": 17,
+      "timestamp": "2026-02-24T10:18:44.906Z",
+      "elapsedMs": 18442,
+      "durationMs": 18,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/lovvalgsperioder/46",
-        "pathname": "/api/lovvalgsperioder/46",
+        "url": "http://localhost:3000/api/lovvalgsperioder/62",
+        "pathname": "/api/lovvalgsperioder/62",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -7406,13 +7410,13 @@
     },
     {
       "index": 81,
-      "timestamp": "2026-02-23T21:17:05.961Z",
-      "elapsedMs": 18497,
-      "durationMs": 84,
+      "timestamp": "2026-02-24T10:18:44.949Z",
+      "elapsedMs": 18485,
+      "durationMs": 66,
       "request": {
         "method": "POST",
-        "url": "http://localhost:3000/api/saksflyt/vedtak/46/fatt",
-        "pathname": "/api/saksflyt/vedtak/46/fatt",
+        "url": "http://localhost:3000/api/saksflyt/vedtak/62/fatt",
+        "pathname": "/api/saksflyt/vedtak/62/fatt",
         "query": {},
         "headers": {
           "content-type": "application/json",
@@ -7436,8 +7440,8 @@
     },
     {
       "index": 82,
-      "timestamp": "2026-02-23T21:17:06.072Z",
-      "elapsedMs": 18608,
+      "timestamp": "2026-02-24T10:18:45.043Z",
+      "elapsedMs": 18579,
       "durationMs": 4,
       "request": {
         "method": "GET",
@@ -7474,8 +7478,8 @@
     },
     {
       "index": 83,
-      "timestamp": "2026-02-23T21:17:06.076Z",
-      "elapsedMs": 18612,
+      "timestamp": "2026-02-24T10:18:45.048Z",
+      "elapsedMs": 18584,
       "durationMs": 5,
       "request": {
         "method": "GET",
