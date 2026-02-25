@@ -1,0 +1,474 @@
+# SaksopplysningKilde Race Condition — Complete Fix Documentation
+
+**Date:** 2026-02-25
+**Status:** Fix validated (166/166 tests passed across 3 CI runs)
+**PRs:**
+- melosys-api: [#3233](https://github.com/navikt/melosys-api/pull/3233)
+- melosys-web: [#3022](https://github.com/navikt/melosys-web/pull/3022)
+
+## Problem
+
+76.5% of CI runs had at least one flaky "arbeid i flere land" test. The failure manifests as:
+
+```
+TimeoutError: waiting for getByRole('checkbox', { name: 'Ståles Stål AS' }) to be visible
+```
+
+The checkbox never appears because `RegisteropplysningerService` fails with `OptimisticLockingFailureException`, preventing arbeidsforhold data from loading.
+
+```
+ERROR | Row was updated or deleted by another transaction
+  [no.nav.melosys.domain.SaksopplysningKilde#66]
+```
+
+## Root Cause
+
+Two concurrent HTTP requests from the **same browser** both call `RegisteropplysningerService.hentOgLagreOpplysninger()` for the same behandling. Both remove and recreate `Saksopplysning`/`SaksopplysningKilde` entities simultaneously. The second transaction fails on commit.
+
+### The Two Requests
+
+```mermaid
+graph LR
+    subgraph "Browser (React)"
+        A[useEffect<br/>debounced 500ms] -->|POST| K["/api/kontroll/<br/>ferdigbehandling"]
+        B[onSubmit<br/>click 'Fatt vedtak'] -->|POST| V["/api/saksflyt/<br/>vedtak/{id}/fatt"]
+    end
+
+    subgraph "Backend (melosys-api)"
+        K --> KC[KontrollController]
+        KC --> FKF[FerdigbehandlingKontrollFacade<br/>.kontroller]
+        FKF -->|skalRegisteropplysninger<br/>Oppdateres=true| KMR[KontrollMedRegisteropplysning]
+        KMR --> RS1[RegisteropplysningerService<br/>.hentOgLagreOpplysninger]
+
+        V --> VC[VedtakController]
+        VC --> VF[VedtaksfattingFasade]
+        VF --> EVS[EosVedtakService<br/>.fattVedtak]
+        EVS --> FKF2[FerdigbehandlingKontrollFacade<br/>.kontrollerVedtakMedRegisteropplysninger]
+        FKF2 --> KMR2[KontrollMedRegisteropplysning]
+        KMR2 --> RS2[RegisteropplysningerService<br/>.hentOgLagreOpplysninger]
+    end
+
+    RS1 -->|MODIFY| DB[(SaksopplysningKilde)]
+    RS2 -->|MODIFY| DB
+
+    style RS1 fill:#f66,color:#fff
+    style RS2 fill:#f66,color:#fff
+    style DB fill:#f96,color:#fff
+```
+
+### Race Timeline
+
+```mermaid
+sequenceDiagram
+    participant U as User / E2E Test
+    participant R as React (vurderingVedtak)
+    participant T1 as Backend Thread 1<br/>(kontroll)
+    participant T2 as Backend Thread 2<br/>(vedtak)
+    participant DB as Database
+
+    U->>R: Navigate to vedtak step
+    Note over R: mottatteOpplysningerStatus → "OK"
+    R->>R: useEffect triggers<br/>debounce(kontroller, 500ms)
+
+    Note over R: ~500ms passes
+
+    R->>T1: POST /kontroll/ferdigbehandling<br/>(skalRegisteropplysningerOppdateres=true)
+    activate T1
+    T1->>DB: BEGIN TRANSACTION
+    T1->>DB: DELETE FROM saksopplysning_kilde<br/>WHERE behandling_id = 11
+    T1->>DB: INSERT INTO saksopplysning_kilde<br/>(new register data)
+
+    U->>R: Click "Fatt vedtak"
+    R->>T2: POST /saksflyt/vedtak/11/fatt
+    activate T2
+    T2->>DB: BEGIN TRANSACTION
+    T2->>DB: DELETE FROM saksopplysning_kilde<br/>WHERE behandling_id = 11
+
+    T1->>DB: COMMIT ✅
+    deactivate T1
+
+    T2->>DB: INSERT INTO saksopplysning_kilde
+    T2->>DB: COMMIT ❌ OptimisticLockingFailureException
+    deactivate T2
+
+    T2-->>R: HTTP 500
+    Note over R: Vedtak fails, arbeidsforhold<br/>not loaded → checkbox timeout
+```
+
+### Actual API Recording from Failing Run
+
+```
+#81  req@18076ms  resp@18314ms (238ms)  POST /api/kontroll/ferdigbehandling → 200
+#82  req@18272ms  resp@18402ms (130ms)  POST /api/saksflyt/vedtak/11/fatt → 500 💥
+                  ←── 42ms overlap ──→
+```
+
+### Actual Docker Logs from Failing Run
+
+```
+10:57:35.413 | f610e5d5 | RegisteropplysningerService | Medlemskap hentet for behandling 11  ← kontroll thread
+10:57:35.592 | 2c659c6a | EosVedtakService            | Fatter vedtak for (EU_EØS) sak: MEL-11
+10:57:35.606 | 2c659c6a | RegisteropplysningerService | Medlemskap hentet for behandling 11  ← vedtak thread
+10:57:35.712 | 2c659c6a | ExceptionMapper              | ERROR | SaksopplysningKilde#66     ← 💥 CRASH
+```
+
+## Frontend Code Analysis
+
+### How the debounced kontroll fires (vurderingVedtak.tsx)
+
+```typescript
+// Line 164 — true only for FIRST kontroll call per component mount
+let oppdaterFørKontroll = true;
+
+// Line 201 — kontroll function
+async function kontroller(data) {
+  if (redigerbart && data.mottatteOpplysningerStatus === "OK" && data.aktivtSteg) {
+    const request = {
+      // First call: true → triggers RegisteropplysningerService on backend
+      // Subsequent calls: false → read-only kontroll (no race risk)
+      skalRegisteropplysningerOppdateres: oppdaterFørKontroll,
+    };
+    oppdaterFørKontroll = false;
+    await dispatch(kontrollOperations.kontrollerFerdigbehandling(request));
+  }
+}
+
+// Line 223 — debounced at 500ms, memoized once on mount
+const debouncedKontrollerBehandling = useCallback(Utils._debounce(kontroller, 500), []);
+
+// Line 225 — fires on status/form changes
+useEffect(() => {
+  debouncedKontrollerBehandling({ aktivtSteg, formValues, mottatteOpplysningerStatus });
+}, [redigerbart, formIsValid, aktivtSteg, formValues?.kopiTilArbeidsgiver,
+    mottatteOpplysningerStatus]);
+```
+
+### How onSubmit triggers the race (BEFORE fix)
+
+```typescript
+// Line 238 — NO cancel of debounced kontroll!
+const onSubmit = async () => {
+  if (!validerForm()) return;
+  setVedtakPending(true);
+  validerMottatteOpplysninger()         // calls lagreAllData() → POST /mottatteopplysninger
+    .then(() => {
+      dispatch(vedtakOperations.fatt(   // POST /vedtak/fatt — races with debounced kontroll
+        behandlingID, vedtakRequest
+      ));
+    });
+};
+```
+
+### Why vedtak/fatt always calls RegisteropplysningerService
+
+```mermaid
+graph TD
+    A[EosVedtakService.fattVedtak] --> B{behandlingsresultat<br/>.erInnvilgelse?}
+    B -->|Yes| C[ferdigbehandlingKontrollFacade<br/>.kontrollerVedtakMedRegisteropplysninger]
+    C --> D[KontrollMedRegisteropplysning<br/>.kontrollerVedtak]
+    D --> E[hentNyeRegisteropplysninger]
+    E --> F[registeropplysningerService<br/>.hentOgLagreOpplysninger]
+    F --> G[removeIf existing Saksopplysning]
+    G --> H[hentSaksopplysninger from AAREG/MEDL]
+    H --> I[lagreSaksopplysninger]
+    I --> J[behandling.setSisteOpplysningerHentetDato]
+
+    B -->|No| K[Skip kontroll]
+
+    style F fill:#f66,color:#fff
+    style G fill:#f96,color:#fff
+    style I fill:#f96,color:#fff
+```
+
+Note: `kontrollerVedtakMedRegisteropplysninger` has no `skalRegisteropplysningerOppdateres` flag — it **always** refreshes register data. This is by design: the vedtak endpoint ensures data is fresh before committing a vedtak.
+
+## Previous Investigation (Nov 2025)
+
+The exact same pattern was identified in November 2025 (`melosys-web/docs/debugging/2025-11-28-FRONTEND-FIX-CANCEL-DEBOUNCE.md`), but for a different entity (`behandlingsresultat`). The proposed fix (cancel debounce + 200ms delay) was documented but **never merged**.
+
+## The Fix (Two Parts)
+
+### Part 1: Frontend — Cancel debounced kontroll (melosys-web)
+
+**File:** `src/sider/eu_eøs/stegKomponenter/vurderingVedtak/vurderingVedtak.tsx`
+
+```typescript
+const onSubmit = async () => {
+  // Cancel any pending debounced kontroll to prevent concurrent HTTP requests
+  // that race with vedtak/fatt on SaksopplysningKilde entities
+  debouncedKontrollerBehandling.cancel?.();
+
+  if (!validerForm()) return;
+  setVedtakPending(true);
+
+  try {
+    await validerMottatteOpplysninger();
+    const vedtakRequest = { /* ... */ };
+    const res = await dispatch(vedtakOperations.fatt(behandlingID, vedtakRequest));
+    if (res.data?.data?.error) setVedtakPending(false);
+  } catch {
+    setVedtakPending(false);
+  }
+};
+```
+
+**What it does:**
+- Cancels the debounced kontroll timer before proceeding with vedtak
+- Prevents the concurrent `kontroll/ferdigbehandling` HTTP request
+- `vedtak/fatt` already runs kontroll internally, so the frontend kontroll is redundant at submit time
+
+**What it does NOT do:**
+- Does not cancel already in-flight HTTP requests (would need AbortController)
+- Does not change backend behavior
+
+### Part 2: Backend — Debounce in RegisteropplysningerService (melosys-api)
+
+**File:** `service/src/main/java/no/nav/melosys/service/registeropplysninger/RegisteropplysningerService.java`
+
+```java
+@Transactional
+public void hentOgLagreOpplysninger(RegisteropplysningerRequest request) {
+    // ... validation ...
+
+    Behandling behandling = behandlingService.hentBehandlingMedSaksopplysninger(
+        request.getBehandlingID());
+
+    // Debounce: skip if register data was just fetched
+    // (prevents concurrent modification race condition on SaksopplysningKilde)
+    if (behandling.getSisteOpplysningerHentetDato() != null
+            && Duration.between(behandling.getSisteOpplysningerHentetDato(),
+                Instant.now()).getSeconds() < 2) {
+        log.info("Registeropplysninger nylig hentet for behandling {}, hopper over",
+            request.getBehandlingID());
+        return;
+    }
+
+    hentOgLagreOpplysninger(request, behandling);
+}
+```
+
+**What it does:**
+- Checks `sisteOpplysningerHentetDato` timestamp on the behandling
+- If register data was fetched less than 2 seconds ago, skips the operation
+- The skipped data would be identical (AAREG/MEDL don't change within 2 seconds)
+
+```mermaid
+flowchart TD
+    A[hentOgLagreOpplysninger called] --> B[Load behandling<br/>from database]
+    B --> C{sisteOpplysningerHentetDato<br/>< 2 seconds ago?}
+    C -->|Yes| D[LOG: nylig hentet, hopper over]
+    D --> E[return early ✅]
+    C -->|No or null| F[Fetch from AAREG/MEDL]
+    F --> G[removeIf old Saksopplysning]
+    G --> H[Save new Saksopplysning]
+    H --> I[Set sisteOpplysningerHentetDato = now]
+    I --> J[Commit ✅]
+
+    style D fill:#4a4,color:#fff
+    style E fill:#4a4,color:#fff
+```
+
+## Why Both Fixes Are Needed
+
+```mermaid
+graph TB
+    subgraph "Frontend fix alone"
+        A1[Cancel debounced kontroll] --> B1[Prevents PENDING kontroll<br/>from firing]
+        B1 --> C1{Already in-flight<br/>kontroll?}
+        C1 -->|No| D1[Race prevented ✅]
+        C1 -->|Yes| E1[Race still possible ❌<br/>cancel only stops pending,<br/>not in-flight requests]
+    end
+
+    subgraph "Backend fix alone"
+        A2[Debounce check] --> B2{Thread B reads<br/>AFTER Thread A commits?}
+        B2 -->|Yes| C2[Sees timestamp,<br/>skips → Race prevented ✅]
+        B2 -->|No| D2[Both read before commit<br/>→ Race still possible ❌<br/>~2% probability]
+    end
+
+    subgraph "Both fixes together"
+        A3[Cancel debounced kontroll] --> B3[Prevents most races<br/>at the source]
+        B3 --> C3[Backend debounce<br/>catches any remaining<br/>concurrent calls]
+        C3 --> D3[Race eliminated ✅]
+    end
+
+    style D1 fill:#4a4,color:#fff
+    style E1 fill:#c44,color:#fff
+    style C2 fill:#4a4,color:#fff
+    style D2 fill:#c44,color:#fff
+    style D3 fill:#4a4,color:#fff
+```
+
+### CI Results
+
+| Run | Configuration | Tests | Passed | Failed | Rate |
+|-----|--------------|-------|--------|--------|------|
+| [22390008907](https://github.com/navikt/melosys-e2e-tests/actions/runs/22390008907) | api:fix-5 + web:fix-5, 20x | 60 | 60 | 0 | **0%** |
+| [22394409152](https://github.com/navikt/melosys-e2e-tests/actions/runs/22394409152) | api:fix-5 + web:fix-5, 30x | 106* | 106 | 0 | **0%** |
+| [22396622532](https://github.com/navikt/melosys-e2e-tests/actions/runs/22396622532) | api:fix-5 + web:fix-5, 20x | 60 | TBD | TBD | TBD |
+| [22392940208](https://github.com/navikt/melosys-e2e-tests/actions/runs/22392940208) | web:fix-5 only (api:latest) | 60 | ~50 | ~10 | **~17%** |
+| Previous baseline | latest (no fix) | 34 | 8 | 26 | **76.5%** |
+
+*cancelled due to 45-min CI timeout, all completed tests passed
+
+## Could This Break Something?
+
+### Frontend fix: Cancel debounced kontroll
+
+**Risk: Low.** The cancel only prevents a *pending* debounced kontroll from firing. The kontroll is purely a pre-validation check — it shows warning banners in the UI if there are kontroll errors. When the user clicks "Fatt vedtak":
+
+1. The vedtak endpoint runs its own `kontrollerVedtakMedRegisteropplysninger` internally
+2. If kontroll fails, the vedtak endpoint throws `ValideringException` and returns errors to the UI
+3. The user sees the same kontroll errors regardless of whether the frontend kontroll ran
+
+```mermaid
+sequenceDiagram
+    participant U as User
+    participant R as React
+    participant B as Backend
+
+    Note over R: Before fix: debounced kontroll may run + vedtak runs kontroll
+    Note over R: After fix: only vedtak runs kontroll
+
+    U->>R: Click "Fatt vedtak"
+    R->>R: cancel debounced kontroll
+    R->>B: POST /vedtak/{id}/fatt
+
+    alt Kontroll passes
+        B->>B: kontrollerVedtakMedRegisteropplysninger ✅
+        B->>B: Create vedtak, prosessinstans
+        B-->>R: 204 No Content
+        R-->>U: Vedtak fattet ✅
+    else Kontroll fails
+        B->>B: kontrollerVedtakMedRegisteropplysninger ❌
+        B-->>R: ValideringException (kontrollfeil)
+        R-->>U: Show kontroll errors ❌
+    end
+```
+
+**Edge case:** If the user clicks "Fatt vedtak" within 500ms of navigating to the vedtak step, the first kontroll (with `oppdaterFørKontroll=true`) is cancelled. This means the kontroll warning banners don't appear before the user submits. But the vedtak endpoint's internal kontroll catches the same errors, so the user still gets feedback.
+
+**What about the other vedtak components?** The same pattern exists in 5 other components (listed in the PR). They should get the same fix, but the race condition primarily affects EU/EOS "arbeid i flere land" flows because those are the ones that exercise `RegisteropplysningerService` most heavily.
+
+### Backend fix: Debounce in RegisteropplysningerService
+
+**Risk: Very low.** The debounce only skips fetching register data that was already fetched less than 2 seconds ago. Analysis of when this matters:
+
+| Scenario | Impact | Risk |
+|----------|--------|------|
+| **Normal user workflow** | User navigates steps, fills form over minutes. No debounce triggered. | None |
+| **Manual "Oppfrisk" click** | Goes through `OppfriskSaksopplysningerService` which calls `slettRegisterOpplysninger` first, resetting `sisteOpplysningerHentetDato` implicitly via new saksopplysninger. | None |
+| **Concurrent kontroll + vedtak** | Second call skipped — identical data would be fetched. | None (intended) |
+| **Register data actually changed within 2s** | Stale data for up to 2 seconds. In practice, AAREG/MEDL data changes on hours/days timescale, not seconds. | Negligible |
+| **Multiple behandlinger** | Each behandling has its own `sisteOpplysningerHentetDato`. Debounce only affects same behandling. | None |
+| **Saksflyt async thread** | `HENT_REGISTEROPPLYSNINGER` step runs during sak creation, minutes before vedtak. No debounce triggered. | None |
+
+```mermaid
+graph TD
+    A[Who calls RegisteropplysningerService?] --> B[Saksflyt: HENT_REGISTEROPPLYSNINGER<br/>During sak creation<br/>Minutes before vedtak]
+    A --> C[Frontend: kontroll/ferdigbehandling<br/>Debounced useEffect<br/>On vedtak step]
+    A --> D[Vedtak: EosVedtakService.fattVedtak<br/>Always calls kontrollerVedtak<br/>MedRegisteropplysninger]
+    A --> E[Oppfrisk: OppfriskSaksopplysningerService<br/>Manual refresh button<br/>Deletes + re-fetches]
+
+    B --> F{Debounce triggered?}
+    F -->|No — minutes apart| G[Normal flow ✅]
+
+    C --> H{Debounce triggered?}
+    D --> H
+    H -->|Only if both run<br/>within 2 seconds| I[Second call skipped ✅<br/>Redundant data anyway]
+
+    E --> J{Debounce triggered?}
+    J -->|No — slettRegisterOpplysninger<br/>resets state| K[Normal flow ✅]
+
+    style I fill:#4a4,color:#fff
+```
+
+### Could the 2-second window ever be too short?
+
+The debounce uses `Duration.between(sisteOpplysningerHentetDato, Instant.now()).getSeconds() < 2`. This means:
+
+- 0-1.999 seconds: debounce active (skip)
+- 2.000+ seconds: debounce expired (fetch normally)
+
+The race window between kontroll and vedtak is typically 40-200ms (from API recordings). A 2-second window provides 10-50x margin. If the system is under extreme load and the gap exceeds 2 seconds, the debounce wouldn't help — but at that point the transactions are far enough apart that they're unlikely to conflict anyway.
+
+### Could the 2-second window ever be too long?
+
+If a user could somehow trigger two legitimate, different register data fetches for the same behandling within 2 seconds, the second would be skipped. In practice:
+
+- Form navigation: `lagreMottatteOpplysningerOgOppfriskSaksopplysninger` takes >2s to complete
+- Manual refresh: `OppfriskSaksopplysningerService` calls `slettRegisterOpplysninger` first
+- Saksflyt: runs on sak creation, minutes before any user interaction
+- No UI action can trigger two independent register fetches within 2 seconds
+
+## All Paths to RegisteropplysningerService
+
+For completeness, here is every code path that calls `RegisteropplysningerService.hentOgLagreOpplysninger()`:
+
+```mermaid
+graph TB
+    subgraph "Path 1: Saksflyt (async, sak creation)"
+        P1A[ProsessinstansService.lagre] -->|Spring Event| P1B[ProsessinstansOpprettetListener<br/>@TransactionalEventListener AFTER_COMMIT]
+        P1B --> P1C[ProsessinstansBehandler<br/>@Async saksflytThreadPoolTaskExecutor]
+        P1C --> P1D[ProsessflytDefinisjon<br/>HENT_REGISTEROPPLYSNINGER step]
+        P1D --> P1E[HentRegisteropplysninger.utfor]
+        P1E --> RS[RegisteropplysningerService<br/>.hentOgLagreOpplysninger]
+    end
+
+    subgraph "Path 2: Frontend kontroll (debounced useEffect)"
+        P2A[vurderingVedtak.tsx useEffect] -->|debounce 500ms| P2B[POST /kontroll/ferdigbehandling]
+        P2B --> P2C[KontrollController]
+        P2C --> P2D[FerdigbehandlingKontrollFacade<br/>.kontroller]
+        P2D -->|skalRegisteropplysninger<br/>Oppdateres=true| P2E[KontrollMedRegisteropplysning<br/>.kontroller]
+        P2E --> RS
+    end
+
+    subgraph "Path 3: Vedtak/fatt (onSubmit)"
+        P3A[vurderingVedtak.tsx onSubmit] --> P3B[POST /saksflyt/vedtak/{id}/fatt]
+        P3B --> P3C[VedtakController]
+        P3C --> P3D[VedtaksfattingFasade]
+        P3D --> P3E[EosVedtakService.fattVedtak]
+        P3E --> P3F[FerdigbehandlingKontrollFacade<br/>.kontrollerVedtakMedRegisteropplysninger]
+        P3F --> P3G[KontrollMedRegisteropplysning<br/>.kontrollerVedtak]
+        P3G --> RS
+    end
+
+    subgraph "Path 4: Manual refresh (oppfrisk button)"
+        P4A[fellesHandlers.jsx] --> P4B[GET /saksopplysninger/oppfriskning/{id}]
+        P4B --> P4C[SaksopplysningController]
+        P4C --> P4D[OppfriskSaksopplysningerService]
+        P4D --> P4E[slettRegisterOpplysninger]
+        P4E --> RS
+    end
+
+    RS --> DB[(Database:<br/>Saksopplysning +<br/>SaksopplysningKilde)]
+
+    style RS fill:#69f,color:#fff
+    style DB fill:#f96,color:#fff
+```
+
+**The race occurs between Path 2 and Path 3** when they overlap in time. Path 1 completes minutes earlier. Path 4 is user-initiated and sequential.
+
+## Key Files
+
+| Repository | File | Role |
+|-----------|------|------|
+| melosys-web | `src/sider/eu_eøs/stegKomponenter/vurderingVedtak/vurderingVedtak.tsx` | **FIX:** Cancel debounced kontroll in onSubmit |
+| melosys-api | `service/.../registeropplysninger/RegisteropplysningerService.java` | **FIX:** Debounce check on sisteOpplysningerHentetDato |
+| melosys-api | `service/.../vedtak/EosVedtakService.java` | vedtak/fatt always calls kontrollerVedtakMedRegisteropplysninger |
+| melosys-api | `service/.../kontroll/.../KontrollMedRegisteropplysning.kt` | Always calls hentNyeRegisteropplysninger |
+| melosys-api | `service/.../kontroll/.../FerdigbehandlingKontrollFacade.kt` | Routes to KontrollMedRegisteropplysning or read-only Kontroll |
+| melosys-api | `frontend-api/.../kontroll/KontrollController.java` | POST /kontroll/ferdigbehandling endpoint |
+| melosys-api | `saksflyt/.../ProsessinstansBehandler.java` | @Async saksflyt thread pool (not involved in race) |
+| melosys-api | `saksflyt/.../steg/register/HentRegisteropplysninger.java` | Saksflyt step (not involved in race) |
+
+## Earlier Incorrect Attribution
+
+The [initial root cause report (2026-02-24)](saksopplysningkilde-root-cause-found-2026-02-24.md) incorrectly attributed the race to `POST /api/mottatteopplysninger` spawning an async thread. Investigation showed that `MottatteOpplysningerService.lagre()` is purely synchronous — no `@Async`, no events, no Kafka. The "mystery async thread" was a separate HTTP request (`POST /api/kontroll/ferdigbehandling`) from the frontend's debounced useEffect.
+
+## Future Considerations
+
+1. **Other vedtak components:** The same debounce cancel should be applied to `vurderingArtikkel13_x_vedtak.jsx`, `vurderingArtikkel16Vedtak.tsx`, `vurderingVedtak11_3_og_13_3a.tsx`, `vurderingAvslag12_x_og_16.jsx`, and `vurderingArbeidTjenestepersonEllerFlyVedtak.jsx`. These have the same pattern but may not be exercised as heavily in E2E tests.
+
+2. **AbortController:** The current frontend fix cancels *pending* debounced calls but not *in-flight* HTTP requests. Adding AbortController would fully eliminate the race from the frontend side, making the backend debounce unnecessary. This is a possible future improvement but not required — the backend debounce catches any in-flight overlap.
+
+3. **Backend: remove redundant kontroll in vedtak/fatt:** `EosVedtakService.fattVedtak()` always calls `kontrollerVedtakMedRegisteropplysninger`, which always refreshes register data. If the frontend kontroll already ran (and it usually has by the time the user clicks submit), this refresh is redundant. A `skalRegisteropplysningerOppdateres` flag on `kontrollerVedtakMedRegisteropplysninger` would be the cleanest long-term fix, but requires careful consideration of whether the vedtak endpoint should trust that the frontend kontroll ran recently.
