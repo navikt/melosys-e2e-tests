@@ -1,7 +1,7 @@
 # SaksopplysningKilde Race Condition — Complete Fix Documentation
 
-**Date:** 2026-02-25
-**Status:** Fix validated (166/166 tests passed across 3 CI runs)
+**Date:** 2026-02-25 (updated with run 22396622532 findings)
+**Status:** Fix reduces rate from ~47% to ~3.75%, but TOCTOU gap remains — needs stronger locking
 **PRs:**
 - melosys-api: [#3233](https://github.com/navikt/melosys-api/pull/3233)
 - melosys-web: [#3022](https://github.com/navikt/melosys-web/pull/3022)
@@ -304,11 +304,139 @@ graph TB
 |-----|--------------|-------|--------|--------|------|
 | [22390008907](https://github.com/navikt/melosys-e2e-tests/actions/runs/22390008907) | api:fix-5 + web:fix-5, 20x | 60 | 60 | 0 | **0%** |
 | [22394409152](https://github.com/navikt/melosys-e2e-tests/actions/runs/22394409152) | api:fix-5 + web:fix-5, 30x | 106* | 106 | 0 | **0%** |
-| [22396622532](https://github.com/navikt/melosys-e2e-tests/actions/runs/22396622532) | api:fix-5 + web:fix-5, 20x | 60 | TBD | TBD | TBD |
+| [22396622532](https://github.com/navikt/melosys-e2e-tests/actions/runs/22396622532) | api:fix-5 + web:fix-5, 20x | 77 | 74 | 3 | **3.75%** |
 | [22392940208](https://github.com/navikt/melosys-e2e-tests/actions/runs/22392940208) | web:fix-5 only (api:latest) | 60 | ~50 | ~10 | **~17%** |
 | Previous baseline | latest (no fix) | 34 | 8 | 26 | **76.5%** |
 
 *cancelled due to 45-min CI timeout, all completed tests passed
+
+**Note:** Run 22396622532 revealed a TOCTOU gap in the debounce — see [Latest Findings](#latest-findings-debounce-has-a-toctou-gap) below.
+
+## Latest Findings: Debounce Has a TOCTOU Gap
+
+### Run 22396622532 — 3 failures despite both fixes
+
+The run with `melosys-api:fix-5` + `melosys-web:fix-5` and 20 repeats showed **3 failures out of 77 completed tests (3.75%)**. The debounce was bypassed in all 3 cases.
+
+### Evidence: Both threads read before either commits
+
+```
+12:32:26.431 | de08d404 | RegisteropplysningerService | Medlemskap hentet for behandling 15  ← Thread A
+12:32:26.601 | 9083fb60 | EosVedtakService            | Fatter vedtak for behandling 15     ← Thread B starts
+12:32:26.612 | 9083fb60 | RegisteropplysningerService | Medlemskap hentet for behandling 15  ← Thread B (NOT skipped!)
+12:32:26.714 | 9083fb60 | ExceptionMapper              | ERROR SaksopplysningKilde#85       ← 💥
+```
+
+Thread A fetched at 12:32:26.431. Thread B fetched at 12:32:26.612 (181ms later). The debounce did NOT skip Thread B because Thread A hadn't committed yet — Thread B read `sisteOpplysningerHentetDato` from the database and saw the OLD value (before Thread A's update).
+
+### The TOCTOU (Time-Of-Check-Time-Of-Use) Problem
+
+```mermaid
+sequenceDiagram
+    participant A as Thread A (kontroll)
+    participant DB as Database
+    participant B as Thread B (vedtak)
+
+    A->>DB: SELECT behandling<br/>(sisteOpplysningerHentetDato = old)
+    A->>A: Check: old > 2s ago → proceed
+    A->>DB: DELETE + INSERT saksopplysning_kilde
+
+    Note over A,B: Thread B reads BEFORE Thread A commits
+
+    B->>DB: SELECT behandling<br/>(sisteOpplysningerHentetDato = old)
+    B->>B: Check: old > 2s ago → proceed ← DEBOUNCE BYPASSED
+    B->>DB: DELETE + INSERT saksopplysning_kilde
+
+    A->>DB: COMMIT ✅ (sets sisteOpplysningerHentetDato = now)
+    B->>DB: COMMIT ❌ OptimisticLockingFailureException
+```
+
+The debounce reads `sisteOpplysningerHentetDato` from the database, but the timestamp is only updated when the transaction commits. If both threads read before either commits, both see the old timestamp and both proceed.
+
+### Debounce statistics from run 22396622532
+
+| Metric | Count |
+|--------|-------|
+| Debounce skips ("nylig hentet, hopper over") | 23 |
+| Total Medlemskap fetches | 143 |
+| Races where debounce prevented crash | ~23 |
+| Races where both threads overlapped before commit | 3 |
+| **Debounce effectiveness** | **~88% of concurrent calls prevented** |
+
+### Effectiveness across all CI runs
+
+| Run | Config | Tests | Failures | Rate | Notes |
+|-----|--------|-------|----------|------|-------|
+| Baseline (no fix) | latest | 34 runs | 26 | **76.5%** | Per-run failure rate |
+| [22390008907](https://github.com/navikt/melosys-e2e-tests/actions/runs/22390008907) | api:fix-5 + web:fix-5 | 60 | 0 | **0%** | Lucky — no overlapping reads |
+| [22394409152](https://github.com/navikt/melosys-e2e-tests/actions/runs/22394409152) | api:fix-5 + web:fix-5 | 106* | 0 | **0%** | *cancelled at timeout |
+| [22396622532](https://github.com/navikt/melosys-e2e-tests/actions/runs/22396622532) | api:fix-5 + web:fix-5 | 77 | 3 | **3.75%** | TOCTOU gap hit 3 times |
+| [22392940208](https://github.com/navikt/melosys-e2e-tests/actions/runs/22392940208) | web:fix-5 only | 60 | ~10 | **~17%** | Frontend fix alone insufficient |
+
+**The fix reduces failure rate from ~47% to ~3.75%**, but does not eliminate it.
+
+### Options to fully eliminate the race
+
+#### Option A: Database-level lock (SELECT FOR UPDATE)
+
+Add a pessimistic lock when reading the behandling:
+
+```java
+// In RegisteropplysningerService or a new method in BehandlingService
+@Lock(LockModeType.PESSIMISTIC_WRITE)
+@Query("SELECT b FROM Behandling b WHERE b.id = :id")
+Behandling hentBehandlingForUpdate(@Param("id") long id);
+```
+
+Thread B would block until Thread A commits, then read the updated timestamp and skip via debounce.
+
+**Pros:** Deterministic, eliminates the race entirely.
+**Cons:** Adds lock contention. Could cause deadlocks if other code also locks behandling in a different order. Increases latency for concurrent calls.
+
+#### Option B: Application-level lock (ConcurrentHashMap)
+
+```java
+private final ConcurrentHashMap<Long, ReentrantLock> behandlingLocks = new ConcurrentHashMap<>();
+
+public void hentOgLagreOpplysninger(RegisteropplysningerRequest request) {
+    var lock = behandlingLocks.computeIfAbsent(request.getBehandlingID(), k -> new ReentrantLock());
+    if (!lock.tryLock()) {
+        log.info("Registeropplysninger allerede hentes for behandling {}, hopper over",
+            request.getBehandlingID());
+        return;
+    }
+    try {
+        // ... existing logic ...
+    } finally {
+        lock.unlock();
+        behandlingLocks.remove(request.getBehandlingID());
+    }
+}
+```
+
+**Pros:** No database changes, no deadlock risk, deterministic.
+**Cons:** Only works within a single JVM (not across multiple instances). In E2E/local dev this is fine (single melosys-api instance). In production with multiple pods, the race is already unlikely due to lower load.
+
+#### Option C: Increase debounce + add retry (pragmatic)
+
+Combine the current debounce with a retry at the caller level:
+
+1. Keep the 2-second debounce (catches ~88% of cases)
+2. Add `@Retryable` on a **separate bean** that wraps `RegisteropplysningerService` (avoids the `@Transactional` + `@Retryable` same-method issue)
+3. The retry catches the remaining ~12% where TOCTOU bites
+
+**Pros:** No locking, handles the edge case gracefully.
+**Cons:** More complex, retry adds latency on failure.
+
+#### Recommendation
+
+**Option B (application-level lock)** is the simplest and most effective for our setup:
+- Single melosys-api instance in E2E and local dev
+- `tryLock()` with immediate skip is non-blocking
+- No database changes needed
+- No AOP ordering issues like `@Retryable`
+
+For production (multiple pods), the debounce alone provides sufficient protection since concurrent requests for the same behandling from different pods are extremely rare.
 
 ## Could This Break Something?
 
