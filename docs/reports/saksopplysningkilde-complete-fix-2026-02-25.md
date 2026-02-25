@@ -551,7 +551,7 @@ graph TB
     end
 
     subgraph "Path 3: Vedtak/fatt (onSubmit)"
-        P3A[vurderingVedtak.tsx onSubmit] --> P3B[POST /saksflyt/vedtak/{id}/fatt]
+        P3A[vurderingVedtak.tsx onSubmit] --> P3B["POST /saksflyt/vedtak/{id}/fatt"]
         P3B --> P3C[VedtakController]
         P3C --> P3D[VedtaksfattingFasade]
         P3D --> P3E[EosVedtakService.fattVedtak]
@@ -561,7 +561,7 @@ graph TB
     end
 
     subgraph "Path 4: Manual refresh (oppfrisk button)"
-        P4A[fellesHandlers.jsx] --> P4B[GET /saksopplysninger/oppfriskning/{id}]
+        P4A[fellesHandlers.jsx] --> P4B["GET /saksopplysninger/oppfriskning/{id}"]
         P4B --> P4C[SaksopplysningController]
         P4C --> P4D[OppfriskSaksopplysningerService]
         P4D --> P4E[slettRegisterOpplysninger]
