@@ -1,4 +1,4 @@
-import { test, expect } from '@playwright/test';
+import { test, expect } from '../../fixtures';
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
 import * as dotenv from 'dotenv';
@@ -6,7 +6,7 @@ import type { ApiRecording, RecordedExchange } from '../../recording/types';
 
 // Load env for LOCAL_AUTH_TOKEN
 dotenv.config({ path: resolve(__dirname, '../../.env') });
-dotenv.config({ path: resolve(__dirname, '../../.env.local'), override: true } as any);
+dotenv.config({ path: resolve(__dirname, '../../.env.local'), override: true });
 
 const RECORDING_PATH = resolve(__dirname, '../../recordings/skal-fullfore-arbeid-i-flere-land-arbeidsflyt.json');
 const BASE_URL = process.env.MELOSYS_API_BASE_URL?.replace(/\/api$/, '') || 'http://localhost:8080';

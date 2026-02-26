@@ -25,7 +25,7 @@ import type { ApiRecording, RecordedExchange } from '../recording/types';
 
 // Load .env for LOCAL_AUTH_TOKEN
 dotenv.config({ path: resolve(__dirname, '../.env') });
-dotenv.config({ path: resolve(__dirname, '../.env.local'), override: true } as any);
+dotenv.config({ path: resolve(__dirname, '../.env.local'), override: true });
 
 // ANSI colors for terminal output
 const colors = {

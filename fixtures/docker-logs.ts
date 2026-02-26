@@ -371,6 +371,10 @@ export const dockerLogsFixture = base.extend<{ dockerLogChecker: void }>({
         );
       }
     } catch (error) {
+      // Re-throw intentional test failures (docker log errors should fail the test)
+      if (error instanceof Error && error.message.includes('Docker error')) {
+        throw error;
+      }
       console.error('Failed to check docker logs:', error);
     }
   }, { auto: true }]
