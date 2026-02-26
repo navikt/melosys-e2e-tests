@@ -1,7 +1,7 @@
 # SaksopplysningKilde Race Condition — Complete Fix Documentation
 
-**Date:** 2026-02-25 (updated 2026-02-26 with fix-7 TransactionSynchronization approach)
-**Status:** fix-7 (lock released after TX commit) under validation — run 22431015533
+**Date:** 2026-02-25 (updated 2026-02-26)
+**Status:** fix-7 validated — 0 failures across 240+ test runs (3 consecutive CI runs)
 **PRs:**
 - melosys-api: [#3233](https://github.com/navikt/melosys-api/pull/3233)
 - melosys-web: [#3022](https://github.com/navikt/melosys-web/pull/3022)
@@ -221,25 +221,42 @@ const onSubmit = async () => {
 - Does not cancel already in-flight HTTP requests (would need AbortController)
 - Does not change backend behavior
 
-### Part 2: Backend — Debounce in RegisteropplysningerService (melosys-api)
+### Part 2: Backend — Lock + debounce in RegisteropplysningerService (melosys-api)
 
 **File:** `service/src/main/java/no/nav/melosys/service/registeropplysninger/RegisteropplysningerService.java`
 
 ```java
+private static final ConcurrentHashMap<Long, ReentrantLock> behandlingLocks = new ConcurrentHashMap<>();
+
 @Transactional
 public void hentOgLagreOpplysninger(RegisteropplysningerRequest request) {
     // ... validation ...
+    long behandlingId = request.getBehandlingID();
 
-    Behandling behandling = behandlingService.hentBehandlingMedSaksopplysninger(
-        request.getBehandlingID());
+    // Application-level lock: tryLock() returns immediately if another thread
+    // is already running hentOgLagreOpplysninger for the same behandling.
+    var lock = behandlingLocks.computeIfAbsent(behandlingId, k -> new ReentrantLock());
+    if (!lock.tryLock()) {
+        log.info("Registeropplysninger hentes allerede for behandling {}, hopper over", behandlingId);
+        return;
+    }
 
-    // Debounce: skip if register data was just fetched
-    // (prevents concurrent modification race condition on SaksopplysningKilde)
+    // Release lock AFTER transaction completes (not in finally block!)
+    TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+        @Override
+        public void afterCompletion(int status) {
+            lock.unlock();
+            behandlingLocks.remove(behandlingId);
+        }
+    });
+
+    Behandling behandling = behandlingService.hentBehandlingMedSaksopplysninger(behandlingId);
+
+    // Debounce: skip if register data was just fetched (catches sequential near-duplicates)
     if (behandling.getSisteOpplysningerHentetDato() != null
             && Duration.between(behandling.getSisteOpplysningerHentetDato(),
                 Instant.now()).getSeconds() < 2) {
-        log.info("Registeropplysninger nylig hentet for behandling {}, hopper over",
-            request.getBehandlingID());
+        log.info("Registeropplysninger nylig hentet for behandling {}, hopper over", behandlingId);
         return;
     }
 
@@ -247,25 +264,36 @@ public void hentOgLagreOpplysninger(RegisteropplysningerRequest request) {
 }
 ```
 
-**What it does:**
-- Checks `sisteOpplysningerHentetDato` timestamp on the behandling
-- If register data was fetched less than 2 seconds ago, skips the operation
-- The skipped data would be identical (AAREG/MEDL don't change within 2 seconds)
+**What it does (fix-7 — final version):**
+
+Two layers of protection:
+
+1. **Application-level lock** (`ConcurrentHashMap` + `ReentrantLock` per behandling-ID): `tryLock()` returns immediately if another thread is already running `hentOgLagreOpplysninger` for the same behandling. The lock is released via `TransactionSynchronization.afterCompletion()` — AFTER the transaction commits, not in a finally block.
+
+2. **Debounce check** (`sisteOpplysningerHentetDato` < 2 seconds): Catches sequential near-duplicate calls that don't overlap but happen shortly after each other.
 
 ```mermaid
 flowchart TD
-    A[hentOgLagreOpplysninger called] --> B[Load behandling<br/>from database]
-    B --> C{sisteOpplysningerHentetDato<br/>< 2 seconds ago?}
-    C -->|Yes| D[LOG: nylig hentet, hopper over]
-    D --> E[return early ✅]
-    C -->|No or null| F[Fetch from AAREG/MEDL]
-    F --> G[removeIf old Saksopplysning]
-    G --> H[Save new Saksopplysning]
-    H --> I[Set sisteOpplysningerHentetDato = now]
-    I --> J[Commit ✅]
+    A[hentOgLagreOpplysninger called] --> B{tryLock for<br/>this behandling?}
+    B -->|No — another thread<br/>holds the lock| C[LOG: hentes allerede, hopper over]
+    C --> D[return early ✅]
+    B -->|Yes — lock acquired| E[Register afterCompletion<br/>to unlock after TX commit]
+    E --> F[Load behandling<br/>from database]
+    F --> G{sisteOpplysningerHentetDato<br/>< 2 seconds ago?}
+    G -->|Yes| H[LOG: nylig hentet, hopper over]
+    H --> I[return early ✅<br/>lock released on TX complete]
+    G -->|No or null| J[Fetch from AAREG/MEDL]
+    J --> K[removeIf old Saksopplysning]
+    K --> L[Save new Saksopplysning]
+    L --> M[Set sisteOpplysningerHentetDato = now]
+    M --> N["@Transactional COMMIT ✅"]
+    N --> O[afterCompletion: unlock]
 
+    style C fill:#4a4,color:#fff
     style D fill:#4a4,color:#fff
-    style E fill:#4a4,color:#fff
+    style H fill:#4a4,color:#fff
+    style I fill:#4a4,color:#fff
+    style O fill:#69f,color:#fff
 ```
 
 ## Why Both Fixes Are Needed
@@ -279,15 +307,15 @@ graph TB
         C1 -->|Yes| E1[Race still possible ❌<br/>cancel only stops pending,<br/>not in-flight requests]
     end
 
-    subgraph "Backend fix alone"
-        A2[Debounce check] --> B2{Thread B reads<br/>AFTER Thread A commits?}
-        B2 -->|Yes| C2[Sees timestamp,<br/>skips → Race prevented ✅]
-        B2 -->|No| D2[Both read before commit<br/>→ Race still possible ❌<br/>~2% probability]
+    subgraph "Backend fix alone (fix-7)"
+        A2[tryLock per behandling] --> B2{Another thread<br/>holds lock?}
+        B2 -->|Yes| C2[Skip immediately ✅]
+        B2 -->|No| D2[Proceed, lock held<br/>until TX commits ✅]
     end
 
     subgraph "Both fixes together"
         A3[Cancel debounced kontroll] --> B3[Prevents most races<br/>at the source]
-        B3 --> C3[Backend debounce<br/>catches any remaining<br/>concurrent calls]
+        B3 --> C3[Backend lock + debounce<br/>catches any remaining<br/>concurrent calls deterministically]
         C3 --> D3[Race eliminated ✅]
     end
 
@@ -300,17 +328,20 @@ graph TB
 
 ### CI Results
 
-| Run | Configuration | Tests | Passed | Failed | Rate |
-|-----|--------------|-------|--------|--------|------|
-| [22390008907](https://github.com/navikt/melosys-e2e-tests/actions/runs/22390008907) | api:fix-5 + web:fix-5, 20x | 60 | 60 | 0 | **0%** |
-| [22394409152](https://github.com/navikt/melosys-e2e-tests/actions/runs/22394409152) | api:fix-5 + web:fix-5, 30x | 106* | 106 | 0 | **0%** |
-| [22396622532](https://github.com/navikt/melosys-e2e-tests/actions/runs/22396622532) | api:fix-5 + web:fix-5, 20x | 77 | 74 | 3 | **3.75%** |
-| [22392940208](https://github.com/navikt/melosys-e2e-tests/actions/runs/22392940208) | web:fix-5 only (api:latest) | 60 | ~50 | ~10 | **~17%** |
-| Previous baseline | latest (no fix) | 34 | 8 | 26 | **76.5%** |
+| Run | Configuration | Tests | Failed | Rate |
+|-----|--------------|-------|--------|------|
+| Previous baseline | latest (no fix) | 34 runs | 26 | **76.5%** |
+| [22392940208](https://github.com/navikt/melosys-e2e-tests/actions/runs/22392940208) | web:fix-5 only | 60 | ~10 | **~17%** |
+| [22396622532](https://github.com/navikt/melosys-e2e-tests/actions/runs/22396622532) | fix-5 (debounce only) | 77 | 3 | **3.75%** |
+| [22415716297](https://github.com/navikt/melosys-e2e-tests/actions/runs/22415716297) | fix-6 (lock in finally) | 80 | 2 | **2.5%** |
+| [22431015533](https://github.com/navikt/melosys-e2e-tests/actions/runs/22431015533) | **fix-7 (lock after TX)** | 80 | 0 | **0%** |
+| [22432730859](https://github.com/navikt/melosys-e2e-tests/actions/runs/22432730859) | **fix-7 (lock after TX)** | 80 | 0 | **0%** |
+| [22433426547](https://github.com/navikt/melosys-e2e-tests/actions/runs/22433426547) | **fix-7 (lock after TX)** | 80 | 0 | **0%** |
+| [22434539832](https://github.com/navikt/melosys-e2e-tests/actions/runs/22434539832) | **fix-7 (lock after TX)** | 80 | TBD | TBD |
 
-*cancelled due to 45-min CI timeout, all completed tests passed
+**fix-7 validated: 0/240 failures across 3 consecutive runs** (4th run in progress).
 
-**Note:** Run 22396622532 revealed a TOCTOU gap in the debounce — see [Latest Findings](#latest-findings-debounce-has-a-toctou-gap) below.
+See [fix iteration details](#latest-findings-debounce-has-a-toctou-gap) below for why earlier fix versions failed.
 
 ## Latest Findings: Debounce Has a TOCTOU Gap
 
@@ -448,13 +479,23 @@ Now Thread B's `tryLock()` returns false until Thread A's transaction has fully 
 | [22394409152](https://github.com/navikt/melosys-e2e-tests/actions/runs/22394409152) | fix-5 (debounce only) | 106* | 0 | **0%** | *cancelled at timeout |
 | [22412734167](https://github.com/navikt/melosys-e2e-tests/actions/runs/22412734167) | fix-6 (lock in finally) | 80 | 0 | **0%** | Lucky |
 | [22415716297](https://github.com/navikt/melosys-e2e-tests/actions/runs/22415716297) | fix-6 (lock in finally) | 80 | 2 | **2.5%** | Lock releases before TX commit |
-| [22417209214](https://github.com/navikt/melosys-e2e-tests/actions/runs/22417209214) | fix-6 (lock in finally) | 80 | ? | **?%** | Same issue |
-| [22431015533](https://github.com/navikt/melosys-e2e-tests/actions/runs/22431015533) | fix-7 (lock after TX) | 80 | 0 | **0%** | All passed |
-| [22432730859](https://github.com/navikt/melosys-e2e-tests/actions/runs/22432730859) | fix-7 (lock after TX) | 80 | TBD | **TBD** | Validation run 2 |
+| [22417209214](https://github.com/navikt/melosys-e2e-tests/actions/runs/22417209214) | fix-6 (lock in finally) | 80 | 3 | **3.75%** | Same issue |
+| [22431015533](https://github.com/navikt/melosys-e2e-tests/actions/runs/22431015533) | **fix-7 (lock after TX)** | 80 | 0 | **0%** | All passed |
+| [22432730859](https://github.com/navikt/melosys-e2e-tests/actions/runs/22432730859) | **fix-7 (lock after TX)** | 80 | 0 | **0%** | All passed |
+| [22433426547](https://github.com/navikt/melosys-e2e-tests/actions/runs/22433426547) | **fix-7 (lock after TX)** | 80 | 0 | **0%** | All passed |
+| [22434539832](https://github.com/navikt/melosys-e2e-tests/actions/runs/22434539832) | **fix-7 (lock after TX)** | 80 | TBD | TBD | Validation run 4 |
 
-### Options to fully eliminate the race
+### Options considered to fully eliminate the race
 
-#### Option A: Database-level lock (SELECT FOR UPDATE)
+#### Option B: Application-level lock ✅ IMPLEMENTED (fix-7)
+
+This is what we shipped. See [fix-7 section above](#fix-7-transactionsynchronization--lock-released-after-tx-commit).
+
+Key insight: the lock must be released AFTER the transaction commits, not in a `finally` block. `TransactionSynchronization.afterCompletion()` achieves this.
+
+**Unit test impact:** `TransactionSynchronizationManager.registerSynchronization()` requires an active synchronization context. Unit tests need `TransactionSynchronizationManager.initSynchronization()` in `@BeforeEach` and `clearSynchronization()` in `@AfterEach`.
+
+#### Option A: Database-level lock (SELECT FOR UPDATE) — not needed
 
 Add a pessimistic lock when reading the behandling:
 
@@ -470,31 +511,7 @@ Thread B would block until Thread A commits, then read the updated timestamp and
 **Pros:** Deterministic, eliminates the race entirely.
 **Cons:** Adds lock contention. Could cause deadlocks if other code also locks behandling in a different order. Increases latency for concurrent calls.
 
-#### Option B: Application-level lock (ConcurrentHashMap)
-
-```java
-private final ConcurrentHashMap<Long, ReentrantLock> behandlingLocks = new ConcurrentHashMap<>();
-
-public void hentOgLagreOpplysninger(RegisteropplysningerRequest request) {
-    var lock = behandlingLocks.computeIfAbsent(request.getBehandlingID(), k -> new ReentrantLock());
-    if (!lock.tryLock()) {
-        log.info("Registeropplysninger allerede hentes for behandling {}, hopper over",
-            request.getBehandlingID());
-        return;
-    }
-    try {
-        // ... existing logic ...
-    } finally {
-        lock.unlock();
-        behandlingLocks.remove(request.getBehandlingID());
-    }
-}
-```
-
-**Pros:** No database changes, no deadlock risk, deterministic.
-**Cons:** Only works within a single JVM (not across multiple instances). In E2E/local dev this is fine (single melosys-api instance). In production with multiple pods, the race is already unlikely due to lower load.
-
-#### Option C: Increase debounce + add retry (pragmatic)
+#### Option C: Increase debounce + add retry (pragmatic) — not needed
 
 Combine the current debounce with a retry at the caller level:
 
@@ -505,15 +522,12 @@ Combine the current debounce with a retry at the caller level:
 **Pros:** No locking, handles the edge case gracefully.
 **Cons:** More complex, retry adds latency on failure.
 
-#### Recommendation
+#### Production considerations (multiple pods)
 
-**Option B (application-level lock)** is the simplest and most effective for our setup:
-- Single melosys-api instance in E2E and local dev
-- `tryLock()` with immediate skip is non-blocking
-- No database changes needed
-- No AOP ordering issues like `@Retryable`
-
-For production (multiple pods), the debounce alone provides sufficient protection since concurrent requests for the same behandling from different pods are extremely rare.
+The application-level lock only works within a single JVM. In production with multiple pods, two requests for the same behandling could land on different pods. However:
+- In production, the debounce alone provides sufficient protection since concurrent requests for the same behandling from different pods are extremely rare
+- The race condition is primarily a CI/E2E issue where a single melosys-api instance handles all traffic
+- If needed in the future, Option A (SELECT FOR UPDATE) could be added as well
 
 ## Could This Break Something?
 
