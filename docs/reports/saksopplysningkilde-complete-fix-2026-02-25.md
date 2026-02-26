@@ -1,7 +1,7 @@
 # SaksopplysningKilde Race Condition — Complete Fix Documentation
 
-**Date:** 2026-02-25 (updated with run 22396622532 findings)
-**Status:** Fix reduces rate from ~47% to ~3.75%, but TOCTOU gap remains — needs stronger locking
+**Date:** 2026-02-25 (updated 2026-02-26 with fix-7 TransactionSynchronization approach)
+**Status:** fix-7 (lock released after TX commit) under validation — run 22431015533
 **PRs:**
 - melosys-api: [#3233](https://github.com/navikt/melosys-api/pull/3233)
 - melosys-web: [#3022](https://github.com/navikt/melosys-web/pull/3022)
@@ -374,6 +374,82 @@ The debounce reads `sisteOpplysningerHentetDato` from the database, but the time
 | [22392940208](https://github.com/navikt/melosys-e2e-tests/actions/runs/22392940208) | web:fix-5 only | 60 | ~10 | **~17%** | Frontend fix alone insufficient |
 
 **The fix reduces failure rate from ~47% to ~3.75%**, but does not eliminate it.
+
+### fix-6: Application-level lock — still fails (lock releases before TX commit)
+
+Run [22415716297](https://github.com/navikt/melosys-e2e-tests/actions/runs/22415716297) with `melosys-api:fix-6` (ConcurrentHashMap + tryLock) showed **2 flaky tests** (1 failure each out of 20 attempts), with SaksopplysningKilde errors still in docker logs.
+
+**Why the lock didn't work:** The `@Transactional` proxy wraps the method. The lock is acquired INSIDE the transaction, and `unlock()` in the `finally` block runs BEFORE the proxy commits:
+
+```mermaid
+sequenceDiagram
+    participant P as Spring @Transactional Proxy
+    participant M as Method Body
+    participant DB as Database
+
+    P->>DB: BEGIN TRANSACTION
+    P->>M: enter method
+    M->>M: tryLock() ✅
+    M->>DB: DELETE + INSERT saksopplysninger
+    M->>M: finally: unlock() ← Lock released HERE
+    M-->>P: return
+    P->>DB: COMMIT ← But TX commits HERE (after unlock!)
+```
+
+Thread B acquires the lock after Thread A unlocks but before Thread A's transaction commits → reads stale `sisteOpplysningerHentetDato` → proceeds → crash.
+
+### fix-7: TransactionSynchronization — lock released after TX commit
+
+Instead of unlocking in a `finally` block, use `TransactionSynchronization.afterCompletion()`:
+
+```java
+var lock = behandlingLocks.computeIfAbsent(behandlingId, k -> new ReentrantLock());
+if (!lock.tryLock()) {
+    log.info("Registeropplysninger hentes allerede for behandling {}, hopper over", behandlingId);
+    return;
+}
+
+// Release lock AFTER transaction completes (commit or rollback)
+TransactionSynchronizationManager.registerSynchronization(new TransactionSynchronization() {
+    @Override
+    public void afterCompletion(int status) {
+        lock.unlock();
+        behandlingLocks.remove(behandlingId);
+    }
+});
+```
+
+```mermaid
+sequenceDiagram
+    participant P as Spring @Transactional Proxy
+    participant M as Method Body
+    participant DB as Database
+
+    P->>DB: BEGIN TRANSACTION
+    P->>M: enter method
+    M->>M: tryLock() ✅
+    M->>M: register afterCompletion callback
+    M->>DB: DELETE + INSERT saksopplysninger
+    M-->>P: return
+    P->>DB: COMMIT ✅
+    P->>M: afterCompletion → unlock() ← Lock released AFTER commit
+```
+
+Now Thread B's `tryLock()` returns false until Thread A's transaction has fully committed. The data is consistent when Thread B reads it.
+
+### Updated CI Results (all fix iterations)
+
+| Run | Fix | Tests | Failures | Rate | Notes |
+|-----|-----|-------|----------|------|-------|
+| Baseline | none (latest) | 34 runs | 26 | **76.5%** | Per-run failure rate |
+| [22392940208](https://github.com/navikt/melosys-e2e-tests/actions/runs/22392940208) | web:fix-5 only | 60 | ~10 | **~17%** | Frontend fix alone insufficient |
+| [22396622532](https://github.com/navikt/melosys-e2e-tests/actions/runs/22396622532) | fix-5 (debounce only) | 77 | 3 | **3.75%** | TOCTOU gap |
+| [22390008907](https://github.com/navikt/melosys-e2e-tests/actions/runs/22390008907) | fix-5 (debounce only) | 60 | 0 | **0%** | Lucky — no overlapping reads |
+| [22394409152](https://github.com/navikt/melosys-e2e-tests/actions/runs/22394409152) | fix-5 (debounce only) | 106* | 0 | **0%** | *cancelled at timeout |
+| [22412734167](https://github.com/navikt/melosys-e2e-tests/actions/runs/22412734167) | fix-6 (lock in finally) | 80 | 0 | **0%** | Lucky |
+| [22415716297](https://github.com/navikt/melosys-e2e-tests/actions/runs/22415716297) | fix-6 (lock in finally) | 80 | 2 | **2.5%** | Lock releases before TX commit |
+| [22417209214](https://github.com/navikt/melosys-e2e-tests/actions/runs/22417209214) | fix-6 (lock in finally) | 80 | ? | **?%** | Same issue |
+| [22431015533](https://github.com/navikt/melosys-e2e-tests/actions/runs/22431015533) | fix-7 (lock after TX) | 80 | TBD | **TBD** | Under validation |
 
 ### Options to fully eliminate the race
 
