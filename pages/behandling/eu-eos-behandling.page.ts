@@ -501,22 +501,12 @@ export class EuEosBehandlingPage extends BasePage {
       console.log('⚠️  No step transition APIs detected, waiting for React state update');
     }
 
-    // If specific content is provided, wait for it to be visible
-    // This is the MOST ROBUST way to ensure the next step is ready
-    if (waitForContent) {
-      console.log('⏳ Waiting for specific content on next step...');
-      const startTime = Date.now();
-      await waitForContent.waitFor({ state: 'visible', timeout: waitForContentTimeout });
-      console.log(`✅ Content visible after ${Date.now() - startTime}ms`);
-    } else {
-      // Wait for step transition: either heading changes OR network becomes idle
-      // Some steps may not change the heading (e.g., confirming pre-filled data)
+    // Always wait for the step heading to change first (ensures transition happened)
+    // Then optionally wait for specific content
+    {
       console.log('⏳ Waiting for step transition...');
       const startTime = Date.now();
 
-      // Try to detect heading change (preferred indicator of step transition)
-      // IMPORTANT: React keeps all step components mounted but hidden.
-      // We must find the VISIBLE h1, not just the first in DOM order.
       const headingChanged = await this.page.waitForFunction(
         (originalHeading) => {
           const headings = document.querySelectorAll('main h1');
@@ -530,28 +520,23 @@ export class EuEosBehandlingPage extends BasePage {
           return false;
         },
         headingBefore,
-        { timeout: 10000 }
+        { timeout: 15000 }
       ).then(() => true).catch(() => false);
 
       if (headingChanged) {
         const headingAfter = await this.getCurrentStepHeading();
-        const elapsed = Date.now() - startTime;
-        console.log(`✅ Step heading changed after ${elapsed}ms: "${headingBefore}" → "${headingAfter}"`);
+        console.log(`✅ Step heading changed after ${Date.now() - startTime}ms: "${headingBefore}" → "${headingAfter}"`);
       } else {
-        // Heading didn't change - wait for network idle as fallback
-        console.log(`⚠️  Heading unchanged after 10s (still "${headingBefore}"), waiting for network idle...`);
+        // Heading didn't change - try network idle then reload as recovery
+        console.log(`⚠️  Heading unchanged after 15s (still "${headingBefore}"), waiting for network idle...`);
         await this.page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {
           console.log('⚠️  Network idle timeout');
         });
 
-        // Check heading one more time
         const headingAfter = await this.getCurrentStepHeading();
         if (headingAfter !== headingBefore) {
           console.log(`✅ Step heading changed (late): "${headingBefore}" → "${headingAfter}"`);
         } else {
-          // Step genuinely didn't transition - reload page to recover
-          // The backend has already processed the request (APIs returned 200),
-          // so reloading should bring us to the correct step
           console.log(`⚠️  Step stuck on "${headingAfter}" - reloading page to recover...`);
           await this.page.reload({ waitUntil: 'networkidle' });
           const headingAfterReload = await this.getCurrentStepHeading();
@@ -559,8 +544,14 @@ export class EuEosBehandlingPage extends BasePage {
         }
       }
 
-      // Extra stability wait
       await this.page.waitForTimeout(500);
+    }
+
+    if (waitForContent) {
+      console.log('⏳ Waiting for specific content on next step...');
+      const startTime = Date.now();
+      await waitForContent.waitFor({ state: 'visible', timeout: waitForContentTimeout });
+      console.log(`✅ Content visible after ${Date.now() - startTime}ms`);
     }
 
     const urlAfter = this.page.url();
