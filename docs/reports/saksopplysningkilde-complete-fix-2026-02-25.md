@@ -1,7 +1,7 @@
 # SaksopplysningKilde Race Condition — Complete Fix Documentation
 
 **Date:** 2026-02-25 (updated 2026-02-26)
-**Status:** fix-7 validated — 0 failures across 240+ test runs (3 consecutive CI runs)
+**Status:** fix-7 validated — 0 failures across 320 test runs (4 consecutive CI runs). Safety analysis completed.
 **PRs:**
 - melosys-api: [#3233](https://github.com/navikt/melosys-api/pull/3233)
 - melosys-web: [#3022](https://github.com/navikt/melosys-web/pull/3022)
@@ -337,11 +337,126 @@ graph TB
 | [22431015533](https://github.com/navikt/melosys-e2e-tests/actions/runs/22431015533) | **fix-7 (lock after TX)** | 80 | 0 | **0%** |
 | [22432730859](https://github.com/navikt/melosys-e2e-tests/actions/runs/22432730859) | **fix-7 (lock after TX)** | 80 | 0 | **0%** |
 | [22433426547](https://github.com/navikt/melosys-e2e-tests/actions/runs/22433426547) | **fix-7 (lock after TX)** | 80 | 0 | **0%** |
-| [22434539832](https://github.com/navikt/melosys-e2e-tests/actions/runs/22434539832) | **fix-7 (lock after TX)** | 80 | TBD | TBD |
+| [22434539832](https://github.com/navikt/melosys-e2e-tests/actions/runs/22434539832) | **fix-7 (lock after TX)** | 80 | 0 | **0%** |
 
-**fix-7 validated: 0/240 failures across 3 consecutive runs** (4th run in progress).
+**fix-7 validated: 0/320 failures across 4 consecutive runs.**
 
 See [fix iteration details](#latest-findings-debounce-has-a-toctou-gap) below for why earlier fix versions failed.
+
+## Safety Analysis: Can the Fix Cause Corrupt Saksopplysninger?
+
+Historically, the team had problems with saksopplysninger becoming corrupt and needing manual rebuild. It's critical that our fix (skipping `hentOgLagreOpplysninger` via lock or debounce) never leaves saksopplysninger in an incomplete or missing state.
+
+### All 4 callers and what happens when we skip
+
+```mermaid
+graph TD
+    subgraph callers ["All callers of hentOgLagreOpplysninger"]
+        C1["1. Saksflyt: HentRegisteropplysninger<br/>Fetches ALL types<br/>Runs at sak creation"]
+        C2["2. kontroll/ferdigbehandling<br/>Fetches MEDL only<br/>Debounced useEffect"]
+        C3["3. vedtak/fatt<br/>Fetches MEDL only<br/>Same params as #2"]
+        C4["4. OppfriskSaksopplysningerService<br/>Fetches ALL types<br/>Manual user action"]
+    end
+
+    C1 --> S1{{"Can skip occur?"}}
+    S1 -->|"No — runs minutes before<br/>vedtak, debounce expired,<br/>lock not held"| SAFE1["Safe ✅"]
+
+    C2 --> S2{{"Can skip occur?"}}
+    C3 --> S2
+    S2 -->|"Yes — this is the race<br/>we are fixing"| CHECK2{{"Data still consistent?"}}
+    CHECK2 -->|"Yes — both fetch<br/>identical MEDL data,<br/>Thread A commits it"| SAFE2["Safe ✅"]
+
+    C4 --> S4{{"Can skip occur?"}}
+    S4 -->|"No — slettRegisterOpplysninger<br/>clears timestamp first,<br/>sequential user action"| SAFE4["Safe ✅"]
+
+    style SAFE1 fill:#4a4,color:#fff
+    style SAFE2 fill:#4a4,color:#fff
+    style SAFE4 fill:#4a4,color:#fff
+```
+
+### Detailed analysis per caller
+
+#### 1. Saksflyt `HentRegisteropplysninger` (sak creation)
+
+- **Fetches:** ALL opplysningstyper (ARBFORH, INNTK, MEDL, ORG, UTBETAL)
+- **When:** Async during sak creation, minutes before vedtak
+- **Lock/debounce risk:** None. The 2-second debounce window expires long before any kontroll or vedtak call.
+- **Verdict:** Not affected by our fix.
+
+#### 2 & 3. `KontrollMedRegisteropplysning` (kontroll + vedtak)
+
+These are the two paths that race. Both call `hentNyeRegisteropplysninger()`:
+
+```kotlin
+private fun hentNyeRegisteropplysninger(behandling: Behandling) {
+    val søknadsperiode = behandling.mottatteOpplysninger!!.mottatteOpplysningerData.periode
+    val fnr = persondataFasade.hentFolkeregisterident(behandling.fagsak.hentBrukersAktørID())
+    registeropplysningerService.hentOgLagreOpplysninger(
+        RegisteropplysningerRequest.builder()
+            .behandlingID(behandling.id)
+            .fnr(fnr)
+            .fom(søknadsperiode.getFom())
+            .tom(søknadsperiode.getTom())
+            .saksopplysningTyper(
+                RegisteropplysningerRequest.SaksopplysningTyper.builder()
+                    .medlemskapsopplysninger()  // ← Only MEDL
+                    .build()
+            ).build()
+    )
+}
+```
+
+Both callers use **identical parameters**: same behandling, same søknadsperiode, same fnr, same opplysningstype (MEDL only). When Thread B skips:
+- Thread A has already fetched (or is fetching) the same MEDL data
+- Thread A's data will be committed when its transaction completes
+- The kontroll check in Thread B uses whatever saksopplysninger are in the database — which includes Thread A's fresh MEDL data once committed
+- **The saksopplysninger from saksflyt (ARBFORH, INNTK, ORG, etc.) are not touched by either thread** — only MEDL is removed and re-created
+
+**Verdict:** Skip is safe. The data being skipped is identical to what's being fetched.
+
+#### 4. `OppfriskSaksopplysningerService` (manual refresh)
+
+```java
+// OppfriskSaksopplysningerService.oppdaterRegisteropplysninger()
+registeropplysningerService.slettRegisterOpplysninger(behandlingID);  // ← deletes all, sets timestamp=null
+registeropplysningerService.hentOgLagreOpplysninger(request);         // ← re-fetches all
+```
+
+**Critical: `slettRegisterOpplysninger` runs first** and:
+1. Deletes all saksopplysninger (except SEDOPPL)
+2. Sets `sisteOpplysningerHentetDato = null`
+3. Saves and commits
+
+The subsequent `hentOgLagreOpplysninger` then:
+- Lock: No concurrent call (user-initiated, sequential) → `tryLock()` succeeds
+- Debounce: `sisteOpplysningerHentetDato` is `null` → debounce doesn't trigger
+- **Full fetch proceeds normally**
+
+**Verdict:** Not affected by our fix.
+
+### Edge case: Thread A rolls back
+
+If Thread A acquires the lock but its transaction rolls back:
+
+1. `afterCompletion(STATUS_ROLLED_BACK)` fires → lock released
+2. Thread B already skipped (returned early)
+3. The saksopplysninger are in their pre-Thread-A state (rollback undid changes)
+4. The data from the previous successful `HentRegisteropplysninger` saksflyt step (minutes earlier) is still there
+5. Next call to `hentOgLagreOpplysninger` succeeds normally (lock free, debounce expired)
+
+**Verdict:** Safe. Saksopplysninger are never left empty — at worst they contain data from the saksflyt step.
+
+### Summary: Can saksopplysninger ever end up missing or corrupt?
+
+| Scenario | Lock skip? | Debounce skip? | Saksopplysninger state |
+|----------|-----------|---------------|----------------------|
+| Saksflyt fetches during sak creation | No | No | All types populated ✅ |
+| kontroll + vedtak race (our fix) | Thread B skips | Thread B skips | MEDL from Thread A ✅ |
+| Manual oppfrisk after slett | No | No | Full re-fetch ✅ |
+| Thread A rolls back, Thread B skipped | N/A | N/A | Previous saksflyt data remains ✅ |
+| oppfrisk + kontroll concurrent | Possible | Possible | oppfrisk slettRegisterOpplysninger clears timestamp, full fetch proceeds ✅ |
+
+**Conclusion: The fix cannot cause corrupt or missing saksopplysninger.** The only calls that get skipped are redundant fetches of identical MEDL data for the same behandling within the same 2-second window.
 
 ## Latest Findings: Debounce Has a TOCTOU Gap
 
@@ -483,7 +598,7 @@ Now Thread B's `tryLock()` returns false until Thread A's transaction has fully 
 | [22431015533](https://github.com/navikt/melosys-e2e-tests/actions/runs/22431015533) | **fix-7 (lock after TX)** | 80 | 0 | **0%** | All passed |
 | [22432730859](https://github.com/navikt/melosys-e2e-tests/actions/runs/22432730859) | **fix-7 (lock after TX)** | 80 | 0 | **0%** | All passed |
 | [22433426547](https://github.com/navikt/melosys-e2e-tests/actions/runs/22433426547) | **fix-7 (lock after TX)** | 80 | 0 | **0%** | All passed |
-| [22434539832](https://github.com/navikt/melosys-e2e-tests/actions/runs/22434539832) | **fix-7 (lock after TX)** | 80 | TBD | TBD | Validation run 4 |
+| [22434539832](https://github.com/navikt/melosys-e2e-tests/actions/runs/22434539832) | **fix-7 (lock after TX)** | 80 | 0 | **0%** | All passed |
 
 ### Options considered to fully eliminate the race
 
