@@ -29,27 +29,27 @@ Two concurrent HTTP requests from the **same browser** both call `Registeropplys
 
 ```mermaid
 graph LR
-    subgraph "Browser (React)"
-        A[useEffect<br/>debounced 500ms] -->|POST| K["/api/kontroll/<br/>ferdigbehandling"]
-        B[onSubmit<br/>click 'Fatt vedtak'] -->|POST| V["/api/saksflyt/<br/>vedtak/{id}/fatt"]
+    subgraph browser ["Browser - React"]
+        A["useEffect debounced 500ms"] --> K["POST /kontroll/ferdigbehandling"]
+        B["onSubmit: Fatt vedtak"] --> V["POST /saksflyt/vedtak/fatt"]
     end
 
-    subgraph "Backend (melosys-api)"
-        K --> KC[KontrollController]
-        KC --> FKF[FerdigbehandlingKontrollFacade<br/>.kontroller]
-        FKF -->|skalRegisteropplysninger<br/>Oppdateres=true| KMR[KontrollMedRegisteropplysning]
-        KMR --> RS1[RegisteropplysningerService<br/>.hentOgLagreOpplysninger]
+    subgraph backend ["Backend - melosys-api"]
+        K --> KC["KontrollController"]
+        KC --> FKF["FerdigbehandlingKontrollFacade"]
+        FKF --> KMR["KontrollMedRegisteropplysning"]
+        KMR --> RS1["RegisteropplysningerService"]
 
-        V --> VC[VedtakController]
-        VC --> VF[VedtaksfattingFasade]
-        VF --> EVS[EosVedtakService<br/>.fattVedtak]
-        EVS --> FKF2[FerdigbehandlingKontrollFacade<br/>.kontrollerVedtakMedRegisteropplysninger]
-        FKF2 --> KMR2[KontrollMedRegisteropplysning]
-        KMR2 --> RS2[RegisteropplysningerService<br/>.hentOgLagreOpplysninger]
+        V --> VC["VedtakController"]
+        VC --> VF["VedtaksfattingFasade"]
+        VF --> EVS["EosVedtakService"]
+        EVS --> FKF2["kontrollerVedtakMedRegisteropplysninger"]
+        FKF2 --> KMR2["KontrollMedRegisteropplysning"]
+        KMR2 --> RS2["RegisteropplysningerService"]
     end
 
-    RS1 -->|MODIFY| DB[(SaksopplysningKilde)]
-    RS2 -->|MODIFY| DB
+    RS1 --> DB[("SaksopplysningKilde")]
+    RS2 --> DB
 
     style RS1 fill:#f66,color:#fff
     style RS2 fill:#f66,color:#fff
@@ -625,41 +625,41 @@ For completeness, here is every code path that calls `RegisteropplysningerServic
 
 ```mermaid
 graph TB
-    subgraph "Path 1: Saksflyt (async, sak creation)"
-        P1A[ProsessinstansService.lagre] -->|Spring Event| P1B[ProsessinstansOpprettetListener<br/>@TransactionalEventListener AFTER_COMMIT]
-        P1B --> P1C[ProsessinstansBehandler<br/>@Async saksflytThreadPoolTaskExecutor]
-        P1C --> P1D[ProsessflytDefinisjon<br/>HENT_REGISTEROPPLYSNINGER step]
-        P1D --> P1E[HentRegisteropplysninger.utfor]
-        P1E --> RS[RegisteropplysningerService<br/>.hentOgLagreOpplysninger]
+    subgraph path1 ["Path 1: Saksflyt - async, sak creation"]
+        P1A["ProsessinstansService.lagre"] --> P1B["ProsessinstansOpprettetListener"]
+        P1B --> P1C["ProsessinstansBehandler - Async"]
+        P1C --> P1D["HENT_REGISTEROPPLYSNINGER step"]
+        P1D --> P1E["HentRegisteropplysninger.utfor"]
     end
 
-    subgraph "Path 2: Frontend kontroll (debounced useEffect)"
-        P2A[vurderingVedtak.tsx useEffect] -->|debounce 500ms| P2B[POST /kontroll/ferdigbehandling]
-        P2B --> P2C[KontrollController]
-        P2C --> P2D[FerdigbehandlingKontrollFacade<br/>.kontroller]
-        P2D -->|skalRegisteropplysninger<br/>Oppdateres=true| P2E[KontrollMedRegisteropplysning<br/>.kontroller]
-        P2E --> RS
+    subgraph path2 ["Path 2: Frontend kontroll - debounced useEffect"]
+        P2A["vurderingVedtak.tsx useEffect"] --> P2B["POST /kontroll/ferdigbehandling"]
+        P2B --> P2C["KontrollController"]
+        P2C --> P2D["FerdigbehandlingKontrollFacade"]
+        P2D --> P2E["KontrollMedRegisteropplysning"]
     end
 
-    subgraph "Path 3: Vedtak/fatt (onSubmit)"
-        P3A[vurderingVedtak.tsx onSubmit] --> P3B["POST /saksflyt/vedtak/{id}/fatt"]
-        P3B --> P3C[VedtakController]
-        P3C --> P3D[VedtaksfattingFasade]
-        P3D --> P3E[EosVedtakService.fattVedtak]
-        P3E --> P3F[FerdigbehandlingKontrollFacade<br/>.kontrollerVedtakMedRegisteropplysninger]
-        P3F --> P3G[KontrollMedRegisteropplysning<br/>.kontrollerVedtak]
-        P3G --> RS
+    subgraph path3 ["Path 3: Vedtak/fatt - onSubmit"]
+        P3A["vurderingVedtak.tsx onSubmit"] --> P3B["POST /saksflyt/vedtak/fatt"]
+        P3B --> P3C["VedtakController"]
+        P3C --> P3D["VedtaksfattingFasade"]
+        P3D --> P3E["EosVedtakService.fattVedtak"]
+        P3E --> P3F["kontrollerVedtakMedRegisteropplysninger"]
+        P3F --> P3G["KontrollMedRegisteropplysning"]
     end
 
-    subgraph "Path 4: Manual refresh (oppfrisk button)"
-        P4A[fellesHandlers.jsx] --> P4B["GET /saksopplysninger/oppfriskning/{id}"]
-        P4B --> P4C[SaksopplysningController]
-        P4C --> P4D[OppfriskSaksopplysningerService]
-        P4D --> P4E[slettRegisterOpplysninger]
-        P4E --> RS
+    subgraph path4 ["Path 4: Manual refresh - oppfrisk button"]
+        P4A["fellesHandlers.jsx"] --> P4B["GET /saksopplysninger/oppfriskning"]
+        P4B --> P4C["SaksopplysningController"]
+        P4C --> P4D["OppfriskSaksopplysningerService"]
+        P4D --> P4E["slettRegisterOpplysninger"]
     end
 
-    RS --> DB[(Database:<br/>Saksopplysning +<br/>SaksopplysningKilde)]
+    P1E --> RS["RegisteropplysningerService.hentOgLagreOpplysninger"]
+    P2E --> RS
+    P3G --> RS
+    P4E --> RS
+    RS --> DB[("Database: Saksopplysning + SaksopplysningKilde")]
 
     style RS fill:#69f,color:#fff
     style DB fill:#f96,color:#fff
