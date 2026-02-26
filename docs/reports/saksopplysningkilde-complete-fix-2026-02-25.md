@@ -449,7 +449,8 @@ Now Thread B's `tryLock()` returns false until Thread A's transaction has fully 
 | [22412734167](https://github.com/navikt/melosys-e2e-tests/actions/runs/22412734167) | fix-6 (lock in finally) | 80 | 0 | **0%** | Lucky |
 | [22415716297](https://github.com/navikt/melosys-e2e-tests/actions/runs/22415716297) | fix-6 (lock in finally) | 80 | 2 | **2.5%** | Lock releases before TX commit |
 | [22417209214](https://github.com/navikt/melosys-e2e-tests/actions/runs/22417209214) | fix-6 (lock in finally) | 80 | ? | **?%** | Same issue |
-| [22431015533](https://github.com/navikt/melosys-e2e-tests/actions/runs/22431015533) | fix-7 (lock after TX) | 80 | TBD | **TBD** | Under validation |
+| [22431015533](https://github.com/navikt/melosys-e2e-tests/actions/runs/22431015533) | fix-7 (lock after TX) | 80 | 0 | **0%** | All passed |
+| [22432730859](https://github.com/navikt/melosys-e2e-tests/actions/runs/22432730859) | fix-7 (lock after TX) | 80 | TBD | **TBD** | Validation run 2 |
 
 ### Options to fully eliminate the race
 
