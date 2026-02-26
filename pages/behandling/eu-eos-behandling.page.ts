@@ -50,6 +50,10 @@ export class EuEosBehandlingPage extends BasePage {
     exact: true
   });
 
+  private readonly yrkesaktivDirekteTilRadio = this.page.getByRole('radio', {
+    name: 'Yrkesaktiv, direkte til'
+  });
+
   private readonly selvstendigRadio = this.page.getByRole('radio', {
     name: 'Selvstendig',
     exact: true
@@ -105,11 +109,18 @@ export class EuEosBehandlingPage extends BasePage {
     const startTime = Date.now();
 
     try {
-      // Wait for the heading to contain the expected text
+      // Wait for the VISIBLE heading to contain the expected text
+      // React keeps all step components mounted but hidden
       await this.page.waitForFunction(
         (expectedText) => {
-          const heading = document.querySelector('main h1');
-          return heading && heading.textContent?.includes(expectedText);
+          const headings = document.querySelectorAll('main h1');
+          for (const h of headings) {
+            const el = h as HTMLElement;
+            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+              return el.textContent?.includes(expectedText) ?? false;
+            }
+          }
+          return false;
         },
         stepName,
         { timeout }
@@ -127,10 +138,20 @@ export class EuEosBehandlingPage extends BasePage {
   }
 
   /**
-   * Get the current step heading text
+   * Get the current VISIBLE step heading text.
+   * React keeps all step components mounted but hidden. We must find the visible h1.
    */
   async getCurrentStepHeading(): Promise<string> {
-    return await this.stepHeading.textContent() || 'Unknown';
+    return await this.page.evaluate(() => {
+      const headings = document.querySelectorAll('main h1');
+      for (const h of Array.from(headings)) {
+        const el = h as HTMLElement;
+        if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+          return el.textContent?.trim() || '';
+        }
+      }
+      return headings[0]?.textContent?.trim() || 'Unknown';
+    });
   }
 
   /**
@@ -226,6 +247,16 @@ export class EuEosBehandlingPage extends BasePage {
     await this.yrkesaktivRadio.waitFor({ state: 'visible' });
     await this.yrkesaktivRadio.check();
     console.log('✅ Valgte: Yrkesaktiv');
+  }
+
+  /**
+   * Velg "Yrkesaktiv, direkte til" radio-knapp
+   * Brukes for utsendt arbeidstaker der man går direkte til unntak/brev-steg
+   */
+  async velgYrkesaktivDirekteTil(): Promise<void> {
+    await this.yrkesaktivDirekteTilRadio.waitFor({ state: 'visible' });
+    await this.yrkesaktivDirekteTilRadio.check();
+    console.log('✅ Valgte: Yrkesaktiv, direkte til');
   }
 
   /**
@@ -342,7 +373,8 @@ export class EuEosBehandlingPage extends BasePage {
   async svarJa(): Promise<void> {
     const jaRadio = this.page.getByRole('radio', { name: 'Ja' });
     // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
-    await jaRadio.waitFor({ state: 'visible' });
+    // 30s timeout for slow CI step transitions
+    await jaRadio.waitFor({ state: 'visible', timeout: 30000 });
     await jaRadio.check();
     console.log('✅ Svarte: Ja');
   }
@@ -353,7 +385,8 @@ export class EuEosBehandlingPage extends BasePage {
   async svarNei(): Promise<void> {
     const neiRadio = this.page.getByRole('radio', { name: 'Nei' });
     // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
-    await neiRadio.waitFor({ state: 'visible' });
+    // 30s timeout for slow CI step transitions
+    await neiRadio.waitFor({ state: 'visible', timeout: 30000 });
     await neiRadio.check();
     console.log('✅ Svarte: Nei');
   }
@@ -379,6 +412,29 @@ export class EuEosBehandlingPage extends BasePage {
   }
 
   /**
+   * Velg "Nei, jeg vil vurdere" radio-knapp
+   * Brukes for å vurdere saken videre (fører til begrunnelse-steg)
+   */
+  async velgNeiVilVurdere(): Promise<void> {
+    const radio = this.page.getByRole('radio', { name: 'Nei, jeg vil vurdere' });
+    await radio.waitFor({ state: 'visible' });
+    await radio.check();
+    console.log('✅ Valgte: Nei, jeg vil vurdere');
+  }
+
+  /**
+   * Legg til begrunnelse for vurdering (combobox + "Legg til" knapp)
+   * @param tekst - Begrunnelsestekst (f.eks. 'Erstatter en annen utsendt person...')
+   */
+  async leggTilBegrunnelseForVurdering(tekst: string): Promise<void> {
+    const combobox = this.page.getByRole('combobox', { name: 'Legg til begrunnelse for at' });
+    await combobox.click();
+    await combobox.fill(tekst);
+    await this.page.getByRole('button', { name: 'Legg til' }).click();
+    console.log(`✅ La til begrunnelse: ${tekst.substring(0, 50)}...`);
+  }
+
+  /**
    * Klikk "Bekreft og fortsett" knapp
    * Venter på at siden er klar etter navigasjon
    *
@@ -396,7 +452,12 @@ export class EuEosBehandlingPage extends BasePage {
    * We wait for the two most critical endpoints (avklartefakta and vilkaar)
    * which are always present in step transitions, then verify the heading changed.
    */
-  async klikkBekreftOgFortsett(): Promise<void> {
+  async klikkBekreftOgFortsett(options?: {
+    waitForContent?: import('@playwright/test').Locator;
+    waitForContentTimeout?: number;
+  }): Promise<void> {
+    const { waitForContent, waitForContentTimeout = 30000 } = options || {};
+
     console.log('🔄 Klikker "Bekreft og fortsett"...');
     const urlBefore = this.page.url();
 
@@ -440,44 +501,58 @@ export class EuEosBehandlingPage extends BasePage {
       console.log('⚠️  No step transition APIs detected, waiting for React state update');
     }
 
-    // Wait for step transition: either heading changes OR network becomes idle
-    // Some steps may not change the heading (e.g., confirming pre-filled data)
-    console.log('⏳ Waiting for step transition...');
-    const startTime = Date.now();
+    // Always wait for the step heading to change first (ensures transition happened)
+    // Then optionally wait for specific content
+    {
+      console.log('⏳ Waiting for step transition...');
+      const startTime = Date.now();
 
-    // Try to detect heading change (preferred indicator of step transition)
-    const headingChanged = await this.page.waitForFunction(
-      (originalHeading) => {
-        const heading = document.querySelector('main h1');
-        const currentText = heading?.textContent || '';
-        return heading && currentText !== originalHeading && currentText.trim() !== '';
-      },
-      headingBefore,
-      { timeout: 10000 }
-    ).then(() => true).catch(() => false);
+      const headingChanged = await this.page.waitForFunction(
+        (originalHeading) => {
+          const headings = document.querySelectorAll('main h1');
+          for (const h of headings) {
+            const el = h as HTMLElement;
+            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+              const text = el.textContent?.trim() || '';
+              return text !== originalHeading && text !== '';
+            }
+          }
+          return false;
+        },
+        headingBefore,
+        { timeout: 15000 }
+      ).then(() => true).catch(() => false);
 
-    if (headingChanged) {
-      const headingAfter = await this.getCurrentStepHeading();
-      const elapsed = Date.now() - startTime;
-      console.log(`✅ Step heading changed after ${elapsed}ms: "${headingBefore}" → "${headingAfter}"`);
-    } else {
-      // Heading didn't change - wait for network idle as fallback
-      console.log(`⚠️  Heading unchanged after 10s (still "${headingBefore}"), waiting for network idle...`);
-      await this.page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {
-        console.log('⚠️  Network idle timeout');
-      });
-
-      // Check heading one more time
-      const headingAfter = await this.getCurrentStepHeading();
-      if (headingAfter !== headingBefore) {
-        console.log(`✅ Step heading changed (late): "${headingBefore}" → "${headingAfter}"`);
+      if (headingChanged) {
+        const headingAfter = await this.getCurrentStepHeading();
+        console.log(`✅ Step heading changed after ${Date.now() - startTime}ms: "${headingBefore}" → "${headingAfter}"`);
       } else {
-        console.log(`⚠️  Step heading still unchanged: "${headingAfter}" - continuing anyway`);
+        // Heading didn't change - try network idle then reload as recovery
+        console.log(`⚠️  Heading unchanged after 15s (still "${headingBefore}"), waiting for network idle...`);
+        await this.page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {
+          console.log('⚠️  Network idle timeout');
+        });
+
+        const headingAfter = await this.getCurrentStepHeading();
+        if (headingAfter !== headingBefore) {
+          console.log(`✅ Step heading changed (late): "${headingBefore}" → "${headingAfter}"`);
+        } else {
+          console.log(`⚠️  Step stuck on "${headingAfter}" - reloading page to recover...`);
+          await this.page.reload({ waitUntil: 'networkidle' });
+          const headingAfterReload = await this.getCurrentStepHeading();
+          console.log(`🔄 After reload: "${headingAfterReload}"`);
+        }
       }
+
+      await this.page.waitForTimeout(500);
     }
 
-    // Extra stability wait
-    await this.page.waitForTimeout(500);
+    if (waitForContent) {
+      console.log('⏳ Waiting for specific content on next step...');
+      const startTime = Date.now();
+      await waitForContent.waitFor({ state: 'visible', timeout: waitForContentTimeout });
+      console.log(`✅ Content visible after ${Date.now() - startTime}ms`);
+    }
 
     const urlAfter = this.page.url();
     console.log(`✅ Klikket Bekreft og fortsett`);
@@ -609,9 +684,11 @@ export class EuEosBehandlingPage extends BasePage {
    *
    * @param arbeidsgiverNavn - Navn på arbeidsgiver (default: 'Ståles Stål AS')
    */
-  async velgArbeidsgiverOgFortsett(arbeidsgiverNavn: string = 'Ståles Stål AS'): Promise<void> {
+  async velgArbeidsgiverOgFortsett(arbeidsgiverNavn: string = 'Ståles Stål AS', options?: {
+    waitForContent?: import('@playwright/test').Locator;
+  }): Promise<void> {
     await this.velgArbeidsgiver(arbeidsgiverNavn);
-    await this.klikkBekreftOgFortsett();
+    await this.klikkBekreftOgFortsett(options ? { waitForContent: options.waitForContent } : undefined);
   }
 
   /**
@@ -634,7 +711,6 @@ export class EuEosBehandlingPage extends BasePage {
    * Hjelpemetode for spørsmålssteg
    */
   async svarJaOgFortsett(): Promise<void> {
-    await this.svarJa();
     await this.svarJa();
     await this.klikkBekreftOgFortsett();
   }
