@@ -26,8 +26,8 @@ import { AarsavregningAssertions } from './aarsavregning.assertions';
  * const aarsavregning = new AarsavregningPage(page);
  * await aarsavregning.velgÅr('2025');
  * await aarsavregning.velgBestemmelse('FTRL_KAP2_2_1');
- * await aarsavregning.velgFraOgMedPeriode('mandag 6');
- * await aarsavregning.velgTilOgMedPeriode('søndag 12');
+ * await aarsavregning.velgFraOgMedPeriode('06.01.2025');
+ * await aarsavregning.velgTilOgMedPeriode('12.01.2025');
  * await aarsavregning.velgSkattepliktig(false);
  * await aarsavregning.velgInntektskilde('ARBEIDSINNTEKT');
  * await aarsavregning.fyllInnBruttoinntektMedApiVent('3213');
@@ -41,13 +41,13 @@ export class AarsavregningPage extends BasePage {
 
   private readonly bestemmelseDropdown = this.page.getByLabel('Bestemmelse');
 
-  private readonly fraOgMedDatovelger = this.page
+  private readonly fraOgMedDatoField = this.page
     .getByLabel('Fra og med periode')
-    .getByRole('button', { name: 'Åpne datovelger' });
+    .getByRole('textbox');
 
-  private readonly tilOgMedDatovelger = this.page
+  private readonly tilOgMedDatoField = this.page
     .getByLabel('Til og med periode')
-    .getByRole('button', { name: 'Åpne datovelger' });
+    .getByRole('textbox');
 
   private readonly skattepliktigGroup = this.page.getByRole('group', { name: 'Skattepliktig' });
 
@@ -122,25 +122,27 @@ export class AarsavregningPage extends BasePage {
   }
 
   /**
-   * Open the "Fra og med periode" date picker and select a day
+   * Fill "Fra og med periode" date field
    *
-   * @param dagNavn - Day button name matching the day of week (e.g., 'mandag 6')
+   * @param dato - Date in format DD.MM.YYYY (e.g., '06.01.2025')
    */
-  async velgFraOgMedPeriode(dagNavn: string): Promise<void> {
-    await this.fraOgMedDatovelger.click();
-    await this.page.getByRole('button', { name: dagNavn }).click();
-    console.log(`✅ Selected Fra og med periode = ${dagNavn}`);
+  async velgFraOgMedPeriode(dato: string): Promise<void> {
+    await this.fraOgMedDatoField.click();
+    await this.fraOgMedDatoField.fill(dato);
+    await this.fraOgMedDatoField.press('Enter');
+    console.log(`✅ Fylte inn fra og med periode: ${dato}`);
   }
 
   /**
-   * Open the "Til og med periode" date picker and select a day
+   * Fill "Til og med periode" date field
    *
-   * @param dagNavn - Day button name matching the day of week (e.g., 'søndag 12')
+   * @param dato - Date in format DD.MM.YYYY (e.g., '12.01.2025')
    */
-  async velgTilOgMedPeriode(dagNavn: string): Promise<void> {
-    await this.tilOgMedDatovelger.click();
-    await this.page.getByRole('button', { name: dagNavn }).click();
-    console.log(`✅ Selected Til og med periode = ${dagNavn}`);
+  async velgTilOgMedPeriode(dato: string): Promise<void> {
+    await this.tilOgMedDatoField.click();
+    await this.tilOgMedDatoField.fill(dato);
+    await this.tilOgMedDatoField.press('Enter');
+    console.log(`✅ Fylte inn til og med periode: ${dato}`);
   }
 
   /**
@@ -265,8 +267,8 @@ export class AarsavregningPage extends BasePage {
    *
    * @param år - Year to select (default: '2025')
    * @param bestemmelse - Regulation code (default: 'FTRL_KAP2_2_1')
-   * @param fraOgMedDag - Fra og med day button name (e.g., 'mandag 6')
-   * @param tilOgMedDag - Til og med day button name (e.g., 'søndag 12')
+   * @param fraOgMedDag - Fra og med date in format DD.MM.YYYY (e.g., '06.01.2025')
+   * @param tilOgMedDag - Til og med date in format DD.MM.YYYY (e.g., '12.01.2025')
    * @param erSkattepliktig - Tax liable status (default: false)
    * @param inntektskilde - Income source code (default: 'ARBEIDSINNTEKT')
    * @param bruttoinntekt - Gross income amount (default: '100000')

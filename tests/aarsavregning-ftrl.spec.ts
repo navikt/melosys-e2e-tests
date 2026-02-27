@@ -12,10 +12,14 @@ import {
   AARSAK,
   BEHANDLINGSTYPE,
 } from '../pages/shared/constants';
+import {waitForProcessInstances} from "../helpers/api-helper";
 
-test.describe('Årsavregning FTRL workflow', () => {
-  test('should create and complete årsavregning behandling', async ({ page }) => {
-    // Setup
+test.describe('Årsavregning FTRL - Komplett arbeidsflyt', () => {
+  test('skal opprette og fullføre årsavregning behandling', async ({ page }) => {
+    // Øk test timeout til 120 sekunder (vedtak kan ta lang tid på CI)
+    test.setTimeout(120000);
+
+    // Oppsett
     const auth = new AuthHelper(page);
     await auth.login();
 
@@ -25,42 +29,45 @@ test.describe('Årsavregning FTRL workflow', () => {
     const aarsavregning = new AarsavregningPage(page);
     const vedtak = new VedtakPage(page);
 
-    // --- Step 1: Navigate to main page and open "Opprett ny sak" ---
+    // --- Steg 1: Naviger til hovedside og åpne "Opprett ny sak" ---
     await hovedside.goto();
     await hovedside.klikkOpprettNySak();
 
-    // --- Step 2: Create new case ---
+    // --- Steg 2: Opprett ny sak ---
     await opprettSak.fyllInnBrukerID(USER_ID_VALID);
     await opprettSak.velgOpprettNySak();
     await opprettSak.velgSakstype(SAKSTYPER.FTRL);
     await opprettSak.velgSakstema(SAKSTEMA.MEDLEMSKAP_LOVVALG);
     await opprettSak.velgBehandlingstema(BEHANDLINGSTEMA.YRKESAKTIV);
+    await opprettSak.velgBehandlingstype(BEHANDLINGSTYPE.ÅRSAVREGNING);
     await opprettSak.velgAarsak(AARSAK.SØKNAD);
-    // Select ÅRSAVREGNING behandlingstype
-    await page.getByLabel('Behandlingstype').selectOption(BEHANDLINGSTYPE.ÅRSAVREGNING);
     await opprettSak.leggBehandlingIMine();
     await opprettSak.klikkOpprettNyBehandling();
 
-    // --- Step 3: Open the created behandling ---
-    // The link text is dynamic (includes name, dates), so match on fnr
+    // --- Steg 3: Vent på prosessinstanser og naviger til behandling ---
+    console.log('📝 Venter på prosessinstanser...');
+    await waitForProcessInstances(page.request, 30);
+    await hovedside.goto();
+
+    // Lenketeksten er dynamisk (inkluderer navn, datoer), match på fnr
     await page
       .getByRole('link', { name: new RegExp(`${USER_ID_VALID}`) })
       .first()
       .click();
 
-    // --- Step 4: Fill in Årsavregning behandling ---
+    // --- Steg 4: Fyll inn årsavregning ---
     await aarsavregning.ventPåSideLastet();
     await aarsavregning.velgÅr('2025');
     await aarsavregning.svarNei();
     await aarsavregning.velgBestemmelse('FTRL_KAP2_2_1');
-    await aarsavregning.velgFraOgMedPeriode('mandag 6');
-    await aarsavregning.velgTilOgMedPeriode('søndag 12');
+    await aarsavregning.velgFraOgMedPeriode('06.01.2025');
+    await aarsavregning.velgTilOgMedPeriode('12.01.2025');
     await aarsavregning.velgSkattepliktig(false);
     await aarsavregning.velgInntektskilde('ARBEIDSINNTEKT');
     await aarsavregning.fyllInnBruttoinntektMedApiVent('3213');
     await aarsavregning.klikkBekreftOgFortsett();
 
-    // --- Step 5: Fatt vedtak ---
+    // --- Steg 5: Fatt vedtak ---
     await vedtak.klikkFattVedtak();
   });
 });

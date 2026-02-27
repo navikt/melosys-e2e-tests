@@ -44,6 +44,8 @@ export class OpprettNySakPage extends BasePage {
 
   private readonly behandlingstemaDropdown = this.page.getByLabel('Behandlingstema');
 
+  private readonly behandlingstypeDropdown = this.page.getByLabel('Behandlingstype');
+
   private readonly aarsakDropdown = this.page.getByLabel('Årsak', { exact: true });
 
   private readonly leggIMineCheckbox = this.page.getByRole('checkbox', {
@@ -110,6 +112,15 @@ export class OpprettNySakPage extends BasePage {
    */
   async velgBehandlingstema(behandlingstema: string): Promise<void> {
     await this.behandlingstemaDropdown.selectOption(behandlingstema);
+  }
+
+  /**
+   * Select treatment type (Behandlingstype)
+   *
+   * @param behandlingstype - Treatment type value (e.g., 'ÅRSAVREGNING')
+   */
+  async velgBehandlingstype(behandlingstype: string): Promise<void> {
+    await this.behandlingstypeDropdown.selectOption(behandlingstype);
   }
 
   /**
