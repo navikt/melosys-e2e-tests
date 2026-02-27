@@ -44,6 +44,10 @@ export const AARSAK = {
   SØKNAD: 'SØKNAD',
 } as const;
 
+export const BEHANDLINGSTYPE = {
+  ÅRSAVREGNING: 'ÅRSAVREGNING',
+} as const;
+
 // Trygdeavtale constants
 export const ARBEIDSLAND = {
   AUSTRALIA: 'AU',
