@@ -67,13 +67,13 @@ async function createSakAndGetIds(authToken: string): Promise<{ behandlingId: st
   // Poll for oppgave (async processing can take longer on CI)
   let oppgave: { behandling: { behandlingID: number }; hovedpartIdent: string } | undefined;
   for (let attempt = 0; attempt < 15; attempt++) {
-    await new Promise(r => setTimeout(r, 2000));
     const oppgaverResp = await fetch(`${BASE_URL}/api/oppgaver/oversikt`, { headers });
     const oppgaver = await oppgaverResp.json() as {
       saksbehandling: Array<{ behandling: { behandlingID: number }; hovedpartIdent: string }>;
     };
     oppgave = oppgaver.saksbehandling.find(o => o.hovedpartIdent === BRUKER_ID);
     if (oppgave) break;
+    await new Promise(resolve => setTimeout(resolve, 2000));
   }
 
   if (!oppgave) {
@@ -186,7 +186,7 @@ test.describe('API Replay - Arbeid i flere land', () => {
       if (exchange.elapsedMs > lastElapsedMs) {
         const delayMs = exchange.elapsedMs - lastElapsedMs;
         if (delayMs > 50) {
-          await new Promise(r => setTimeout(r, delayMs));
+          await new Promise(resolve => setTimeout(resolve, delayMs));
         }
         lastElapsedMs = exchange.elapsedMs;
       }

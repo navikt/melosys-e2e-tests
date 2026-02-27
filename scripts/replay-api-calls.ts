@@ -123,7 +123,8 @@ async function replayExchange(
     const success = response.status >= 200 && response.status < 400;
 
     if (verbose && !success) {
-      console.log(`  ${colors.dim}Response body:${colors.reset}`, JSON.stringify(responseBody, null, 2)?.substring(0, 500));
+      const responseBodyString = JSON.stringify(responseBody, null, 2) ?? '';
+      console.log(`  ${colors.dim}Response body:${colors.reset}`, responseBodyString.substring(0, 500));
     }
 
     return { success, status: response.status, durationMs };

@@ -28,16 +28,14 @@ function parseQuery(url: URL): Record<string, string> {
 }
 
 /**
- * Extract relevant headers, redacting sensitive values.
+ * Extract relevant headers using an allowlist of non-sensitive headers.
  */
 function extractHeaders(headers: Record<string, string>): Record<string, string> {
   const extracted: Record<string, string> = {};
-  const keep = ['content-type', 'accept', 'authorization', 'x-melosys-admin-apikey'];
-  for (const key of keep) {
-    if (headers[key]) {
-      extracted[key] = (key === 'authorization' || key === 'x-melosys-admin-apikey')
-        ? '[REDACTED]'
-        : headers[key];
+  const safeHeaders = new Set(['content-type', 'accept']);
+  for (const [key, value] of Object.entries(headers)) {
+    if (safeHeaders.has(key.toLowerCase())) {
+      extracted[key.toLowerCase()] = value;
     }
   }
   return extracted;
@@ -133,7 +131,10 @@ export class ApiRecorder {
         body,
       });
     } catch (error) {
-      console.warn(`[Recorder] Failed to capture ${request.method()} ${request.url()}: ${error}`);
+      const errorDetail = error instanceof Error
+        ? `${error.message}\n  Stack: ${error.stack}`
+        : String(error);
+      console.warn(`[Recorder] Failed to capture ${request.method()} ${request.url()}:\n  ${errorDetail}`);
       await route.continue();
     }
   }
