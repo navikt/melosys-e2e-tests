@@ -12,7 +12,7 @@ import {
   AARSAK,
   BEHANDLINGSTYPE,
 } from '../pages/shared/constants';
-import {waitForProcessInstances} from "../helpers/api-helper";
+import {waitForProcessInstances} from '../helpers/api-helper';
 
 test.describe('Årsavregning FTRL - Komplett arbeidsflyt', () => {
   test('skal opprette og fullføre årsavregning behandling', async ({ page }) => {
@@ -45,6 +45,7 @@ test.describe('Årsavregning FTRL - Komplett arbeidsflyt', () => {
     await opprettSak.klikkOpprettNyBehandling();
     await opprettSak.assertions.verifiserBehandlingOpprettet();
 
+    // --- Steg 3: Vent på prosessinstanser ---
     console.log('📝 Venter på prosessinstanser...');
     await waitForProcessInstances(page.request, 30);
     await hovedside.goto();
