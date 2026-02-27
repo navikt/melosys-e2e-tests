@@ -237,6 +237,13 @@ export const dockerLogsFixture = base.extend<{ dockerLogChecker: void }>({
       return;
     }
 
+    // Tests tagged with @expect-docker-errors intentionally trigger backend errors
+    // (e.g., navigating to non-existent resources to test error handling)
+    if (testInfo.title.includes('@expect-docker-errors')) {
+      console.log(`\n⏭️  Skipping docker log check (@expect-docker-errors tag)`);
+      return;
+    }
+
     // After test completes, check logs from all services
     console.log(`\n🔍 Checking docker logs for: ${testInfo.title}`);
 
