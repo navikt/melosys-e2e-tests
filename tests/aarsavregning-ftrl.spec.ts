@@ -43,8 +43,8 @@ test.describe('Årsavregning FTRL - Komplett arbeidsflyt', () => {
     await opprettSak.velgAarsak(AARSAK.SØKNAD);
     await opprettSak.leggBehandlingIMine();
     await opprettSak.klikkOpprettNyBehandling();
+    await opprettSak.assertions.verifiserBehandlingOpprettet();
 
-    // --- Steg 3: Vent på prosessinstanser og naviger til behandling ---
     console.log('📝 Venter på prosessinstanser...');
     await waitForProcessInstances(page.request, 30);
     await hovedside.goto();
