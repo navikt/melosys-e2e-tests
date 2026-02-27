@@ -10,7 +10,7 @@ import { recordingFixture } from './recording';
  * Features:
  * - Automatic database cleanup before and after each test
  * - Automatic mock service cleanup before and after each test
- * - Docker log error checking after each test
+ * - Docker log error checking after each test (skipped for @expect-docker-errors tests)
  * - Automatic detection of @known-error tagged tests (expected failures)
  * - API call recording when RECORD_API=true (for race condition analysis)
  *
