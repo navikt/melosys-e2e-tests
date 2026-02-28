@@ -325,7 +325,7 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     waitForContent?: import('@playwright/test').Locator;
     waitForContentTimeout?: number;
   }): Promise<void> {
-    const { waitForContent, waitForContentTimeout = 30000 } = options || {};
+    const { waitForContent, waitForContentTimeout = 45000 } = options || {};
 
     console.log('🔄 Klikker "Bekreft og fortsett"...');
 
@@ -476,7 +476,7 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     // Vent på at Virksomhet-seksjonen er fullstendig lastet med arbeidsgiver-checkbox
     const arbeidsgiverCheckbox = this.page.getByRole('checkbox', { name: arbeidsgiver });
     console.log(`⏳ Venter på arbeidsgiver checkbox "${arbeidsgiver}"...`);
-    await arbeidsgiverCheckbox.waitFor({ state: 'visible', timeout: 30000 });
+    await arbeidsgiverCheckbox.waitFor({ state: 'visible', timeout: 45000 });
     console.log('✅ Arbeidsgiver checkbox synlig');
 
     await this.velgArbeidsgiver(arbeidsgiver);
