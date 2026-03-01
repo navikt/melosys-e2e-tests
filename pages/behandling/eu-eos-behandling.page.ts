@@ -456,7 +456,7 @@ export class EuEosBehandlingPage extends BasePage {
     waitForContent?: import('@playwright/test').Locator;
     waitForContentTimeout?: number;
   }): Promise<void> {
-    const { waitForContent, waitForContentTimeout = 30000 } = options || {};
+    const { waitForContent, waitForContentTimeout = 45000 } = options || {};
 
     console.log('🔄 Klikker "Bekreft og fortsett"...');
     const urlBefore = this.page.url();

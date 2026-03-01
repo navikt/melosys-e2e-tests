@@ -27,6 +27,11 @@ on:
         required: false
         type: boolean
         default: false
+      record_api:
+        description: 'Record API calls during tests (for race condition analysis)'
+        required: false
+        type: boolean
+        default: false
 
   repository_dispatch:
     types:
@@ -463,6 +468,7 @@ jobs:
         env:
           CI: true
           RETRIES_DISABLED: ${{ inputs.disable_retries == true }}
+          RECORD_API: ${{ inputs.record_api == true && 'true' || '' }}
 
       - name: Set test status outputs
         id: test-status
@@ -932,6 +938,7 @@ jobs:
             playwright-report/test-summary.json
             playwright-report/metrics-summary.md
             playwright-report/metrics-coverage.json
+            playwright-report/recordings/
           retention-days: 30
 
       - name: Upload docker logs
