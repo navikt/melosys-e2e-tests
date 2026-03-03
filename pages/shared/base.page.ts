@@ -230,6 +230,7 @@ export abstract class BasePage {
     console.log(`  Heading før: "${headingBefore}"`);
 
     let headingChanged = false;
+    let disabledWaits = 0;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) {
@@ -241,8 +242,12 @@ export abstract class BasePage {
       try {
         await expect(button).toBeEnabled({ timeout: 10000 });
       } catch {
-        console.log(`  ⏳ Knapp deaktivert etter 10s, prøver igjen...`);
-        attempt--; // Don't count disabled-wait as an attempt
+        disabledWaits++;
+        if (disabledWaits >= 3) {
+          throw new Error('Button remained disabled after 3 waits (30s total). Possible validation error or frontend bug.');
+        }
+        console.log(`  ⏳ Knapp deaktivert etter 10s, venter igjen (${disabledWaits}/3)...`);
+        attempt--; // Don't count disabled-wait as a click attempt
         continue;
       }
       if (attempt === 1) {

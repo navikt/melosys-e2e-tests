@@ -137,7 +137,6 @@ export class EuEosBehandlingPage extends BasePage {
     }
   }
 
-  // getCurrentStepHeading is inherited from BasePage
 
   /**
    * Åpne dateplukker og velg år og dag
