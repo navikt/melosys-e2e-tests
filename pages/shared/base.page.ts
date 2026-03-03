@@ -261,27 +261,26 @@ export abstract class BasePage {
         console.log(`  Knapp aktivert: true`);
       }
 
-      // Set up response listener BEFORE clicking
-      const apiResponsePromise = this.page.waitForResponse(
-        (response: Response) =>
-          apiPatterns.some(p => response.url().includes(p)) &&
-          response.request().method() === 'POST',
-        { timeout: 10000 },
-      ).catch(() => null);
+      if (verifyHeadingChange) {
+        // Set up response listener BEFORE clicking (only in heading-change mode)
+        const apiResponsePromise = this.page.waitForResponse(
+          (response: Response) =>
+            apiPatterns.some(p => response.url().includes(p)) &&
+            response.request().method() === 'POST',
+          { timeout: 10000 },
+        ).catch(() => null);
 
-      await button.click();
+        await button.click();
 
-      // Wait for API response to confirm click triggered a step transition
-      const apiResponse = await apiResponsePromise;
-      if (apiResponse) {
-        console.log(`  ✅ API: ${apiResponse.url().split('/api/')[1]?.split('?')[0]} → ${apiResponse.status()}`);
-      } else if (verifyHeadingChange) {
-        console.log(`  ⚠️  Ingen API-respons (forsøk ${attempt})`);
-      }
-
-      // Simple mode: just wait for network idle and proceed
-      if (!verifyHeadingChange) {
-        await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+        const apiResponse = await apiResponsePromise;
+        if (apiResponse) {
+          console.log(`  ✅ API: ${apiResponse.url().split('/api/')[1]?.split('?')[0]} → ${apiResponse.status()}`);
+        } else {
+          console.log(`  ⚠️  Ingen API-respons (forsøk ${attempt})`);
+        }
+      } else {
+        // Simple mode: just click and proceed
+        await button.click();
         break;
       }
 
