@@ -1,4 +1,4 @@
-import { Page, Locator, Response } from '@playwright/test';
+import { Page, Locator, Response, expect } from '@playwright/test';
 import { TIMEOUT_MEDIUM } from './constants';
 
 /**
@@ -236,16 +236,17 @@ export abstract class BasePage {
         console.log(`  🔄 Retry ${attempt}/${maxAttempts}...`);
       }
 
-      // Wait for button to be stable and enabled
+      // Wait for button to be visible and enabled (up to 10s)
       await button.waitFor({ state: 'visible', timeout: 10000 });
-      const isEnabled = await button.isEnabled();
-      if (!isEnabled) {
-        console.log(`  ⏳ Knapp deaktivert, venter...`);
-        await this.page.waitForTimeout(1000);
+      try {
+        await expect(button).toBeEnabled({ timeout: 10000 });
+      } catch {
+        console.log(`  ⏳ Knapp deaktivert etter 10s, prøver igjen...`);
+        attempt--; // Don't count disabled-wait as an attempt
         continue;
       }
       if (attempt === 1) {
-        console.log(`  Knapp aktivert: ${isEnabled}`);
+        console.log(`  Knapp aktivert: true`);
       }
 
       // Set up response listener BEFORE clicking
@@ -305,7 +306,10 @@ export abstract class BasePage {
 
     if (!headingChanged) {
       const finalHeading = await this.getCurrentStepHeading();
-      console.log(`  ❌ Steg endret seg ikke etter ${maxAttempts} forsøk (heading: "${finalHeading}")`);
+      throw new Error(
+        `Step transition failed after ${maxAttempts} attempts. ` +
+        `Heading is still "${finalHeading}" (expected change from "${headingBefore}").`
+      );
     }
 
     await this.page.waitForTimeout(500);
