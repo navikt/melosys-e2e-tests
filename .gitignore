@@ -101,5 +101,8 @@ debug-*.jpg
 # yarn.lock
 # pnpm-lock.yaml
 
+# API recordings - checked in for CI replay
+# /recordings/
+
 # Serena (AI assistant files)
 .serena/
