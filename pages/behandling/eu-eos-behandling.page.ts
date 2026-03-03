@@ -457,6 +457,7 @@ export class EuEosBehandlingPage extends BasePage {
     waitForContentTimeout?: number;
   }): Promise<void> {
     const { waitForContent, waitForContentTimeout = 45000 } = options || {};
+    const maxAttempts = 3;
 
     console.log('🔄 Klikker "Bekreft og fortsett"...');
     const urlBefore = this.page.url();
@@ -465,49 +466,46 @@ export class EuEosBehandlingPage extends BasePage {
     const headingBefore = await this.getCurrentStepHeading();
     console.log(`  Heading før: "${headingBefore}"`);
 
-    // Check if button is enabled before clicking
-    const isEnabled = await this.bekreftOgFortsettButton.isEnabled();
-    console.log(`  Knapp aktivert: ${isEnabled}`);
+    let headingChanged = false;
 
-    // CRITICAL: Set up response listeners BEFORE clicking
-    // Wait for the two most important step transition APIs
-    const avklartefaktaPromise = this.page.waitForResponse(
-      response => response.url().includes('/api/avklartefakta/') &&
-                  response.request().method() === 'POST' &&
-                  response.status() === 200,
-      { timeout: 10000 }
-    ).catch(() => null); // Don't fail if not present in this step
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (attempt > 1) {
+        console.log(`🔄 Retry ${attempt}/${maxAttempts} - klikker "Bekreft og fortsett" på nytt...`);
+      }
 
-    const vilkaarPromise = this.page.waitForResponse(
-      response => response.url().includes('/api/vilkaar/') &&
-                  response.request().method() === 'POST' &&
-                  response.status() === 200,
-      { timeout: 10000 }
-    ).catch(() => null); // Don't fail if not present in this step
+      // Wait for button to be stable and enabled
+      await this.bekreftOgFortsettButton.waitFor({ state: 'visible', timeout: 10000 });
+      const isEnabled = await this.bekreftOgFortsettButton.isEnabled();
+      if (!isEnabled) {
+        console.log(`  ⏳ Knapp deaktivert, venter...`);
+        await this.page.waitForTimeout(1000);
+        continue;
+      }
+      if (attempt === 1) {
+        console.log(`  Knapp aktivert: ${isEnabled}`);
+      }
 
-    await this.bekreftOgFortsettButton.click();
+      // Set up response listener BEFORE clicking to detect if the click triggered an API call
+      const apiResponsePromise = this.page.waitForResponse(
+        response => (response.url().includes('/api/avklartefakta/') ||
+                     response.url().includes('/api/vilkaar/')) &&
+                    response.request().method() === 'POST',
+        { timeout: 10000 }
+      ).catch(() => null);
 
-    // Wait for critical APIs to complete (if they fire)
-    const [avklartefaktaResponse, vilkaarResponse] = await Promise.all([
-      avklartefaktaPromise,
-      vilkaarPromise
-    ]);
+      await this.bekreftOgFortsettButton.click();
 
-    if (avklartefaktaResponse || vilkaarResponse) {
-      console.log('✅ Step transition APIs completed:');
-      if (avklartefaktaResponse) console.log(`   - avklartefakta: ${avklartefaktaResponse.status()}`);
-      if (vilkaarResponse) console.log(`   - vilkaar: ${vilkaarResponse.status()}`);
-    } else {
-      console.log('⚠️  No step transition APIs detected, waiting for React state update');
-    }
+      // Wait for API response to confirm the click triggered a step transition
+      const apiResponse = await apiResponsePromise;
+      if (apiResponse) {
+        console.log(`  ✅ API-respons: ${apiResponse.url().split('/api/')[1]?.split('?')[0]} → ${apiResponse.status()}`);
+      } else {
+        console.log(`  ⚠️  Ingen API-respons etter klikk (forsøk ${attempt})`);
+      }
 
-    // Always wait for the step heading to change first (ensures transition happened)
-    // Then optionally wait for specific content
-    {
-      console.log('⏳ Waiting for step transition...');
-      const startTime = Date.now();
-
-      const headingChanged = await this.page.waitForFunction(
+      // Wait for heading to change (confirms step transition in UI)
+      const transitionStart = Date.now();
+      headingChanged = await this.page.waitForFunction(
         (originalHeading) => {
           const headings = document.querySelectorAll('main h1');
           for (const h of headings) {
@@ -525,39 +523,39 @@ export class EuEosBehandlingPage extends BasePage {
 
       if (headingChanged) {
         const headingAfter = await this.getCurrentStepHeading();
-        console.log(`✅ Step heading changed after ${Date.now() - startTime}ms: "${headingBefore}" → "${headingAfter}"`);
-      } else {
-        // Heading didn't change - try network idle then reload as recovery
-        console.log(`⚠️  Heading unchanged after 15s (still "${headingBefore}"), waiting for network idle...`);
-        await this.page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {
-          console.log('⚠️  Network idle timeout');
-        });
-
-        const headingAfter = await this.getCurrentStepHeading();
-        if (headingAfter !== headingBefore) {
-          console.log(`✅ Step heading changed (late): "${headingBefore}" → "${headingAfter}"`);
-        } else {
-          console.log(`⚠️  Step stuck on "${headingAfter}" - reloading page to recover...`);
-          await this.page.reload({ waitUntil: 'networkidle' });
-          const headingAfterReload = await this.getCurrentStepHeading();
-          console.log(`🔄 After reload: "${headingAfterReload}"`);
-        }
+        console.log(`  ✅ Steg endret etter ${Date.now() - transitionStart}ms: "${headingBefore}" → "${headingAfter}"`);
+        break;
       }
 
-      await this.page.waitForTimeout(500);
+      // Heading didn't change - wait for network idle before retrying
+      console.log(`  ⚠️  Heading uendret etter 15s (forsøk ${attempt}/${maxAttempts})`);
+      await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+
+      // Check if heading changed during network idle wait
+      const currentHeading = await this.getCurrentStepHeading();
+      if (currentHeading !== headingBefore) {
+        console.log(`  ✅ Steg endret (sent): "${headingBefore}" → "${currentHeading}"`);
+        headingChanged = true;
+        break;
+      }
     }
 
+    if (!headingChanged) {
+      const finalHeading = await this.getCurrentStepHeading();
+      console.log(`  ❌ Steg endret seg ikke etter ${maxAttempts} forsøk (heading: "${finalHeading}")`);
+    }
+
+    await this.page.waitForTimeout(500);
+
     if (waitForContent) {
-      console.log('⏳ Waiting for specific content on next step...');
+      console.log('  ⏳ Venter på innhold på neste steg...');
       const startTime = Date.now();
       await waitForContent.waitFor({ state: 'visible', timeout: waitForContentTimeout });
-      console.log(`✅ Content visible after ${Date.now() - startTime}ms`);
+      console.log(`  ✅ Innhold synlig etter ${Date.now() - startTime}ms`);
     }
 
     const urlAfter = this.page.url();
     console.log(`✅ Klikket Bekreft og fortsett`);
-    console.log(`  URL før:  ${urlBefore}`);
-    console.log(`  URL etter: ${urlAfter}`);
     console.log(`  URL endret: ${urlBefore !== urlAfter}`);
   }
 
