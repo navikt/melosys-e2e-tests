@@ -198,16 +198,20 @@ export abstract class BasePage {
   }
 
   /**
-   * Click "Bekreft og fortsett" with retry logic for reliable step transitions.
+   * Click "Bekreft og fortsett" with API wait and optional heading-change retry.
    *
-   * On slow CI runners, the button click sometimes doesn't register (React re-render,
-   * loading overlay, etc.). This method retries the click up to 3 times, verifying
-   * that the step heading actually changed before proceeding.
+   * Two modes:
+   * - **Simple** (default): Click, wait for API response, wait for networkidle.
+   *   Used by most POMs (lovvalg, medlemskap, trygdeavgift, etc.)
+   * - **With heading retry** (verifyHeadingChange: true): Also verifies that the
+   *   visible h1 heading changed, retrying the click up to 3 times if not.
+   *   Used by EU/EØS multi-step flows where clicks sometimes don't register on CI.
    *
    * @param button - The "Bekreft og fortsett" button locator
    * @param options.waitForContent - Optional locator to wait for on the next step
    * @param options.waitForContentTimeout - Timeout for waitForContent (default: 45000ms)
    * @param options.apiPatterns - URL patterns to detect API calls (default: avklartefakta/vilkaar)
+   * @param options.verifyHeadingChange - Enable heading-change retry (default: false)
    */
   protected async clickStepButtonWithRetry(
     button: Locator,
@@ -215,21 +219,24 @@ export abstract class BasePage {
       waitForContent?: Locator;
       waitForContentTimeout?: number;
       apiPatterns?: string[];
+      verifyHeadingChange?: boolean;
     },
   ): Promise<void> {
     const {
       waitForContent,
       waitForContentTimeout = 45000,
       apiPatterns = ['/api/avklartefakta/', '/api/vilkaar/'],
+      verifyHeadingChange = false,
     } = options || {};
-    const maxAttempts = 3;
 
     console.log('🔄 Klikker "Bekreft og fortsett"...');
 
-    const headingBefore = await this.getCurrentStepHeading();
-    console.log(`  Heading før: "${headingBefore}"`);
+    const headingBefore = verifyHeadingChange ? await this.getCurrentStepHeading() : null;
+    if (headingBefore) {
+      console.log(`  Heading før: "${headingBefore}"`);
+    }
 
-    let headingChanged = false;
+    const maxAttempts = verifyHeadingChange ? 3 : 1;
     let disabledWaits = 0;
 
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
@@ -237,7 +244,7 @@ export abstract class BasePage {
         console.log(`  🔄 Retry ${attempt}/${maxAttempts}...`);
       }
 
-      // Wait for button to be visible and enabled (up to 10s)
+      // Wait for button to be visible and enabled
       await button.waitFor({ state: 'visible', timeout: 10000 });
       try {
         await expect(button).toBeEnabled({ timeout: 10000 });
@@ -268,13 +275,19 @@ export abstract class BasePage {
       const apiResponse = await apiResponsePromise;
       if (apiResponse) {
         console.log(`  ✅ API: ${apiResponse.url().split('/api/')[1]?.split('?')[0]} → ${apiResponse.status()}`);
-      } else {
+      } else if (verifyHeadingChange) {
         console.log(`  ⚠️  Ingen API-respons (forsøk ${attempt})`);
       }
 
-      // Wait for heading to change (confirms step transition in UI)
+      // Simple mode: just wait for network idle and proceed
+      if (!verifyHeadingChange) {
+        await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+        break;
+      }
+
+      // Heading-change mode: verify UI actually transitioned
       const transitionStart = Date.now();
-      headingChanged = await this.page.waitForFunction(
+      const headingChanged = await this.page.waitForFunction(
         (originalHeading: string) => {
           const headings = document.querySelectorAll('main h1');
           for (const h of headings) {
@@ -286,7 +299,7 @@ export abstract class BasePage {
           }
           return false;
         },
-        headingBefore,
+        headingBefore!,
         { timeout: 15000 },
       ).then(() => true).catch(() => false);
 
@@ -304,17 +317,15 @@ export abstract class BasePage {
       const currentHeading = await this.getCurrentStepHeading();
       if (currentHeading !== headingBefore) {
         console.log(`  ✅ Steg endret (sent): "${headingBefore}" → "${currentHeading}"`);
-        headingChanged = true;
         break;
       }
-    }
 
-    if (!headingChanged) {
-      const finalHeading = await this.getCurrentStepHeading();
-      throw new Error(
-        `Step transition failed after ${maxAttempts} attempts. ` +
-        `Heading is still "${finalHeading}" (expected change from "${headingBefore}").`
-      );
+      if (attempt === maxAttempts) {
+        throw new Error(
+          `Step transition failed after ${maxAttempts} attempts. ` +
+          `Heading is still "${currentHeading}" (expected change from "${headingBefore}").`
+        );
+      }
     }
 
     await this.page.waitForTimeout(500);

@@ -439,7 +439,10 @@ export class EuEosBehandlingPage extends BasePage {
     waitForContent?: import('@playwright/test').Locator;
     waitForContentTimeout?: number;
   }): Promise<void> {
-    await this.clickStepButtonWithRetry(this.bekreftOgFortsettButton, options);
+    await this.clickStepButtonWithRetry(this.bekreftOgFortsettButton, {
+      ...options,
+      verifyHeadingChange: true,
+    });
   }
 
   /**
