@@ -138,23 +138,6 @@ export class EuEosBehandlingPage extends BasePage {
   }
 
   /**
-   * Get the current VISIBLE step heading text.
-   * React keeps all step components mounted but hidden. We must find the visible h1.
-   */
-  async getCurrentStepHeading(): Promise<string> {
-    return await this.page.evaluate(() => {
-      const headings = document.querySelectorAll('main h1');
-      for (const h of Array.from(headings)) {
-        const el = h as HTMLElement;
-        if (el.offsetHeight > 0 && el.offsetWidth > 0) {
-          return el.textContent?.trim() || '';
-        }
-      }
-      return headings[0]?.textContent?.trim() || 'Unknown';
-    });
-  }
-
-  /**
    * Åpne dateplukker og velg år og dag
    * Brukes for startdato
    *
@@ -456,109 +439,10 @@ export class EuEosBehandlingPage extends BasePage {
     waitForContent?: import('@playwright/test').Locator;
     waitForContentTimeout?: number;
   }): Promise<void> {
-    const { waitForContent, waitForContentTimeout = 45000 } = options || {};
-
-    console.log('🔄 Klikker "Bekreft og fortsett"...');
-    const urlBefore = this.page.url();
-
-    // CRITICAL: Record current heading BEFORE clicking
-    const headingBefore = await this.getCurrentStepHeading();
-    console.log(`  Heading før: "${headingBefore}"`);
-
-    // Check if button is enabled before clicking
-    const isEnabled = await this.bekreftOgFortsettButton.isEnabled();
-    console.log(`  Knapp aktivert: ${isEnabled}`);
-
-    // CRITICAL: Set up response listeners BEFORE clicking
-    // Wait for the two most important step transition APIs
-    const avklartefaktaPromise = this.page.waitForResponse(
-      response => response.url().includes('/api/avklartefakta/') &&
-                  response.request().method() === 'POST' &&
-                  response.status() === 200,
-      { timeout: 10000 }
-    ).catch(() => null); // Don't fail if not present in this step
-
-    const vilkaarPromise = this.page.waitForResponse(
-      response => response.url().includes('/api/vilkaar/') &&
-                  response.request().method() === 'POST' &&
-                  response.status() === 200,
-      { timeout: 10000 }
-    ).catch(() => null); // Don't fail if not present in this step
-
-    await this.bekreftOgFortsettButton.click();
-
-    // Wait for critical APIs to complete (if they fire)
-    const [avklartefaktaResponse, vilkaarResponse] = await Promise.all([
-      avklartefaktaPromise,
-      vilkaarPromise
-    ]);
-
-    if (avklartefaktaResponse || vilkaarResponse) {
-      console.log('✅ Step transition APIs completed:');
-      if (avklartefaktaResponse) console.log(`   - avklartefakta: ${avklartefaktaResponse.status()}`);
-      if (vilkaarResponse) console.log(`   - vilkaar: ${vilkaarResponse.status()}`);
-    } else {
-      console.log('⚠️  No step transition APIs detected, waiting for React state update');
-    }
-
-    // Always wait for the step heading to change first (ensures transition happened)
-    // Then optionally wait for specific content
-    {
-      console.log('⏳ Waiting for step transition...');
-      const startTime = Date.now();
-
-      const headingChanged = await this.page.waitForFunction(
-        (originalHeading) => {
-          const headings = document.querySelectorAll('main h1');
-          for (const h of headings) {
-            const el = h as HTMLElement;
-            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
-              const text = el.textContent?.trim() || '';
-              return text !== originalHeading && text !== '';
-            }
-          }
-          return false;
-        },
-        headingBefore,
-        { timeout: 15000 }
-      ).then(() => true).catch(() => false);
-
-      if (headingChanged) {
-        const headingAfter = await this.getCurrentStepHeading();
-        console.log(`✅ Step heading changed after ${Date.now() - startTime}ms: "${headingBefore}" → "${headingAfter}"`);
-      } else {
-        // Heading didn't change - try network idle then reload as recovery
-        console.log(`⚠️  Heading unchanged after 15s (still "${headingBefore}"), waiting for network idle...`);
-        await this.page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {
-          console.log('⚠️  Network idle timeout');
-        });
-
-        const headingAfter = await this.getCurrentStepHeading();
-        if (headingAfter !== headingBefore) {
-          console.log(`✅ Step heading changed (late): "${headingBefore}" → "${headingAfter}"`);
-        } else {
-          console.log(`⚠️  Step stuck on "${headingAfter}" - reloading page to recover...`);
-          await this.page.reload({ waitUntil: 'networkidle' });
-          const headingAfterReload = await this.getCurrentStepHeading();
-          console.log(`🔄 After reload: "${headingAfterReload}"`);
-        }
-      }
-
-      await this.page.waitForTimeout(500);
-    }
-
-    if (waitForContent) {
-      console.log('⏳ Waiting for specific content on next step...');
-      const startTime = Date.now();
-      await waitForContent.waitFor({ state: 'visible', timeout: waitForContentTimeout });
-      console.log(`✅ Content visible after ${Date.now() - startTime}ms`);
-    }
-
-    const urlAfter = this.page.url();
-    console.log(`✅ Klikket Bekreft og fortsett`);
-    console.log(`  URL før:  ${urlBefore}`);
-    console.log(`  URL etter: ${urlAfter}`);
-    console.log(`  URL endret: ${urlBefore !== urlAfter}`);
+    await this.clickStepButtonWithRetry(this.bekreftOgFortsettButton, {
+      ...options,
+      verifyHeadingChange: true,
+    });
   }
 
   /**

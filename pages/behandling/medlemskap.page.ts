@@ -128,10 +128,10 @@ export class MedlemskapPage extends BasePage {
   }
 
   /**
-   * Click "Bekreft og fortsett" button to proceed to next step
+   * Click "Bekreft og fortsett" button with retry logic for reliable step transitions
    */
   async klikkBekreftOgFortsett(): Promise<void> {
-    await this.bekreftButton.click();
+    await this.clickStepButtonWithRetry(this.bekreftButton);
   }
 
   /**

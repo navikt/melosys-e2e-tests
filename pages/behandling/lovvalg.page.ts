@@ -1,4 +1,4 @@
-import { Page, expect } from '@playwright/test';
+import { Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 import { LovvalgAssertions } from './lovvalg.assertions';
 
@@ -134,14 +134,10 @@ export class LovvalgPage extends BasePage {
   }
 
   /**
-   * Click "Bekreft og fortsett" button and wait for it to be enabled
-   *
-   * Note: This button may take time to enable after answering questions
+   * Click "Bekreft og fortsett" button with retry logic for reliable step transitions
    */
   async klikkBekreftOgFortsett(): Promise<void> {
-    await expect(this.bekreftButton).toBeEnabled({ timeout: 10000 });
-    console.log('✅ Bekreft og fortsett button is enabled');
-    await this.bekreftButton.click();
+    await this.clickStepButtonWithRetry(this.bekreftButton);
   }
 
   /**

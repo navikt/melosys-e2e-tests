@@ -254,11 +254,10 @@ export class AarsavregningPage extends BasePage {
   }
 
   /**
-   * Click "Bekreft og fortsett" button
+   * Click "Bekreft og fortsett" button with retry logic for reliable step transitions
    */
   async klikkBekreftOgFortsett(): Promise<void> {
-    await this.bekreftButton.click();
-    console.log('✅ Clicked Bekreft og fortsett');
+    await this.clickStepButtonWithRetry(this.bekreftButton);
   }
 
   /**
