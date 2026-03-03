@@ -137,7 +137,6 @@ export class EuEosBehandlingPage extends BasePage {
     }
   }
 
-
   /**
    * Åpne dateplukker og velg år og dag
    * Brukes for startdato
