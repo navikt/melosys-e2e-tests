@@ -1,4 +1,4 @@
-import { Page, Locator } from '@playwright/test';
+import { Page, Locator, Response } from '@playwright/test';
 import { TIMEOUT_MEDIUM } from './constants';
 
 /**
@@ -176,5 +176,147 @@ export abstract class BasePage {
       path: `test-results/debug-${name}.png`,
       fullPage: true,
     });
+  }
+
+  // ── Step transition helpers ──────────────────────────────────────────
+
+  /**
+   * Get the current VISIBLE step heading text.
+   * React keeps all step components mounted but hidden. We must find the visible h1.
+   */
+  protected async getCurrentStepHeading(): Promise<string> {
+    return await this.page.evaluate(() => {
+      const headings = document.querySelectorAll('main h1');
+      for (const h of Array.from(headings)) {
+        const el = h as HTMLElement;
+        if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+          return el.textContent?.trim() || '';
+        }
+      }
+      return headings[0]?.textContent?.trim() || 'Unknown';
+    });
+  }
+
+  /**
+   * Click "Bekreft og fortsett" with retry logic for reliable step transitions.
+   *
+   * On slow CI runners, the button click sometimes doesn't register (React re-render,
+   * loading overlay, etc.). This method retries the click up to 3 times, verifying
+   * that the step heading actually changed before proceeding.
+   *
+   * @param button - The "Bekreft og fortsett" button locator
+   * @param options.waitForContent - Optional locator to wait for on the next step
+   * @param options.waitForContentTimeout - Timeout for waitForContent (default: 45000ms)
+   * @param options.apiPatterns - URL patterns to detect API calls (default: avklartefakta/vilkaar)
+   */
+  protected async clickStepButtonWithRetry(
+    button: Locator,
+    options?: {
+      waitForContent?: Locator;
+      waitForContentTimeout?: number;
+      apiPatterns?: string[];
+    },
+  ): Promise<void> {
+    const {
+      waitForContent,
+      waitForContentTimeout = 45000,
+      apiPatterns = ['/api/avklartefakta/', '/api/vilkaar/'],
+    } = options || {};
+    const maxAttempts = 3;
+
+    console.log('🔄 Klikker "Bekreft og fortsett"...');
+
+    const headingBefore = await this.getCurrentStepHeading();
+    console.log(`  Heading før: "${headingBefore}"`);
+
+    let headingChanged = false;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (attempt > 1) {
+        console.log(`  🔄 Retry ${attempt}/${maxAttempts}...`);
+      }
+
+      // Wait for button to be stable and enabled
+      await button.waitFor({ state: 'visible', timeout: 10000 });
+      const isEnabled = await button.isEnabled();
+      if (!isEnabled) {
+        console.log(`  ⏳ Knapp deaktivert, venter...`);
+        await this.page.waitForTimeout(1000);
+        continue;
+      }
+      if (attempt === 1) {
+        console.log(`  Knapp aktivert: ${isEnabled}`);
+      }
+
+      // Set up response listener BEFORE clicking
+      const apiResponsePromise = this.page.waitForResponse(
+        (response: Response) =>
+          apiPatterns.some(p => response.url().includes(p)) &&
+          response.request().method() === 'POST',
+        { timeout: 10000 },
+      ).catch(() => null);
+
+      await button.click();
+
+      // Wait for API response to confirm click triggered a step transition
+      const apiResponse = await apiResponsePromise;
+      if (apiResponse) {
+        console.log(`  ✅ API: ${apiResponse.url().split('/api/')[1]?.split('?')[0]} → ${apiResponse.status()}`);
+      } else {
+        console.log(`  ⚠️  Ingen API-respons (forsøk ${attempt})`);
+      }
+
+      // Wait for heading to change (confirms step transition in UI)
+      const transitionStart = Date.now();
+      headingChanged = await this.page.waitForFunction(
+        (originalHeading: string) => {
+          const headings = document.querySelectorAll('main h1');
+          for (const h of headings) {
+            const el = h as HTMLElement;
+            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+              const text = el.textContent?.trim() || '';
+              return text !== originalHeading && text !== '';
+            }
+          }
+          return false;
+        },
+        headingBefore,
+        { timeout: 15000 },
+      ).then(() => true).catch(() => false);
+
+      if (headingChanged) {
+        const headingAfter = await this.getCurrentStepHeading();
+        console.log(`  ✅ Steg endret etter ${Date.now() - transitionStart}ms: "${headingBefore}" → "${headingAfter}"`);
+        break;
+      }
+
+      // Heading didn't change - wait briefly before retrying
+      console.log(`  ⚠️  Heading uendret etter 15s (forsøk ${attempt}/${maxAttempts})`);
+      await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+
+      // Check if heading changed during network idle wait
+      const currentHeading = await this.getCurrentStepHeading();
+      if (currentHeading !== headingBefore) {
+        console.log(`  ✅ Steg endret (sent): "${headingBefore}" → "${currentHeading}"`);
+        headingChanged = true;
+        break;
+      }
+    }
+
+    if (!headingChanged) {
+      const finalHeading = await this.getCurrentStepHeading();
+      console.log(`  ❌ Steg endret seg ikke etter ${maxAttempts} forsøk (heading: "${finalHeading}")`);
+    }
+
+    await this.page.waitForTimeout(500);
+
+    if (waitForContent) {
+      console.log('  ⏳ Venter på innhold på neste steg...');
+      const startTime = Date.now();
+      await waitForContent.waitFor({ state: 'visible', timeout: waitForContentTimeout });
+      console.log(`  ✅ Innhold synlig etter ${Date.now() - startTime}ms`);
+    }
+
+    console.log('✅ Bekreft og fortsett fullført');
   }
 }

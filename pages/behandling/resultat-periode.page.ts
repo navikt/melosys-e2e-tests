@@ -77,12 +77,10 @@ export class ResultatPeriodePage extends BasePage {
   }
 
   /**
-   * Click "Bekreft og fortsett" button
+   * Click "Bekreft og fortsett" button with retry logic for reliable step transitions
    */
   async klikkBekreftOgFortsett(): Promise<void> {
-    await this.bekreftOgFortsettButton.waitFor({ state: 'visible' });
-    await this.bekreftOgFortsettButton.click();
-    console.log('✅ Clicked Bekreft og fortsett');
+    await this.clickStepButtonWithRetry(this.bekreftOgFortsettButton);
   }
 
   /**
