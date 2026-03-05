@@ -249,6 +249,15 @@ export abstract class BasePage {
       try {
         await expect(button).toBeEnabled({ timeout: 10000 });
       } catch {
+        // If heading already changed (e.g. double-advance from delayed response),
+        // the button is disabled on the NEXT step — don't keep waiting
+        if (verifyHeadingChange && headingBefore) {
+          const currentHeading = await this.getCurrentStepHeading();
+          if (currentHeading !== headingBefore && currentHeading !== '' && currentHeading !== 'Unknown') {
+            console.log(`  ✅ Steg allerede endret (knapp deaktivert på nytt steg): "${headingBefore}" → "${currentHeading}"`);
+            break;
+          }
+        }
         disabledWaits++;
         if (disabledWaits >= 3) {
           throw new Error('Button remained disabled after 3 waits (30s total). Possible validation error or frontend bug.');
@@ -262,6 +271,18 @@ export abstract class BasePage {
       }
 
       if (verifyHeadingChange) {
+        // CRITICAL: On retry attempts, re-check heading right before clicking.
+        // The previous click's delayed API response may arrive between the
+        // post-timeout heading check and this point, causing a double-advance
+        // where two step transitions fire from a single retry.
+        if (attempt > 1) {
+          const preClickHeading = await this.getCurrentStepHeading();
+          if (preClickHeading !== headingBefore && preClickHeading !== '' && preClickHeading !== 'Unknown') {
+            console.log(`  ✅ Steg allerede endret før retry-klikk: "${headingBefore}" → "${preClickHeading}"`);
+            break;
+          }
+        }
+
         // Set up response listener BEFORE clicking (only in heading-change mode)
         const apiResponsePromise = this.page.waitForResponse(
           (response: Response) =>
@@ -278,16 +299,10 @@ export abstract class BasePage {
         } else {
           console.log(`  ⚠️  Ingen API-respons (forsøk ${attempt})`);
         }
-      } else {
-        // Simple mode: just click and proceed
-        await button.click();
-        break;
-      }
 
-      // Heading-change mode: verify UI actually transitioned
-      const transitionStart = Date.now();
-      const headingChanged = await this.page.waitForFunction(
-        (originalHeading: string) => {
+        // Verify UI actually transitioned
+        const transitionStart = Date.now();
+        const headingCheckFn = (originalHeading: string) => {
           const headings = document.querySelectorAll('main h1');
           for (const h of headings) {
             const el = h as HTMLElement;
@@ -297,33 +312,65 @@ export abstract class BasePage {
             }
           }
           return false;
-        },
-        headingBefore!,
-        { timeout: 15000 },
-      ).then(() => true).catch(() => false);
+        };
 
-      if (headingChanged) {
-        const headingAfter = await this.getCurrentStepHeading();
-        console.log(`  ✅ Steg endret etter ${Date.now() - transitionStart}ms: "${headingBefore}" → "${headingAfter}"`);
+        const headingChanged = await this.page.waitForFunction(
+          headingCheckFn,
+          headingBefore!,
+          { timeout: 15000 },
+        ).then(() => true).catch(() => false);
+
+        if (headingChanged) {
+          const headingAfter = await this.getCurrentStepHeading();
+          console.log(`  ✅ Steg endret etter ${Date.now() - transitionStart}ms: "${headingBefore}" → "${headingAfter}"`);
+          break;
+        }
+
+        // Heading didn't change within 15s.
+        // CRITICAL: If the API responded, the backend processed the click.
+        // The frontend is just slow. Do NOT retry — that causes double-advance.
+        // Instead, wait longer for the frontend to catch up.
+        if (apiResponse) {
+          console.log(`  ⏳ API svarte OK men heading uendret — venter lenger (unngår dobbel-avansering)...`);
+          const lateHeadingChanged = await this.page.waitForFunction(
+            headingCheckFn,
+            headingBefore!,
+            { timeout: 30000 },
+          ).then(() => true).catch(() => false);
+
+          if (lateHeadingChanged) {
+            const headingAfter = await this.getCurrentStepHeading();
+            console.log(`  ✅ Steg endret (utvidet ventetid, ${Date.now() - transitionStart}ms): "${headingBefore}" → "${headingAfter}"`);
+            break;
+          }
+
+          throw new Error(
+            `Step transition timed out after 45s. API responded OK but heading is still "${headingBefore}". ` +
+            `This suggests a frontend rendering issue.`
+          );
+        }
+
+        // API didn't respond — click likely didn't register, retry is safe
+        console.log(`  ⚠️  Heading uendret og ingen API-respons (forsøk ${attempt}/${maxAttempts}) — prøver igjen...`);
+        await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+
+        // Check if heading changed during network idle wait
+        const currentHeading = await this.getCurrentStepHeading();
+        if (currentHeading !== headingBefore) {
+          console.log(`  ✅ Steg endret (sent): "${headingBefore}" → "${currentHeading}"`);
+          break;
+        }
+
+        if (attempt === maxAttempts) {
+          throw new Error(
+            `Step transition failed after ${maxAttempts} attempts. ` +
+            `Heading is still "${currentHeading}" (expected change from "${headingBefore}").`
+          );
+        }
+      } else {
+        // Simple mode: just click and proceed
+        await button.click();
         break;
-      }
-
-      // Heading didn't change - wait briefly before retrying
-      console.log(`  ⚠️  Heading uendret etter 15s (forsøk ${attempt}/${maxAttempts})`);
-      await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
-
-      // Check if heading changed during network idle wait
-      const currentHeading = await this.getCurrentStepHeading();
-      if (currentHeading !== headingBefore) {
-        console.log(`  ✅ Steg endret (sent): "${headingBefore}" → "${currentHeading}"`);
-        break;
-      }
-
-      if (attempt === maxAttempts) {
-        throw new Error(
-          `Step transition failed after ${maxAttempts} attempts. ` +
-          `Heading is still "${currentHeading}" (expected change from "${headingBefore}").`
-        );
       }
     }
 
