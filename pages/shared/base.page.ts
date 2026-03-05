@@ -249,6 +249,15 @@ export abstract class BasePage {
       try {
         await expect(button).toBeEnabled({ timeout: 10000 });
       } catch {
+        // If heading already changed (e.g. double-advance from delayed response),
+        // the button is disabled on the NEXT step — don't keep waiting
+        if (verifyHeadingChange && headingBefore) {
+          const currentHeading = await this.getCurrentStepHeading();
+          if (currentHeading !== headingBefore && currentHeading !== '' && currentHeading !== 'Unknown') {
+            console.log(`  ✅ Steg allerede endret (knapp deaktivert på nytt steg): "${headingBefore}" → "${currentHeading}"`);
+            break;
+          }
+        }
         disabledWaits++;
         if (disabledWaits >= 3) {
           throw new Error('Button remained disabled after 3 waits (30s total). Possible validation error or frontend bug.');
@@ -262,6 +271,18 @@ export abstract class BasePage {
       }
 
       if (verifyHeadingChange) {
+        // CRITICAL: On retry attempts, re-check heading right before clicking.
+        // The previous click's delayed API response may arrive between the
+        // post-timeout heading check and this point, causing a double-advance
+        // where two step transitions fire from a single retry.
+        if (attempt > 1) {
+          const preClickHeading = await this.getCurrentStepHeading();
+          if (preClickHeading !== headingBefore && preClickHeading !== '' && preClickHeading !== 'Unknown') {
+            console.log(`  ✅ Steg allerede endret før retry-klikk: "${headingBefore}" → "${preClickHeading}"`);
+            break;
+          }
+        }
+
         // Set up response listener BEFORE clicking (only in heading-change mode)
         const apiResponsePromise = this.page.waitForResponse(
           (response: Response) =>
