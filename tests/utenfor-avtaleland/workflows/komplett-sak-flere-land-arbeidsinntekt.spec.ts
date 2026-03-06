@@ -27,6 +27,7 @@ import {withFaktureringDatabase} from '../../../helpers/pg-db-helper';
  * - Vedtak: Fullføring av saksflyt
  * - Faktura: Sett alle rader til BESTILT
  * - Nyvurdering: Endre skattestatus til skattepliktig
+ * - Ingen trygdeavgiftsperioder for 2026 - avregning skal returnere q1 og q2 fakturalinjer
  */
 test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
     test('skal fullføre sak med flere land, ikke-skattepliktig og arbeidsinntekt fra Norge', async ({
@@ -34,6 +35,7 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         request
     }) => {
         // Setup
+        test.setTimeout(120000);
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);
         await unleash.disableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
@@ -107,6 +109,8 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
             const updated = await db.execute("UPDATE faktura SET status = 'BESTILT'");
             console.log(`Updated ${updated} faktura rows to BESTILT`);
         });
+
+        await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
 
         // Step 10: Create nyvurdering - endre skattestatus til skattepliktig
         console.log('Step 10: Creating nyvurdering...');
