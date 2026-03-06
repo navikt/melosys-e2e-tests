@@ -1,4 +1,4 @@
-import {test} from '../../../fixtures';
+import {test, expect} from '../../../fixtures';
 import {AuthHelper} from '../../../helpers/auth-helper';
 import {HovedsidePage} from '../../../pages/hovedside.page';
 import {OpprettNySakPage} from '../../../pages/opprett-ny-sak/opprett-ny-sak.page';
@@ -12,8 +12,10 @@ import {VedtakPage} from '../../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../../pages/shared/constants';
 import {UnleashHelper} from '../../../helpers/unleash-helper';
 import {TestPeriods} from '../../../helpers/date-helper';
-import {waitForProcessInstances} from '../../../helpers/api-helper';
+import {AdminApiHelper, waitForProcessInstances} from '../../../helpers/api-helper';
 import {withFaktureringDatabase} from '../../../helpers/pg-db-helper';
+import {withDatabase} from "../../../helpers/db-helper";
+import {FaktureringHelper} from "../../../helpers/fakturering-helper";
 
 /**
  * Komplett saksflyt for FTRL-sak med flere land og arbeidsinntekt fra Norge
@@ -30,10 +32,10 @@ import {withFaktureringDatabase} from '../../../helpers/pg-db-helper';
  * - Ingen trygdeavgiftsperioder for 2026 - avregning skal returnere q1 og q2 fakturalinjer
  */
 test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
-    test('skal fullføre sak med flere land, ikke-skattepliktig og arbeidsinntekt fra Norge', async ({
-        page,
-        request
-    }) => {
+    test('skal fullføre sak med flere land, ikke-skattepliktig og arbeidsinntekt fra Norge. Så NV med skattepliktig, avregning skal bli riktig', async ({
+                                                                                                                                                            page,
+                                                                                                                                                            request
+                                                                                                                                                        }) => {
         // Setup
         test.setTimeout(120000);
         const auth = new AuthHelper(page);
@@ -51,6 +53,7 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         const behandling = new BehandlingPage(page);
         const trygdeavgift = new TrygdeavgiftPage(page);
         const vedtak = new VedtakPage(page);
+        const adminApi = new AdminApiHelper();
 
         // Step 1: Create case
         console.log('Step 1: Creating new case...');
@@ -73,6 +76,10 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         // Step 4: Arbeidsforhold
         console.log('Step 4: Selecting arbeidsforhold...');
         await arbeidsforhold.fyllUtArbeidsforhold('Ståles Stål AS');
+
+        // Hent behandlingId fra URL
+        const opprinneligBehandlingId = new URL(page.url()).searchParams.get('behandlingID');
+        console.log(`OpprinneligBehandlingId: ${opprinneligBehandlingId}`);
 
         // Step 5: Lovvalg - 2-8 a med alle vilkar
         console.log('Step 5: Answering lovvalg questions...');
@@ -124,6 +131,10 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         console.log('Step 12: Opening new behandling...');
         await hovedside.goto();
         await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).first().click();
+        // Hent behandlingId fra URL
+        const url = page.url();
+        const behandlingId = new URL(page.url()).searchParams.get('behandlingID');
+        console.log(`BehandlingId: ${behandlingId}`);
 
         // Step 13: Navigate to Trygdeavgift and change skattepliktig to Ja
         console.log('Step 13: Changing skattepliktig to Ja...');
@@ -135,7 +146,52 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         console.log('Step 14: Submitting vedtak for nyvurdering...');
         await page.waitForLoadState('networkidle');
         await vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING');
+        await waitForProcessInstances(page.request, 30);
+
 
         console.log('Workflow completed successfully!');
+
+
+        //Verifiserer at ny vurdering har avregnet innværende fakturalinjer
+
+        const opprinneligFakturaserieReferanse = await withDatabase(async (db) => {
+            const result = await db.queryOne<{ FAKTURASERIE_REFERANSE: string }>(
+                `SELECT FAKTURASERIE_REFERANSE
+                 FROM BEHANDLINGSRESULTAT
+                 WHERE BEHANDLING_ID = :id`,
+                {id: opprinneligBehandlingId}
+            );
+            return result?.FAKTURASERIE_REFERANSE;
+        });
+
+        const fakturaserieReferanse = await withDatabase(async (db) => {
+            const result = await db.queryOne<{ FAKTURASERIE_REFERANSE: string }>(
+                `SELECT FAKTURASERIE_REFERANSE
+                 FROM BEHANDLINGSRESULTAT
+                 WHERE BEHANDLING_ID = :id`,
+                {id: behandlingId}
+            );
+            return result?.FAKTURASERIE_REFERANSE;
+        });
+
+        if(opprinneligFakturaserieReferanse === undefined || fakturaserieReferanse === undefined) {
+            throw new Error(`Fakturaserie referanse er ikke satt. Opprinnelig: ${opprinneligFakturaserieReferanse} (behandlingId: ${opprinneligBehandlingId}), Ny: ${fakturaserieReferanse} (behandlingId: ${behandlingId})`);
+        }
+
+        const faktureringHelper = new FaktureringHelper(request);
+        const opprinneligFakturaserie = await faktureringHelper.hentFakturaserie(opprinneligFakturaserieReferanse);
+        const fakturaserie = await faktureringHelper.hentFakturaserie(fakturaserieReferanse);
+
+        faktureringHelper.loggFakturaserie(opprinneligFakturaserie);
+        faktureringHelper.loggFakturaserie(fakturaserie);
+
+        const opprinneligTotal2026 = faktureringHelper.totalBelop(opprinneligFakturaserie, 2026);
+        const nyTotal2026 = faktureringHelper.totalBelop(fakturaserie, 2026);
+        const sum2026 = opprinneligTotal2026 + nyTotal2026;
+
+        console.log(`Opprinnelig serie 2026: ${opprinneligTotal2026} kr`);
+        console.log(`Ny serie 2026: ${nyTotal2026} kr`);
+
+        expect(sum2026, 'Sum av fakturaserier for 2026 skal være 0').toBe(0);
     });
 });
