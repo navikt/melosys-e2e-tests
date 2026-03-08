@@ -402,7 +402,8 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     land: string = 'Norge',
     arbeidsgiver: string = 'Ståles Stål AS',
     begrunnelse: string = 'Lorem ipsum',
-    informasjon: string = 'Dodatkowo'
+    informasjon: string = 'Dodatkowo',
+    options: { skipFattVedtak?: boolean } = {}
   ): Promise<void> {
     // EU/EØS behandlinger har en tabbet UI med Inngang, Bosted, Virksomhet
     // "Bekreft og fortsett" navigerer automatisk til neste steg
@@ -460,8 +461,9 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     await this.fyllInnFritekstTilBegrunnelse(begrunnelse);
     await this.fyllInnYtterligereInformasjon(informasjon);
 
-    // Steg 8: Fatt vedtak
-    await this.fattVedtak();
+    if (!options.skipFattVedtak) {
+      await this.fattVedtak();
+    }
   }
 
   // ============================================================
