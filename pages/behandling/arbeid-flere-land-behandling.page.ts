@@ -397,6 +397,9 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
    * @param arbeidsgiver - Arbeidsgiver å velge (default: 'Ståles Stål AS')
    * @param begrunnelse - Fritekst til begrunnelse (default: 'Lorem ipsum')
    * @param informasjon - Ytterligere informasjon (default: 'Dodatkowo')
+   * @param options - Valgfrie innstillinger
+   * @param options.skipFattVedtak - Hvis true, stoppes flyten før "Fatt vedtak"-steget.
+   *   Bruk dette når du trenger å gjøre egne handlinger (f.eks. velge EESSI-institusjon) før vedtaket fattes.
    */
   async fyllUtArbeidFlereLandBehandling(
     land: string = 'Norge',

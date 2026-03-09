@@ -38,8 +38,7 @@ test.describe('MELOSYS-7795: Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () =>
    */
   async function opprettOgNavigerTilBehandling(
     page: Page,
-    land: string[],
-    options: { arbeidsgiver?: string; begrunnelse?: string; informasjon?: string } = {}
+    land: string[]
   ) {
     const auth = new AuthHelper(page);
     await auth.login();
@@ -83,7 +82,6 @@ test.describe('MELOSYS-7795: Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () =>
    * 2. SEND_BREV er opprettet for hvert forventet papirland (FO/GL)
    * 3. Ingen SEND_BREV er opprettet for rene EESSI-vedtak
    *
-   * @param fnr - Brukerens personnummer
    * @param forventetPapirland - Landkoder som skal ha fått papir-A1, f.eks. ['FO'] eller ['FO', 'GL']
    */
   async function verifiserProsessinstanserEtterVedtak(
@@ -127,18 +125,14 @@ test.describe('MELOSYS-7795: Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () =>
       });
 
       if (forventetPapirland.length === 0) {
-        // Regresjonstest: ingen papir-A1 skal trigges for rene EESSI-saker
-        const foGlBrev = papirA1Brev.filter(row => {
-          const data = row.DATA || '';
-          // Properties.store() escaper ':' som '\:' i verdier — søk etter escaped form
-          return data.includes('"trygdemyndighetLand"\\:"FO"')
-              || data.includes('"trygdemyndighetLand"\\:"GL"');
-        });
+        // Regresjonstest: ingen papir-A1 skal opprettes for rene EESSI-saker.
+        // papirA1Brev er allerede filtrert på ATTEST_A1 + UTENLANDSK_TRYGDEMYNDIGHET,
+        // så hele lista skal være tom — ikke bare FO/GL-innslag.
         expect(
-          foGlBrev.length,
-          `Forventet ingen papir-A1 til FO/GL, men fant ${foGlBrev.length}`
+          papirA1Brev.length,
+          `Forventet ingen papir-A1 SEND_BREV, men fant ${papirA1Brev.length}`
         ).toBe(0);
-        console.log('✅ Ingen papir-A1 SEND_BREV for FO/GL (regresjonstest OK)');
+        console.log('✅ Ingen papir-A1 SEND_BREV (regresjonstest OK)');
       } else {
         expect(
           papirA1Brev.length,
