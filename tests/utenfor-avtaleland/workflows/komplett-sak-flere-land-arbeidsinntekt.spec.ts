@@ -53,7 +53,6 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         const behandling = new BehandlingPage(page);
         const trygdeavgift = new TrygdeavgiftPage(page);
         const vedtak = new VedtakPage(page);
-        const adminApi = new AdminApiHelper();
 
         // Step 1: Create case
         console.log('Step 1: Creating new case...');
