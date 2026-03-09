@@ -2,7 +2,7 @@ import { Page, expect } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 
 export class ArsavregningPage extends BasePage {
-  private readonly førsteRadioNei = this.page.getByRole('radio', { name: 'Nei' });
+  private readonly avgiftssystemetGroup = this.page.getByRole('group', { name: 'Skal du legge til trygdeavgift fra Avgiftssystemet' });
   private readonly skattepliktigGroup = this.page.getByRole('group', { name: 'Skattepliktig' });
   private readonly inntektskildeDropdown = this.page.getByLabel('Inntektskilde');
   private readonly bruttoinntektField = this.page.getByRole('textbox', { name: 'Bruttoinntekt' });
@@ -15,12 +15,12 @@ export class ArsavregningPage extends BasePage {
   }
 
   /**
-   * Answer the first radio question (before Skattepliktig group appears)
-   * This is likely "Er det endring?" or similar
+   * Svar på "Skal du legge til trygdeavgift fra Avgiftssystemet til denne årsavregningen?"
    */
-  async svarNeiPåFørsteSpørsmål(): Promise<void> {
-    await this.førsteRadioNei.check();
-    console.log('✅ Answered Nei on first question');
+  async svarPåAvgiftssystemetSpørsmål(ja: boolean): Promise<void> {
+    const svar = ja ? 'Ja' : 'Nei';
+    await this.avgiftssystemetGroup.getByRole('radio', { name: svar }).check();
+    console.log(`✅ Avgiftssystemet: ${svar}`);
   }
 
   async velgSkattepliktig(erSkattepliktig: boolean): Promise<void> {

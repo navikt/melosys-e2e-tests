@@ -112,7 +112,7 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og NV-kanselle
 
         // Step 12: Fyll ut årsavregning
         console.log('Step 12: Filling årsavregning...');
-        await arsavregning.svarNeiPåFørsteSpørsmål();
+        await arsavregning.svarPåAvgiftssystemetSpørsmål(false);
         await arsavregning.velgSkattepliktig(false);
         await arsavregning.velgInntektskilde('ARBEIDSINNTEKT_FRA_NORGE');
         await arsavregning.fyllInnBruttoinntekt('20000');
