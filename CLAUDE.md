@@ -827,6 +827,7 @@ Key steps:
 
 ## Resources
 
+- **Recording to POM**: `docs/guides/RECORDING-TO-POM.md` - From codegen recording to POM test
 - **Quick Start**: `QUICK-START.md` - Get started in 5 minutes
 - **Troubleshooting**: `docs/guides/TROUBLESHOOTING.md` - Common issues and solutions
 - **Helpers**: `docs/guides/HELPERS.md` - FormHelper, DatabaseHelper, AuthHelper

@@ -6,7 +6,7 @@ Oppskrift for å lage en ny E2E-test med Copilot — fra Playwright-opptak til g
 
 ```mermaid
 graph LR
-    A["1. Record\n npm run codegen"] --> B["2. Claude lager POM\n pom-from-recording"]
+    A["1. Record\n npm run codegen"] --> B["2. Copilot lager POM\n pom-from-recording"]
     B --> C["3. Test lokalt\n npm run test:ui"]
     C --> D["4. Push til GitHub\n git push"]
     D --> E["5. Verifiser CI\n gh workflow run"]
@@ -27,18 +27,18 @@ cd ../melosys-docker-compose && make dev-eessi
 npm run codegen
 ```
 
-Utfør arbeidsflyten i nettleseren. Playwright Inspector genererer kode. Kopier den — du trenger den ikke direkte, men den gir Claude konteksten for hva som skal automatiseres.
+Utfør arbeidsflyten i nettleseren. Playwright Inspector genererer kode. Kopier den — du trenger den ikke direkte, men den gir Copilot konteksten for hva som skal automatiseres.
 
-## Steg 2: La Claude lage POM-test
+## Steg 2: La Copilot lage POM-test
 
-Claude har en egen skill (`pom-from-recording`) som vet hvordan kodegenopptak konverteres til POM-baserte tester med riktig arkitektur. Be Claude om å lage testen:
+Copilot har en egen skill (`pom-from-recording`) som vet hvordan kodegenopptak konverteres til POM-baserte tester med riktig arkitektur. Be Copilot om å lage testen:
 
 ```
 Lag en ny E2E-test basert på dette opptaket: [lim inn codegen-kode]
 Testen skal dekke [beskriv arbeidsflyten].
 ```
 
-Claude vil:
+Copilot vil:
 - Gjenbruke eksisterende POMs (sjekker `pages/`-mappen først)
 - Lage nye POMs kun for sider som ikke er dekket
 - Bruke riktig `waitForProcessInstances`-mønster (se under)
@@ -127,7 +127,7 @@ Bruk `e2e-test-debugger`-skillen i Copilot for systematisk feilsøking:
 Testen feiler med timeout på "Fatt vedtak"-knappen. Hjelp meg debugge.
 ```
 
-Claude vil da sjekke screenshots, database-tilstand (prosessinstanser, behandling, vedtak), og docker-logger for å finne årsaken.
+Copilot vil da sjekke screenshots, database-tilstand (prosessinstanser, behandling, vedtak), og docker-logger for å finne årsaken.
 
 ## Steg 4: Push og lag PR
 
@@ -206,7 +206,7 @@ graph TD
 ## Sjekkliste
 
 - [ ] Codegen-opptak utført
-- [ ] Claude har laget POM-test med `pom-from-recording`-skill
+- [ ] Copilot har laget POM-test med `pom-from-recording`-skill
 - [ ] Importerer fra `../../fixtures` (ikke `@playwright/test`)
 - [ ] `test.setTimeout(120000)` for tester med vedtak
 - [ ] `waitForProcessInstances` etter saksopprettelse
