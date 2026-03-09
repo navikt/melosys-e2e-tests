@@ -12,7 +12,7 @@ import { APIRequestContext } from '@playwright/test';
 import { fetchStoredSedDocuments, findNewNavFormatSed, RinaDocumentInfo } from '../../helpers/mock-helper';
 
 /**
- * MELOSYS-7795: Papir-A1 til ikke-EESSI-land (FO/GL) ved EOS-vedtak
+ * Papir-A1 til ikke-EESSI-land (FO/GL) ved EOS-vedtak
  *
  * Disse testene verifiserer at når en sak inkluderer både EESSI-klare land og
  * ikke-EESSI-land (Færøyene og/eller Grønland), så:
@@ -30,7 +30,7 @@ import { fetchStoredSedDocuments, findNewNavFormatSed, RinaDocumentInfo } from '
  * - Scenario 3: Regresjon — kun EU/EØS-land (ingen FO/GL)
  * - Scenario 4: Regresjon — kun ikke-EESSI-land (FO + GL)
  */
-test.describe('MELOSYS-7795: Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () => {
+test.describe('Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () => {
 
   /**
    * Hjelpefunksjon for å sette opp og navigere til en behandling.
@@ -192,7 +192,7 @@ test.describe('MELOSYS-7795: Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () =>
     await behandling.fyllUtArbeidFlereLandBehandling(
       'Norge', 'Ståles Stål AS',
       'Test: SED til Sverige, papir til Færøyene',
-      'MELOSYS-7795 E2E test scenario 1',
+      'E2E test scenario 1',
       { skipFattVedtak: true }
     );
     await behandling.velgInstitusjonSomSkalMottaSed(EU_EOS_LAND.SVERIGE);
@@ -221,7 +221,7 @@ test.describe('MELOSYS-7795: Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () =>
     await behandling.fyllUtArbeidFlereLandBehandling(
       'Norge', 'Ståles Stål AS',
       'Test: SED til Sverige, papir til FO og GL',
-      'MELOSYS-7795 E2E test scenario 2',
+      'E2E test scenario 2',
       { skipFattVedtak: true }
     );
     await behandling.velgInstitusjonSomSkalMottaSed(EU_EOS_LAND.SVERIGE);
@@ -252,7 +252,7 @@ test.describe('MELOSYS-7795: Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () =>
     await behandling.fyllUtArbeidFlereLandBehandling(
       'Norge', 'Ståles Stål AS',
       'Test: Regresjon kun EESSI-land',
-      'MELOSYS-7795 E2E test scenario 3',
+      'E2E test scenario 3',
       { skipFattVedtak: true }
     );
 
@@ -282,7 +282,7 @@ test.describe('MELOSYS-7795: Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () =>
     await behandling.fyllUtArbeidFlereLandBehandling(
       'Norge', 'Ståles Stål AS',
       'Test: Regresjon kun FO og GL',
-      'MELOSYS-7795 E2E test scenario 4'
+      'E2E test scenario 4'
     );
 
     await waitForProcessInstances(page.request, 60);
