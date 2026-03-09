@@ -8,7 +8,7 @@ End-to-end tests for Melosys using Playwright and TypeScript. Record workflows, 
 
 ```bash
 # 1. Start services (required)
-cd ../melosys-docker-compose && make start-all
+cd ../melosys-docker-compose && make dev-eessi
 
 # 2. Install dependencies
 npm install

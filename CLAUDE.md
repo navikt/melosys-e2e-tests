@@ -93,7 +93,7 @@ npx playwright install
 
 # Start required services (LOCAL development only)
 cd ../melosys-docker-compose
-make start-all
+make dev-eessi
 ```
 
 **Note:** Local development uses `melosys-docker-compose` repo. GitHub Actions CI uses its own `docker-compose.yml` in this repo with pre-built images from NAIS registry.
@@ -806,7 +806,7 @@ Key steps:
 
 ## Recording New Workflows
 
-1. Start services (local): `cd ../melosys-docker-compose && make start-all`
+1. Start services (local): `cd ../melosys-docker-compose && make dev-eessi`
 2. Run codegen: `npm run codegen`
 3. Perform workflow in opened browser
 4. Copy generated code from Playwright Inspector

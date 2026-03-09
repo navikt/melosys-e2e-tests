@@ -23,7 +23,7 @@ graph LR
 Start services og åpne codegen:
 
 ```bash
-cd ../melosys-docker-compose && make start-all
+cd ../melosys-docker-compose && make dev-eessi
 npm run codegen
 ```
 
