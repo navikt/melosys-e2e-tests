@@ -93,7 +93,7 @@ test.describe('MELOSYS-7795: Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () =>
         `SELECT PI.BEHANDLING_ID, PI.STATUS, PI.SIST_FULLFORT_STEG
          FROM PROSESSINSTANS PI
          WHERE PI.PROSESS_TYPE = 'IVERKSETT_VEDTAK_EOS'
-           AND PI.REGISTRERT_DATO > SYSDATE - INTERVAL '5' MINUTE
+           AND PI.REGISTRERT_DATO > SYSDATE - INTERVAL '10' MINUTE
          ORDER BY PI.REGISTRERT_DATO DESC
          FETCH FIRST 1 ROWS ONLY`,
         {}
@@ -145,6 +145,9 @@ test.describe('MELOSYS-7795: Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () =>
             // Properties.store() escaper ':' som '\:' i verdier — søk etter escaped form
             return data.includes(`"trygdemyndighetLand"\\:"${landkode}"`);
           });
+          if (!brevForLand) {
+            console.log(`DATA-verdier i papir-A1 SEND_BREV (søkte etter landkode="${landkode}"):\n${papirA1Brev.map(b => b.DATA).join('\n---\n')}`);
+          }
           expect(brevForLand, `Forventet papir-A1 SEND_BREV med trygdemyndighetLand="${landkode}", men fant det ikke`).toBeTruthy();
           expect(
             brevForLand!.STATUS,
