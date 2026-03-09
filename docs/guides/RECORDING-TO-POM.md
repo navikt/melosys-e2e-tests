@@ -1,6 +1,6 @@
 # Fra recording til POM-test
 
-Oppskrift for å lage en ny E2E-test med Claude Code — fra Playwright-opptak til grønn CI.
+Oppskrift for å lage en ny E2E-test med Copilot — fra Playwright-opptak til grønn CI.
 
 ## Oversikt
 
@@ -121,7 +121,7 @@ Tips for feilsøking:
 
 ### Når ting ikke fungerer
 
-Bruk `e2e-test-debugger`-skillen i Claude Code for systematisk feilsøking:
+Bruk `e2e-test-debugger`-skillen i Copilot for systematisk feilsøking:
 
 ```
 Testen feiler med timeout på "Fatt vedtak"-knappen. Hjelp meg debugge.
