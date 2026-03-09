@@ -147,12 +147,12 @@ export class FaktureringHelper {
   // --- Convenience methods ---
 
   /**
-   * Get total beløp for faktura-linjer som tilhører et gitt år
+   * Get total beløp for faktura-linjer, eventuelt filtrert på år
    */
-  totalBelop(serie: Fakturaserie, aar: number): number {
+  totalBelop(serie: Fakturaserie, aar?: number): number {
     return serie.faktura.reduce(
         (sum, f) => sum + f.fakturaLinje
-            .filter(l => l.periodeFra.startsWith(`${aar}-`) || l.periodeTil.startsWith(`${aar}-`))
+            .filter(l => aar === undefined || l.periodeFra.startsWith(`${aar}-`) || l.periodeTil.startsWith(`${aar}-`))
             .reduce((s, l) => s + l.belop, 0),
         0
     );

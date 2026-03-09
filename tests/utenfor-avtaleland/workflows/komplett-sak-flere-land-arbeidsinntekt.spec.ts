@@ -131,7 +131,6 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         await hovedside.goto();
         await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).first().click();
         // Hent behandlingId fra URL
-        const url = page.url();
         const behandlingId = new URL(page.url()).searchParams.get('behandlingID');
         console.log(`BehandlingId: ${behandlingId}`);
 

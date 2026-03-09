@@ -9,11 +9,17 @@ import {ResultatPeriodePage} from '../../../pages/behandling/resultat-periode.pa
 import {TrygdeavgiftPage} from '../../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../../pages/shared/constants';
-import {waitForProcessInstances} from "../../../helpers/api-helper";
-import {withFaktureringDatabase} from "../../../helpers/pg-db-helper";
+import {waitForProcessInstances} from '../../../helpers/api-helper';
+import {withFaktureringDatabase} from '../../../helpers/pg-db-helper';
+import {AnnulleringPage} from "../../../pages/behandling/annullering.page";
+import {withDatabase} from "../../../helpers/db-helper";
+import {FaktureringHelper} from "../../../helpers/fakturering-helper";
+import {expect} from "@playwright/test";
+import {ArsavregningPage} from "../../../pages/trygdeavgift/arsavregning.page";
 
 /**
- * Komplett saksflyt for FTRL-sak med flere land og pensjon-dekning
+ * Komplett saksflyt for FTRL-sak med flere land og pensjon-dekning,
+ * etterfulgt av ny vurdering som annulleres.
  *
  * Tester:
  * - Opprettelse av FTRL-sak (Folketrygdloven)
@@ -21,9 +27,11 @@ import {withFaktureringDatabase} from "../../../helpers/pg-db-helper";
  * - Lovvalg: § 2-8 første ledd a med alle vilkår oppfylt
  * - Trygdeavgift: Ikke-skattepliktig, arbeidsinntekt fra Norge
  * - Vedtak: Fullføring av saksflyt
+ * - Faktura: Sett alle rader til BESTILT
+ * - Ny vurdering: Opprett og annuller (kansellering)
  */
-test.describe('Komplett saksflyt - Flere land med pensjon-dekning', () => {
-    test('skal fullføre sak med flere land, ny vurdering så kansellering', async ({page}) => {
+test.describe('Komplett saksflyt - Flere land med pensjon-dekning og NV-kansellering', () => {
+    test('skal fullføre sak med flere land, pensjon-dekning, deretter NV som annulleres', async ({page, request}) => {
         test.setTimeout(120000);
 
         // Setup
@@ -39,6 +47,8 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning', () => {
         const resultatPeriode = new ResultatPeriodePage(page);
         const trygdeavgift = new TrygdeavgiftPage(page);
         const vedtak = new VedtakPage(page);
+        const annullering = new AnnulleringPage(page);
+        const arsavregning = new ArsavregningPage(page);
 
         // Step 1: Opprett sak
         console.log('Step 1: Creating new case...');
@@ -74,6 +84,10 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning', () => {
         await page.waitForTimeout(3000);
         await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
 
+        // Hent behandlingId fra URL
+        const opprinneligBehandlingId = new URL(page.url()).searchParams.get('behandlingID');
+        console.log(`OpprinneligBehandlingId: ${opprinneligBehandlingId}`);
+
         // Step 7: Trygdeavgift - Ikke-skattepliktig med arbeidsinntekt fra Norge
         console.log('Step 7: Filling trygdeavgift...');
         await trygdeavgift.ventPåSideLastet();
@@ -90,11 +104,111 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning', () => {
         console.log('Step 9: Waiting for processes and updating faktura...');
         await waitForProcessInstances(page.request, 30);
 
+        // Step 11: Søk opp bruker og åpne årsavregningsbehandling
+        console.log('Step 11: Opening årsavregning behandling...');
+        await hovedside.goto();
+        await hovedside.søkEtterBruker(USER_ID_VALID);
+        await page.getByRole('link', {name: 'Yrkesaktiv - Årsavregning'}).getByRole('button').click();
+
+        // Step 12: Fyll ut årsavregning
+        console.log('Step 12: Filling årsavregning...');
+        await arsavregning.svarNeiPåFørsteSpørsmål();
+        await arsavregning.velgSkattepliktig(false);
+        await arsavregning.velgInntektskilde('ARBEIDSINNTEKT_FRA_NORGE');
+        await arsavregning.fyllInnBruttoinntekt('20000');
+        await arsavregning.klikkBekreftOgFortsett();
+
+        // Hent behandlingId fra URL
+        const arsavregningBehandlingId = new URL(page.url()).searchParams.get('behandlingID');
+        console.log(`ArsavregningBehandlingId: ${arsavregningBehandlingId}`);
+
+        // Step 13: Fatt vedtak for årsavregning
+        console.log('Step 13: Making årsavregning decision...');
+        await arsavregning.kryssAvSkjønnsfastsatt();
+        await arsavregning.klikkFattVedtak();
+
+        await waitForProcessInstances(page.request, 30);
+        console.log('✅ Årsavregning vedtak completed');
+
         await withFaktureringDatabase(async (db) => {
             const updated = await db.execute("UPDATE faktura SET status = 'BESTILT'");
             console.log(`Updated ${updated} faktura rows to BESTILT`);
         });
 
+
+
+        // Step 14: Opprett ny vurdering
+        console.log('Step 10: Creating nyvurdering...');
+        await hovedside.klikkOpprettNySak();
+        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
+        await waitForProcessInstances(page.request, 30);
+
+        // Step 15: Åpne ny behandling
+        console.log('Step 11: Opening new behandling...');
+        await hovedside.goto();
+        await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).first().click();
+
+        // Hent behandlingId fra URL
+        const behandlingId = new URL(page.url()).searchParams.get('behandlingID');
+        console.log(`BehandlingId: ${behandlingId}`);
+
+        // Step 16: Annuller saken
+        console.log('Step 12: Annullering...');
+        await annullering.annullerSak();
+        await waitForProcessInstances(page.request, 30);
+
         console.log('✅ Workflow completed successfully!');
+
+        //Verifiserer at annulering har avregnet innværende fakturalinjer
+
+        const opprinneligFakturaserieReferanse = await withDatabase(async (db) => {
+            const result = await db.queryOne<{ FAKTURASERIE_REFERANSE: string }>(
+                `SELECT FAKTURASERIE_REFERANSE
+                 FROM BEHANDLINGSRESULTAT
+                 WHERE BEHANDLING_ID = :id`,
+                {id: opprinneligBehandlingId}
+            );
+            return result?.FAKTURASERIE_REFERANSE;
+        });
+
+        const fakturaserieReferanse = await withDatabase(async (db) => {
+            const result = await db.queryOne<{ FAKTURASERIE_REFERANSE: string }>(
+                `SELECT FAKTURASERIE_REFERANSE
+                 FROM BEHANDLINGSRESULTAT
+                 WHERE BEHANDLING_ID = :id`,
+                {id: behandlingId}
+            );
+            return result?.FAKTURASERIE_REFERANSE;
+        });
+
+        const arsavregningFakturaserieRef = await withDatabase(async (db) => {
+            const result = await db.queryOne<{ FAKTURASERIE_REFERANSE: string }>(
+                `SELECT FAKTURASERIE_REFERANSE
+                 FROM BEHANDLINGSRESULTAT
+                 WHERE BEHANDLING_ID = :id`,
+                {id: arsavregningBehandlingId}
+            );
+            return result?.FAKTURASERIE_REFERANSE;
+        });
+
+        if (opprinneligFakturaserieReferanse === undefined || fakturaserieReferanse === undefined || arsavregningFakturaserieRef === undefined) {
+            throw new Error(`Fakturaserie referanse er ikke satt. Opprinnelig: ${opprinneligFakturaserieReferanse} (behandlingId: ${opprinneligBehandlingId}), Ny: ${fakturaserieReferanse} (behandlingId: ${behandlingId})`);
+        }
+
+        const faktureringHelper = new FaktureringHelper(request);
+        const opprinneligFakturaserie = await faktureringHelper.hentFakturaserie(opprinneligFakturaserieReferanse);
+        const fakturaserie = await faktureringHelper.hentFakturaserie(fakturaserieReferanse);
+        const arsavregningFakturaserie = await faktureringHelper.hentFakturaserie(arsavregningFakturaserieRef);
+
+        faktureringHelper.loggFakturaserie(opprinneligFakturaserie);
+        faktureringHelper.loggFakturaserie(fakturaserie);
+        faktureringHelper.loggFakturaserie(arsavregningFakturaserie);
+
+        const opprinneligTotal = faktureringHelper.totalBelop(opprinneligFakturaserie);
+        const arsavregningTotal = faktureringHelper.totalBelop(arsavregningFakturaserie);
+        const nyTotal = faktureringHelper.totalBelop(fakturaserie);
+        const sum = opprinneligTotal + arsavregningTotal + nyTotal;
+
+        expect(sum, 'Sum av fakturaserier skal være 0').toBe(0);
     });
 });
