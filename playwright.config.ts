@@ -88,7 +88,7 @@ export default defineConfig({
 
   /* Wait for services to be ready before running tests */
   webServer: {
-    command: 'echo "Make sure docker-compose services are running: cd ../melosys-docker-compose && make start-all"',
+    command: 'echo "Make sure docker-compose services are running: cd ../melosys-docker-compose && make dev-eessi"',
     url: 'http://localhost:3000/melosys/',
     reuseExistingServer: true,
     timeout: 5000,

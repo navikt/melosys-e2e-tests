@@ -25,7 +25,7 @@ cp .env.example .env
 ```bash
 # In melosys-docker-compose directory
 cd ../melosys-docker-compose
-make start-all
+make dev-eessi
 
 # Wait ~2 minutes for services to start
 # Verify services are running:
@@ -54,7 +54,7 @@ npm test tests/example-workflow.spec.ts
 
 ```bash
 # 1. Make sure services are running
-cd ../melosys-docker-compose && make start-all
+cd ../melosys-docker-compose && make dev-eessi
 
 # 2. Start recording
 cd ../melosys-e2e-tests
