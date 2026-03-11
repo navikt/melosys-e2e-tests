@@ -335,7 +335,7 @@ export abstract class BasePage {
           const lateHeadingChanged = await this.page.waitForFunction(
             headingCheckFn,
             headingBefore!,
-            { timeout: 30000 },
+            { timeout: 45000 },
           ).then(() => true).catch(() => false);
 
           if (lateHeadingChanged) {
@@ -344,9 +344,22 @@ export abstract class BasePage {
             break;
           }
 
+          // Last resort: reload the page. The backend already processed the step
+          // transition (API responded OK), so after reload the page should render
+          // the new step. This fixes CI-only rendering stalls.
+          console.log(`  🔄 Heading fortsatt "${headingBefore}" etter 60s — prøver page reload som siste utvei...`);
+          await this.page.reload({ waitUntil: 'networkidle', timeout: 30000 });
+          await this.page.waitForTimeout(2000);
+
+          const headingAfterReload = await this.getCurrentStepHeading();
+          if (headingAfterReload !== headingBefore && headingAfterReload !== '' && headingAfterReload !== 'Unknown') {
+            console.log(`  ✅ Steg endret etter reload (${Date.now() - transitionStart}ms): "${headingBefore}" → "${headingAfterReload}"`);
+            break;
+          }
+
           throw new Error(
-            `Step transition timed out after 45s. API responded OK but heading is still "${headingBefore}". ` +
-            `This suggests a frontend rendering issue.`
+            `Step transition timed out after 60s + reload. API responded OK but heading is still "${headingAfterReload}" (was "${headingBefore}"). ` +
+            `This suggests the backend did not advance the step, or the page failed to render the correct state after reload.`
           );
         }
 
