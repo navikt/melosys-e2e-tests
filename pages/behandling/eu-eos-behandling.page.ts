@@ -356,8 +356,8 @@ export class EuEosBehandlingPage extends BasePage {
   async svarJa(): Promise<void> {
     const jaRadio = this.page.getByRole('radio', { name: 'Ja' });
     // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
-    // 30s timeout for slow CI step transitions
-    await jaRadio.waitFor({ state: 'visible', timeout: 30000 });
+    // 45s timeout for slow CI step transitions (30s var for kort)
+    await jaRadio.waitFor({ state: 'visible', timeout: 45000 });
     await jaRadio.check();
     console.log('✅ Svarte: Ja');
   }
@@ -368,8 +368,8 @@ export class EuEosBehandlingPage extends BasePage {
   async svarNei(): Promise<void> {
     const neiRadio = this.page.getByRole('radio', { name: 'Nei' });
     // Vent på at radio-knapp er synlig og stabil før sjekking (unngår race condition)
-    // 30s timeout for slow CI step transitions
-    await neiRadio.waitFor({ state: 'visible', timeout: 30000 });
+    // 45s timeout for slow CI step transitions (30s var for kort)
+    await neiRadio.waitFor({ state: 'visible', timeout: 45000 });
     await neiRadio.check();
     console.log('✅ Svarte: Nei');
   }
