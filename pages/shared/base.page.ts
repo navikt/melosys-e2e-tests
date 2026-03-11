@@ -332,10 +332,16 @@ export abstract class BasePage {
         // Instead, wait longer for the frontend to catch up.
         if (apiResponse) {
           console.log(`  ⏳ API svarte OK men heading uendret — venter lenger (unngår dobbel-avansering)...`);
+
+          // Wait up to 75s more (90s total) for the frontend to re-render.
+          // NOTE: Page reload is NOT safe here — the step wizard uses client-side
+          // React state, so reload sends us back to step 1 regardless of backend state.
+          // This causes a backwards-navigation bug where step 2→3 appears to succeed
+          // but we're actually on step 1.
           const lateHeadingChanged = await this.page.waitForFunction(
             headingCheckFn,
             headingBefore!,
-            { timeout: 45000 },
+            { timeout: 75000 },
           ).then(() => true).catch(() => false);
 
           if (lateHeadingChanged) {
@@ -344,22 +350,9 @@ export abstract class BasePage {
             break;
           }
 
-          // Last resort: reload the page. The backend already processed the step
-          // transition (API responded OK), so after reload the page should render
-          // the new step. This fixes CI-only rendering stalls.
-          console.log(`  🔄 Heading fortsatt "${headingBefore}" etter 60s — prøver page reload som siste utvei...`);
-          await this.page.reload({ waitUntil: 'networkidle', timeout: 30000 });
-          await this.page.waitForTimeout(2000);
-
-          const headingAfterReload = await this.getCurrentStepHeading();
-          if (headingAfterReload !== headingBefore && headingAfterReload !== '' && headingAfterReload !== 'Unknown') {
-            console.log(`  ✅ Steg endret etter reload (${Date.now() - transitionStart}ms): "${headingBefore}" → "${headingAfterReload}"`);
-            break;
-          }
-
           throw new Error(
-            `Step transition timed out after 60s + reload. API responded OK but heading is still "${headingAfterReload}" (was "${headingBefore}"). ` +
-            `This suggests the backend did not advance the step, or the page failed to render the correct state after reload.`
+            `Step transition timed out after 90s. API responded OK but heading is still "${headingBefore}". ` +
+            `This suggests a frontend rendering issue — the backend processed the step but React did not re-render.`
           );
         }
 
