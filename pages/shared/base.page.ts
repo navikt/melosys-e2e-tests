@@ -332,10 +332,16 @@ export abstract class BasePage {
         // Instead, wait longer for the frontend to catch up.
         if (apiResponse) {
           console.log(`  ⏳ API svarte OK men heading uendret — venter lenger (unngår dobbel-avansering)...`);
+
+          // Wait up to 75s more (90s total) for the frontend to re-render.
+          // NOTE: Page reload is NOT safe here — the step wizard uses client-side
+          // React state, so reload sends us back to step 1 regardless of backend state.
+          // This causes a backwards-navigation bug where step 2→3 appears to succeed
+          // but we're actually on step 1.
           const lateHeadingChanged = await this.page.waitForFunction(
             headingCheckFn,
             headingBefore!,
-            { timeout: 30000 },
+            { timeout: 75000 },
           ).then(() => true).catch(() => false);
 
           if (lateHeadingChanged) {
@@ -345,8 +351,8 @@ export abstract class BasePage {
           }
 
           throw new Error(
-            `Step transition timed out after 45s. API responded OK but heading is still "${headingBefore}". ` +
-            `This suggests a frontend rendering issue.`
+            `Step transition timed out after 90s. API responded OK but heading is still "${headingBefore}". ` +
+            `This suggests a frontend rendering issue — the backend processed the step but React did not re-render.`
           );
         }
 

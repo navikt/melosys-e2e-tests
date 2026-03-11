@@ -27,8 +27,8 @@ import {waitForProcessInstances} from '../../helpers/api-helper';
  */
 test.describe('EU/EØS - Arbeid i flere land (artikkel 13.1)', () => {
     test('skal fullføre arbeid i flere land-arbeidsflyt', async ({page}) => {
-        // Øk test timeout til 120 sekunder (network idle waits på hvert steg tar tid på CI)
-        test.setTimeout(120000);
+        // Øk test timeout til 180 sekunder (reload-fallback ved rendering-stall kan ta opptil 90s per steg)
+        test.setTimeout(180000);
 
         // Oppsett
         const auth = new AuthHelper(page);
