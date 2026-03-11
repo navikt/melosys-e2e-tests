@@ -51,6 +51,37 @@ See [references/database-queries.md](references/database-queries.md) for more qu
 
 ## Common Issues
 
+### Step Transition Timeout (Flaky on CI)
+
+**Symptom:** `Step transition timed out after 90s. API responded OK but heading is still "X"`
+**Root cause:** Frontend rendering stall — backend processes the step but React doesn't re-render.
+
+**Key facts (confirmed March 2026):**
+- Always the same error: API responds OK, heading doesn't change
+- Specific to EU/EØS multi-step wizard flows (uses `verifyHeadingChange: true`)
+- The "Yrkessituasjon" step is the worst offender — stalls ~60% of the time on CI
+- NOT a backend issue — the API always succeeds
+- NOT fixable by increasing timeouts alone — when React stalls, it stalls indefinitely
+- Likely a melosys-web bug in the step wizard React component
+
+**What NOT to do:**
+- **NEVER use page.reload() as fallback** — The step wizard uses client-side React state.
+  Reload sends you back to step 1. The heading changes (step 2→step 1), so the code
+  incorrectly thinks the step *advanced*. This causes cascading failures.
+- Don't retry the click when API already responded — causes double-advance
+- Don't add networkidle waits to every step — accumulated 4700s overhead in full suite
+
+**What helps:**
+- Extended wait (75s after initial 15s) catches most slow renders
+- POM-level waitFor timeouts of 30-45s (not default 10s) for radio/checkbox elements
+- The `clickStepButtonWithRetry` in BasePage handles the safe retry logic
+
+**How to investigate CI failures:**
+1. Download `error-context.md` from `test-results/` — shows page snapshot at failure
+2. Check which step heading is shown — if it's a PREVIOUS step, the page went backwards
+3. Check `test-summary.json` `totalAttempts` vs `failedAttempts` for flaky rate
+4. Run stability test: `gh workflow run -f test_grep="test name" -f repeat_each=5 -f disable_retries=true`
+
 ### Button Disabled (e.g., "Fatt vedtak")
 
 **Symptom:** `element is not enabled` in timeout error
@@ -67,6 +98,10 @@ await this.fattVedtakButton.click();
 
 **Symptom:** `Process instances timed out: Timeout after 30s`
 
+This is usually a **secondary error** — the test already failed (e.g., step transition timeout),
+and the cleanup fixture times out because the test left things in an unfinished state.
+Check the FIRST error in the annotation, not this one.
+
 | Database State | Meaning | Action |
 |----------------|---------|--------|
 | No IVERKSETT_VEDTAK_EOS | API never called | Button was disabled - check screenshot |
@@ -81,6 +116,20 @@ This means the vedtak API endpoint was never called. Check:
 1. Screenshot for disabled "Fatt vedtak" button
 2. Required fields like institution dropdown
 3. Validation errors on form
+
+### Radio/Checkbox Not Visible After Step Transition
+
+**Symptom:** `locator.waitFor: Timeout Xms exceeded. waiting for getByRole('radio/checkbox', ...)`
+**Cause:** The step transition completed but dependent UI elements haven't rendered yet on slow CI.
+
+**Fix:** Increase waitFor timeout in POM methods to 30-45s (not default 10s):
+```typescript
+// BAD - default 10s too short for CI
+await this.skipRadio.waitFor({ state: 'visible' });
+
+// GOOD - explicit 30s timeout
+await this.skipRadio.waitFor({ state: 'visible', timeout: 30000 });
+```
 
 ## Database State Checklist
 
