@@ -10,7 +10,7 @@ import {BehandlingPage} from '../../../pages/behandling/behandling.page';
 import {TrygdeavgiftPage} from '../../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../../pages/shared/constants';
-import {TestPeriods} from '../../../helpers/date-helper';
+import {getYearFromDate, TestPeriods} from '../../../helpers/date-helper';
 import {waitForProcessInstances} from '../../../helpers/api-helper';
 import {withFaktureringDatabase} from '../../../helpers/pg-db-helper';
 import {withDatabase} from "../../../helpers/db-helper";
@@ -62,7 +62,7 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).click();
 
         // Step 3: Medlemskap - Flere land med delvis dekning
-        const period = TestPeriods.standardPeriod;
+        const period = TestPeriods.yearBoundaryPeriod;
         console.log(`Step 3: Filling medlemskap (${period.start} - ${period.end})...`);
         await medlemskap.velgPeriode(period.start, period.end);
         await medlemskap.velgFlereLandIkkeKjentHvilke();
@@ -91,13 +91,13 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
 
         // Step 7: Trygdeavgift - Ikke-skattepliktig med arbeidsinntekt fra Norge
+        // Skatteforhold/inntektsperiode kan ikke være i tidligere år, bruk starten av inneværende år
+        const currentYearStart = TestPeriods.currentYearPeriod.start;
         console.log('Step 7: Filling trygdeavgift...');
         await trygdeavgift.ventPåSideLastet();
         await trygdeavgift.velgSkattepliktig(false);
         await trygdeavgift.velgInntektskilde('ARBEIDSINNTEKT');
         await trygdeavgift.fyllInnBruttoinntektMedApiVent('10000');
-        await trygdeavgift.fyllInnSkatteforholdFraDato(period.start);
-        await trygdeavgift.fyllInnInntektsperiodeFraDato(period.start);
         await trygdeavgift.klikkBekreftOgFortsett();
 
         // Step 8: Vedtak
@@ -178,13 +178,14 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         faktureringHelper.loggFakturaserie(opprinneligFakturaserie);
         faktureringHelper.loggFakturaserie(fakturaserie);
 
-        const opprinneligTotal2026 = faktureringHelper.totalBelop(opprinneligFakturaserie, 2026);
-        const nyTotal2026 = faktureringHelper.totalBelop(fakturaserie, 2026);
-        const sum2026 = opprinneligTotal2026 + nyTotal2026;
+        const avregningsÅr = getYearFromDate(period.end)
+        const opprinneligTotal = faktureringHelper.totalBelop(opprinneligFakturaserie, avregningsÅr);
+        const nyTotal = faktureringHelper.totalBelop(fakturaserie, avregningsÅr);
+        const sum = opprinneligTotal + nyTotal;
 
-        console.log(`Opprinnelig serie 2026: ${opprinneligTotal2026} kr`);
-        console.log(`Ny serie 2026: ${nyTotal2026} kr`);
+        console.log(`Opprinnelig serie 2026: ${opprinneligTotal} kr`);
+        console.log(`Ny serie 2026: ${nyTotal} kr`);
 
-        expect(sum2026, 'Sum av fakturaserier for 2026 skal være 0').toBe(0);
+        expect(sum, 'Sum av fakturaserier for 2026 skal være 0').toBe(0);
     });
 });

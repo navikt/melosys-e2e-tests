@@ -16,6 +16,7 @@ import {withDatabase} from "../../../helpers/db-helper";
 import {FaktureringHelper} from "../../../helpers/fakturering-helper";
 import {expect} from "@playwright/test";
 import {AarsavregningPage} from "../../../pages/behandling/aarsavregning.page";
+import {TestPeriods} from "../../../helpers/date-helper";
 
 /**
  * Komplett saksflyt for FTRL-sak med flere land og pensjon-dekning,
@@ -61,8 +62,9 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og NV-kanselle
         await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).click();
 
         // Step 3: Medlemskap - Flere land med pensjon-dekning
-        console.log('Step 3: Filling medlemskap (01.01.2025 - 31.07.2026)...');
-        await medlemskap.velgPeriode('01.01.2025', '31.07.2026');
+        const period = TestPeriods.yearBoundaryPeriod
+        console.log(`Step 3: Filling medlemskap (${period.start} - ${period.end})...`);
+        await medlemskap.velgPeriode(period.start, period.end);
         await medlemskap.velgFlereLandIkkeKjentHvilke();
         await medlemskap.velgTrygdedekning('FTRL_2_9_FØRSTE_LEDD_B_PENSJON');
         await medlemskap.klikkBekreftOgFortsett();
