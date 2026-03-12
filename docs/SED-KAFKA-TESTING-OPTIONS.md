@@ -224,7 +224,7 @@ Run melosys-eessi as a separate process alongside docker-compose.
 ```bash
 # Terminal 1: Start docker-compose
 cd melosys-docker-compose
-make start-all
+make dev-eessi
 
 # Terminal 2: Start melosys-eessi
 cd melosys-eessi

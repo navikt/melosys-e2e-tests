@@ -399,10 +399,10 @@ export class TrygdeavgiftPage extends BasePage {
   }
 
   /**
-   * Click "Bekreft og fortsett" button
+   * Click "Bekreft og fortsett" button with retry logic for reliable step transitions
    */
   async klikkBekreftOgFortsett(): Promise<void> {
-    await this.bekreftButton.click();
+    await this.clickStepButtonWithRetry(this.bekreftButton);
   }
 
   /**

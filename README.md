@@ -2,11 +2,13 @@
 
 End-to-end tests for Melosys using Playwright and TypeScript. Record workflows, automate regression testing, and debug without manual clicking.
 
+> **Ny test?** Se [Fra recording til POM-test](docs/guides/RECORDING-TO-POM.md) — komplett oppskrift fra codegen-opptak til grønn CI.
+
 ## Quick Start
 
 ```bash
 # 1. Start services (required)
-cd ../melosys-docker-compose && make start-all
+cd ../melosys-docker-compose && make dev-eessi
 
 # 2. Install dependencies
 npm install
@@ -552,6 +554,7 @@ npm run codegen
 ## Resources
 
 ### Documentation
+- **[Fra recording til POM-test](docs/guides/RECORDING-TO-POM.md)** - Komplett oppskrift fra codegen til grønn CI
 - **[E2E Failure Analysis](docs/ci-cd/E2E-FAILURE-ANALYSIS.md)** - Automated failure detection and Copilot analysis
 - **[Labels Setup Guide](docs/ci-cd/LABELS-SETUP.md)** - Required GitHub labels for failure analysis
 - **[Error Reporting Guide](docs/guides/ERROR-REPORTING.md)** - How tests detect and report failures

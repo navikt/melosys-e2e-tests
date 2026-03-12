@@ -225,14 +225,24 @@ services:
     volumes:
       - ./jacoco:/jacoco:ro  # Mount JaCoCo agent (optional, for E2E coverage)
     depends_on:
-      - kafka
-      - mock-oauth2-server
-      - mock-oauth2-server-sts
-      - melosys-mock
-      - melosys-eessi
-      - faktureringskomponenten
-      - melosys-dokgen
-      - melosys-trygdeavgift-beregning
+      melosys-oracle:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      mock-oauth2-server:
+        condition: service_started
+      mock-oauth2-server-sts:
+        condition: service_started
+      melosys-mock:
+        condition: service_started
+      melosys-eessi:
+        condition: service_started
+      faktureringskomponenten:
+        condition: service_started
+      melosys-dokgen:
+        condition: service_started
+      melosys-trygdeavgift-beregning:
+        condition: service_started
     environment:
       SPRING_PROFILES_ACTIVE: local-mock
       # JaCoCo coverage agent (optional - only set in CI for E2E coverage)
@@ -450,6 +460,7 @@ services:
       - mock-oauth2-server-sts
       - melosys-mock
       - postgres
+      - unleash
     ports:
       - "8081:8081"
     environment:
@@ -515,7 +526,8 @@ services:
       # Cron job (disabled - run only Jan 1 at 00:00)
       CRON_JOB_LUKK_BUC: "0 0 0 1 1 *"
       # Unleash
-      UNLEASH_SERVER_API_TOKEN: fake
+      UNLEASH_SERVER_API_URL: "http://unleash.melosys.docker-internal:4242"
+      UNLEASH_SERVER_API_TOKEN: "*:development.unleash-insecure-client-api-token"
     networks:
       melosys.docker-internal:
         aliases:

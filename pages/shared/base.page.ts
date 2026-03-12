@@ -1,4 +1,4 @@
-import { Page, Locator } from '@playwright/test';
+import { Page, Locator, Response, expect } from '@playwright/test';
 import { TIMEOUT_MEDIUM } from './constants';
 
 /**
@@ -176,5 +176,219 @@ export abstract class BasePage {
       path: `test-results/debug-${name}.png`,
       fullPage: true,
     });
+  }
+
+  // ── Step transition helpers ──────────────────────────────────────────
+
+  /**
+   * Get the current VISIBLE step heading text.
+   * React keeps all step components mounted but hidden. We must find the visible h1.
+   */
+  protected async getCurrentStepHeading(): Promise<string> {
+    return await this.page.evaluate(() => {
+      const headings = document.querySelectorAll('main h1');
+      for (const h of Array.from(headings)) {
+        const el = h as HTMLElement;
+        if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+          return el.textContent?.trim() || '';
+        }
+      }
+      return headings[0]?.textContent?.trim() || 'Unknown';
+    });
+  }
+
+  /**
+   * Click "Bekreft og fortsett" with API wait and optional heading-change retry.
+   *
+   * Two modes:
+   * - **Simple** (default): Click, wait for API response, wait for networkidle.
+   *   Used by most POMs (lovvalg, medlemskap, trygdeavgift, etc.)
+   * - **With heading retry** (verifyHeadingChange: true): Also verifies that the
+   *   visible h1 heading changed, retrying the click up to 3 times if not.
+   *   Used by EU/EØS multi-step flows where clicks sometimes don't register on CI.
+   *
+   * @param button - The "Bekreft og fortsett" button locator
+   * @param options.waitForContent - Optional locator to wait for on the next step
+   * @param options.waitForContentTimeout - Timeout for waitForContent (default: 45000ms)
+   * @param options.apiPatterns - URL patterns to detect API calls (default: avklartefakta/vilkaar)
+   * @param options.verifyHeadingChange - Enable heading-change retry (default: false)
+   */
+  protected async clickStepButtonWithRetry(
+    button: Locator,
+    options?: {
+      waitForContent?: Locator;
+      waitForContentTimeout?: number;
+      apiPatterns?: string[];
+      verifyHeadingChange?: boolean;
+    },
+  ): Promise<void> {
+    const {
+      waitForContent,
+      waitForContentTimeout = 45000,
+      apiPatterns = ['/api/avklartefakta/', '/api/vilkaar/'],
+      verifyHeadingChange = false,
+    } = options || {};
+
+    console.log('🔄 Klikker "Bekreft og fortsett"...');
+
+    const headingBefore = verifyHeadingChange ? await this.getCurrentStepHeading() : null;
+    if (headingBefore) {
+      console.log(`  Heading før: "${headingBefore}"`);
+    }
+
+    const maxAttempts = verifyHeadingChange ? 3 : 1;
+    let disabledWaits = 0;
+
+    for (let attempt = 1; attempt <= maxAttempts; attempt++) {
+      if (attempt > 1) {
+        console.log(`  🔄 Retry ${attempt}/${maxAttempts}...`);
+      }
+
+      // Wait for button to be visible and enabled
+      await button.waitFor({ state: 'visible', timeout: 10000 });
+      try {
+        await expect(button).toBeEnabled({ timeout: 10000 });
+      } catch {
+        // If heading already changed (e.g. double-advance from delayed response),
+        // the button is disabled on the NEXT step — don't keep waiting
+        if (verifyHeadingChange && headingBefore) {
+          const currentHeading = await this.getCurrentStepHeading();
+          if (currentHeading !== headingBefore && currentHeading !== '' && currentHeading !== 'Unknown') {
+            console.log(`  ✅ Steg allerede endret (knapp deaktivert på nytt steg): "${headingBefore}" → "${currentHeading}"`);
+            break;
+          }
+        }
+        disabledWaits++;
+        if (disabledWaits >= 3) {
+          throw new Error('Button remained disabled after 3 waits (30s total). Possible validation error or frontend bug.');
+        }
+        console.log(`  ⏳ Knapp deaktivert etter 10s, venter igjen (${disabledWaits}/3)...`);
+        attempt--; // Don't count disabled-wait as a click attempt
+        continue;
+      }
+      if (attempt === 1) {
+        console.log(`  Knapp aktivert: true`);
+      }
+
+      if (verifyHeadingChange) {
+        // CRITICAL: On retry attempts, re-check heading right before clicking.
+        // The previous click's delayed API response may arrive between the
+        // post-timeout heading check and this point, causing a double-advance
+        // where two step transitions fire from a single retry.
+        if (attempt > 1) {
+          const preClickHeading = await this.getCurrentStepHeading();
+          if (preClickHeading !== headingBefore && preClickHeading !== '' && preClickHeading !== 'Unknown') {
+            console.log(`  ✅ Steg allerede endret før retry-klikk: "${headingBefore}" → "${preClickHeading}"`);
+            break;
+          }
+        }
+
+        // Set up response listener BEFORE clicking (only in heading-change mode)
+        const apiResponsePromise = this.page.waitForResponse(
+          (response: Response) =>
+            apiPatterns.some(p => response.url().includes(p)) &&
+            response.request().method() === 'POST',
+          { timeout: 10000 },
+        ).catch(() => null);
+
+        await button.click();
+
+        const apiResponse = await apiResponsePromise;
+        if (apiResponse) {
+          console.log(`  ✅ API: ${apiResponse.url().split('/api/')[1]?.split('?')[0]} → ${apiResponse.status()}`);
+        } else {
+          console.log(`  ⚠️  Ingen API-respons (forsøk ${attempt})`);
+        }
+
+        // Verify UI actually transitioned
+        const transitionStart = Date.now();
+        const headingCheckFn = (originalHeading: string) => {
+          const headings = document.querySelectorAll('main h1');
+          for (const h of headings) {
+            const el = h as HTMLElement;
+            if (el.offsetHeight > 0 && el.offsetWidth > 0) {
+              const text = el.textContent?.trim() || '';
+              return text !== originalHeading && text !== '';
+            }
+          }
+          return false;
+        };
+
+        const headingChanged = await this.page.waitForFunction(
+          headingCheckFn,
+          headingBefore!,
+          { timeout: 15000 },
+        ).then(() => true).catch(() => false);
+
+        if (headingChanged) {
+          const headingAfter = await this.getCurrentStepHeading();
+          console.log(`  ✅ Steg endret etter ${Date.now() - transitionStart}ms: "${headingBefore}" → "${headingAfter}"`);
+          break;
+        }
+
+        // Heading didn't change within 15s.
+        // CRITICAL: If the API responded, the backend processed the click.
+        // The frontend is just slow. Do NOT retry — that causes double-advance.
+        // Instead, wait longer for the frontend to catch up.
+        if (apiResponse) {
+          console.log(`  ⏳ API svarte OK men heading uendret — venter lenger (unngår dobbel-avansering)...`);
+
+          // Wait up to 75s more (90s total) for the frontend to re-render.
+          // NOTE: Page reload is NOT safe here — the step wizard uses client-side
+          // React state, so reload sends us back to step 1 regardless of backend state.
+          // This causes a backwards-navigation bug where step 2→3 appears to succeed
+          // but we're actually on step 1.
+          const lateHeadingChanged = await this.page.waitForFunction(
+            headingCheckFn,
+            headingBefore!,
+            { timeout: 75000 },
+          ).then(() => true).catch(() => false);
+
+          if (lateHeadingChanged) {
+            const headingAfter = await this.getCurrentStepHeading();
+            console.log(`  ✅ Steg endret (utvidet ventetid, ${Date.now() - transitionStart}ms): "${headingBefore}" → "${headingAfter}"`);
+            break;
+          }
+
+          throw new Error(
+            `Step transition timed out after 90s. API responded OK but heading is still "${headingBefore}". ` +
+            `This suggests a frontend rendering issue — the backend processed the step but React did not re-render.`
+          );
+        }
+
+        // API didn't respond — click likely didn't register, retry is safe
+        console.log(`  ⚠️  Heading uendret og ingen API-respons (forsøk ${attempt}/${maxAttempts}) — prøver igjen...`);
+        await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+
+        // Check if heading changed during network idle wait
+        const currentHeading = await this.getCurrentStepHeading();
+        if (currentHeading !== headingBefore) {
+          console.log(`  ✅ Steg endret (sent): "${headingBefore}" → "${currentHeading}"`);
+          break;
+        }
+
+        if (attempt === maxAttempts) {
+          throw new Error(
+            `Step transition failed after ${maxAttempts} attempts. ` +
+            `Heading is still "${currentHeading}" (expected change from "${headingBefore}").`
+          );
+        }
+      } else {
+        // Simple mode: just click and proceed
+        await button.click();
+        break;
+      }
+    }
+
+    await this.page.waitForTimeout(500);
+
+    if (waitForContent) {
+      console.log('  ⏳ Venter på innhold på neste steg...');
+      const startTime = Date.now();
+      await waitForContent.waitFor({ state: 'visible', timeout: waitForContentTimeout });
+      console.log(`  ✅ Innhold synlig etter ${Date.now() - startTime}ms`);
+    }
+
+    console.log('✅ Bekreft og fortsett fullført');
   }
 }

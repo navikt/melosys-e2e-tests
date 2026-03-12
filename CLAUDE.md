@@ -93,7 +93,7 @@ npx playwright install
 
 # Start required services (LOCAL development only)
 cd ../melosys-docker-compose
-make start-all
+make dev-eessi
 ```
 
 **Note:** Local development uses `melosys-docker-compose` repo. GitHub Actions CI uses its own `docker-compose.yml` in this repo with pre-built images from NAIS registry.
@@ -638,15 +638,39 @@ test('should calculate tax correctly @known-error #MELOSYS-1234', async ({ page 
 
 **See:** `docs/guides/KNOWN-ERRORS.md` for complete guide and examples.
 
+### @expect-docker-errors - Expected Backend Errors
+
+Tests tagged with `@expect-docker-errors` skip docker log error checking. Use this for tests that intentionally trigger backend errors (e.g., navigating to non-existent resources to test error handling):
+
+```typescript
+test('should handle missing data gracefully @expect-docker-errors', async ({ page }) => {
+  // This test navigates to a non-existent resource
+  // Backend will log ERROR, but that's expected behavior
+  // Docker log fixture will skip error checking for this test
+});
+```
+
+**When to use:**
+- Tests that intentionally trigger backend errors (404s, 500s)
+- Tests verifying error handling behavior
+- Tests navigating to non-existent resources
+
+**Behavior:**
+- ✅ Test runs normally
+- ✅ Test can still fail from Playwright assertions
+- ⏭️ Docker log error checking is skipped
+- ✅ No false positives from expected backend errors
+
 ### Comparison
 
-| Feature | @manual | @known-error |
-|---------|---------|--------------|
-| Runs by default | ❌ No (skipped) | ✅ Yes |
-| Runs in CI | ❌ No | ✅ Yes |
-| Can fail CI | ❌ N/A | ❌ No |
-| Use case | Manual-only tests | Known bugs |
-| Run command | `MANUAL_TESTS=true npm test` | `npm test` |
+| Feature | @manual | @known-error | @expect-docker-errors |
+|---------|---------|--------------|----------------------|
+| Runs by default | ❌ No (skipped) | ✅ Yes | ✅ Yes |
+| Runs in CI | ❌ No | ✅ Yes | ✅ Yes |
+| Can fail CI | ❌ N/A | ❌ No | ✅ Yes (from assertions) |
+| Docker log check | ✅ Yes | ✅ Yes | ❌ Skipped |
+| Use case | Manual-only tests | Known bugs | Expected backend errors |
+| Run command | `MANUAL_TESTS=true npm test` | `npm test` | `npm test` |
 
 ## Common Patterns
 
@@ -782,7 +806,7 @@ Key steps:
 
 ## Recording New Workflows
 
-1. Start services (local): `cd ../melosys-docker-compose && make start-all`
+1. Start services (local): `cd ../melosys-docker-compose && make dev-eessi`
 2. Run codegen: `npm run codegen`
 3. Perform workflow in opened browser
 4. Copy generated code from Playwright Inspector
@@ -803,6 +827,7 @@ Key steps:
 
 ## Resources
 
+- **Recording to POM**: `docs/guides/RECORDING-TO-POM.md` - From codegen recording to POM test
 - **Quick Start**: `QUICK-START.md` - Get started in 5 minutes
 - **Troubleshooting**: `docs/guides/TROUBLESHOOTING.md` - Common issues and solutions
 - **Helpers**: `docs/guides/HELPERS.md` - FormHelper, DatabaseHelper, AuthHelper

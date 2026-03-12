@@ -199,7 +199,7 @@ test.describe('Journalføring', () => {
     }
   });
 
-  test('skal håndtere journalføring-side uten data gracefully', async ({ page }) => {
+  test('skal håndtere journalføring-side uten data gracefully @expect-docker-errors', async ({ page }) => {
     // Try to navigate directly to a non-existent journalpost
     console.log('📝 Step 1: Navigating to non-existent journalpost...');
 

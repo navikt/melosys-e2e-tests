@@ -10,6 +10,94 @@ import { APIRequestContext } from '@playwright/test';
  *   await clearMockData(page.request);
  */
 
+/**
+ * A SED document stored in the RINA CPI mock
+ */
+export interface RinaDocumentInfo {
+  caseId: string;
+  documentId: string;
+  sedType: string | null;
+  content: Record<string, unknown>;
+}
+
+/**
+ * Fetch stored SED documents from the RINA CPI mock.
+ *
+ * These are the documents that melosys-eessi has submitted to RINA via
+ * POST /eux/cpi/buc/{id}/sed. They contain the full SED JSON content.
+ *
+ * @param request - Playwright APIRequestContext
+ * @param sedType - Optional SED type filter (e.g., 'A008')
+ * @returns Array of stored SED documents with full content
+ */
+export async function fetchStoredSedDocuments(
+  request: APIRequestContext,
+  sedType?: string
+): Promise<RinaDocumentInfo[]> {
+  const url = sedType
+    ? `http://localhost:8083/testdata/verification/rina/documents?sedType=${sedType}`
+    : 'http://localhost:8083/testdata/verification/rina/documents';
+
+  const response = await request.get(url);
+
+  if (!response.ok()) {
+    throw new Error(`Failed to fetch stored SED documents: ${response.status()}`);
+  }
+
+  return await response.json();
+}
+
+/**
+ * Find the newest NAV-format SED document that was not present in a previous snapshot.
+ *
+ * The RINA CPI mock stores documents in both NAV format (from melosys-eessi)
+ * and EU format (from eux-rina-api). NAV format documents have `sed` and `sedVer`
+ * at the root level.
+ *
+ * Usage:
+ *   // Before the action that creates the SED:
+ *   const before = await fetchStoredSedDocuments(request, 'A008');
+ *   // ... perform action ...
+ *   const sedContent = await findNewNavFormatSed(request, 'A008', before);
+ */
+export async function findNewNavFormatSed(
+  request: APIRequestContext,
+  sedType: string,
+  before: RinaDocumentInfo[],
+  timeoutMs = 30000
+): Promise<Record<string, any>> {
+  const beforeKeys = new Set(before.map(d => `${d.caseId}:${d.documentId}`));
+  const pollInterval = 2000;
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const after = await fetchStoredSedDocuments(request, sedType);
+    const newDocs = after.filter(d => !beforeKeys.has(`${d.caseId}:${d.documentId}`));
+
+    // Filter to NAV format (has 'sed' and 'sedVer' at root)
+    const navFormatDocs = newDocs.filter(d => {
+      const c = d.content as Record<string, any>;
+      return c.sed !== undefined && c.sedVer !== undefined;
+    });
+
+    if (navFormatDocs.length > 0) {
+      return navFormatDocs[navFormatDocs.length - 1].content as Record<string, any>;
+    }
+
+    console.log(`⏳ Waiting for NAV-format ${sedType} SED... (new docs: ${newDocs.length})`);
+    await new Promise(resolve => setTimeout(resolve, pollInterval));
+  }
+
+  // Final attempt with detailed error
+  const after = await fetchStoredSedDocuments(request, sedType);
+  const newDocs = after.filter(d => !beforeKeys.has(`${d.caseId}:${d.documentId}`));
+  const formats = newDocs.map(d => Object.keys(d.content).join(',')).join(' | ');
+  throw new Error(
+    `Timed out waiting for NAV-format ${sedType} document (${timeoutMs}ms). ` +
+    `New docs: ${newDocs.length}, formats: [${formats}]`
+  );
+}
+
 export interface MockClearResponse {
   message: string;
   journalpostCleared?: string | number;
@@ -37,7 +125,7 @@ export async function clearMockData(request: APIRequestContext): Promise<MockCle
 
     return data;
   } catch (error) {
-    console.log(`⚠️  Could not clear mock data: ${error.message || error}`);
+    console.log(`⚠️  Could not clear mock data: ${(error as Error).message || error}`);
     throw error;
   }
 }
@@ -70,6 +158,8 @@ export interface CreateJfrOppgaveOptions {
   medVedlegg?: boolean;
   /** Assigned resource/user ID (default: Z990693 - testuser) */
   tilordnetRessurs?: string;
+  /** Fødselsnummer for bruker. If not set, uses first person in PersonRepo */
+  brukerIdent?: string;
 }
 
 /**
@@ -93,13 +183,17 @@ export async function createJournalforingOppgaver(
   request: APIRequestContext,
   options: CreateJfrOppgaveOptions = {}
 ): Promise<boolean> {
-  const payload = {
+  const payload: Record<string, unknown> = {
     antall: options.antall ?? 1,
     forVirksomhet: options.forVirksomhet ?? false,
     medLogiskVedlegg: options.medLogiskVedlegg ?? false,
     medVedlegg: options.medVedlegg ?? false,
     tilordnetRessurs: options.tilordnetRessurs ?? 'Z990693', // testuser
   };
+
+  if (options.brukerIdent) {
+    payload.brukerIdent = options.brukerIdent;
+  }
 
   try {
     const response = await request.post('http://localhost:8083/testdata/jfr-oppgave', {

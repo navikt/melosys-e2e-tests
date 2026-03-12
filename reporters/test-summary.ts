@@ -46,7 +46,7 @@ class TestSummaryReporter implements Reporter {
       testInfo = {
         test,
         results: [],
-        finalStatus: result.status,
+        finalStatus: (result.status === 'timedOut' || result.status === 'interrupted') ? 'failed' : result.status,
         totalAttempts: 0,
         failedAttempts: 0,
         isKnownError

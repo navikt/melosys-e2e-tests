@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import { Page, type Response as PlaywrightResponse } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 import { ArbeidFlereLandBehandlingAssertions } from './arbeid-flere-land-behandling.assertions';
 
@@ -98,7 +98,7 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     let employerApiCalled = false;
     const employerApis: string[] = [];
 
-    const apiListener = (response: Response) => {
+    const apiListener = (response: PlaywrightResponse) => {
       const responseUrl = response.url();
       // Monitor for potential employer list endpoints
       if (responseUrl.includes('/arbeidsforhold') ||
@@ -325,64 +325,10 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     waitForContent?: import('@playwright/test').Locator;
     waitForContentTimeout?: number;
   }): Promise<void> {
-    const { waitForContent, waitForContentTimeout = 30000 } = options || {};
-
-    console.log('🔄 Klikker "Bekreft og fortsett"...');
-
-    // Check if button is enabled before clicking
-    const isEnabled = await this.bekreftOgFortsettButton.isEnabled();
-    console.log(`  Knapp aktivert: ${isEnabled}`);
-
-    // CRITICAL: Set up response listeners BEFORE clicking
-    // Wait for the two most important step transition APIs
-    const avklartefaktaPromise = this.page.waitForResponse(
-      response => response.url().includes('/api/avklartefakta/') &&
-                  response.request().method() === 'POST' &&
-                  response.status() === 200,
-      { timeout: 10000 }
-    ).catch(() => null); // Don't fail if not present in this step
-
-    const vilkaarPromise = this.page.waitForResponse(
-      response => response.url().includes('/api/vilkaar/') &&
-                  response.request().method() === 'POST' &&
-                  response.status() === 200,
-      { timeout: 10000 }
-    ).catch(() => null); // Don't fail if not present in this step
-
-    await this.bekreftOgFortsettButton.click();
-
-    // Wait for critical APIs to complete (if they fire)
-    const [avklartefaktaResponse, vilkaarResponse] = await Promise.all([
-      avklartefaktaPromise,
-      vilkaarPromise
-    ]);
-
-    if (avklartefaktaResponse || vilkaarResponse) {
-      console.log('✅ Step transition APIs completed:');
-      if (avklartefaktaResponse) console.log(`   - avklartefakta: ${avklartefaktaResponse.status()}`);
-      if (vilkaarResponse) console.log(`   - vilkaar: ${vilkaarResponse.status()}`);
-    } else {
-      console.log('⚠️  No step transition APIs detected');
-    }
-
-    // If specific content is provided, wait for it to be visible
-    // This is the MOST ROBUST way to ensure the next step is ready
-    if (waitForContent) {
-      console.log('⏳ Waiting for specific content on next step...');
-      const startTime = Date.now();
-      await waitForContent.waitFor({ state: 'visible', timeout: waitForContentTimeout });
-      console.log(`✅ Content visible after ${Date.now() - startTime}ms`);
-    } else {
-      // Fallback: Wait for React to process the state update and render next step
-      await this.page.waitForTimeout(500);
-
-      // Wait for network idle as fallback
-      await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {
-        console.log('⚠️  Network idle timeout (non-critical)');
-      });
-    }
-
-    console.log('✅ Klikket Bekreft og fortsett');
+    await this.clickStepButtonWithRetry(this.bekreftOgFortsettButton, {
+      ...options,
+      verifyHeadingChange: true,
+    });
   }
 
   /**
@@ -476,7 +422,7 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     // Vent på at Virksomhet-seksjonen er fullstendig lastet med arbeidsgiver-checkbox
     const arbeidsgiverCheckbox = this.page.getByRole('checkbox', { name: arbeidsgiver });
     console.log(`⏳ Venter på arbeidsgiver checkbox "${arbeidsgiver}"...`);
-    await arbeidsgiverCheckbox.waitFor({ state: 'visible', timeout: 30000 });
+    await arbeidsgiverCheckbox.waitFor({ state: 'visible', timeout: 45000 });
     console.log('✅ Arbeidsgiver checkbox synlig');
 
     await this.velgArbeidsgiver(arbeidsgiver);
