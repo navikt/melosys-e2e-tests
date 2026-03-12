@@ -15,7 +15,7 @@ import {AnnulleringPage} from "../../../pages/behandling/annullering.page";
 import {withDatabase} from "../../../helpers/db-helper";
 import {FaktureringHelper} from "../../../helpers/fakturering-helper";
 import {expect} from "@playwright/test";
-import {ArsavregningPage} from "../../../pages/trygdeavgift/arsavregning.page";
+import {AarsavregningPage} from "../../../pages/behandling/aarsavregning.page";
 
 /**
  * Komplett saksflyt for FTRL-sak med flere land og pensjon-dekning,
@@ -48,7 +48,7 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og NV-kanselle
         const trygdeavgift = new TrygdeavgiftPage(page);
         const vedtak = new VedtakPage(page);
         const annullering = new AnnulleringPage(page);
-        const arsavregning = new ArsavregningPage(page);
+        const arsavregning = new AarsavregningPage(page);
 
         // Step 1: Opprett sak
         console.log('Step 1: Creating new case...');
@@ -112,10 +112,10 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og NV-kanselle
 
         // Step 12: Fyll ut årsavregning
         console.log('Step 12: Filling årsavregning...');
-        await arsavregning.svarPåAvgiftssystemetSpørsmål(false);
+        await arsavregning.svarNei();
         await arsavregning.velgSkattepliktig(false);
         await arsavregning.velgInntektskilde('ARBEIDSINNTEKT_FRA_NORGE');
-        await arsavregning.fyllInnBruttoinntekt('20000');
+        await arsavregning.fyllInnBruttoinntektMedApiVent('20000');
         await arsavregning.klikkBekreftOgFortsett();
 
         // Hent behandlingId fra URL
@@ -124,8 +124,7 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og NV-kanselle
 
         // Step 13: Fatt vedtak for årsavregning
         console.log('Step 13: Making årsavregning decision...');
-        await arsavregning.kryssAvSkjønnsfastsatt();
-        await arsavregning.klikkFattVedtak();
+        await vedtak.klikkFattVedtak();
 
         await waitForProcessInstances(page.request, 30);
         console.log('✅ Årsavregning vedtak completed');

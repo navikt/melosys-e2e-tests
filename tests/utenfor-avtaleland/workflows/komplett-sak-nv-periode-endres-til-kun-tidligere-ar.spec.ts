@@ -6,7 +6,6 @@ import {MedlemskapPage} from '../../../pages/behandling/medlemskap.page';
 import {ArbeidsforholdPage} from '../../../pages/behandling/arbeidsforhold.page';
 import {LovvalgPage} from '../../../pages/behandling/lovvalg.page';
 import {ResultatPeriodePage} from '../../../pages/behandling/resultat-periode.page';
-import {BehandlingPage} from '../../../pages/behandling/behandling.page';
 import {TrygdeavgiftPage} from '../../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../../pages/shared/constants';
@@ -50,7 +49,6 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         const arbeidsforhold = new ArbeidsforholdPage(page);
         const lovvalg = new LovvalgPage(page);
         const resultatPeriode = new ResultatPeriodePage(page);
-        const behandling = new BehandlingPage(page);
         const trygdeavgift = new TrygdeavgiftPage(page);
         const vedtak = new VedtakPage(page);
 
