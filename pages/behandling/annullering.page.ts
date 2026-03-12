@@ -24,18 +24,22 @@ export class AnnulleringPage extends BasePage {
     }
 
     async åpneBehandlingsmeny(): Promise<void> {
+        await this.behandlingsmenyButton.waitFor({state: 'visible'});
         await this.behandlingsmenyButton.click();
     }
 
     async klikkAvsluttBehandling(): Promise<void> {
+        await this.avsluttBehandlingButton.waitFor({state: 'visible'});
         await this.avsluttBehandlingButton.click();
     }
 
     async velgSakenErAnnullert(): Promise<void> {
+        await this.sakenErAnnullertButton.waitFor({state: 'visible'});
         await this.sakenErAnnullertButton.click();
     }
 
     async bekreft(): Promise<void> {
+        await this.bekreftButton.waitFor({state: 'visible'});
         await this.bekreftButton.click();
     }
 
