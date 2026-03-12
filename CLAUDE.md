@@ -34,20 +34,11 @@ npm run test:debug
 npm run test:ui
 ```
 
-#### Unit Tests (Vitest)
+#### Unit Tests (Node.js built-in test runner)
 
 ```bash
-# Run unit tests (watch mode)
+# Run unit tests
 npm run test:unit
-
-# Run unit tests once (for CI)
-npm run test:unit:run
-
-# Run unit tests with UI
-npm run test:unit:ui
-
-# Run all tests (unit + E2E)
-npm run test:all
 ```
 
 **What are unit tests?**
