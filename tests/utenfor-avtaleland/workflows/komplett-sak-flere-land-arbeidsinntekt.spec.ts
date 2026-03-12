@@ -13,8 +13,8 @@ import {USER_ID_VALID} from '../../../pages/shared/constants';
 import {getYearFromDate, TestPeriods} from '../../../helpers/date-helper';
 import {waitForProcessInstances} from '../../../helpers/api-helper';
 import {withFaktureringDatabase} from '../../../helpers/pg-db-helper';
-import {withDatabase} from "../../../helpers/db-helper";
-import {FaktureringHelper} from "../../../helpers/fakturering-helper";
+import {withDatabase} from '../../../helpers/db-helper';
+import {FaktureringHelper} from '../../../helpers/fakturering-helper';
 
 /**
  * Komplett saksflyt for FTRL-sak med flere land og arbeidsinntekt fra Norge
@@ -91,8 +91,6 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
 
         // Step 7: Trygdeavgift - Ikke-skattepliktig med arbeidsinntekt fra Norge
-        // Skatteforhold/inntektsperiode kan ikke være i tidligere år, bruk starten av inneværende år
-        const currentYearStart = TestPeriods.currentYearPeriod.start;
         console.log('Step 7: Filling trygdeavgift...');
         await trygdeavgift.ventPåSideLastet();
         await trygdeavgift.velgSkattepliktig(false);

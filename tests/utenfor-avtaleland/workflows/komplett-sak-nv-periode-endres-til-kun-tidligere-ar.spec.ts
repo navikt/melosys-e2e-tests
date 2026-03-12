@@ -13,8 +13,8 @@ import {UnleashHelper} from '../../../helpers/unleash-helper';
 import {getYearFromDate, TestPeriods} from '../../../helpers/date-helper';
 import {waitForProcessInstances} from '../../../helpers/api-helper';
 import {withFaktureringDatabase} from '../../../helpers/pg-db-helper';
-import {withDatabase} from "../../../helpers/db-helper";
-import {FaktureringHelper} from "../../../helpers/fakturering-helper";
+import {withDatabase} from '../../../helpers/db-helper';
+import {FaktureringHelper} from '../../../helpers/fakturering-helper';
 
 /**
  * Komplett saksflyt for FTRL-sak med flere land og arbeidsinntekt fra Norge

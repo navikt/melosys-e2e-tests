@@ -1,4 +1,4 @@
-import {test} from '../../../fixtures';
+import {expect, test} from '../../../fixtures';
 import {AuthHelper} from '../../../helpers/auth-helper';
 import {HovedsidePage} from '../../../pages/hovedside.page';
 import {OpprettNySakPage} from '../../../pages/opprett-ny-sak/opprett-ny-sak.page';
@@ -11,12 +11,11 @@ import {VedtakPage} from '../../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../../pages/shared/constants';
 import {waitForProcessInstances} from '../../../helpers/api-helper';
 import {withFaktureringDatabase} from '../../../helpers/pg-db-helper';
-import {AnnulleringPage} from "../../../pages/behandling/annullering.page";
-import {withDatabase} from "../../../helpers/db-helper";
-import {FaktureringHelper} from "../../../helpers/fakturering-helper";
-import {expect} from "@playwright/test";
-import {AarsavregningPage} from "../../../pages/behandling/aarsavregning.page";
-import {TestPeriods} from "../../../helpers/date-helper";
+import {AnnulleringPage} from '../../../pages/behandling/annullering.page';
+import {withDatabase} from '../../../helpers/db-helper';
+import {FaktureringHelper} from '../../../helpers/fakturering-helper';
+import {AarsavregningPage} from '../../../pages/behandling/aarsavregning.page';
+import {TestPeriods} from '../../../helpers/date-helper';
 
 /**
  * Komplett saksflyt for FTRL-sak med flere land og pensjon-dekning,
@@ -106,14 +105,14 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og NV-kanselle
         console.log('Step 9: Waiting for processes...');
         await waitForProcessInstances(page.request, 30);
 
-        // Step 11: Søk opp bruker og åpne årsavregningsbehandling
-        console.log('Step 11: Opening årsavregning behandling...');
+        // Step 10: Søk opp bruker og åpne årsavregningsbehandling
+        console.log('Step 10: Opening årsavregning behandling...');
         await hovedside.goto();
         await hovedside.søkEtterBruker(USER_ID_VALID);
         await page.getByRole('link', {name: 'Yrkesaktiv - Årsavregning'}).getByRole('button').click();
 
-        // Step 12: Fyll ut årsavregning
-        console.log('Step 12: Filling årsavregning...');
+        // Step 11: Fyll ut årsavregning
+        console.log('Step 11: Filling årsavregning...');
         await arsavregning.svarNei();
         await arsavregning.velgSkattepliktig(false);
         await arsavregning.velgInntektskilde('ARBEIDSINNTEKT_FRA_NORGE');
@@ -124,8 +123,8 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og NV-kanselle
         const arsavregningBehandlingId = new URL(page.url()).searchParams.get('behandlingID');
         console.log(`ArsavregningBehandlingId: ${arsavregningBehandlingId}`);
 
-        // Step 13: Fatt vedtak for årsavregning
-        console.log('Step 13: Making årsavregning decision...');
+        // Step 12: Fatt vedtak for årsavregning
+        console.log('Step 12: Making årsavregning decision...');
         await vedtak.klikkFattVedtak();
 
         await waitForProcessInstances(page.request, 30);
@@ -136,16 +135,14 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og NV-kanselle
             console.log(`Updated ${updated} faktura rows to BESTILT`);
         });
 
-
-
-        // Step 14: Opprett ny vurdering
-        console.log('Step 10: Creating nyvurdering...');
+        // Step 13: Opprett ny vurdering
+        console.log('Step 13: Creating nyvurdering...');
         await hovedside.klikkOpprettNySak();
         await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
         await waitForProcessInstances(page.request, 30);
 
-        // Step 15: Åpne ny behandling
-        console.log('Step 11: Opening new behandling...');
+        // Step 14: Åpne ny behandling
+        console.log('Step 14: Opening new behandling...');
         await hovedside.goto();
         await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).first().click();
 
@@ -153,8 +150,8 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og NV-kanselle
         const behandlingId = new URL(page.url()).searchParams.get('behandlingID');
         console.log(`BehandlingId: ${behandlingId}`);
 
-        // Step 16: Annuller saken
-        console.log('Step 12: Annullering...');
+        // Step 15: Annuller saken
+        console.log('Step 15: Annullering...');
         await annullering.annullerSak();
         await waitForProcessInstances(page.request, 30);
 
