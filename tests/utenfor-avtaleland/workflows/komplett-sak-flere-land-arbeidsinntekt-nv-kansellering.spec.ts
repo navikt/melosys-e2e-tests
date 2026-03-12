@@ -100,8 +100,8 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og NV-kanselle
         console.log('Step 8: Making decision...');
         await vedtak.klikkFattVedtak();
 
-        // Step 9: Vent på prosesser og sett faktura til BESTILT
-        console.log('Step 9: Waiting for processes and updating faktura...');
+        // Step 9: Vent på prosesser
+        console.log('Step 9: Waiting for processes...');
         await waitForProcessInstances(page.request, 30);
 
         // Step 11: Søk opp bruker og åpne årsavregningsbehandling
