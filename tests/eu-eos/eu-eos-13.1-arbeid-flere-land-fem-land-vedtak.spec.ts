@@ -8,24 +8,24 @@ import { USER_ID_VALID, EU_EOS_LAND } from '../../pages/shared/constants';
 import { waitForProcessInstances } from '../../helpers/api-helper';
 
 /**
- * EU/EØS 13.1 - Arbeid i flere land (5 land)
+ * MELOSYS-7795: EØS art. 13 — A1 sendes på papir til alle arbeidsland når
+ * Færøyene eller Grønland er inkludert
+ *
+ * Bug: Når Grønland/Færøyene er blant arbeidslandene, sender melosys-api
+ * feilaktig A1 på papir til ALLE land — også EU/EØS-land som skal ha SED A003.
+ *
+ * Forventet (etter fix):
+ * - SED A003 til EESSI-land (Danmark, Belgia, Tyskland)
+ * - A1 på papir kun til Grønland (ikke EESSI-kompatibelt)
+ * - Vedtaksbrev "Innvilgelse yrkesaktiv i flere land" til bruker
  *
  * Arbeidsflyt:
- * 1. Opprett ny EU/EØS-sak (ARBEID_FLERE_LAND) med 5 land:
+ * 1. Opprett EU/EØS-sak (ARBEID_FLERE_LAND) med 5 land:
  *    Norge, Danmark, Belgia, Grønland, Tyskland
- * 2. Fyll inn periode
- * 3. Opprett behandling
- * 4. Bekreft inngangsvilkår
- * 5. Velg bostedsland (Norge)
- * 6. Velg arbeidsgiver (Ståles Stål AS)
- * 7. Bekreft arbeidslokasjon
- * 8. Velg arbeidstype (Lønnet arbeid i to eller flere land)
- * 9. Velg prosentandel (% eller mer)
- * 10. Fatt vedtak
- *
- * Tester at arbeid i flere land fungerer med mange land valgt.
+ * 2. Gjennomfør behandlingssteg (inngang → bosted → virksomhet → lovvalg)
+ * 3. Fatt vedtak
  */
-test.describe('EU/EØS 13.1 - Arbeid i flere land (5 land)', () => {
+test.describe('EU/EØS 13.1 - Arbeid i flere land med Grønland', () => {
   test('skal fullføre arbeid i flere land med Norge, Danmark, Belgia, Grønland og Tyskland', async ({ page }) => {
     test.setTimeout(180000);
 
