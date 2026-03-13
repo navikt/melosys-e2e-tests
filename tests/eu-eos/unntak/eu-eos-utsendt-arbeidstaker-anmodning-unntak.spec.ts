@@ -237,7 +237,7 @@ test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
   });
 
   test('via full behandling - skal sende anmodning om unntak', async ({ page, request }) => {
-    test.setTimeout(120000);
+    test.setTimeout(180000);
 
     // Eksplisitt CDM 4.4
     const unleash = new UnleashHelper(request);

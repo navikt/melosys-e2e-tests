@@ -8,7 +8,7 @@ Common issues and solutions when working with Melosys E2E tests.
 
 | Symptom | Likely Cause | Quick Fix |
 |---------|--------------|-----------|
-| Tests timeout | Services not running | `cd ../melosys-docker-compose && make start-all` |
+| Tests timeout | Services not running | `cd ../melosys-docker-compose && make dev-eessi` |
 | "Connection refused" | Database not ready | Wait 30s, check `docker ps` |
 | Flaky tests | No API wait | Use `FormHelper.fillAndWaitForApi()` |
 | "Element not found" | Selector changed | Update locator in POM or test |
@@ -39,7 +39,7 @@ docker ps
 ```bash
 # Start all services
 cd ../melosys-docker-compose
-make start-all
+make dev-eessi
 
 # Verify services are accessible
 curl http://localhost:3000/melosys/
@@ -75,7 +75,7 @@ docker restart kafka
 # Or restart all services
 cd ../melosys-docker-compose
 docker compose down
-make start-all
+make dev-eessi
 ```
 
 **Common culprits:**
@@ -393,7 +393,7 @@ docker ps | grep melosys
 ```bash
 # Start services
 cd ../melosys-docker-compose
-make start-all
+make dev-eessi
 ```
 
 ### Seeing errors from previous tests
@@ -608,7 +608,7 @@ Code changes don't seem to affect test behavior.
 ```bash
 cd ../melosys-docker-compose
 docker compose down
-make start-all
+make dev-eessi
 ```
 
 **2. Clear npm cache:**

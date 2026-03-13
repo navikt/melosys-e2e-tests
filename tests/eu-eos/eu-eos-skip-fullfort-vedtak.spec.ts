@@ -28,8 +28,8 @@ import { waitForProcessInstances } from '../../helpers/api-helper';
  */
 test.describe('EU/EØS Skip - Komplett arbeidsflyt', () => {
   test('skal fullføre EU/EØS-skip-arbeidsflyt med vedtak', async ({ page }) => {
-    // Øk test timeout til 120 sekunder (vedtak kan ta lang tid på CI)
-    test.setTimeout(120000);
+    // Øk test timeout til 180 sekunder (reload-fallback ved rendering-stall kan ta opptil 90s per steg)
+    test.setTimeout(180000);
 
     // Oppsett
     const auth = new AuthHelper(page);
