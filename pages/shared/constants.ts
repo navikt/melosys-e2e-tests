@@ -74,6 +74,7 @@ export const EU_EOS_LAND = {
   FRANKRIKE: 'Frankrike',
   NEDERLAND: 'Nederland',
   ESTLAND: 'Estland',
+  BELGIA: 'Belgia',
   NORGE: 'Norge',
   // Ikke-EESSI-land som brukes i arbeid-i-flere-land-saker
   FAROEYENE: 'Færøyene',
