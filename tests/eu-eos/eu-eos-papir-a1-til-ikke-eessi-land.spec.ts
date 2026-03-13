@@ -50,6 +50,7 @@ test.describe('Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () => {
     await hovedside.goto();
     await hovedside.klikkOpprettNySak();
     await opprettSak.fyllInnBrukerID(USER_ID_VALID);
+    await opprettSak.velgOpprettNySak();
     await opprettSak.velgSakstype('EU_EOS');
     await opprettSak.velgSakstema('MEDLEMSKAP_LOVVALG');
     await opprettSak.velgBehandlingstema('ARBEID_FLERE_LAND');
