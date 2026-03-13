@@ -67,12 +67,14 @@ export const BESTEMMELSER = {
 
 // EU/EØS constants
 export const EU_EOS_LAND = {
+  BELGIA: 'Belgia',
   DANMARK: 'Danmark',
-  SVERIGE: 'Sverige',
-  FINLAND: 'Finland',
-  TYSKLAND: 'Tyskland',
-  FRANKRIKE: 'Frankrike',
-  NEDERLAND: 'Nederland',
   ESTLAND: 'Estland',
+  FINLAND: 'Finland',
+  FRANKRIKE: 'Frankrike',
+  GRONLAND: 'Grønland',
+  NEDERLAND: 'Nederland',
   NORGE: 'Norge',
+  SVERIGE: 'Sverige',
+  TYSKLAND: 'Tyskland',
 } as const;
