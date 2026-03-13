@@ -9,7 +9,10 @@ import { USER_ID_VALID, EU_EOS_LAND } from '../../pages/shared/constants';
 import { waitForProcessInstances } from '../../helpers/api-helper';
 import { withDatabase } from '../../helpers/db-helper';
 import { APIRequestContext } from '@playwright/test';
-import { fetchStoredSedDocuments, findNewNavFormatSed, RinaDocumentInfo } from '../../helpers/mock-helper';
+import {
+  fetchStoredSedDocuments, findNewNavFormatSed, RinaDocumentInfo,
+  fetchStoredJournalposter, findNewUtgaaendeJournalpost, JournalpostInfo,
+} from '../../helpers/mock-helper';
 
 /**
  * Papir-A1 til ikke-EESSI-land (FO/GL) ved EOS-vedtak
@@ -179,6 +182,27 @@ test.describe('Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () => {
     console.log(`✅ A003 SED sendt til EESSI (sed=${sedContent.sed}, sedVer=${sedContent.sedVer})`);
   }
 
+  /**
+   * Verifiserer at en UTGAAENDE journalpost ble opprettet og ferdigstilt i SAF-mock
+   * etter at SED ble sendt. Bekrefter at hele Kafka-sløyfen fungerte:
+   * sendSed → EessiSedSendtProducer → SedSendtConsumer → OpprettUtgaaendeJournalpostService.
+   *
+   * @param request   - Playwright APIRequestContext
+   * @param jpBefore  - Snapshot av journalposter tatt FØR vedtak
+   */
+  async function verifiserUtgaaendeJournalpostOpprettet(
+    request: APIRequestContext,
+    jpBefore: JournalpostInfo[]
+  ): Promise<void> {
+    const jp = await findNewUtgaaendeJournalpost(request, jpBefore);
+    expect(jp, 'Forventet UTGAAENDE journalpost i SAF-mock etter SED ble sendt, men fant ingen ny').not.toBeNull();
+    expect(
+      jp!.journalStatus,
+      `Journalpost skal være ferdigstilt (J), men er: ${jp!.journalStatus}`
+    ).toBe('J');
+    console.log(`✅ UTGAAENDE journalpost opprettet og ferdigstilt (id=${jp!.journalpostId}, tittel="${jp!.tittel}")`);
+  }
+
   // ============================================================
   // Scenario 1: Færøyene + EU/EØS-land
   // ============================================================
@@ -199,10 +223,12 @@ test.describe('Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () => {
     await behandling.velgInstitusjonSomSkalMottaSed(EU_EOS_LAND.SVERIGE);
 
     const docsBefore = await fetchStoredSedDocuments(request, 'A003');
+    const jpBefore = await fetchStoredJournalposter(request);
     await behandling.fattVedtak();
 
     await waitForProcessInstances(page.request, 60);
     await verifiserSedSendtTilEessi(request, docsBefore);
+    await verifiserUtgaaendeJournalpostOpprettet(request, jpBefore);
     await verifiserProsessinstanserEtterVedtak(['FO']);
     console.log('✅ Scenario 1: SED til Sverige og papir til Færøyene — verifisert');
   });
@@ -228,10 +254,12 @@ test.describe('Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () => {
     await behandling.velgInstitusjonSomSkalMottaSed(EU_EOS_LAND.SVERIGE);
 
     const docsBefore = await fetchStoredSedDocuments(request, 'A003');
+    const jpBefore = await fetchStoredJournalposter(request);
     await behandling.fattVedtak();
 
     await waitForProcessInstances(page.request, 60);
     await verifiserSedSendtTilEessi(request, docsBefore);
+    await verifiserUtgaaendeJournalpostOpprettet(request, jpBefore);
     await verifiserProsessinstanserEtterVedtak(['FO', 'GL']);
     console.log('✅ Scenario 2: SED til Sverige, papir til Færøyene og Grønland — verifisert');
   });
@@ -260,10 +288,12 @@ test.describe('Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () => {
     await behandling.velgInstitusjonSomSkalMottaSed(EU_EOS_LAND.SVERIGE);
 
     const docsBefore = await fetchStoredSedDocuments(request, 'A003');
+    const jpBefore = await fetchStoredJournalposter(request);
     await behandling.fattVedtak();
 
     await waitForProcessInstances(page.request, 60);
     await verifiserSedSendtTilEessi(request, docsBefore);
+    await verifiserUtgaaendeJournalpostOpprettet(request, jpBefore);
     await verifiserProsessinstanserEtterVedtak([]);
     console.log('✅ Scenario 3: SED til Sverige og ingen SEND_BREV for FO/GL — regresjon OK');
   });
