@@ -21,10 +21,13 @@ export class DatabaseHelper {
     }
 
     try {
+      // Return CLOB columns as strings instead of LOB stream objects
+      oracledb.fetchAsString = [oracledb.CLOB];
+
       this.connection = await oracledb.getConnection({
         user: process.env.DB_USER || 'MELOSYS',
         password: process.env.DB_PASSWORD || 'melosyspwd',
-        connectString: process.env.DB_CONNECT_STRING || 'localhost:1521/freepdb1'
+        connectString: process.env.DB_CONNECT_STRING || `localhost:1521/${process.env.MELOSYS_ORACLE_DB_NAME || 'freepdb1'}`
       });
       
       console.log('✅ Connected to Oracle database');
