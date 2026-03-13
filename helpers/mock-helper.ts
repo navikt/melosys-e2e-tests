@@ -109,6 +109,8 @@ export interface JournalpostInfo {
   journalStatus: 'J' | 'MO' | 'M' | 'A' | null;
   sakId: string | null;
   eksternReferanseId: string | null;
+  kanal: string | null;
+  tilleggsoppltsninger: Array<{ nokkel: string | null; verdi: string | null }>;
   avsenderMottaker: {
     id?: string;
     type?: string;
@@ -158,13 +160,16 @@ export async function findNewUtgaaendeJournalpost(
 
   while (Date.now() < deadline) {
     const after = await fetchStoredJournalposter(request);
-    const newUtgaaende = after.filter(
-      (jp) => !beforeIds.has(jp.journalpostId) && jp.journalposttype === 'UTGAAENDE'
+    const newEessiJournalpost = after.filter(
+      (jp) =>
+        !beforeIds.has(jp.journalpostId) &&
+        jp.journalposttype === 'UTGAAENDE' &&
+        jp.kanal === 'EESSI'
     );
-    if (newUtgaaende.length > 0) {
-      return newUtgaaende[0];
+    if (newEessiJournalpost.length > 0) {
+      return newEessiJournalpost[0];
     }
-    console.log(`⏳ Venter på UTGAAENDE journalpost...`);
+    console.log(`⏳ Venter på UTGAAENDE EESSI-journalpost...`);
     await new Promise((r) => setTimeout(r, 2000));
   }
   return null;

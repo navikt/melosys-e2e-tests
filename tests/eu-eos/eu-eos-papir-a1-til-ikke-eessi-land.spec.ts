@@ -195,12 +195,13 @@ test.describe('Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () => {
     jpBefore: JournalpostInfo[]
   ): Promise<void> {
     const jp = await findNewUtgaaendeJournalpost(request, jpBefore);
-    expect(jp, 'Forventet UTGAAENDE journalpost i SAF-mock etter SED ble sendt, men fant ingen ny').not.toBeNull();
+    expect(jp, 'Forventet UTGAAENDE EESSI-journalpost i SAF-mock etter SED ble sendt, men fant ingen ny med kanal=EESSI').not.toBeNull();
     expect(
       jp!.journalStatus,
       `Journalpost skal være ferdigstilt (J), men er: ${jp!.journalStatus}`
     ).toBe('J');
-    console.log(`✅ UTGAAENDE journalpost opprettet og ferdigstilt (id=${jp!.journalpostId}, tittel="${jp!.tittel}")`);
+    expect(jp!.kanal, 'Journalpost skal ha kanal=EESSI').toBe('EESSI');
+    console.log(`✅ UTGAAENDE EESSI-journalpost opprettet og ferdigstilt (id=${jp!.journalpostId}, tittel="${jp!.tittel}")`);
   }
 
   // ============================================================
