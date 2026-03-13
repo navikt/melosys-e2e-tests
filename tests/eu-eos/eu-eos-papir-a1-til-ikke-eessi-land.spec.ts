@@ -187,21 +187,31 @@ test.describe('Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () => {
    * etter at SED ble sendt. Bekrefter at hele Kafka-sløyfen fungerte:
    * sendSed → EessiSedSendtProducer → SedSendtConsumer → OpprettUtgaaendeJournalpostService.
    *
-   * @param request   - Playwright APIRequestContext
-   * @param jpBefore  - Snapshot av journalposter tatt FØR vedtak
+   * avsenderMottaker.id settes til mottakerId fra SedHendelse — formatet er '<landkode>:<institusjonId>'
+   * (f.eks. 'SE:FK'). Vi verifiserer at prefixet matcher forventet mottakerland.
+   *
+   * @param request              - Playwright APIRequestContext
+   * @param jpBefore             - Snapshot av journalposter tatt FØR vedtak
+   * @param forventetMottakerLand - ISO-landkode for institusjonen som skal ha mottatt SED (f.eks. 'SE')
    */
   async function verifiserUtgaaendeJournalpostOpprettet(
     request: APIRequestContext,
-    jpBefore: JournalpostInfo[]
+    jpBefore: JournalpostInfo[],
+    forventetMottakerLand: string
   ): Promise<void> {
     const jp = await findNewUtgaaendeJournalpost(request, jpBefore);
     expect(jp, 'Forventet UTGAAENDE EESSI-journalpost i SAF-mock etter SED ble sendt, men fant ingen ny med kanal=EESSI').not.toBeNull();
-    expect(
-      jp!.journalStatus,
-      `Journalpost skal være ferdigstilt (J), men er: ${jp!.journalStatus}`
-    ).toBe('J');
+    expect(jp!.journalStatus, `Journalpost skal være ferdigstilt (J), men er: ${jp!.journalStatus}`).toBe('J');
     expect(jp!.kanal, 'Journalpost skal ha kanal=EESSI').toBe('EESSI');
-    console.log(`✅ UTGAAENDE EESSI-journalpost opprettet og ferdigstilt (id=${jp!.journalpostId}, tittel="${jp!.tittel}")`);
+
+    const mottakerId = jp!.avsenderMottaker?.id ?? '';
+    const mottakerLand = mottakerId.split(':')[0];
+    expect(
+      mottakerLand,
+      `SED skal være sendt til ${forventetMottakerLand}, men avsenderMottaker.id='${mottakerId}' → land='${mottakerLand}'`
+    ).toBe(forventetMottakerLand);
+
+    console.log(`✅ UTGAAENDE EESSI-journalpost sendt til ${mottakerLand} (id=${jp!.journalpostId}, mottaker='${mottakerId}')`);
   }
 
   // ============================================================
@@ -229,7 +239,7 @@ test.describe('Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () => {
 
     await waitForProcessInstances(page.request, 60);
     await verifiserSedSendtTilEessi(request, docsBefore);
-    await verifiserUtgaaendeJournalpostOpprettet(request, jpBefore);
+    await verifiserUtgaaendeJournalpostOpprettet(request, jpBefore, 'SE');
     await verifiserProsessinstanserEtterVedtak(['FO']);
     console.log('✅ Scenario 1: SED til Sverige og papir til Færøyene — verifisert');
   });
@@ -260,7 +270,7 @@ test.describe('Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () => {
 
     await waitForProcessInstances(page.request, 60);
     await verifiserSedSendtTilEessi(request, docsBefore);
-    await verifiserUtgaaendeJournalpostOpprettet(request, jpBefore);
+    await verifiserUtgaaendeJournalpostOpprettet(request, jpBefore, 'SE');
     await verifiserProsessinstanserEtterVedtak(['FO', 'GL']);
     console.log('✅ Scenario 2: SED til Sverige, papir til Færøyene og Grønland — verifisert');
   });
@@ -294,7 +304,7 @@ test.describe('Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () => {
 
     await waitForProcessInstances(page.request, 60);
     await verifiserSedSendtTilEessi(request, docsBefore);
-    await verifiserUtgaaendeJournalpostOpprettet(request, jpBefore);
+    await verifiserUtgaaendeJournalpostOpprettet(request, jpBefore, 'SE');
     await verifiserProsessinstanserEtterVedtak([]);
     console.log('✅ Scenario 3: SED til Sverige og ingen SEND_BREV for FO/GL — regresjon OK');
   });
