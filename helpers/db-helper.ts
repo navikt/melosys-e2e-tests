@@ -292,3 +292,16 @@ export async function withDatabase<T>(
     await db.close();
   }
 }
+
+/**
+ * Fetch FAKTURASERIE_REFERANSE for a given behandling ID from BEHANDLINGSRESULTAT
+ */
+export async function getFakturaserieReferanse(behandlingId: string | null | undefined): Promise<string | undefined> {
+  return withDatabase(async (db) => {
+    const result = await db.queryOne<{ FAKTURASERIE_REFERANSE: string }>(
+      `SELECT FAKTURASERIE_REFERANSE FROM BEHANDLINGSRESULTAT WHERE BEHANDLING_ID = :id`,
+      { id: behandlingId }
+    );
+    return result?.FAKTURASERIE_REFERANSE;
+  });
+}
