@@ -12,7 +12,7 @@ import {USER_ID_VALID} from '../../../pages/shared/constants';
 import {waitForProcessInstances} from '../../../helpers/api-helper';
 import {withFaktureringDatabase} from '../../../helpers/pg-db-helper';
 import {AnnulleringPage} from '../../../pages/behandling/annullering.page';
-import {withDatabase} from '../../../helpers/db-helper';
+import {getFakturaserieReferanse} from '../../../helpers/db-helper';
 import {FaktureringHelper} from '../../../helpers/fakturering-helper';
 import {AarsavregningPage} from '../../../pages/behandling/aarsavregning.page';
 import {TestPeriods} from '../../../helpers/date-helper';
@@ -159,35 +159,9 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og NV-kanselle
 
         //Verifiserer at annulering har avregnet innværende fakturalinjer
 
-        const opprinneligFakturaserieReferanse = await withDatabase(async (db) => {
-            const result = await db.queryOne<{ FAKTURASERIE_REFERANSE: string }>(
-                `SELECT FAKTURASERIE_REFERANSE
-                 FROM BEHANDLINGSRESULTAT
-                 WHERE BEHANDLING_ID = :id`,
-                {id: opprinneligBehandlingId}
-            );
-            return result?.FAKTURASERIE_REFERANSE;
-        });
-
-        const fakturaserieReferanse = await withDatabase(async (db) => {
-            const result = await db.queryOne<{ FAKTURASERIE_REFERANSE: string }>(
-                `SELECT FAKTURASERIE_REFERANSE
-                 FROM BEHANDLINGSRESULTAT
-                 WHERE BEHANDLING_ID = :id`,
-                {id: behandlingId}
-            );
-            return result?.FAKTURASERIE_REFERANSE;
-        });
-
-        const arsavregningFakturaserieRef = await withDatabase(async (db) => {
-            const result = await db.queryOne<{ FAKTURASERIE_REFERANSE: string }>(
-                `SELECT FAKTURASERIE_REFERANSE
-                 FROM BEHANDLINGSRESULTAT
-                 WHERE BEHANDLING_ID = :id`,
-                {id: arsavregningBehandlingId}
-            );
-            return result?.FAKTURASERIE_REFERANSE;
-        });
+        const opprinneligFakturaserieReferanse = await getFakturaserieReferanse(opprinneligBehandlingId);
+        const fakturaserieReferanse = await getFakturaserieReferanse(behandlingId);
+        const arsavregningFakturaserieRef = await getFakturaserieReferanse(arsavregningBehandlingId);
 
         if (opprinneligFakturaserieReferanse === undefined || fakturaserieReferanse === undefined || arsavregningFakturaserieRef === undefined) {
             throw new Error(`Fakturaserie referanse er ikke satt. Opprinnelig: ${opprinneligFakturaserieReferanse} (behandlingId: ${opprinneligBehandlingId}), Ny: ${fakturaserieReferanse} (behandlingId: ${behandlingId})`);
