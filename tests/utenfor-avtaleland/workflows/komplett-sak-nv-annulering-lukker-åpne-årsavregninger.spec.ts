@@ -12,29 +12,29 @@ import {USER_ID_VALID} from '../../../pages/shared/constants';
 import {getYearFromDate, TestPeriods} from '../../../helpers/date-helper';
 import {waitForProcessInstances} from '../../../helpers/api-helper';
 import {withFaktureringDatabase} from '../../../helpers/pg-db-helper';
-import {withDatabase, getFakturaserieReferanse} from '../../../helpers/db-helper';
+import {getFakturaserieReferanse, withDatabase} from '../../../helpers/db-helper';
 import {FaktureringHelper} from '../../../helpers/fakturering-helper';
 import {AnnulleringPage} from "../../../pages/behandling/annullering.page";
 
 /**
- * Komplett saksflyt for FTRL-sak med flere land og arbeidsinntekt fra Norge
+ * Komplett saksflyt for FTRL-sak med automatisk opprettet årsavregning og NV-annullering
  *
  * Tester:
  * - Opprettelse av FTRL-sak (Folketrygdloven)
  * - Medlemskap: Flere land (ikke kjent hvilke), delvis dekning (helse/pensjon)
- * - Lovvalg: 2-8 forste ledd a med alle vilkar oppfylt
+ * - Lovvalg: 2-8 første ledd a med alle vilkår oppfylt
  * - Trygdeavgift: Ikke-skattepliktig, arbeidsinntekt fra Norge
- *   inkludert skatteforhold og inntektsperiode datoer
- * - Vedtak: Fullføring av saksflyt
- * - Faktura: Sett alle rader til BESTILT
- * - Nyvurdering: Endre skattestatus til skattepliktig
- * - Ingen trygdeavgiftsperioder for 2026 - avregning skal returnere q1 og q2 fakturalinjer
+ * - Vedtak: Fullføring av førstegangsbehandling
+ * - Faktura: Sett alle rader til BESTILT (simulerer at faktura er sendt)
+ * - Nyvurdering: Opprett ny vurdering og annuller saken
+ * - Verifiser: Årsavregningsbehandlingen lukkes med BehandlingsresultatType = FERDIGBEHANDLET
+ * - Verifiser: Sum av fakturaserier for avregningsåret er 0
  */
-test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
+test.describe('Komplett saksflyt - NV annulering lukker åpne årsavregninger', () => {
     test('komplett førstegangsbehandling, automatisk opprettet årsavregning, nv annulerer også åpen årsavregning', async ({
-                                                                                                                                                            page,
-                                                                                                                                                            request
-                                                                                                                                                        }) => {
+                                                                                                                              page,
+                                                                                                                              request
+                                                                                                                          }) => {
         // Setup
         test.setTimeout(120000);
         const auth = new AuthHelper(page);
@@ -111,14 +111,14 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
             console.log(`Updated ${updated} faktura rows to BESTILT`);
         });
 
-        // Step 13: Opprett ny vurdering
-        console.log('Step 13: Creating nyvurdering...');
+        // Step 10: Opprett ny vurdering
+        console.log('Step 10: Creating nyvurdering...');
         await hovedside.klikkOpprettNySak();
         await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
         await waitForProcessInstances(page.request, 30);
 
-        // Step 14: Åpne ny behandling
-        console.log('Step 14: Opening new behandling...');
+        // Step 11: Åpne ny behandling
+        console.log('Step 11: Opening new behandling...');
         await hovedside.goto();
         await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).first().click();
 
@@ -126,8 +126,8 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         const behandlingId = new URL(page.url()).searchParams.get('behandlingID');
         console.log(`BehandlingId: ${behandlingId}`);
 
-        // Step 15: Annuller saken
-        console.log('Step 15: Annullering...');
+        // Step 12: Annuller saken
+        console.log('Step 12: Annullering...');
         await annullering.annullerSak();
         await waitForProcessInstances(page.request, 30);
 
@@ -138,7 +138,7 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
             const result = await db.queryOne<{ ID: string }>(
                 `SELECT b.id
                  FROM BEHANDLING b
-                 JOIN FAGSAK s ON b.saksnummer = s.saksnummer
+                          JOIN FAGSAK s ON b.saksnummer = s.saksnummer
                  WHERE s.saksnummer = (SELECT saksnummer FROM BEHANDLING WHERE id = :id)
                    AND b.beh_type = 'ÅRSAVREGNING'`,
                 {id: opprinneligBehandlingId}
@@ -153,7 +153,9 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         // Verifiserer at årsavregningsbehandlingen ble lukket med FERDIGBEHANDLET
         await withDatabase(async (db) => {
             const result = await db.queryOne<{ RESULTAT_TYPE: string }>(
-                `SELECT RESULTAT_TYPE FROM BEHANDLINGSRESULTAT WHERE BEHANDLING_ID = :id`,
+                `SELECT RESULTAT_TYPE
+                 FROM BEHANDLINGSRESULTAT
+                 WHERE BEHANDLING_ID = :id`,
                 {id: aarsavregningBehandlingId}
             );
             expect(
