@@ -246,6 +246,14 @@ export abstract class BasePage {
 
       // Wait for button to be visible and enabled
       await button.waitFor({ state: 'visible', timeout: 10000 });
+
+      // In heading-change mode: wait for network to settle before clicking.
+      // Radio buttons trigger auto-save API calls (POST /api/mottatteopplysninger/).
+      // If we click "Bekreft og fortsett" before those complete, it can cause a
+      // race condition where React gets stuck and never re-renders the next step.
+      if (verifyHeadingChange && attempt === 1) {
+        await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+      }
       try {
         await expect(button).toBeEnabled({ timeout: 10000 });
       } catch {
@@ -331,22 +339,52 @@ export abstract class BasePage {
         // The frontend is just slow. Do NOT retry — that causes double-advance.
         // Instead, wait longer for the frontend to catch up.
         if (apiResponse) {
+          // FIRST: If waitForContent was provided, check if it's already visible.
+          // The step may have transitioned but the heading visibility check missed it
+          // (e.g., React rendered the new step's content without updating h1 visibility).
+          if (waitForContent) {
+            const contentAlreadyVisible = await waitForContent.isVisible().catch(() => false);
+            if (contentAlreadyVisible) {
+              const headingAfter = await this.getCurrentStepHeading();
+              console.log(`  ✅ waitForContent allerede synlig — steget har endret seg (${Date.now() - transitionStart}ms): "${headingBefore}" → "${headingAfter}"`);
+              break;
+            }
+          }
+
           console.log(`  ⏳ API svarte OK men heading uendret — venter lenger (unngår dobbel-avansering)...`);
+
+          // Try to nudge React into re-rendering by triggering focus/blur events.
+          // The radio auto-save response may have arrived but React batched the
+          // state update without flushing a re-render.
+          await this.page.keyboard.press('Tab').catch(() => {});
+          await this.page.waitForTimeout(200);
+          await this.page.keyboard.press('Shift+Tab').catch(() => {});
 
           // Wait up to 75s more (90s total) for the frontend to re-render.
           // NOTE: Page reload is NOT safe here — the step wizard uses client-side
           // React state, so reload sends us back to step 1 regardless of backend state.
-          // This causes a backwards-navigation bug where step 2→3 appears to succeed
-          // but we're actually on step 1.
-          const lateHeadingChanged = await this.page.waitForFunction(
-            headingCheckFn,
-            headingBefore!,
-            { timeout: 75000 },
-          ).then(() => true).catch(() => false);
+          // Use BOTH heading change AND waitForContent as success signals.
+          const successPromises: Promise<string>[] = [
+            this.page.waitForFunction(
+              headingCheckFn,
+              headingBefore!,
+              { timeout: 75000 },
+            ).then(() => 'heading'),
+          ];
 
-          if (lateHeadingChanged) {
+          if (waitForContent) {
+            successPromises.push(
+              waitForContent.waitFor({ state: 'visible', timeout: 75000 })
+                .then(() => 'content'),
+            );
+          }
+
+          const lateSignal = await Promise.race(successPromises)
+            .catch(() => null);
+
+          if (lateSignal) {
             const headingAfter = await this.getCurrentStepHeading();
-            console.log(`  ✅ Steg endret (utvidet ventetid, ${Date.now() - transitionStart}ms): "${headingBefore}" → "${headingAfter}"`);
+            console.log(`  ✅ Steg endret (${lateSignal}-signal, ${Date.now() - transitionStart}ms): "${headingBefore}" → "${headingAfter}"`);
             break;
           }
 
