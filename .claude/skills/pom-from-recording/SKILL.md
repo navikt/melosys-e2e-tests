@@ -142,7 +142,13 @@ BasePage provides these — use them instead of raw Playwright calls:
 
 ```typescript
 // Step transitions with retry (handles flaky CI)
-await this.clickStepButtonWithRetry(this.bekreftButton);
+// IMPORTANT: Always pass waitForContent with an element from the NEXT step.
+// This gives clickStepButtonWithRetry a fallback signal via Promise.race
+// when the heading visibility check fails (common on CI).
+await this.clickStepButtonWithRetry(this.bekreftButton, {
+  waitForContent: this.nextStepElement,  // e.g. a radio, checkbox, or button on next step
+  verifyHeadingChange: true,             // required for EU/EØS multi-step wizards
+});
 
 // Dropdown that depends on a previous selection
 await this.waitForDropdownToPopulate(this.kommuneDropdown);
@@ -156,6 +162,27 @@ await this.trySelectors([
   this.page.getByRole('button', { name: 'Bekreft' }),
   this.page.getByRole('button', { name: 'Bekreft og fortsett' }),
 ]);
+```
+
+### Step transition anti-patterns
+
+Radio buttons on step wizard pages trigger auto-save API calls. Be aware of this
+when creating POMs that call `klikkBekreftOgFortsett` after radio selections:
+
+```typescript
+// BAD — no waitForContent, heading check is the only signal
+async velgYrkesaktivOgFortsett(): Promise<void> {
+  await this.velgYrkesaktiv();
+  await this.klikkBekreftOgFortsett();
+}
+
+// GOOD — waitForContent provides fallback detection
+async velgYrkesaktivOgFortsett(): Promise<void> {
+  await this.velgYrkesaktiv();
+  await this.klikkBekreftOgFortsett({
+    waitForContent: this.arbeidsgiverCheckbox,  // element on next step
+  });
+}
 ```
 
 ### Constants

@@ -71,10 +71,35 @@ See [references/database-queries.md](references/database-queries.md) for more qu
 - Don't retry the click when API already responded — causes double-advance
 - Don't add networkidle waits to every step — accumulated 4700s overhead in full suite
 
-**What helps:**
-- Extended wait (75s after initial 15s) catches most slow renders
-- POM-level waitFor timeouts of 30-45s (not default 10s) for radio/checkbox elements
-- The `clickStepButtonWithRetry` in BasePage handles the safe retry logic
+**What helps (in priority order):**
+1. **ALWAYS pass `waitForContent` to `klikkBekreftOgFortsett`** — this is the single most
+   effective fix. Pass a locator for an element on the NEXT step (radio, checkbox, button).
+   `clickStepButtonWithRetry` uses it as an alternative success signal via `Promise.race`
+   when the heading check fails. Without it, the only detection mechanism is the fragile
+   heading visibility check.
+   ```typescript
+   // GOOD — gives fallback detection
+   await behandling.klikkBekreftOgFortsett({
+     waitForContent: page.getByRole('checkbox', { name: 'Ståles Stål AS' }),
+   });
+
+   // BAD — only heading check, will timeout if React stalls
+   await behandling.klikkBekreftOgFortsett();
+   ```
+2. **Networkidle before clicking** — Radio buttons trigger auto-save API calls
+   (POST /api/mottatteopplysninger/). If "Bekreft og fortsett" is clicked before
+   those complete, React can get into a stuck state. `clickStepButtonWithRetry`
+   now does this automatically in heading-change mode.
+3. Extended wait (75s after initial 15s) catches most slow renders
+4. POM-level waitFor timeouts of 30-45s (not default 10s) for radio/checkbox elements
+5. UI nudge (Tab/Shift+Tab) after stuck heading to trigger React re-render cycle
+
+**Race condition with radio auto-save:**
+Radio selections on step wizard pages trigger immediate API saves. If you click
+"Bekreft og fortsett" before the auto-save completes, two concurrent API calls
+can cause React to batch state updates without flushing a re-render. Tests with
+TWO radio selections before clicking (e.g. "direkte til" tests) are less flaky
+because the second selection gives the first one's API call time to complete.
 
 **How to investigate CI failures:**
 1. Download `error-context.md` from `test-results/` — shows page snapshot at failure
