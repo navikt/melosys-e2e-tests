@@ -6,15 +6,12 @@ import { JournalforingPage } from '../../pages/journalforing/journalforing.page'
 import { ArbeidFlereLandBehandlingPage } from '../../pages/behandling/arbeid-flere-land-behandling.page';
 import { waitForProcessInstances } from '../../helpers/api-helper';
 import { createJournalforingOppgaver, fetchStoredSedDocuments, findNewNavFormatSed, RinaDocumentInfo } from '../../helpers/mock-helper';
-import { UnleashHelper } from '../../helpers/unleash-helper';
 import { USER_ID_KOSOVO, PERSON_NAME_KOSOVO } from '../../pages/shared/constants';
 
 /**
  * EU/EØS Kosovo statsborgerskap i SED A008 (MELOSYS-7558)
  *
- * Tester at Kosovo-statsborgerskap (XK) håndteres korrekt i SED basert på CDM-versjon:
- * - CDM 4.4 (toggle PÅ): Kosovo (XK) bevares i SED
- * - CDM 4.3 (toggle AV): Kosovo konverteres til Ukjent (XU)
+ * Tester at Kosovo-statsborgerskap (XK) bevares korrekt i SED A008.
  *
  * Bruker journalføringsoppgave-flyten med en Kosovo-person (TREIG SALMANSEN).
  */
@@ -108,17 +105,14 @@ async function opprettOgVideresendSøknad(
 
 test.describe('EU/EØS Kosovo statsborgerskap i SED A008 (MELOSYS-7558)', () => {
 
-  test('CDM 4.4 toggle PÅ - Kosovo statsborgerskap bevart', async ({ page, request }) => {
+  test('Kosovo statsborgerskap bevart i SED A008', async ({ page, request }) => {
     test.setTimeout(120000);
 
-    const unleash = new UnleashHelper(request);
-    await unleash.enableFeature('melosys.cdm-4-4');
-
-    console.log('Starter Kosovo statsborgerskap test (CDM 4.4 PÅ)');
+    console.log('Starter Kosovo statsborgerskap test');
     const docsBefore = await opprettOgVideresendSøknad(page, request);
 
     const sedContent = await findNewNavFormatSed(request, 'A008', docsBefore);
-    console.log(`Verifiserer SED A008 (CDM 4.4): sedVer=${sedContent.sedVer}`);
+    console.log(`Verifiserer SED A008: sedVer=${sedContent.sedVer}`);
 
     expect(sedContent.sed).toBe('A008');
     expect(sedContent.sedVer).toBe('4');
@@ -128,30 +122,6 @@ test.describe('EU/EØS Kosovo statsborgerskap i SED A008 (MELOSYS-7558)', () => 
     const landkoder = extractLandkoder(nav);
     expect(landkoder).toContain('XK');
 
-    console.log(`Kosovo statsborgerskap (XK) bevart i CDM 4.4: ${JSON.stringify(landkoder)}`);
-  });
-
-  test('CDM 4.4 toggle AV - Kosovo konvertert til ukjent', async ({ page, request }) => {
-    test.setTimeout(120000);
-
-    const unleash = new UnleashHelper(request);
-    await unleash.disableFeature('melosys.cdm-4-4');
-
-    console.log('Starter Kosovo statsborgerskap test (CDM 4.4 AV)');
-    const docsBefore = await opprettOgVideresendSøknad(page, request);
-
-    const sedContent = await findNewNavFormatSed(request, 'A008', docsBefore);
-    console.log(`Verifiserer SED A008 (CDM 4.3): sedVer=${sedContent.sedVer}`);
-
-    expect(sedContent.sed).toBe('A008');
-    expect(sedContent.sedVer).toBe('3');
-    expect(sedContent.sedGVer).toBe('4');
-
-    const nav = sedContent.nav as Record<string, unknown>;
-    const landkoder = extractLandkoder(nav);
-    expect(landkoder).toContain('XU');
-    expect(landkoder).not.toContain('XK');
-
-    console.log(`Kosovo konvertert til Ukjent (XU) i CDM 4.3: ${JSON.stringify(landkoder)}`);
+    console.log(`Kosovo statsborgerskap (XK) bevart: ${JSON.stringify(landkoder)}`);
   });
 });
