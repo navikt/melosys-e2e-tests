@@ -31,6 +31,7 @@ export const SAKSTYPER = {
 
 export const SAKSTEMA = {
   MEDLEMSKAP_LOVVALG: 'MEDLEMSKAP_LOVVALG',
+  TRYGDEAVGIFT: 'TRYGDEAVGIFT',
 } as const;
 
 export const BEHANDLINGSTEMA = {
@@ -38,6 +39,7 @@ export const BEHANDLINGSTEMA = {
   SELVSTENDIG: 'SELVSTENDIG',
   UTSENDT_ARBEIDSTAKER: 'UTSENDT_ARBEIDSTAKER',
   ARBEID_FLERE_LAND: 'ARBEID_FLERE_LAND',
+  PENSJONIST: 'PENSJONIST',
 } as const;
 
 export const AARSAK = {
@@ -75,4 +77,26 @@ export const EU_EOS_LAND = {
   NEDERLAND: 'Nederland',
   ESTLAND: 'Estland',
   NORGE: 'Norge',
+} as const;
+
+// Bostedsland codes (for Trygdeavgift behandling)
+export const BOSTEDSLAND = {
+  FAROEYENE: 'FO',
+  GRONLAND: 'GL',
+  DANMARK: 'DK',
+  SVERIGE: 'SE',
+  FINLAND: 'FI',
+  TYSKLAND: 'DE',
+  FRANKRIKE: 'FR',
+} as const;
+
+// Inntektskilde codes
+export const INNTEKTSKILDE = {
+  ARBEIDSINNTEKT: 'ARBEIDSINNTEKT',
+  NÆRINGSINNTEKT: 'NÆRINGSINNTEKT',
+  INNTEKT_FRA_UTLANDET: 'INNTEKT_FRA_UTLANDET',
+  FN_SKATTEFRITAK: 'FN_SKATTEFRITAK',
+  MISJONÆR: 'MISJONÆR',
+  PENSJON: 'PENSJON',
+  PENSJON_KILDESKATT: 'PENSJON_KILDESKATT',
 } as const;

@@ -55,6 +55,8 @@ export class AarsavregningPage extends BasePage {
 
   private readonly bruttoinntektField = this.page.getByRole('textbox', { name: 'Bruttoinntekt' });
 
+  private readonly trygdeavgiftFraField = this.page.getByRole('textbox', { name: 'Trygdeavgift fra' });
+
   private readonly bekreftButton = this.page.getByRole('button', { name: 'Bekreft og fortsett' });
 
   constructor(page: Page) {
@@ -108,6 +110,20 @@ export class AarsavregningPage extends BasePage {
     await jaRadio.waitFor({ state: 'visible', timeout: 5000 });
     await jaRadio.check();
     console.log('✅ Answered Ja');
+  }
+
+  /**
+   * Fill "Trygdeavgift fra" field
+   * This field appears when answering "Ja" to having paid trygdeavgift.
+   * The amount represents trygdeavgift paid from a specific source.
+   *
+   * @param beløp - Amount as string (e.g., '5000')
+   */
+  async fyllInnTrygdeavgiftFra(beløp: string): Promise<void> {
+    await this.trygdeavgiftFraField.waitFor({ state: 'visible', timeout: 5000 });
+    await this.trygdeavgiftFraField.fill(beløp);
+    await this.trygdeavgiftFraField.press('Tab'); // Trigger blur
+    console.log(`✅ Fylte inn Trygdeavgift fra: ${beløp}`);
   }
 
   /**

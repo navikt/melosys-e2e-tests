@@ -88,6 +88,37 @@ export class OpprettNySakPage extends BasePage {
   }
 
   /**
+   * Select an existing case by saksnummer
+   * The checkbox ID is dynamic: #saksnummer-{saksnr} (e.g., #saksnummer-MEL-2)
+   *
+   * @param saksnummer - Case number (e.g., 'MEL-2')
+   */
+  async velgEksisterendeSak(saksnummer: string): Promise<void> {
+    await this.page.locator(`#saksnummer-${saksnummer}`).check();
+    console.log(`✅ Selected existing case: ${saksnummer}`);
+  }
+
+  /**
+   * Select first available existing case
+   * Useful when the saksnummer is dynamic/unknown
+   */
+  async velgFørsteEksisterendeSak(): Promise<void> {
+    const checkbox = this.page.locator('[id^="saksnummer-"]').first();
+    await checkbox.check();
+    const id = await checkbox.getAttribute('id');
+    console.log(`✅ Selected first existing case: ${id}`);
+  }
+
+  /**
+   * Select "Årsavregning" radio button
+   * Used when creating an årsavregning on an existing case
+   */
+  async velgÅrsavregningRadio(): Promise<void> {
+    await this.page.getByRole('radio', { name: 'Årsavregning' }).check();
+    console.log('✅ Selected Årsavregning radio');
+  }
+
+  /**
    * Select case type (Sakstype)
    *
    * @param sakstype - Case type value (e.g., 'FTRL', 'AVTALELAND')
