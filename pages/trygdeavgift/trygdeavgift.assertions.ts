@@ -211,6 +211,48 @@ export class TrygdeavgiftAssertions {
   }
 
   /**
+   * Verify the sats (rate) column shows expected value for a specific row.
+   * Uses td.tall_felt to find the sats cell (first .tall_felt in each row).
+   *
+   * @param radIndex - Row index (0-based)
+   * @param forventetSats - Expected text: '*' (minstebeløp), '**' (25%-regel), or numeric like '6.8'
+   */
+  async verifiserSatsKolonne(radIndex: number, forventetSats: string | RegExp): Promise<void> {
+    const table = this.page.locator('table').filter({ has: this.page.getByText('Trygdeperiode') });
+    await expect(table).toBeVisible({ timeout: 5000 });
+
+    const row = table.locator('tbody tr').nth(radIndex);
+    const satsCell = row.locator('td.tall_felt').first();
+    await expect(satsCell).toHaveText(forventetSats);
+    console.log(`✅ Sats column row ${radIndex}: ${forventetSats}`);
+  }
+
+  /**
+   * Verify that a forklaringstekst (footnote) is visible below the table.
+   * The component renders these in div.forklaringstekster when beregningstype
+   * is MINSTEBELOEP or TJUEFEM_PROSENT_REGEL.
+   *
+   * @param tekst - Expected text (substring match) or RegExp
+   */
+  async verifiserForklaringstekst(tekst: string | RegExp): Promise<void> {
+    const forklaring = this.page.locator('.forklaringstekster');
+    await expect(forklaring).toBeVisible({ timeout: 5000 });
+    await expect(forklaring).toContainText(tekst);
+    console.log(`✅ Forklaringstekst verified`);
+  }
+
+  /**
+   * Verify that no forklaringstekster are visible (ordinær beregning).
+   * The div.forklaringstekster is only rendered when MINSTEBELOEP or
+   * TJUEFEM_PROSENT_REGEL is present.
+   */
+  async verifiserIngenForklaringstekster(): Promise<void> {
+    const forklaring = this.page.locator('.forklaringstekster');
+    await expect(forklaring).not.toBeVisible({ timeout: 2000 });
+    console.log(`✅ No forklaringstekster visible`);
+  }
+
+  /**
    * Verify calculated tax values in the table
    * @param expectedValues - Array of expected tax calculations for each period
    *
