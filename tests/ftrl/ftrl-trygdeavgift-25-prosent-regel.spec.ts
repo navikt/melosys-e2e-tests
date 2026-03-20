@@ -75,7 +75,7 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     return trygdeavgift;
   }
 
-  test('25%-regelen begrenser avgiften (8000 kr/md) @expect-docker-errors', async ({ page, request }) => {
+  test('25%-regelen begrenser avgiften (8000 kr/md)', async ({ page, request }) => {
     test.setTimeout(120000);
     const trygdeavgift = await opprettSakOgNavigerTilTrygdeavgift(page, request);
 
@@ -95,7 +95,7 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     await vedtak.klikkFattVedtak();
   });
 
-  test('ordinær beregning uten begrensning (80000 kr/md) @expect-docker-errors', async ({ page, request }) => {
+  test('ordinær beregning uten begrensning (80000 kr/md)', async ({ page, request }) => {
     test.setTimeout(120000);
     const trygdeavgift = await opprettSakOgNavigerTilTrygdeavgift(page, request);
 
