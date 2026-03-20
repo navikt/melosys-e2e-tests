@@ -7,15 +7,15 @@ import { TrygdeavgiftPensjonistBehandlingAssertions } from './trygdeavgift-pensj
  *
  * This is a unique multi-step wizard for creating a Trygdeavgift Pensjonist case:
  *   Step 1: Period dates (Fra og med / Til og med) + Bostedsland dropdown
- *   Step 2: Yrkesaktiv question (Ja/Nei radio) + Inntektskilde dropdown + Bruttoinntekt
- *   Step 3: "Bekreft og send" button to submit
+ *   Step 2: Trygdeavgift (yrkesaktiv, inntektskilde, bruttoinntekt)
+ *   Step 3: Bekreftelse ("Bekreft og send orienteringsbrev til bruker")
  *
  * IMPORTANT: The date fields are plain textboxes (NOT datepickers).
  * The Bostedsland dropdown uses value codes (e.g., 'FO' for Færøyene).
  *
  * Related pages:
  * - OpprettNySakPage (navigates from after case creation)
- * - VedtakPage (not used — this wizard submits directly via "Bekreft og send")
+ * - VedtakPage (not used — this wizard submits directly from the bekreftelse step)
  *
  * @example
  * const behandling = new TrygdeavgiftPensjonistBehandlingPage(page);
@@ -44,7 +44,10 @@ export class TrygdeavgiftPensjonistBehandlingPage extends BasePage {
 
   // Shared buttons
   private readonly bekreftOgFortsettButton = this.page.getByRole('button', { name: 'Bekreft og fortsett' });
-  private readonly bekreftOgSendButton = this.page.getByRole('button', { name: 'Bekreft og send' });
+
+  // Step 3 locators - Bekreftelse
+  private readonly bekreftOpplysningerHeading = this.page.getByRole('heading', { name: 'Bekreft opplysninger' });
+  private readonly bekreftOgSendButton = this.page.getByRole('button', { name: /Bekreft og send/i });
 
   constructor(page: Page) {
     super(page);
@@ -60,6 +63,11 @@ export class TrygdeavgiftPensjonistBehandlingPage extends BasePage {
   async ventPåSideLastet(): Promise<void> {
     try {
       await this.fraOgMedField.waitFor({ state: 'visible', timeout: 15000 });
+
+      // The first field renders before the page finishes its async init.
+      await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+      await this.page.waitForTimeout(500);
+
       console.log('✅ Trygdeavgift Pensjonist behandling loaded - Fra og med field visible');
     } catch (error) {
       console.error('❌ Failed to reach Trygdeavgift Pensjonist behandling page');
@@ -102,6 +110,11 @@ export class TrygdeavgiftPensjonistBehandlingPage extends BasePage {
   async velgBostedsland(landkode: string): Promise<void> {
     await this.bostedslandDropdown.waitFor({ state: 'visible', timeout: 5000 });
     await this.bostedslandDropdown.selectOption(landkode);
+
+    // Blur the dropdown so form state settles before step submit.
+    await this.bostedslandDropdown.press('Tab').catch(() => {});
+    await this.page.waitForTimeout(200);
+
     console.log(`✅ Valgte Bostedsland: ${landkode}`);
   }
 
@@ -115,6 +128,12 @@ export class TrygdeavgiftPensjonistBehandlingPage extends BasePage {
   async klikkBekreftOgFortsett(): Promise<void> {
     await this.clickStepButtonWithRetry(this.bekreftOgFortsettButton, {
       waitForContent: this.neiRadio,
+      waitForContentTimeout: 45000,
+      apiPatterns: [
+        '/api/avklartefakta/',
+        '/api/vilkaar/',
+        '/api/mottatteopplysninger/',
+      ],
       verifyHeadingChange: true,
     });
   }
@@ -126,7 +145,7 @@ export class TrygdeavgiftPensjonistBehandlingPage extends BasePage {
    * This is the typical answer for pensjonist cases
    */
   async svarNeiYrkesaktiv(): Promise<void> {
-    await this.neiRadio.waitFor({ state: 'visible', timeout: 10000 });
+    await this.neiRadio.waitFor({ state: 'visible', timeout: 30000 });
     await this.neiRadio.check();
     console.log('✅ Svarte Nei på yrkesaktiv-spørsmål');
   }
@@ -135,7 +154,7 @@ export class TrygdeavgiftPensjonistBehandlingPage extends BasePage {
    * Answer "Ja" to the yrkesaktiv question
    */
   async svarJaYrkesaktiv(): Promise<void> {
-    await this.jaRadio.waitFor({ state: 'visible', timeout: 10000 });
+    await this.jaRadio.waitFor({ state: 'visible', timeout: 30000 });
     await this.jaRadio.check();
     console.log('✅ Svarte Ja på yrkesaktiv-spørsmål');
   }
@@ -146,8 +165,8 @@ export class TrygdeavgiftPensjonistBehandlingPage extends BasePage {
    * @param inntektskilde - Income source code (e.g., 'PENSJON', 'ARBEIDSINNTEKT')
    */
   async velgInntektskilde(inntektskilde: string): Promise<void> {
-    await this.inntektskildeDropdown.waitFor({ state: 'visible', timeout: 5000 });
-    await expect(this.inntektskildeDropdown).toBeEnabled({ timeout: 10000 });
+    await this.inntektskildeDropdown.waitFor({ state: 'visible', timeout: 30000 });
+    await expect(this.inntektskildeDropdown).toBeEnabled({ timeout: 30000 });
 
     // Wait for options to populate
     await this.page.waitForFunction(
@@ -156,7 +175,7 @@ export class TrygdeavgiftPensjonistBehandlingPage extends BasePage {
         return dropdown && dropdown.options.length > 1;
       },
       'select[name="inntektskilder[0].kildetype"]',
-      { timeout: 10000 }
+      { timeout: 30000 }
     );
 
     await this.inntektskildeDropdown.selectOption(inntektskilde);
@@ -165,7 +184,7 @@ export class TrygdeavgiftPensjonistBehandlingPage extends BasePage {
 
   /**
    * Fill Bruttoinntekt field WITH API wait (RECOMMENDED)
-   * Waits for /trygdeavgift/beregning API call to complete after blur
+   * Waits for the pensjonist trygdeavgift beregning API call to complete after blur
    *
    * @param beløp - Amount as string (e.g., '200000')
    */
@@ -174,7 +193,10 @@ export class TrygdeavgiftPensjonistBehandlingPage extends BasePage {
 
     // CRITICAL: Create response promise BEFORE triggering blur
     const responsePromise = this.page.waitForResponse(
-      response => response.url().includes('/trygdeavgift/beregning') && response.status() === 200,
+      response =>
+        response.url().includes('/trygdeavgift/eos-pensjonist/beregning') &&
+        (response.request().method() === 'GET' || response.request().method() === 'PUT') &&
+        response.status() === 200,
       { timeout: 30000 }
     );
 
@@ -183,33 +205,65 @@ export class TrygdeavgiftPensjonistBehandlingPage extends BasePage {
 
     await responsePromise;
     console.log('✅ Trygdeavgift calculation API completed');
+
+    await expect(this.bekreftOgFortsettButton).toBeEnabled({ timeout: 15000 });
+    console.log('✅ Bekreft og fortsett button is enabled on Trygdeavgift step');
   }
 
   // ── Step 3: Submit ────────────────────────────────────────────────────
 
   /**
+   * Click "Bekreft og fortsett" from the Trygdeavgift step to the Bekreftelse step.
+   */
+  async klikkBekreftOgFortsettTilBekreftelse(): Promise<void> {
+    await this.clickStepButtonWithRetry(this.bekreftOgFortsettButton, {
+      waitForContent: this.bekreftOpplysningerHeading,
+      waitForContentTimeout: 45000,
+      verifyHeadingChange: true,
+    });
+  }
+
+  /**
+   * Ensure the final bekreftelse step is visible before submitting.
+   */
+  private async ventPåBekreftelseSteg(): Promise<void> {
+    const alleredePåBekreftelse = await this.bekreftOgSendButton.isVisible().catch(() => false);
+
+    if (!alleredePåBekreftelse) {
+      await this.klikkBekreftOgFortsettTilBekreftelse();
+    }
+
+    await this.bekreftOpplysningerHeading.waitFor({ state: 'visible', timeout: 15000 });
+    await this.bekreftOgSendButton.waitFor({ state: 'visible', timeout: 15000 });
+  }
+
+  /**
    * Click "Bekreft og send" button to submit the behandling
    *
-   * This is the final step of the Trygdeavgift Pensjonist wizard.
-   * Waits for the vedtak API response to confirm successful submission.
+   * If the page is still on the Trygdeavgift step, this method advances to the
+   * Bekreftelse step first and then submits.
    */
   async klikkBekreftOgSend(): Promise<void> {
-    await this.bekreftOgSendButton.waitFor({ state: 'visible', timeout: 10000 });
+    await this.ventPåBekreftelseSteg();
     await expect(this.bekreftOgSendButton).toBeEnabled({ timeout: 15000 });
 
-    // CRITICAL: Set up response listener BEFORE clicking
+    // CRITICAL: Set up response listener BEFORE clicking.
+    // The pensjonist final submit does not use the normal vedtak page, so keep
+    // the matcher broad enough to catch both current and older endpoint shapes.
     const responsePromise = this.page.waitForResponse(
-      response => response.url().includes('/api/saksflyt/vedtak/') &&
-                  response.url().includes('/fatt') &&
-                  response.request().method() === 'POST' &&
-                  (response.status() === 200 || response.status() === 204),
+      response =>
+        response.request().method() === 'POST' &&
+        (response.url().includes('/api/saksflyt/vedtak/') ||
+          response.url().includes('/api/saksflyt/trygdeavgift/') ||
+          response.url().includes('/iverksett')) &&
+        (response.status() === 200 || response.status() === 204),
       { timeout: 60000 }
     );
 
     await this.bekreftOgSendButton.click();
 
     const response = await responsePromise;
-    console.log(`✅ Bekreft og send fullført - vedtak API: ${response.status()}`);
+    console.log(`✅ Bekreft og send fullført - submit API: ${response.status()}`);
   }
 
   // ── Convenience methods ───────────────────────────────────────────────

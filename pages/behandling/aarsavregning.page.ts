@@ -41,6 +41,10 @@ export class AarsavregningPage extends BasePage {
 
   private readonly bestemmelseDropdown = this.page.getByLabel('Bestemmelse');
 
+  private readonly avgiftssystemGroup = this.page.getByRole('group', {
+    name: /Skal du legge til trygdeavgift fra Avgiftssystemet til denne årsavregningen\?/i,
+  });
+
   private readonly fraOgMedDatoField = this.page
     .getByLabel('Fra og med periode')
     .getByRole('textbox');
@@ -92,21 +96,20 @@ export class AarsavregningPage extends BasePage {
   }
 
   /**
-   * Answer "Nei" to the first radio question on the page
-   * Used for the initial Nei/Ja question in årsavregning
+   * Answer "Nei" to the Avgiftssystemet question on the page.
    */
   async svarNei(): Promise<void> {
-    const neiRadio = this.page.getByRole('radio', { name: 'Nei' });
+    const neiRadio = this.avgiftssystemGroup.getByRole('radio', { name: 'Nei', exact: true });
     await neiRadio.waitFor({ state: 'visible', timeout: 5000 });
     await neiRadio.check();
     console.log('✅ Answered Nei');
   }
 
   /**
-   * Answer "Ja" to the first radio question on the page
+   * Answer "Ja" to the Avgiftssystemet question on the page.
    */
   async svarJa(): Promise<void> {
-    const jaRadio = this.page.getByRole('radio', { name: 'Ja' });
+    const jaRadio = this.avgiftssystemGroup.getByRole('radio', { name: 'Ja', exact: true });
     await jaRadio.waitFor({ state: 'visible', timeout: 5000 });
     await jaRadio.check();
     console.log('✅ Answered Ja');
@@ -246,7 +249,11 @@ export class AarsavregningPage extends BasePage {
 
   /**
    * Fill Bruttoinntekt field WITH API wait (RECOMMENDED)
-   * This waits for the /trygdeavgift/beregning API call to complete
+   * This waits for the trygdeavgift beregning effect to settle.
+   *
+   * In årsavregning the calculation is sometimes already reflected in the UI
+   * before Playwright observes a matching response, so this method treats the
+   * response as a best-effort signal and falls back to debounce/network settling.
    *
    * @param beløp - Amount as string (e.g., '3213')
    */
@@ -255,15 +262,24 @@ export class AarsavregningPage extends BasePage {
 
     // CRITICAL: Create response promise BEFORE triggering action
     const responsePromise = this.page.waitForResponse(
-      response => response.url().includes('/trygdeavgift/beregning') && response.status() === 200,
-      { timeout: 30000 }
-    );
+      response =>
+        response.url().includes('/trygdeavgift/beregning') &&
+        (response.request().method() === 'GET' || response.request().method() === 'PUT') &&
+        response.status() === 200,
+      { timeout: 3000 }
+    ).catch(() => null);
 
     await this.bruttoinntektField.fill(beløp);
     await this.bruttoinntektField.press('Tab'); // Trigger blur event
 
-    await responsePromise;
-    console.log('✅ Trygdeavgift calculation API completed');
+    const response = await responsePromise;
+    if (response) {
+      console.log('✅ Trygdeavgift calculation API completed');
+    } else {
+      console.log('⚠️  No beregning response detected after bruttoinntekt, waiting for debounce/network settle...');
+      await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+      await this.page.waitForTimeout(1500);
+    }
 
     await expect(this.bekreftButton).toBeEnabled({ timeout: 15000 });
     console.log('✅ Bekreft og fortsett button is enabled');

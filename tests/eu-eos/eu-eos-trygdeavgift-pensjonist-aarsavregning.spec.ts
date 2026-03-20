@@ -22,13 +22,12 @@ test.describe('EU/EØS Trygdeavgift Pensjonist - Førstegangsbehandling + Årsav
     // Vedtak + årsavregning can take a long time on CI
     test.setTimeout(180000);
 
-    // Setup
-    const auth = new AuthHelper(page);
-    await auth.login();
-
-    // Disable feature toggle that hides the second step of the wizard
+    // Setup - Disable feature toggle BEFORE login so frontend fetches correct state
     const unleash = new UnleashHelper(request);
     await unleash.disableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
+
+    const auth = new AuthHelper(page);
+    await auth.login();
 
     // Page Objects
     const hovedside = new HovedsidePage(page);
