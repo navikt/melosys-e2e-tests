@@ -107,5 +107,9 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     await trygdeavgift.assertions.verifiserTrygdeavgiftBeregnet();
     await trygdeavgift.assertions.verifiserSatsKolonne(0, /^\d/);
     await trygdeavgift.assertions.verifiserIngenForklaringstekster();
+
+    await trygdeavgift.klikkBekreftOgFortsett();
+    const vedtak = new VedtakPage(page);
+    await vedtak.klikkFattVedtak();
   });
 });
