@@ -85,9 +85,9 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     await trygdeavgift.fyllInnBruttoinntektMedApiVent('8000');
 
     await trygdeavgift.assertions.verifiserTrygdeavgiftBeregnet();
-    await trygdeavgift.assertions.verifiserSatsKolonne(0, '**');
+    await trygdeavgift.assertions.verifiserSatsKolonne(0, '*');
     await trygdeavgift.assertions.verifiserForklaringstekst(
-      'Trygdeavgiften kan maks utgjøre 25 % av inntekten som overstiger minstebeløpet'
+      'Beregnet etter 25 %-regelen'
     );
 
     await trygdeavgift.klikkBekreftOgFortsett();
