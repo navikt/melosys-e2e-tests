@@ -138,6 +138,7 @@ class TestSummaryReporter implements Reporter {
       { key: 'melosys-inngangsvilkar', envVar: 'MELOSYS_INNGANGSVILKAR_TAG' },
       { key: 'melosys-eessi', envVar: 'MELOSYS_EESSI_TAG' },
       { key: 'melosys-mock', envVar: 'MELOSYS_MOCK_TAG' },
+      { key: 'melosys-dokgen', envVar: 'MELOSYS_DOKGEN_TAG' },
     ];
 
     for (const { key, envVar } of tagEnvVars) {
