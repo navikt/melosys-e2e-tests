@@ -171,18 +171,12 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         }
 
         const faktureringHelper = new FaktureringHelper(request);
-        const opprinneligKjede = await faktureringHelper.hentFakturaserieKjede(opprinneligFakturaserieReferanse);
-        const nyKjede = await faktureringHelper.hentFakturaserieKjede(fakturaserieReferanse);
-
-        // Dedupliser serier som finnes i begge kjeder
-        const sett = new Map<string, Fakturaserie>();
-        [...opprinneligKjede, ...nyKjede].forEach(s => sett.set(s.fakturaserieReferanse, s));
-        const alleSerier = [...sett.values()];
+        const alleSerier = await faktureringHelper.hentSammenslåttKjede(opprinneligFakturaserieReferanse, fakturaserieReferanse);
 
         alleSerier.forEach(s => faktureringHelper.loggFakturaserie(s));
 
         const avregningsÅr = getYearFromDate(period.end)
-        const sum = Math.round(faktureringHelper.totalBelopKjede(alleSerier, avregningsÅr) * 100) / 100;
+        const sum = faktureringHelper.avrundBelop(faktureringHelper.totalBelopKjede(alleSerier, avregningsÅr));
 
         console.log(`Sum kjede for ${avregningsÅr}: ${sum} kr`);
 
