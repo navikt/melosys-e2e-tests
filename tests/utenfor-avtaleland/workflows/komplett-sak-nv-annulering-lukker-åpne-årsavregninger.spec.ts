@@ -95,7 +95,7 @@ test.describe('Komplett saksflyt - NV annulering lukker åpne årsavregninger', 
         await trygdeavgift.ventPåSideLastet();
         await trygdeavgift.velgSkattepliktig(false);
         await trygdeavgift.velgInntektskilde('ARBEIDSINNTEKT');
-        await trygdeavgift.fyllInnBruttoinntektMedApiVent('10000');
+        await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
         await trygdeavgift.klikkBekreftOgFortsett();
 
         // Step 8: Vedtak
@@ -174,15 +174,15 @@ test.describe('Komplett saksflyt - NV annulering lukker åpne årsavregninger', 
         }
 
         const faktureringHelper = new FaktureringHelper(request);
-        const opprinneligFakturaserie = await faktureringHelper.hentFakturaserie(opprinneligFakturaserieReferanse);
+        const opprinneligKjede = await faktureringHelper.hentFakturaserieKjede(opprinneligFakturaserieReferanse);
 
-        faktureringHelper.loggFakturaserie(opprinneligFakturaserie);
+        opprinneligKjede.forEach(s => faktureringHelper.loggFakturaserie(s));
 
         const avregningsÅr = getYearFromDate(period.end)
-        const opprinneligTotal = faktureringHelper.totalBelop(opprinneligFakturaserie, avregningsÅr);
+        const sum = Math.round(faktureringHelper.totalBelopKjede(opprinneligKjede, avregningsÅr) * 100) / 100;
 
-        console.log(`Opprinnelig serie: ${opprinneligTotal} kr`);
+        console.log(`Sum kjede for ${avregningsÅr}: ${sum} kr`);
 
-        expect(opprinneligTotal, `Opprinnelig fakturaserie for ${avregningsÅr} skal være kansellert (0)`).toBe(0);
+        expect(sum, `Fakturaserie-kjede for ${avregningsÅr} skal summere til 0`).toBe(0);
     });
 });
