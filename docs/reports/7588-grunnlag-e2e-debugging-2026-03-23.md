@@ -84,42 +84,35 @@ ArithmeticException: Rounding necessary
 
 ### CI Run 23425338486: 4 failed, 64 passed, 2 flaky
 
-#### Feil 1-3: Fakturaserie-referanse null ved nyvurdering (3 tester)
+#### Feil 1-2: Test-feil — forventer fakturaserie for annullert nyvurdering (FIKSET)
 
 **Tester:**
 1. `komplett-sak-flere-land-arbeidsinntekt-nv-kansellering.spec.ts`
-2. `komplett-sak-flere-land-arbeidsinntekt.spec.ts`
-3. `komplett-sak-nv-annulering-lukker-apne-arsavregninger.spec.ts`
+2. `komplett-sak-nv-annulering-lukker-apne-arsavregninger.spec.ts`
 
-**Feilmelding:**
-```
-Error: Failed to get fakturaserie null: 404 -
-{"message":"Fant ikke fakturaserie pa: null"}
-```
+**Rotarsak:** Testene annullerer nyvurdering uten a fatte vedtak. Uten vedtak kjorer
+ikke IVERKSETT_VEDTAK_FTRL, og OPPRETT_FAKTURASERIE oppretter ingen fakturaserie.
+Testene forventet likevel fakturaserie for nyvurdering-behandlingen.
 
-**Analyse:**
-- Alle tre testene oppretter forstegangsvedtak, arsavregning, og deretter nyvurdering
-- `getFakturaserieReferanse(behandlingId)` returnerer `null` for nyvurdering-behandlingen
-- Testen forventer at alle behandlinger (opprinnelig, arsavregning, nyvurdering) har
-  fakturaserie for a verifisere at sum = 0 etter annullering
-- Faktureringskomponenten har ingen feil i loggene — alle POST /fakturaserier lyktes
-- Problemet er at OPPRETT_FAKTURASERIE-steget enten ikke kjorer eller ikke lagrer
-  referansen for nyvurdering-behandlingen
-- Mulig race condition mellom nyvurdering-opprettelse og prosessinstans-fullforelse
+**Debug-funn (OpprettFakturaserie):**
+- Forstegangsbehandling: `harFakturerbarTrygdeavgift=false, belop=0, sats=null`
+- Nyvurdering: ingen OPPRETT_FAKTURASERIE-logg (steget kjorer ikke uten vedtak)
 
-**Status:** Uavklart. Krever videre debugging av prosessinstans-flyten for nyvurdering
-i melosys-api.
+**Fiks:** Fjernet fakturaserie-verifisering for nyvurdering-behandlingen. Testen
+verifiserer naa kun opprinnelig og arsavregning.
 
-#### Feil 4: Nyvurdering periodeendring (1 test)
+#### Feil 3-4: Nyvurdering med vedtak mangler fakturaserie (UNDER ANALYSE)
 
-**Test:** `komplett-sak-nv-periode-endres-til-kun-tidligere-ar.spec.ts`
+**Tester:**
+1. `komplett-sak-flere-land-arbeidsinntekt.spec.ts`
+2. `komplett-sak-nv-periode-endres-til-kun-tidligere-ar.spec.ts`
 
-**Feilmelding:** `Bad Request` — testen prover a endre en behandling som ikke er redigerbar.
+**Analyse:** Disse testene fatter vedtak for nyvurderingen via
+`fattVedtakForNyVurdering('FEIL_I_BEHANDLING')`, saa OPPRETT_FAKTURASERIE burde kjore.
+Likevel returnerer `getFakturaserieReferanse` null.
 
-**Analyse:** Samme underliggende problem som feil 1-3. Nyvurdering-behandlingen er
-enten auto-vedtatt eller i feil tilstand for redigering.
-
-**Status:** Uavklart.
+**Status:** melosys-api pushet med debug-logging i OPPRETT_FAKTURASERIE for a se
+hva `harFakturerbarTrygdeavgift` og `skalFaktureres` returnerer i CI-miljoet.
 
 #### Flaky tester (ikke-blokkerende)
 
