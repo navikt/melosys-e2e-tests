@@ -94,7 +94,7 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og NV-kanselle
         await trygdeavgift.ventPåSideLastet();
         await trygdeavgift.velgSkattepliktig(false);
         await trygdeavgift.velgInntektskilde('ARBEIDSINNTEKT');
-        await trygdeavgift.fyllInnBruttoinntektMedApiVent('10000');
+        await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
         await trygdeavgift.klikkBekreftOgFortsett();
 
         // Step 8: Vedtak
@@ -168,15 +168,17 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og NV-kanselle
         }
 
         const faktureringHelper = new FaktureringHelper(request);
-        const opprinneligFakturaserie = await faktureringHelper.hentFakturaserie(opprinneligFakturaserieReferanse);
-        const arsavregningFakturaserie = await faktureringHelper.hentFakturaserie(arsavregningFakturaserieRef);
+        const opprinneligKjede = await faktureringHelper.hentFakturaserieKjede(opprinneligFakturaserieReferanse);
+        const arsavregningKjede = await faktureringHelper.hentFakturaserieKjede(arsavregningFakturaserieRef);
 
-        faktureringHelper.loggFakturaserie(opprinneligFakturaserie);
-        faktureringHelper.loggFakturaserie(arsavregningFakturaserie);
+        // Dedupliser serier som finnes i begge kjeder (kreditering kan lenkes til begge)
+        const sett = new Map<string, Fakturaserie>();
+        [...opprinneligKjede, ...arsavregningKjede].forEach(s => sett.set(s.fakturaserieReferanse, s));
+        const alleSerier = [...sett.values()];
 
-        const opprinneligTotal = faktureringHelper.totalBelop(opprinneligFakturaserie);
-        const arsavregningTotal = faktureringHelper.totalBelop(arsavregningFakturaserie);
-        const sum = opprinneligTotal + arsavregningTotal;
+        alleSerier.forEach(s => faktureringHelper.loggFakturaserie(s));
+
+        const sum = Math.round(faktureringHelper.totalBelopKjede(alleSerier) * 100) / 100;
 
         expect(sum, 'Sum av fakturaserier skal være 0').toBe(0);
     });

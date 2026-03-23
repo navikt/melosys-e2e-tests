@@ -144,6 +144,30 @@ export class FaktureringHelper {
     return await response.json();
   }
 
+  /**
+   * Hent fakturaserie-kjede by referanse (inkluderer krediterings-serier via erstattet_med-kjeden)
+   *
+   * Bruker query-parameter-endepunktet som traverserer hele erstattet_med-kjeden,
+   * i motsetning til hentFakturaserie som kun returnerer én serie.
+   */
+  async hentFakturaserieKjede(referanse: string): Promise<Fakturaserie[]> {
+    const response = await this.callEndpoint('GET', `/fakturaserier?referanse=${referanse}`);
+
+    if (!response.ok()) {
+      const text = await response.text();
+      throw new Error(`Failed to get fakturaserie-kjede ${referanse}: ${response.status()} - ${text}`);
+    }
+
+    return await response.json();
+  }
+
+  /**
+   * Get total beløp for en hel fakturaserie-kjede (inkl. krediteringer), eventuelt filtrert på år
+   */
+  totalBelopKjede(serier: Fakturaserie[], aar?: number): number {
+    return serier.reduce((sum, serie) => sum + this.totalBelop(serie, aar), 0);
+  }
+
   // --- Convenience methods ---
 
   /**
