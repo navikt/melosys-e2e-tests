@@ -157,29 +157,26 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og NV-kanselle
 
         console.log('✅ Workflow completed successfully!');
 
-        //Verifiserer at annulering har avregnet innværende fakturalinjer
+        // Verifiserer at annulering har avregnet innværende fakturalinjer
+        // Nyvurderingen (behandlingId) annulleres uten vedtak, så den har ingen fakturaserie
 
         const opprinneligFakturaserieReferanse = await getFakturaserieReferanse(opprinneligBehandlingId);
-        const fakturaserieReferanse = await getFakturaserieReferanse(behandlingId);
         const arsavregningFakturaserieRef = await getFakturaserieReferanse(arsavregningBehandlingId);
 
-        if (opprinneligFakturaserieReferanse === undefined || fakturaserieReferanse === undefined || arsavregningFakturaserieRef === undefined) {
-            throw new Error(`Fakturaserie referanse er ikke satt. Opprinnelig: ${opprinneligFakturaserieReferanse} (behandlingId: ${opprinneligBehandlingId}), Ny: ${fakturaserieReferanse} (behandlingId: ${behandlingId})`);
+        if (opprinneligFakturaserieReferanse === undefined || arsavregningFakturaserieRef === undefined) {
+            throw new Error(`Fakturaserie referanse er ikke satt. Opprinnelig: ${opprinneligFakturaserieReferanse} (behandlingId: ${opprinneligBehandlingId}), Årsavregning: ${arsavregningFakturaserieRef} (behandlingId: ${arsavregningBehandlingId})`);
         }
 
         const faktureringHelper = new FaktureringHelper(request);
         const opprinneligFakturaserie = await faktureringHelper.hentFakturaserie(opprinneligFakturaserieReferanse);
-        const fakturaserie = await faktureringHelper.hentFakturaserie(fakturaserieReferanse);
         const arsavregningFakturaserie = await faktureringHelper.hentFakturaserie(arsavregningFakturaserieRef);
 
         faktureringHelper.loggFakturaserie(opprinneligFakturaserie);
-        faktureringHelper.loggFakturaserie(fakturaserie);
         faktureringHelper.loggFakturaserie(arsavregningFakturaserie);
 
         const opprinneligTotal = faktureringHelper.totalBelop(opprinneligFakturaserie);
         const arsavregningTotal = faktureringHelper.totalBelop(arsavregningFakturaserie);
-        const nyTotal = faktureringHelper.totalBelop(fakturaserie);
-        const sum = opprinneligTotal + arsavregningTotal + nyTotal;
+        const sum = opprinneligTotal + arsavregningTotal;
 
         expect(sum, 'Sum av fakturaserier skal være 0').toBe(0);
     });

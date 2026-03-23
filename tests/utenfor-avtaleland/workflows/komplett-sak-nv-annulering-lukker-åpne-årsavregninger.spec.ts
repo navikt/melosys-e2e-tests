@@ -164,30 +164,25 @@ test.describe('Komplett saksflyt - NV annulering lukker åpne årsavregninger', 
             ).toBe('FERDIGBEHANDLET');
         });
 
-        // Verifiserer at ny vurdering har avregnet innværende fakturalinjer
+        // Verifiserer at annulering har kansellert fakturalinjer
+        // Nyvurderingen (behandlingId) annulleres uten vedtak, så den har ingen fakturaserie
 
         const opprinneligFakturaserieReferanse = await getFakturaserieReferanse(opprinneligBehandlingId);
-        const fakturaserieReferanse = await getFakturaserieReferanse(behandlingId);
 
-        if (opprinneligFakturaserieReferanse === undefined || fakturaserieReferanse === undefined) {
-            throw new Error(`Fakturaserie referanse er ikke satt. Opprinnelig: ${opprinneligFakturaserieReferanse} (behandlingId: ${opprinneligBehandlingId}), Ny: ${fakturaserieReferanse} (behandlingId: ${behandlingId})`);
+        if (opprinneligFakturaserieReferanse === undefined) {
+            throw new Error(`Fakturaserie referanse er ikke satt for opprinnelig behandling ${opprinneligBehandlingId}`);
         }
 
         const faktureringHelper = new FaktureringHelper(request);
         const opprinneligFakturaserie = await faktureringHelper.hentFakturaserie(opprinneligFakturaserieReferanse);
-        const fakturaserie = await faktureringHelper.hentFakturaserie(fakturaserieReferanse);
 
         faktureringHelper.loggFakturaserie(opprinneligFakturaserie);
-        faktureringHelper.loggFakturaserie(fakturaserie);
 
         const avregningsÅr = getYearFromDate(period.end)
         const opprinneligTotal = faktureringHelper.totalBelop(opprinneligFakturaserie, avregningsÅr);
-        const nyTotal = faktureringHelper.totalBelop(fakturaserie, avregningsÅr);
-        const sum = opprinneligTotal + nyTotal;
 
         console.log(`Opprinnelig serie: ${opprinneligTotal} kr`);
-        console.log(`Ny serie: ${nyTotal} kr`);
 
-        expect(sum, `Sum av fakturaserier for ${avregningsÅr} skal være 0`).toBe(0);
+        expect(opprinneligTotal, `Opprinnelig fakturaserie for ${avregningsÅr} skal være kansellert (0)`).toBe(0);
     });
 });
