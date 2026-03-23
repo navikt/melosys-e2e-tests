@@ -168,6 +168,24 @@ export class FaktureringHelper {
     return serier.reduce((sum, serie) => sum + this.totalBelop(serie, aar), 0);
   }
 
+  /**
+   * Hent og slå sammen flere fakturaserie-kjeder, deduplisert på referanse.
+   * Nødvendig når krediterings-serier lenkes til flere kjeder via erstattet_med.
+   */
+  async hentSammenslåttKjede(...referanser: string[]): Promise<Fakturaserie[]> {
+    const kjeder = await Promise.all(referanser.map(r => this.hentFakturaserieKjede(r)));
+    const sett = new Map<string, Fakturaserie>();
+    kjeder.flat().forEach(s => sett.set(s.fakturaserieReferanse, s));
+    return [...sett.values()];
+  }
+
+  /**
+   * Avrund beløp til 2 desimaler (unngår floating point epsilon-avvik)
+   */
+  avrundBelop(belop: number): number {
+    return parseFloat(belop.toFixed(2));
+  }
+
   // --- Convenience methods ---
 
   /**

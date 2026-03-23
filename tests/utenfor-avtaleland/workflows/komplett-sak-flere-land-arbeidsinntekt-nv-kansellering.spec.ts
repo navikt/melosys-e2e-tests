@@ -168,17 +168,11 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og NV-kanselle
         }
 
         const faktureringHelper = new FaktureringHelper(request);
-        const opprinneligKjede = await faktureringHelper.hentFakturaserieKjede(opprinneligFakturaserieReferanse);
-        const arsavregningKjede = await faktureringHelper.hentFakturaserieKjede(arsavregningFakturaserieRef);
-
-        // Dedupliser serier som finnes i begge kjeder (kreditering kan lenkes til begge)
-        const sett = new Map<string, Fakturaserie>();
-        [...opprinneligKjede, ...arsavregningKjede].forEach(s => sett.set(s.fakturaserieReferanse, s));
-        const alleSerier = [...sett.values()];
+        const alleSerier = await faktureringHelper.hentSammenslåttKjede(opprinneligFakturaserieReferanse, arsavregningFakturaserieRef);
 
         alleSerier.forEach(s => faktureringHelper.loggFakturaserie(s));
 
-        const sum = Math.round(faktureringHelper.totalBelopKjede(alleSerier) * 100) / 100;
+        const sum = faktureringHelper.avrundBelop(faktureringHelper.totalBelopKjede(alleSerier));
 
         expect(sum, 'Sum av fakturaserier skal være 0').toBe(0);
     });

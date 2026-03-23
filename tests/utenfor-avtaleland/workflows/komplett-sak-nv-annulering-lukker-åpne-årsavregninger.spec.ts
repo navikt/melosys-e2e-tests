@@ -179,7 +179,7 @@ test.describe('Komplett saksflyt - NV annulering lukker åpne årsavregninger', 
         opprinneligKjede.forEach(s => faktureringHelper.loggFakturaserie(s));
 
         const avregningsÅr = getYearFromDate(period.end)
-        const sum = Math.round(faktureringHelper.totalBelopKjede(opprinneligKjede, avregningsÅr) * 100) / 100;
+        const sum = faktureringHelper.avrundBelop(faktureringHelper.totalBelopKjede(opprinneligKjede, avregningsÅr));
 
         console.log(`Sum kjede for ${avregningsÅr}: ${sum} kr`);
 
