@@ -275,7 +275,9 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
 
     // Steg 2: Velg yrkesaktiv på sokkel
     await this.velgYrkesaktivPaSokkel();
-    await this.klikkBekreftOgFortsett();
+    await this.klikkBekreftOgFortsett({
+      waitForContent: this.arbeidsstedButton,
+    });
 
     // Steg 3: Legg til skip med detaljer
     await this.leggTilSkipOgFyllUtDetaljer(

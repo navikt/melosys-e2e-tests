@@ -53,7 +53,7 @@ permissions:
 jobs:
   e2e-tests:
     runs-on: ubuntu-latest-8-cores
-    timeout-minutes: 45
+    timeout-minutes: 60
 
     steps:
       - name: Checkout code
@@ -118,6 +118,7 @@ jobs:
             MELOSYS_INNGANGSVILKAR_TAG="latest"
             MELOSYS_EESSI_TAG="latest"
             MELOSYS_MOCK_TAG="latest"
+            MELOSYS_DOKGEN_TAG="latest"
 
             # Override with specific tag based on which service triggered
             if [ "${{ github.event.action }}" = "melosys-api-published" ]; then
@@ -151,6 +152,10 @@ jobs:
             if [ "${{ github.event.action }}" = "melosys-mock-published" ]; then
               MELOSYS_MOCK_TAG="${{ github.event.client_payload.image_tag }}"
             fi
+
+            if [ "${{ github.event.action }}" = "melosys-dokgen-published" ]; then
+              MELOSYS_DOKGEN_TAG="${{ github.event.client_payload.image_tag }}"
+            fi
           else
             # Manual trigger via workflow_dispatch
             echo "👆 Manually triggered via workflow_dispatch"
@@ -165,6 +170,7 @@ jobs:
             MELOSYS_INNGANGSVILKAR_TAG="latest"
             MELOSYS_EESSI_TAG="latest"
             MELOSYS_MOCK_TAG="latest"
+            MELOSYS_DOKGEN_TAG="latest"
 
             # Check if input contains service:tag format (has colon)
             if [[ "$INPUT_ENV" == *":"* ]]; then
@@ -204,6 +210,9 @@ jobs:
                   melosys-mock)
                     MELOSYS_MOCK_TAG="$tag"
                     ;;
+                  melosys-dokgen)
+                    MELOSYS_DOKGEN_TAG="$tag"
+                    ;;
                   *)
                     echo "  ⚠️  Unknown service: $service (ignored)"
                     ;;
@@ -225,6 +234,7 @@ jobs:
           echo "melosys_inngangsvilkar_tag=$MELOSYS_INNGANGSVILKAR_TAG" >> $GITHUB_OUTPUT
           echo "melosys_eessi_tag=$MELOSYS_EESSI_TAG" >> $GITHUB_OUTPUT
           echo "melosys_mock_tag=$MELOSYS_MOCK_TAG" >> $GITHUB_OUTPUT
+          echo "melosys_dokgen_tag=$MELOSYS_DOKGEN_TAG" >> $GITHUB_OUTPUT
 
           echo ""
           echo "📋 Docker Image Tags (non-latest only):"
@@ -237,6 +247,7 @@ jobs:
           [ "$MELOSYS_INNGANGSVILKAR_TAG" != "latest" ] && echo "  melosys-inngangsvilkar: $MELOSYS_INNGANGSVILKAR_TAG" && NON_LATEST_FOUND=true || true
           [ "$MELOSYS_EESSI_TAG" != "latest" ] && echo "  melosys-eessi: $MELOSYS_EESSI_TAG" && NON_LATEST_FOUND=true || true
           [ "$MELOSYS_MOCK_TAG" != "latest" ] && echo "  melosys-mock: $MELOSYS_MOCK_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_DOKGEN_TAG" != "latest" ] && echo "  melosys-dokgen: $MELOSYS_DOKGEN_TAG" && NON_LATEST_FOUND=true || true
           [ "$NON_LATEST_FOUND" = false ] && echo "  (all services using latest)" || true
 
       - name: Set environment variables for GitHub Actions
@@ -251,6 +262,7 @@ jobs:
           echo "MELOSYS_INNGANGSVILKAR_TAG=${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }}" >> $GITHUB_ENV
           echo "MELOSYS_EESSI_TAG=${{ steps.image-tags.outputs.melosys_eessi_tag }}" >> $GITHUB_ENV
           echo "MELOSYS_MOCK_TAG=${{ steps.image-tags.outputs.melosys_mock_tag }}" >> $GITHUB_ENV
+          echo "MELOSYS_DOKGEN_TAG=${{ steps.image-tags.outputs.melosys_dokgen_tag }}" >> $GITHUB_ENV
 
       - name: Download JaCoCo agent for E2E coverage
         if: inputs.collect_coverage
@@ -289,7 +301,7 @@ jobs:
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:${{ steps.image-tags.outputs.melosys_api_tag }} &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-web:${{ steps.image-tags.outputs.melosys_web_tag }} &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:${{ steps.image-tags.outputs.faktureringskomponenten_tag }} &
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-dokgen:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-dokgen:${{ steps.image-tags.outputs.melosys_dokgen_tag }} &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:${{ steps.image-tags.outputs.melosys_trygdeavgift_tag }} &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }} &
           docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-inngangsvilkar:${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }} &
@@ -319,6 +331,7 @@ jobs:
           MELOSYS_INNGANGSVILKAR_TAG: ${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }}
           MELOSYS_EESSI_TAG: ${{ steps.image-tags.outputs.melosys_eessi_tag }}
           MELOSYS_MOCK_TAG: ${{ steps.image-tags.outputs.melosys_mock_tag }}
+          MELOSYS_DOKGEN_TAG: ${{ steps.image-tags.outputs.melosys_dokgen_tag }}
           JACOCO_AGENT_OPTS: ${{ inputs.collect_coverage && '-javaagent:/jacoco/jacocoagent.jar=output=tcpserver,address=*,port=6300' || '' }}
 
       - name: Wait for services to be healthy

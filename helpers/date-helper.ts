@@ -191,6 +191,17 @@ export const TestPeriodsISO = {
 };
 
 /**
+ * Extract the year from a Norwegian date string (DD.MM.YYYY)
+ *
+ * @example
+ * getYearFromDate('01.01.2025') // '2025'
+ * getYearFromDate(TestPeriods.previousYearPeriod.start) // e.g. '2025'
+ */
+export function getYearFromDate(date: string): number {
+  return parseInt(date.split('.')[2], 10);
+}
+
+/**
  * Helper to create a custom period with specified months offset
  */
 export function createPeriod(

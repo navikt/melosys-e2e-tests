@@ -183,7 +183,7 @@ services:
       - "8084:8084"
 
   melosys-dokgen:
-    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-dokgen:latest
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-dokgen:${MELOSYS_DOKGEN_TAG:-latest}
     container_name: melosys-dokgen
     networks:
       melosys.docker-internal:

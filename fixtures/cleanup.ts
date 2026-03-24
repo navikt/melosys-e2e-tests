@@ -1,5 +1,6 @@
 import {test as base} from '@playwright/test';
 import {DatabaseHelper} from '../helpers/db-helper';
+import {PgDatabaseHelper} from '../helpers/pg-db-helper';
 import {clearMockDataSilent} from '../helpers/mock-helper';
 import {clearApiCaches, waitForProcessInstances} from '../helpers/api-helper';
 import {UnleashHelper} from '../helpers/unleash-helper';
@@ -34,19 +35,37 @@ async function cleanupTestData(page: any, waitForProcesses: boolean = false): Pr
         }
     }
 
-    // Clean database
+    // Clean Oracle database
     const db = new DatabaseHelper();
     try {
         await db.connect();
         const result = await db.cleanDatabase(true); // silent = true
 
         if (result.cleanedCount > 0 || result.totalRowsDeleted > 0) {
-            console.log(`   ✅ Database: ${result.cleanedCount} tables cleaned (${result.totalRowsDeleted} rows)`);
+            console.log(`   ✅ Oracle: ${result.cleanedCount} tables cleaned (${result.totalRowsDeleted} rows)`);
         }
     } catch (error: any) {
-        console.log(`   ⚠️  Database cleanup failed: ${error.message || error}`);
+        console.log(`   ⚠️  Oracle cleanup failed: ${error.message || error}`);
     } finally {
         await db.close();
+    }
+
+    // Clean PostgreSQL databases (faktureringskomponenten)
+    const pgSchemas = ['faktureringskomponenten'];
+    for (const schema of pgSchemas) {
+        const pgDb = new PgDatabaseHelper(schema);
+        try {
+            await pgDb.connect();
+            const result = await pgDb.cleanDatabase(true);
+
+            if (result.cleanedCount > 0 || result.totalRowsDeleted > 0) {
+                console.log(`   ✅ PostgreSQL (${schema}): ${result.cleanedCount} tables cleaned (${result.totalRowsDeleted} rows)`);
+            }
+        } catch (error: any) {
+            console.log(`   ⚠️  PostgreSQL (${schema}) cleanup failed: ${error.message || error}`);
+        } finally {
+            await pgDb.close();
+        }
     }
 
     // Clear API caches to prevent JPA errors
