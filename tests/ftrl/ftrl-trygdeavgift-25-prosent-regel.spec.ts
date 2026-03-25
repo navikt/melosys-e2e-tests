@@ -234,39 +234,67 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     const trygdeavgift = new TrygdeavgiftPage(page);
     await trygdeavgift.ventPåSideLastet();
 
+    // Log all PUT requests to see what data is being saved
+    page.on('request', req => {
+      if (req.url().includes('/trygdeavgift/beregning') && req.method() === 'PUT') {
+        const body = JSON.parse(req.postData() || '{}');
+        console.log(`📤 PUT /trygdeavgift/beregning: ${body.skatteforholdsperioder?.length} skatteforhold, ${body.inntektskilder?.length} inntekter`);
+      }
+    });
+
     // Skatteforhold 1: mai-okt skattepliktig (endre tom-dato fra default)
+    // Use human-like delays between operations to let React process state changes
+    // and avoid race conditions with the debounced save
+    const pause = () => page.waitForTimeout(800);
+
     await trygdeavgift.fyllInnSkatteforholdDatoer(0, periodeStart, `31.10.${year}`);
+    await pause();
     await trygdeavgift.velgSkattepliktigForIndeks(0, true);
+    await pause();
 
     // Skatteforhold 2: nov-des ikke-skattepliktig
     await trygdeavgift.leggTilSkatteforhold();
+    await pause();
     await trygdeavgift.fyllInnSkatteforholdDatoer(1, `01.11.${year}`, periodeEnd);
+    await pause();
     await trygdeavgift.velgSkattepliktigForIndeks(1, false);
-
-    // --- Set up all inntekt rows (dates + kilde + aga) BEFORE filling amounts ---
-    // The API validates that combined periods cover the full membership period,
-    // so all rows must exist before triggering any bruttoinntekt save.
+    await pause();
 
     // Inntekt 1: change default dates to mai-aug
     await trygdeavgift.fyllInnInntektsperiodeDatoer(0, periodeStart, `31.08.${year}`);
+    await pause();
     await trygdeavgift.velgInntektskildeForIndeks(0, 'INNTEKT_FRA_UTLANDET');
+    await pause();
     await trygdeavgift.velgBetalesAgaForIndeks(0, false);
+    await pause();
 
     // Inntekt 2: add row, set dates sep-des
     await trygdeavgift.klikkLeggTilInntekt();
+    await pause();
     await trygdeavgift.fyllInnInntektsperiodeDatoer(1, `01.09.${year}`, periodeEnd);
+    await pause();
     await trygdeavgift.velgInntektskildeForIndeks(1, 'INNTEKT_FRA_UTLANDET');
+    await pause();
     await trygdeavgift.velgBetalesAgaForIndeks(1, false);
+    await pause();
 
     // Inntekt 3: add row, set dates okt-des (aga auto-set for næringsinntekt)
     await trygdeavgift.klikkLeggTilInntekt();
+    await pause();
     await trygdeavgift.fyllInnInntektsperiodeDatoer(2, `01.10.${year}`, periodeEnd);
+    await pause();
     await trygdeavgift.velgInntektskildeForIndeks(2, 'NÆRINGSINNTEKT_FRA_NORGE');
+    await pause();
 
-    // --- Now fill bruttoinntekt (rows 0-1 without API wait, last row with wait) ---
+    // Fill bruttoinntekt — last row triggers the definitive PUT
     await trygdeavgift.fyllInnBruttoinntektForIndeks(0, '10000');
+    await pause();
     await trygdeavgift.fyllInnBruttoinntektForIndeks(1, '13000');
+    await pause();
     await trygdeavgift.fyllInnBruttoinntektForIndeksMedApiVent(2, '3000');
+
+    // Wait for any pending debounced saves to complete
+    await page.waitForLoadState('networkidle');
 
     // --- Verifiser 25%-regelen ---
     await trygdeavgift.assertions.verifiserTrygdeavgiftBeregnet();
@@ -282,6 +310,12 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     }
 
     await trygdeavgift.assertions.verifiserForklaringstekst('Beregnet etter 25 %-regelen');
+
+    // Wait for any re-render debounced PUTs to complete before leaving the step.
+    // The PUT response triggers setTrygdeavgift → re-render → new debounce.
+    // If we navigate away before it fires, the pending debounce may save stale data.
+    await page.waitForTimeout(1500);
+    await page.waitForLoadState('networkidle');
 
     await trygdeavgift.klikkBekreftOgFortsett();
     const vedtak = new VedtakPage(page);

@@ -62,13 +62,32 @@ export class TrygdeavgiftPage extends BasePage {
   }
 
   /**
-   * Wait for Trygdeavgift page to load
-   * Verifies the Skattepliktig field is visible
+   * Wait for Trygdeavgift page to load.
+   *
+   * The page fires a useEffect on mount that fetches saved trygdeavgift data
+   * (GET /trygdeavgift/beregning) and then resets the form fields with
+   * resetSkatteforholdsperioder/resetInntektskilder. We must wait for this
+   * initial fetch to complete before interacting, otherwise the useEffect
+   * response will overwrite any fields we've already filled.
    */
   async ventPåSideLastet(): Promise<void> {
     try {
       await this.skattepliktigGroup.waitFor({ state: 'visible', timeout: 10000 });
       console.log('✅ Trygdeavgift page loaded - Skattepliktig field visible');
+
+      // Wait for the initial GET /trygdeavgift/beregning that the useEffect fires
+      // on mount. The response triggers resetSkatteforholdsperioder/resetInntektskilder.
+      await this.page.waitForResponse(
+        resp => resp.url().includes('/trygdeavgift/beregning') &&
+                resp.request().method() === 'GET',
+        { timeout: 10000 }
+      ).catch(() => {
+        console.log('⚠️  No GET /trygdeavgift/beregning response detected (may have completed before listener)');
+      });
+
+      // Let React process the response and re-render the form
+      await this.page.waitForTimeout(500);
+      console.log('✅ Initial trygdeavgift data load complete');
     } catch (error) {
       console.error('❌ Failed to reach Trygdeavgift page');
       console.error(`Current URL: ${this.currentUrl()}`);
@@ -356,25 +375,9 @@ export class TrygdeavgiftPage extends BasePage {
       `input[name="skatteforholdsperioder[${indeks}].skatteplikttype"][value="${value}"]`
     );
     await radio.waitFor({ state: 'attached', timeout: 5000 });
-
-    // Set up response listener before clicking
-    const responsePromise = this.page.waitForResponse(
-      resp => resp.url().includes('/trygdeavgift/beregning') &&
-              resp.request().method() === 'PUT' &&
-              resp.status() === 200,
-      { timeout: 5000 }
-    ).catch(() => null);
-
     await radio.click({ force: true });
     await expect(radio).toBeChecked({ timeout: 5000 });
-
-    const response = await responsePromise;
-    if (response) {
-      console.log(`✅ Skatteforhold [${indeks}] = ${erSkattepliktig ? 'Ja' : 'Nei'} (PUT saved)`);
-    } else {
-      await this.page.waitForTimeout(1500);
-      console.log(`✅ Skatteforhold [${indeks}] = ${erSkattepliktig ? 'Ja' : 'Nei'}`);
-    }
+    console.log(`✅ Skatteforhold [${indeks}] = ${erSkattepliktig ? 'Ja' : 'Nei'}`);
   }
 
   // ======== Inntekt dates and fields (indexed) ========
