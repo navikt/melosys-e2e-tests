@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import { Page, expect } from '@playwright/test';
 import { test } from '../../fixtures';
 import { AuthHelper } from '../../helpers/auth-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
@@ -302,10 +302,23 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     }
 
     await trygdeavgift.assertions.verifiserForklaringstekst('Beregnet etter 25 %-regelen');
-  
+
+    // Verifiser at backend har lagret komplett data (2 skatteforhold, 3 inntekter)
+    const behandlingId = new URL(page.url()).searchParams.get('behandlingID');
+    const apiData: any = await page.evaluate(async (id) => {
+      const resp = await fetch(`/api/behandlinger/${id}/trygdeavgift/beregning`);
+      if (!resp.ok) return { error: resp.status };
+      const data = await resp.json();
+      return {
+        skatteforhold: data.trygdeavgiftsgrunnlag?.skatteforholdsperioder?.length ?? 0,
+        inntekter: data.trygdeavgiftsgrunnlag?.inntektskilder?.length ?? 0,
+      };
+    }, behandlingId);
+    console.log(`Backend: ${apiData.skatteforhold} skatteforhold, ${apiData.inntekter} inntekter`);
+    expect(apiData.skatteforhold).toBe(2);
+    expect(apiData.inntekter).toBe(3);
+
     // Wait for any re-render debounced PUTs to complete before leaving the step.
-    // The PUT response triggers setTrygdeavgift → re-render → new debounce.
-    // If we navigate away before it fires, the pending debounce may save stale data.
     await page.waitForTimeout(1500);
     await page.waitForLoadState('networkidle');
 
