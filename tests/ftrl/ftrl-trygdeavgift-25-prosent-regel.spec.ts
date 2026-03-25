@@ -10,7 +10,7 @@ import { ResultatPeriodePage } from '../../pages/behandling/resultat-periode.pag
 import { TrygdeavgiftPage } from '../../pages/trygdeavgift/trygdeavgift.page';
 import { VedtakPage } from '../../pages/vedtak/vedtak.page';
 import { USER_ID_VALID } from '../../pages/shared/constants';
-import { TestPeriods } from '../../helpers/date-helper';
+
 import { UnleashHelper } from '../../helpers/unleash-helper';
 
 /**
@@ -19,13 +19,11 @@ import { UnleashHelper } from '../../helpers/unleash-helper';
  * Spec: specs/ftrl-trygdeavgift-25-prosent-regel.md
  *
  * Tester scenarioer for trygdeavgiftsberegning med 25%-regelen:
- * 1. 25%-regelen begrenser avgiften (8000 kr/md → sats viser *)
+ * 1. 25%-regelen begrenser avgiften (10000 kr/md → sats viser *, dekning helsedel/pensjonsdel)
  * 2. Ordinær beregning uten begrensning (80000 kr/md → sats er numerisk)
  * 3. 25%-regelen med Full dekning (pliktig medlem, § 2-1)
- *
- * NB: MINSTEBELOEP beregningstype er definert men settes aldri i
- * melosys-trygdeavgift-beregning (se docs/MINSTEBELOEP-beregningstype-mangler.md).
- * Scenario for minstebeløp (**) legges til når backend returnerer MINSTEBELOEP.
+ * 4. Inntekt under minstebeløpet (4000 kr/md → sats viser **, avgift 0 nkr)
+ * 5. Confluence Eksempel 1 (flere skatteforhold/inntekter, ***, helsedel/pensjonsdel)
  *
  * Oppsett scenario 1-2:
  * - Dekning: FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON (§ 2-8 a, frivillig)
@@ -57,7 +55,11 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     return { opprettSak };
   }
 
-  /** Frivillig medlem: Helse+Pensjon-dekning med § 2-8 a */
+  /** Frivillig medlem: Helse+Pensjon-dekning med § 2-8 a
+   *  Bruker full årsperiode (01.01-31.12) for stabile beregninger.
+   *  NB: currentYearPeriod varierer i lengde (6 mnd fremover), som
+   *  påvirker om inntekt havner over/under minstebeløpet.
+   */
   async function opprettSakFrivilligHelsePensjon(page: Page, request: any): Promise<TrygdeavgiftPage> {
     await fellesOppsett(page, request);
 
@@ -66,8 +68,8 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     const lovvalg = new LovvalgPage(page);
     const resultatPeriode = new ResultatPeriodePage(page);
 
-    const period = TestPeriods.currentYearPeriod;
-    await medlemskap.velgPeriode(period.start, period.end);
+    const year = new Date().getFullYear();
+    await medlemskap.velgPeriode(`01.01.${year}`, `31.12.${year}`);
     await medlemskap.velgFlereLandIkkeKjentHvilke();
     await medlemskap.velgTrygdedekning('FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON');
     await medlemskap.klikkBekreftOgFortsett();
@@ -88,7 +90,9 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     return trygdeavgift;
   }
 
-  /** Pliktig medlem: Full dekning med § 2-1 (midlertidig arbeid) */
+  /** Pliktig medlem: Full dekning med § 2-1 (midlertidig arbeid)
+   *  Bruker full årsperiode for stabile beregninger (som frivillig).
+   */
   async function opprettSakPliktigFullDekning(page: Page, request: any): Promise<TrygdeavgiftPage> {
     await fellesOppsett(page, request);
 
@@ -97,8 +101,8 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     const lovvalg = new LovvalgPage(page);
     const resultatPeriode = new ResultatPeriodePage(page);
 
-    const period = TestPeriods.currentYearPeriod;
-    await medlemskap.velgPeriode(period.start, period.end);
+    const year = new Date().getFullYear();
+    await medlemskap.velgPeriode(`01.01.${year}`, `31.12.${year}`);
     await medlemskap.velgFlereLandIkkeKjentHvilke();
     await medlemskap.velgTrygdedekning('FULL_DEKNING_FTRL');
     await medlemskap.klikkBekreftOgFortsett();
@@ -125,20 +129,24 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     return trygdeavgift;
   }
 
-  test('25%-regelen begrenser avgiften (8000 kr/md)', async ({ page, request }) => {
+  test('25%-regelen begrenser avgiften (10000 kr/md)', async ({ page, request }) => {
     test.setTimeout(120000);
     const trygdeavgift = await opprettSakFrivilligHelsePensjon(page, request);
 
     await trygdeavgift.velgSkattepliktig(false);
     await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
     await trygdeavgift.velgBetalesAga(false);
-    await trygdeavgift.fyllInnBruttoinntektMedApiVent('8000');
+    await trygdeavgift.fyllInnBruttoinntektMedApiVent('10000');
 
     await trygdeavgift.assertions.verifiserTrygdeavgiftBeregnet();
     await trygdeavgift.assertions.verifiserSatsKolonne(0, '*');
     await trygdeavgift.assertions.verifiserForklaringstekst(
       'Beregnet etter 25 %-regelen'
     );
+
+    // Frivillig helse+pensjon: dekning splittes i helsedel og pensjonsdel
+    await trygdeavgift.assertions.verifiserDekningKolonne(0, /Helsedel/);
+    await trygdeavgift.assertions.verifiserDekningKolonne(1, /Pensjonsdel/);
 
     await trygdeavgift.klikkBekreftOgFortsett();
     const vedtak = new VedtakPage(page);
@@ -163,20 +171,41 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     await vedtak.klikkFattVedtak();
   });
 
-  test('25%-regelen med Full dekning — pliktig medlem (8000 kr/md)', async ({ page, request }) => {
+  test('25%-regelen med Full dekning — pliktig medlem (10000 kr/md)', async ({ page, request }) => {
     test.setTimeout(120000);
     const trygdeavgift = await opprettSakPliktigFullDekning(page, request);
 
     await page.waitForLoadState('networkidle');
     await trygdeavgift.velgSkattepliktig(false);
     await trygdeavgift.velgInntektskilde('ARBEIDSINNTEKT');
-    await trygdeavgift.fyllInnBruttoinntektMedApiVent('8000');
+    await trygdeavgift.fyllInnBruttoinntektMedApiVent('10000');
 
     await trygdeavgift.assertions.verifiserTrygdeavgiftBeregnet();
     await trygdeavgift.assertions.verifiserSatsKolonne(0, '*');
     await trygdeavgift.assertions.verifiserForklaringstekst(
       'Beregnet etter 25 %-regelen'
     );
+
+    await trygdeavgift.klikkBekreftOgFortsett();
+    const vedtak = new VedtakPage(page);
+    await vedtak.klikkFattVedtak();
+  });
+
+  test('inntekt under minstebeløpet — avgift 0 kr (4000 kr/md)', async ({ page, request }) => {
+    test.setTimeout(120000);
+    const trygdeavgift = await opprettSakFrivilligHelsePensjon(page, request);
+
+    await trygdeavgift.velgSkattepliktig(false);
+    await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
+    await trygdeavgift.velgBetalesAga(false);
+    await trygdeavgift.fyllInnBruttoinntektMedApiVent('4000');
+
+    await trygdeavgift.assertions.verifiserTrygdeavgiftBeregnet();
+    await trygdeavgift.assertions.verifiserSatsKolonne(0, '**');
+    await trygdeavgift.assertions.verifiserForklaringstekst(
+      'Inntekten er under minstebeløpet'
+    );
+    await trygdeavgift.assertions.verifiserAvgiftPerMd(0, '0 nkr');
 
     await trygdeavgift.klikkBekreftOgFortsett();
     const vedtak = new VedtakPage(page);
@@ -302,6 +331,18 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     }
 
     await trygdeavgift.assertions.verifiserForklaringstekst('Beregnet etter 25 %-regelen');
+
+    // Flere inntektskilder slått sammen: skal vise *** med fotnote
+    for (let i = 0; i < rowCount; i++) {
+      await trygdeavgift.assertions.verifiserInntektskildeKolonne(i, '***');
+    }
+    await trygdeavgift.assertions.verifiserForklaringstekst('Mer enn en inntektskilde');
+
+    // Frivillig helse+pensjon: dekning splittes i helsedel og pensjonsdel
+    // Radene alternerer mellom helsedel og pensjonsdel
+    for (let i = 0; i < rowCount; i++) {
+      await trygdeavgift.assertions.verifiserDekningKolonne(i, /Helsedel|Pensjonsdel/);
+    }
 
     // Verifiser at backend har lagret komplett data (2 skatteforhold, 3 inntekter)
     const behandlingId = new URL(page.url()).searchParams.get('behandlingID');

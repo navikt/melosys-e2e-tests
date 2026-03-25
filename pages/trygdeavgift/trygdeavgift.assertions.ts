@@ -253,6 +253,58 @@ export class TrygdeavgiftAssertions {
   }
 
   /**
+   * Verify the Dekning column text for a specific row.
+   * Used for 25%-regel with split frivillig: "Helsedel" / "Pensjonsdel"
+   *
+   * Table columns: Trygdeperiode(0) | Dekning(1) | Inntektskilde(2) | Sats(3) | Avgift per md.(4)
+   *
+   * @param radIndex - Row index (0-based)
+   * @param forventetDekning - Expected text (substring or RegExp)
+   */
+  async verifiserDekningKolonne(radIndex: number, forventetDekning: string | RegExp): Promise<void> {
+    const table = this.page.locator('table').filter({ has: this.page.getByText('Trygdeperiode') });
+    await expect(table).toBeVisible({ timeout: 5000 });
+
+    const row = table.locator('tbody tr').nth(radIndex);
+    const dekningCell = row.locator('td').nth(1);
+    await expect(dekningCell).toContainText(forventetDekning);
+    console.log(`✅ Dekning column row ${radIndex}: ${forventetDekning}`);
+  }
+
+  /**
+   * Verify the Inntektskilde column text for a specific row.
+   * Shows "***" when harSammenslåtteInntektskilder=true, otherwise the source name.
+   *
+   * @param radIndex - Row index (0-based)
+   * @param forventetInntektskilde - Expected text (substring or RegExp)
+   */
+  async verifiserInntektskildeKolonne(radIndex: number, forventetInntektskilde: string | RegExp): Promise<void> {
+    const table = this.page.locator('table').filter({ has: this.page.getByText('Trygdeperiode') });
+    await expect(table).toBeVisible({ timeout: 5000 });
+
+    const row = table.locator('tbody tr').nth(radIndex);
+    const inntektskildeCell = row.locator('td').nth(2);
+    await expect(inntektskildeCell).toContainText(forventetInntektskilde);
+    console.log(`✅ Inntektskilde column row ${radIndex}: ${forventetInntektskilde}`);
+  }
+
+  /**
+   * Verify the Avgift per md. column text for a specific row.
+   *
+   * @param radIndex - Row index (0-based)
+   * @param forventetAvgift - Expected text (e.g., "0 nkr", "174 nkr")
+   */
+  async verifiserAvgiftPerMd(radIndex: number, forventetAvgift: string | RegExp): Promise<void> {
+    const table = this.page.locator('table').filter({ has: this.page.getByText('Trygdeperiode') });
+    await expect(table).toBeVisible({ timeout: 5000 });
+
+    const row = table.locator('tbody tr').nth(radIndex);
+    const avgiftCell = row.locator('td').last();
+    await expect(avgiftCell).toContainText(forventetAvgift);
+    console.log(`✅ Avgift per md. column row ${radIndex}: ${forventetAvgift}`);
+  }
+
+  /**
    * Verify calculated tax values in the table
    * @param expectedValues - Array of expected tax calculations for each period
    *
