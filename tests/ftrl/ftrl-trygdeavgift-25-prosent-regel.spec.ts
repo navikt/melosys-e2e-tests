@@ -182,4 +182,109 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     const vedtak = new VedtakPage(page);
     await vedtak.klikkFattVedtak();
   });
+
+  /**
+   * Confluence Eksempel 1 — alle perioder beregnes etter 25%-regelen
+   *
+   * Gjenskaper Minas test fra q1 (Confluence: "Eksempler på fastsettelse av
+   * trygdeavgift - dele opp i trygdeavgiftsperioder", Eksempel 1).
+   *
+   * Frivillig medlem med:
+   * - Skatteforhold: skattepliktig mai-okt, ikke-skattepliktig nov-des
+   * - Inntekt 1: Utenlandsk 10 000 kr/md (mai-aug)
+   * - Inntekt 2: Utenlandsk 13 000 kr/md (sep-des)
+   * - Inntekt 3: Næringsinntekt 3 000 kr/md (okt-des)
+   *
+   * Total årsinntekt: ~101 000 kr, minstebeløp 99 650 kr.
+   * 25% × (101 000 − 99 650) = 337 kr → 25%-regelen begrenser alle perioder.
+   */
+  test('Confluence Eksempel 1 — flere skatteforhold og inntekter, 25%-regel på alle perioder', async ({ page, request }) => {
+    test.setTimeout(180000);
+
+    const year = new Date().getFullYear();
+    const periodeStart = `01.05.${year}`;
+    const periodeEnd = `31.12.${year}`;
+
+    // --- Felles oppsett ---
+    await fellesOppsett(page, request);
+
+    const medlemskap = new MedlemskapPage(page);
+    const arbeidsforhold = new ArbeidsforholdPage(page);
+    const lovvalg = new LovvalgPage(page);
+    const resultatPeriode = new ResultatPeriodePage(page);
+
+    // Medlemskap: 01.05 - 31.12, helse+pensjon dekning
+    await medlemskap.velgPeriode(periodeStart, periodeEnd);
+    await medlemskap.velgFlereLandIkkeKjentHvilke();
+    await medlemskap.velgTrygdedekning('FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON');
+    await medlemskap.klikkBekreftOgFortsett();
+
+    await arbeidsforhold.fyllUtArbeidsforhold('Ståles Stål AS');
+
+    await lovvalg.velgBestemmelse('FTRL_KAP2_2_8_FØRSTE_LEDD_A');
+    await lovvalg.svarJaPaaFørsteSpørsmål();
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker vært medlem i minst');
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker nær tilknytning til');
+    await lovvalg.klikkBekreftOgFortsett();
+
+    await page.waitForTimeout(3000);
+    await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
+
+    // --- Trygdeavgift ---
+    const trygdeavgift = new TrygdeavgiftPage(page);
+    await trygdeavgift.ventPåSideLastet();
+
+    // Skatteforhold 1: mai-okt skattepliktig (endre tom-dato fra default)
+    await trygdeavgift.fyllInnSkatteforholdDatoer(0, periodeStart, `31.10.${year}`);
+    await trygdeavgift.velgSkattepliktigForIndeks(0, true);
+
+    // Skatteforhold 2: nov-des ikke-skattepliktig
+    await trygdeavgift.leggTilSkatteforhold();
+    await trygdeavgift.fyllInnSkatteforholdDatoer(1, `01.11.${year}`, periodeEnd);
+    await trygdeavgift.velgSkattepliktigForIndeks(1, false);
+
+    // --- Set up all inntekt rows (dates + kilde + aga) BEFORE filling amounts ---
+    // The API validates that combined periods cover the full membership period,
+    // so all rows must exist before triggering any bruttoinntekt save.
+
+    // Inntekt 1: change default dates to mai-aug
+    await trygdeavgift.fyllInnInntektsperiodeDatoer(0, periodeStart, `31.08.${year}`);
+    await trygdeavgift.velgInntektskildeForIndeks(0, 'INNTEKT_FRA_UTLANDET');
+    await trygdeavgift.velgBetalesAgaForIndeks(0, false);
+
+    // Inntekt 2: add row, set dates sep-des
+    await trygdeavgift.klikkLeggTilInntekt();
+    await trygdeavgift.fyllInnInntektsperiodeDatoer(1, `01.09.${year}`, periodeEnd);
+    await trygdeavgift.velgInntektskildeForIndeks(1, 'INNTEKT_FRA_UTLANDET');
+    await trygdeavgift.velgBetalesAgaForIndeks(1, false);
+
+    // Inntekt 3: add row, set dates okt-des (aga auto-set for næringsinntekt)
+    await trygdeavgift.klikkLeggTilInntekt();
+    await trygdeavgift.fyllInnInntektsperiodeDatoer(2, `01.10.${year}`, periodeEnd);
+    await trygdeavgift.velgInntektskildeForIndeks(2, 'NÆRINGSINNTEKT_FRA_NORGE');
+
+    // --- Now fill bruttoinntekt (rows 0-1 without API wait, last row with wait) ---
+    await trygdeavgift.fyllInnBruttoinntektForIndeks(0, '10000');
+    await trygdeavgift.fyllInnBruttoinntektForIndeks(1, '13000');
+    await trygdeavgift.fyllInnBruttoinntektForIndeksMedApiVent(2, '3000');
+
+    // --- Verifiser 25%-regelen ---
+    await trygdeavgift.assertions.verifiserTrygdeavgiftBeregnet();
+
+    // Alle rader skal ha '*' som sats (25%-regelen begrenser)
+    const table = page.locator('table').filter({ has: page.getByText('Trygdeperiode') });
+    const rows = table.locator('tbody tr');
+    const rowCount = await rows.count();
+    console.log(`Found ${rowCount} trygdeavgiftsperiode rows`);
+
+    for (let i = 0; i < rowCount; i++) {
+      await trygdeavgift.assertions.verifiserSatsKolonne(i, '*');
+    }
+
+    await trygdeavgift.assertions.verifiserForklaringstekst('Beregnet etter 25 %-regelen');
+
+    await trygdeavgift.klikkBekreftOgFortsett();
+    const vedtak = new VedtakPage(page);
+    await vedtak.klikkFattVedtak();
+  });
 });

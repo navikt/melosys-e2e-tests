@@ -51,6 +51,11 @@ export class TrygdeavgiftPage extends BasePage {
     name: 'Legg til inntekt'
   });
 
+  // Locator for "Legg til skatteforhold" button
+  private readonly leggTilSkatteforholdButton = this.page.getByRole('button', {
+    name: 'Legg til skatteforhold'
+  });
+
   constructor(page: Page) {
     super(page);
     this.assertions = new TrygdeavgiftAssertions(page);
@@ -305,6 +310,110 @@ export class TrygdeavgiftPage extends BasePage {
   async klikkLeggTilInntekt(): Promise<void> {
     await this.leggTilInntektButton.click();
     console.log('✅ Added new income source field');
+  }
+
+  // ======== Skatteforhold (indexed) ========
+
+  /**
+   * Click "Legg til skatteforhold" to add another tax relation row
+   */
+  async leggTilSkatteforhold(): Promise<void> {
+    await this.leggTilSkatteforholdButton.click();
+    await this.page.waitForTimeout(300);
+    console.log('✅ Added new skatteforhold row');
+  }
+
+  /**
+   * Fill dates for a specific skatteforhold row.
+   *
+   * DatePicker.Input from @navikt/ds-react does NOT set name on the <input>.
+   * We anchor on the radio button (which has name) and navigate to the row
+   * to find the date inputs via .dato class.
+   */
+  async fyllInnSkatteforholdDatoer(indeks: number, fom: string, tom: string): Promise<void> {
+    const radio = this.page.locator(
+      `input[name="skatteforholdsperioder[${indeks}].skatteplikttype"]`
+    ).first();
+    await radio.waitFor({ state: 'attached', timeout: 10000 });
+    const row = radio.locator('xpath=ancestor::*[contains(@class,"periode__rad")]');
+    const dateInputs = row.locator('.dato input');
+
+    await dateInputs.first().fill(fom);
+    await dateInputs.nth(1).fill(tom);
+    await dateInputs.nth(1).press('Tab');
+    await this.page.waitForTimeout(300);
+    console.log(`✅ Skatteforhold [${indeks}] dates: ${fom} - ${tom}`);
+  }
+
+  /**
+   * Set skattepliktig for a specific skatteforhold row
+   * Field name: skatteforholdsperioder[N].skatteplikttype
+   * Values: SKATTEPLIKTIG (Ja) / IKKE_SKATTEPLIKTIG (Nei)
+   */
+  async velgSkattepliktigForIndeks(indeks: number, erSkattepliktig: boolean): Promise<void> {
+    const value = erSkattepliktig ? 'SKATTEPLIKTIG' : 'IKKE_SKATTEPLIKTIG';
+    const radio = this.page.locator(
+      `input[name="skatteforholdsperioder[${indeks}].skatteplikttype"][value="${value}"]`
+    );
+    await radio.waitFor({ state: 'attached', timeout: 5000 });
+
+    // Set up response listener before clicking
+    const responsePromise = this.page.waitForResponse(
+      resp => resp.url().includes('/trygdeavgift/beregning') &&
+              resp.request().method() === 'PUT' &&
+              resp.status() === 200,
+      { timeout: 5000 }
+    ).catch(() => null);
+
+    await radio.click({ force: true });
+    await expect(radio).toBeChecked({ timeout: 5000 });
+
+    const response = await responsePromise;
+    if (response) {
+      console.log(`✅ Skatteforhold [${indeks}] = ${erSkattepliktig ? 'Ja' : 'Nei'} (PUT saved)`);
+    } else {
+      await this.page.waitForTimeout(1500);
+      console.log(`✅ Skatteforhold [${indeks}] = ${erSkattepliktig ? 'Ja' : 'Nei'}`);
+    }
+  }
+
+  // ======== Inntekt dates and fields (indexed) ========
+
+  /**
+   * Fill dates for a specific inntekt row.
+   *
+   * Anchors on the kildetype <select> (which has name attr) and navigates
+   * up to the row to find date inputs via .dato class.
+   */
+  async fyllInnInntektsperiodeDatoer(indeks: number, fom: string, tom: string): Promise<void> {
+    const select = this.page.locator(`select[name="inntektskilder[${indeks}].kildetype"]`);
+    await select.waitFor({ state: 'attached', timeout: 10000 });
+    const row = select.locator('xpath=ancestor::*[contains(@class,"periode__rad")]');
+    const dateInputs = row.locator('.dato input');
+
+    await dateInputs.first().fill(fom);
+    await dateInputs.nth(1).fill(tom);
+    await dateInputs.nth(1).press('Tab');
+    await this.page.waitForTimeout(300);
+    console.log(`✅ Inntektsperiode [${indeks}] dates: ${fom} - ${tom}`);
+  }
+
+  /**
+   * Set "Betales aga?" for a specific inntekt row
+   * Field name: inntektskilder[N].arbAvgBetales
+   * Values: TRUE (Ja) / FALSE (Nei)
+   *
+   * Note: For NÆRINGSINNTEKT_FRA_NORGE the radio is auto-set and disabled.
+   * Only call this for INNTEKT_FRA_UTLANDET or MISJONÆR.
+   */
+  async velgBetalesAgaForIndeks(indeks: number, betalesAga: boolean): Promise<void> {
+    const value = betalesAga ? 'TRUE' : 'FALSE';
+    const radio = this.page.locator(
+      `input[name="inntektskilder[${indeks}].arbAvgBetales"][value="${value}"]`
+    );
+    await radio.click({ force: true });
+    await expect(radio).toBeChecked({ timeout: 5000 });
+    console.log(`✅ Betales aga [${indeks}] = ${betalesAga ? 'Ja' : 'Nei'}`);
   }
 
   /**
