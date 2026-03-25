@@ -234,14 +234,6 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     const trygdeavgift = new TrygdeavgiftPage(page);
     await trygdeavgift.ventPåSideLastet();
 
-    // Log all PUT requests to see what data is being saved
-    page.on('request', req => {
-      if (req.url().includes('/trygdeavgift/beregning') && req.method() === 'PUT') {
-        const body = JSON.parse(req.postData() || '{}');
-        console.log(`📤 PUT /trygdeavgift/beregning: ${body.skatteforholdsperioder?.length} skatteforhold, ${body.inntektskilder?.length} inntekter`);
-      }
-    });
-
     // Skatteforhold 1: mai-okt skattepliktig (endre tom-dato fra default)
     // Use human-like delays between operations to let React process state changes
     // and avoid race conditions with the debounced save
@@ -310,7 +302,7 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     }
 
     await trygdeavgift.assertions.verifiserForklaringstekst('Beregnet etter 25 %-regelen');
-
+  
     // Wait for any re-render debounced PUTs to complete before leaving the step.
     // The PUT response triggers setTrygdeavgift → re-render → new debounce.
     // If we navigate away before it fires, the pending debounce may save stale data.
