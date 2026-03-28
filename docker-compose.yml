@@ -199,12 +199,15 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      SPRING_PROFILES_ACTIVE: local
       SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/postgres?currentSchema=trygdeavgift-beregning"
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: mysecretpassword
       SPRING_FLYWAY_ENABLED: "true"
       KAFKA_BROKERS: "kafka.melosys.docker-internal:9092"
+      AZURE_APP_WELL_KNOWN_URL: "http://mock-oauth2-server.melosys.docker-internal:8082/aad/.well-known/openid-configuration"
+      AZURE_APP_CLIENT_ID: "dummy"
+      UNLEASH_SERVER_API_TOKEN: "*:development.unleash-insecure-client-api-token"
+      UNLEASH_SERVER_API_URL: "http://unleash.melosys.docker-internal:4242"
     networks:
       melosys.docker-internal:
         aliases:
