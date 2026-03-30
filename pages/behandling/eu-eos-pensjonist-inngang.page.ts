@@ -51,11 +51,22 @@ export class EuEosPensjonistInngangPage extends BasePage {
   }
 
   async velgBostedsland(landkode: string): Promise<void> {
+    // Vent på at debounced save (500ms) til helseutgift-dekkes-perioder fullføres.
+    // For ny sak: POST → 201. For eksisterende: PUT → 200.
+    const savePromise = this.page.waitForResponse(
+      (resp) => resp.url().includes('helseutgift-dekkes-perioder') && resp.status() >= 200 && resp.status() < 300,
+      { timeout: 10000 },
+    );
     await this.bostedslandSelect.selectOption({ value: landkode });
+    await savePromise;
   }
 
   async klikkBekreftOgFortsett(): Promise<void> {
     await this.bekreftKnapp.click();
-    await this.page.waitForLoadState('networkidle');
+    // For nye saker åpnes oppfrisk-dialogen automatisk (registerdata ikke fersk).
+    // Etter oppfrisk navigeres til Trygdeavgift-steget automatisk.
+    // 60s timeout for å håndtere oppfrisk + navigasjon.
+    await this.page.getByRole('heading', { name: 'Trygdeavgift', level: 1 })
+      .waitFor({ state: 'visible', timeout: 60000 });
   }
 }

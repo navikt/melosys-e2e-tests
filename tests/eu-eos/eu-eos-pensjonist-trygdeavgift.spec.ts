@@ -1,11 +1,10 @@
 import { test } from '../../fixtures';
-import { Page } from '@playwright/test';
+import { expect, Page } from '@playwright/test';
 import { AuthHelper } from '../../helpers/auth-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import { EuEosPensjonistInngangPage } from '../../pages/behandling/eu-eos-pensjonist-inngang.page';
 import { EuEosPensjonistTrygdeavgiftPage } from '../../pages/trygdeavgift/eu-eos-pensjonist-trygdeavgift.page';
-import { BehandlingPage } from '../../pages/behandling/behandling.page';
 import { AARSAK, BEHANDLINGSTEMA, SAKSTEMA, SAKSTYPER, USER_ID_VALID } from '../../pages/shared/constants';
 import { waitForProcessInstances } from '../../helpers/api-helper';
 
@@ -44,7 +43,9 @@ async function opprettEøsPensjonistTrygdeavgiftSak(page: Page) {
  *
  * Akseptansekriterier:
  * - AC1: Vis infomelding "Trygdeavgift skal ikke betales..." når alle perioder er under minstebeløpet
- * - AC5: Ordinær beregning → tabell synlig, ingen infomelding
+ * - AC2: 25%-regel → tabell med * i sats-kolonnen og fotnote
+ * - AC4: Sammenslåtte inntektskilder → *** i inntektskilde-kolonnen og fotnote
+ * - Regresjonstest: Ordinær beregning → tabell synlig, ingen infomelding
  */
 test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
   test('skal vise infomelding når inntekten er under minstebeløpet', async ({ page }) => {
@@ -58,19 +59,83 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
     await inngang.velgBostedsland('SE');
     await inngang.klikkBekreftOgFortsett();
 
-    const behandling = new BehandlingPage(page);
-    await behandling.gåTilTrygdeavgift();
-
     const trygdeavgift = new EuEosPensjonistTrygdeavgiftPage(page);
     await trygdeavgift.ventPåSideLastet();
     await trygdeavgift.velgIkkeSkattepliktig();
-    await trygdeavgift.velgInntektskilde('PENSJON_UFØRETRYGD');
+    await trygdeavgift.velgInntektskilde('PENSJON');
     await trygdeavgift.fyllInnBruttoinntektMedApiVent('8000');
 
     await trygdeavgift.verifiserInfomeldingMinstebeløpSynlig();
     await trygdeavgift.verifiserTrygdeavgiftsTabellIkkeSynlig();
   });
 
+  // AC2: 25%-regel → tabell med * i sats-kolonnen og fotnote
+  test('skal vise tabell med asterisk (*) for 25%-regel', async ({ page }) => {
+    test.setTimeout(120000);
+
+    await opprettEøsPensjonistTrygdeavgiftSak(page);
+
+    const inngang = new EuEosPensjonistInngangPage(page);
+    await inngang.ventPåSideLastet();
+    await inngang.fyllInnPeriode(helÅrFra, helÅrTil);
+    await inngang.velgBostedsland('SE');
+    await inngang.klikkBekreftOgFortsett();
+
+    const trygdeavgift = new EuEosPensjonistTrygdeavgiftPage(page);
+    await trygdeavgift.ventPåSideLastet();
+    await trygdeavgift.velgIkkeSkattepliktig();
+    await trygdeavgift.velgInntektskilde('PENSJON');
+    await trygdeavgift.fyllInnBruttoinntektMedApiVent('9000');
+
+    await trygdeavgift.verifiserTrygdeavgiftsTabellSynlig();
+    await expect(page.getByRole('cell', { name: '*' })).toBeVisible();
+    await expect(
+      page.getByText('* Beregnet etter 25 %-regelen: Trygdeavgift skal ikke utgjøre mer enn 25 % av inntekt over minstebeløpet.'),
+    ).toBeVisible();
+    await trygdeavgift.verifiserInfomeldingMinstebeløpIkkeSynlig();
+  });
+
+  // AC4: Sammenslåtte inntektskilder → *** i inntektskilde-kolonnen og fotnote
+  test('skal vise *** for sammenslåtte inntektskilder', async ({ page }) => {
+    test.setTimeout(120000);
+
+    await opprettEøsPensjonistTrygdeavgiftSak(page);
+
+    const inngang = new EuEosPensjonistInngangPage(page);
+    await inngang.ventPåSideLastet();
+    await inngang.fyllInnPeriode(helÅrFra, helÅrTil);
+    await inngang.velgBostedsland('SE');
+    await inngang.klikkBekreftOgFortsett();
+
+    const trygdeavgift = new EuEosPensjonistTrygdeavgiftPage(page);
+    await trygdeavgift.ventPåSideLastet();
+    await trygdeavgift.velgIkkeSkattepliktig();
+
+    // Første inntektskilde: Pensjon
+    await trygdeavgift.velgInntektskilde('PENSJON');
+    await trygdeavgift.fyllInnBruttoinntektMedApiVent('5000');
+
+    // Legg til andre inntektskilde: Uføretrygd
+    // Samlet 2×5000×12=120000 > minstebeløpet, men avgift > 25% av overskudd → sammenslåing
+    await page.getByRole('button', { name: 'Legg til inntekt' }).click();
+    await page.locator('select[name="inntektskilder[1].kildetype"]').selectOption({ label: 'Uføretrygd' });
+
+    const beregningResponse = page.waitForResponse(
+      (resp) => resp.url().includes('eos-pensjonist/beregning') && resp.status() === 200,
+      { timeout: 15000 },
+    );
+    const bruttoinntektFelt = page.locator('input[name="inntektskilder[1].bruttoInntekt"]');
+    await bruttoinntektFelt.click();
+    await bruttoinntektFelt.fill('5000');
+    await bruttoinntektFelt.press('Tab');
+    await beregningResponse;
+
+    await trygdeavgift.verifiserTrygdeavgiftsTabellSynlig();
+    await expect(page.getByRole('cell', { name: '***' })).toBeVisible();
+    await expect(page.getByText('*** Mer enn en inntektskilde')).toBeVisible();
+  });
+
+  // Ordinær beregning (baseline) → tabell synlig, ingen infomeldinger
   test('skal vise tabell ved ordinær beregning', async ({ page }) => {
     test.setTimeout(120000);
 
@@ -82,13 +147,10 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
     await inngang.velgBostedsland('SE');
     await inngang.klikkBekreftOgFortsett();
 
-    const behandling = new BehandlingPage(page);
-    await behandling.gåTilTrygdeavgift();
-
     const trygdeavgift = new EuEosPensjonistTrygdeavgiftPage(page);
     await trygdeavgift.ventPåSideLastet();
     await trygdeavgift.velgIkkeSkattepliktig();
-    await trygdeavgift.velgInntektskilde('PENSJON_UFØRETRYGD');
+    await trygdeavgift.velgInntektskilde('PENSJON');
     await trygdeavgift.fyllInnBruttoinntektMedApiVent('200000');
 
     await trygdeavgift.verifiserTrygdeavgiftsTabellSynlig();

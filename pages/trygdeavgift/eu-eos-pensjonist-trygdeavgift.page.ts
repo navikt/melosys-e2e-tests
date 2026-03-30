@@ -7,7 +7,8 @@ import { BasePage } from '../shared/base.page';
  *
  * Forskjell fra vanlig TrygdeavgiftPage (FTRL):
  * - Beregning-URL: `/trygdeavgift/eos-pensjonist/beregning`
- * - Inntektskilder for IKKE_SKATTEPLIKTIG: PENSJON_UFØRETRYGD og PENSJON_UFØRETRYGD_KILDESKATT
+ * - Inntektskilder: PENSJON og UFØRETRYGD (fordi erEøsPensjonist=true → pliktig=true)
+ *   (PENSJON_UFØRETRYGD/KILDESKATT er for ikke-EU/EØS pensjonist-tilfeller)
  *
  * @example
  * const trygdeavgift = new EuEosPensjonistTrygdeavgiftPage(page);
