@@ -5,6 +5,7 @@ import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import { EuEosPensjonistInngangPage } from '../../pages/behandling/eu-eos-pensjonist-inngang.page';
 import { EuEosPensjonistTrygdeavgiftPage } from '../../pages/trygdeavgift/eu-eos-pensjonist-trygdeavgift.page';
+import { BehandlingPage } from '../../pages/behandling/behandling.page';
 import { AARSAK, BEHANDLINGSTEMA, SAKSTEMA, SAKSTYPER, USER_ID_VALID } from '../../pages/shared/constants';
 import { waitForProcessInstances } from '../../helpers/api-helper';
 
@@ -57,6 +58,9 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
     await inngang.velgBostedsland('SE');
     await inngang.klikkBekreftOgFortsett();
 
+    const behandling = new BehandlingPage(page);
+    await behandling.gåTilTrygdeavgift();
+
     const trygdeavgift = new EuEosPensjonistTrygdeavgiftPage(page);
     await trygdeavgift.ventPåSideLastet();
     await trygdeavgift.velgIkkeSkattepliktig();
@@ -77,6 +81,9 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
     await inngang.fyllInnPeriode(helÅrFra, helÅrTil);
     await inngang.velgBostedsland('SE');
     await inngang.klikkBekreftOgFortsett();
+
+    const behandling = new BehandlingPage(page);
+    await behandling.gåTilTrygdeavgift();
 
     const trygdeavgift = new EuEosPensjonistTrygdeavgiftPage(page);
     await trygdeavgift.ventPåSideLastet();
