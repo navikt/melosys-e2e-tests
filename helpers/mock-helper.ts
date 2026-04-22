@@ -98,6 +98,83 @@ export async function findNewNavFormatSed(
   );
 }
 
+/**
+ * A journalpost stored in the SAF mock.
+ * Mirrors JournalpostModell in melosys-mock.
+ */
+export interface JournalpostInfo {
+  journalpostId: string;
+  tittel: string | null;
+  journalposttype: 'INNGAAENDE' | 'UTGAAENDE' | 'NOTAT' | null;
+  journalStatus: 'J' | 'MO' | 'M' | 'A' | null;
+  sakId: string | null;
+  eksternReferanseId: string | null;
+  kanal: string | null;
+  tilleggsoppltsninger: Array<{ nokkel: string | null; verdi: string | null }>;
+  avsenderMottaker: {
+    id?: string;
+    type?: string;
+    navn?: string;
+    land?: string;
+  };
+}
+
+/**
+ * Fetch all journalposter stored in the SAF mock.
+ *
+ * @param request - Playwright APIRequestContext
+ */
+export async function fetchStoredJournalposter(
+  request: APIRequestContext
+): Promise<JournalpostInfo[]> {
+  const response = await request.get('http://localhost:8083/testdata/verification/journalpost');
+  if (!response.ok()) {
+    throw new Error(`Failed to fetch journalposter: ${response.status()}`);
+  }
+  return response.json();
+}
+
+/**
+ * Poll for a new UTGAAENDE journalpost that was not present in a previous snapshot.
+ *
+ * Used to verify that OpprettUtgaaendeJournalpostService in melosys-eessi ran
+ * successfully after a SED was sent — i.e. the full Kafka sed-sendt loop completed.
+ *
+ * Usage:
+ *   // Before vedtak:
+ *   const jpBefore = await fetchStoredJournalposter(request);
+ *   // ... fatt vedtak ...
+ *   const jp = await findNewUtgaaendeJournalpost(request, jpBefore);
+ *
+ * @param request  - Playwright APIRequestContext
+ * @param before   - Snapshot taken BEFORE vedtak
+ * @param timeoutMs - Max polling time (default: 30s)
+ */
+export async function findNewUtgaaendeJournalpost(
+  request: APIRequestContext,
+  before: JournalpostInfo[],
+  timeoutMs = 30000
+): Promise<JournalpostInfo | null> {
+  const beforeIds = new Set(before.map((jp) => jp.journalpostId));
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const after = await fetchStoredJournalposter(request);
+    const newEessiJournalpost = after.filter(
+      (jp) =>
+        !beforeIds.has(jp.journalpostId) &&
+        jp.journalposttype === 'UTGAAENDE' &&
+        jp.kanal === 'EESSI'
+    );
+    if (newEessiJournalpost.length > 0) {
+      return newEessiJournalpost[0];
+    }
+    console.log(`⏳ Venter på UTGAAENDE EESSI-journalpost...`);
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  return null;
+}
+
 export interface MockClearResponse {
   message: string;
   journalpostCleared?: string | number;
