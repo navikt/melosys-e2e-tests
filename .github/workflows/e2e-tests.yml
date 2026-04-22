@@ -995,14 +995,9 @@ jobs:
     runs-on: ubuntu-latest
     needs: e2e-tests
     if: failure() && github.event_name == 'repository_dispatch'
+    env:
+      SLACK_USER_MAPPING: ${{ secrets.SLACK_USER_MAPPING }}
     steps:
-      - name: Checkout slack-users mapping
-        uses: actions/checkout@v4
-        with:
-          sparse-checkout: |
-            .github/slack-users.json
-          sparse-checkout-cone-mode: false
-
       - name: Download test-summary artifact
         uses: actions/download-artifact@v4
         continue-on-error: true
@@ -1022,11 +1017,11 @@ jobs:
           IMAGE_TAG='${{ github.event.client_payload.image_tag }}'
           SHORT_SHA="${COMMIT_SHA:0:7}"
 
-          # Mention: Slack-ID (U...) gir ekte ping, handle (rune.lind) gir synlig tekst
-          MAPPING_FILE=".github/slack-users.json"
+          # Mention: Slack-ID (U...) gir ekte ping, handle (rune.lind) gir synlig tekst.
+          # Mapping kommer fra org-secret SLACK_USER_MAPPING (JSON-streng).
           SLACK_VAL=""
-          if [ -n "$ACTOR" ] && [ -f "$MAPPING_FILE" ]; then
-            SLACK_VAL=$(jq -r --arg a "$ACTOR" '.[$a] // ""' "$MAPPING_FILE")
+          if [ -n "$ACTOR" ] && [ -n "${SLACK_USER_MAPPING:-}" ]; then
+            SLACK_VAL=$(printf '%s' "$SLACK_USER_MAPPING" | jq -r --arg a "$ACTOR" '.[$a] // ""')
           fi
           if [[ "$SLACK_VAL" =~ ^U[A-Z0-9]+$ ]]; then
             MENTION="<@${SLACK_VAL}>"
