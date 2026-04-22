@@ -28,9 +28,6 @@ auth-state.json
 *.key
 secrets.json
 
-# Local-only Slack-mapping (ikke i public repo)
-.github/slack-users.json
-
 # Environment variables
 .env.local
 .env.*.local
