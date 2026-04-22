@@ -14,7 +14,7 @@ import { BasePage } from '../shared/base.page';
  * const trygdeavgift = new EuEosPensjonistTrygdeavgiftPage(page);
  * await trygdeavgift.ventPåSideLastet();
  * await trygdeavgift.velgIkkeSkattepliktig();
- * await trygdeavgift.velgInntektskilde('PENSJON_UFØRETRYGD');
+ * await trygdeavgift.velgInntektskilde('PENSJON');
  * await trygdeavgift.fyllInnBruttoinntektMedApiVent('8000');
  */
 export class EuEosPensjonistTrygdeavgiftPage extends BasePage {
@@ -33,16 +33,26 @@ export class EuEosPensjonistTrygdeavgiftPage extends BasePage {
   }
 
   async velgSkattepliktig(): Promise<void> {
-    await this.ventPåBeregning(async () => {
-      await this.skatteforholdsGroup.getByRole('radio', { name: 'Ja' }).click();
-    });
+    await this.velgSkattepliktigAlternativ(true);
   }
 
   async velgIkkeSkattepliktig(): Promise<void> {
-    await this.skatteforholdsGroup.getByRole('radio', { name: 'Nei' }).click();
+    await this.velgSkattepliktigAlternativ(false);
+  }
+
+  private async velgSkattepliktigAlternativ(erSkattepliktig: boolean): Promise<void> {
+    const navn = erSkattepliktig ? 'Ja' : 'Nei';
+    await this.ventPåBeregning(async () => {
+      await this.skatteforholdsGroup.getByRole('radio', { name: navn }).click();
+    });
   }
 
   async velgInntektskilde(inntektskildetype: string): Promise<void> {
+    await this.inntektskildeDropdown.waitFor({ state: 'visible', timeout: 15000 });
+    await expect(this.inntektskildeDropdown).toBeEnabled();
+    await expect
+      .poll(async () => this.inntektskildeDropdown.locator('option').count(), { timeout: 15000 })
+      .toBeGreaterThan(1);
     await this.inntektskildeDropdown.selectOption({ value: inntektskildetype });
   }
 

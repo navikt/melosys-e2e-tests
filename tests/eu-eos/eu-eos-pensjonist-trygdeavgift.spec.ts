@@ -1,5 +1,5 @@
-import { test } from '../../fixtures';
-import { expect, Page } from '@playwright/test';
+import { test, expect } from '../../fixtures';
+import { Page } from '@playwright/test';
 import { AuthHelper } from '../../helpers/auth-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
