@@ -1075,13 +1075,13 @@ jobs:
               [.tests[] | select(.status == "failed" and (.isKnownError | not)) | .title]
               | .[0:5]
               | map("• " + .)
-              | join("%0A")
+              | join("\n")
             ' "$SUMMARY_JSON")
             if [ -n "$FAILED_LIST" ] && [ "$FAILED_LIST" != "" ]; then
-              RESULTS_BLOCK="${RESULTS_BLOCK}%0A%0A*Feilede tester:*%0A${FAILED_LIST}"
+              RESULTS_BLOCK="${RESULTS_BLOCK}\n\n*Feilede tester:*\n${FAILED_LIST}"
               if [ "$FAILED" -gt 5 ]; then
                 EXTRA=$((FAILED - 5))
-                RESULTS_BLOCK="${RESULTS_BLOCK}%0A_... og ${EXTRA} til_"
+                RESULTS_BLOCK="${RESULTS_BLOCK}\n_... og ${EXTRA} til_"
               fi
             fi
 
@@ -1090,10 +1090,10 @@ jobs:
               [.tests[] | select(.status == "passed" and .totalAttempts > 1) | .title]
               | .[0:3]
               | map("• " + .)
-              | join("%0A")
+              | join("\n")
             ' "$SUMMARY_JSON")
             if [ -n "$FLAKY_LIST" ] && [ "$FLAKY_LIST" != "" ]; then
-              RESULTS_BLOCK="${RESULTS_BLOCK}%0A%0A*Flaky (passed etter retry):*%0A${FLAKY_LIST}"
+              RESULTS_BLOCK="${RESULTS_BLOCK}\n\n*Flaky (passed etter retry):*\n${FLAKY_LIST}"
             fi
           else
             RESULTS_BLOCK="_Testresultater ikke tilgjengelig (test-summary.json mangler)._"
@@ -1103,11 +1103,11 @@ jobs:
           COMMIT_URL="https://github.com/navikt/${SOURCE_REPO}/commit/${COMMIT_SHA}"
           REPO_URL="https://github.com/navikt/${SOURCE_REPO}"
 
-          MESSAGE="${MENTION} E2E-tester feilet etter image-push fra ${SOURCE_REPO}.%0A%0A"
-          MESSAGE="${MESSAGE}*Repo:* <${REPO_URL}|${SOURCE_REPO}>%0A"
-          MESSAGE="${MESSAGE}*Commit:* <${COMMIT_URL}|\`${SHORT_SHA}\`> — ${COMMIT_MSG}%0A"
-          MESSAGE="${MESSAGE}*Image tag:* \`${IMAGE_TAG}\`%0A%0A"
-          MESSAGE="${MESSAGE}${RESULTS_BLOCK}%0A%0A"
+          MESSAGE="${MENTION} E2E-tester feilet etter image-push fra ${SOURCE_REPO}.\n\n"
+          MESSAGE="${MESSAGE}*Repo:* <${REPO_URL}|${SOURCE_REPO}>\n"
+          MESSAGE="${MESSAGE}*Commit:* <${COMMIT_URL}|\`${SHORT_SHA}\`> — ${COMMIT_MSG}\n"
+          MESSAGE="${MESSAGE}*Image tag:* \`${IMAGE_TAG}\`\n\n"
+          MESSAGE="${MESSAGE}${RESULTS_BLOCK}\n\n"
           MESSAGE="${MESSAGE}*Workflow run:* <${RUN_URL}|#${{ github.run_id }}>"
 
           {
