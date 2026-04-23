@@ -200,12 +200,13 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     await trygdeavgift.velgBetalesAga(false);
     await trygdeavgift.fyllInnBruttoinntektMedApiVent('4000');
 
-    await trygdeavgift.assertions.verifiserTrygdeavgiftBeregnet();
-    await trygdeavgift.assertions.verifiserSatsKolonne(0, '**');
-    await trygdeavgift.assertions.verifiserForklaringstekst(
-      'Inntekten er under minstebeløpet'
-    );
-    await trygdeavgift.assertions.verifiserAvgiftPerMd(0, '0 nkr');
+    // Under minstebeløpet: ingen tabell vises, kun infomelding.
+    await expect(
+      page.getByRole('heading', { name: 'Foreløpig beregnet trygdeavgift' })
+    ).toBeVisible({ timeout: 10000 });
+    await expect(
+      page.getByText('Trygdeavgift skal ikke betales da inntekten er under minstebeløpet.')
+    ).toBeVisible();
 
     await trygdeavgift.klikkBekreftOgFortsett();
     const vedtak = new VedtakPage(page);
