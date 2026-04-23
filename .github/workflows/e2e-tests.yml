@@ -989,3 +989,122 @@ jobs:
         run: |
           docker compose down -v
           docker network rm melosys.docker-internal || true
+
+  notify-slack:
+    name: Notify #melosys-ci on failure
+    runs-on: ubuntu-latest
+    needs: e2e-tests
+    if: failure() && github.event_name == 'repository_dispatch'
+    env:
+      SLACK_USER_MAPPING: ${{ secrets.SLACK_USER_MAPPING }}
+    steps:
+      - name: Download test-summary artifact
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          name: test-summary
+          path: test-summary
+
+      - name: Build Slack context
+        id: ctx
+        run: |
+          set -euo pipefail
+
+          ACTOR='${{ github.event.client_payload.actor }}'
+          SOURCE_REPO='${{ github.event.client_payload.repository }}'
+          COMMIT_SHA='${{ github.event.client_payload.commit_sha }}'
+          COMMIT_MSG='${{ github.event.client_payload.commit_message }}'
+          IMAGE_TAG='${{ github.event.client_payload.image_tag }}'
+          SHORT_SHA="${COMMIT_SHA:0:7}"
+
+          # Mention: Slack-ID (U...) gir ekte ping, handle (rune.lind) gir synlig tekst.
+          # Mapping kommer fra org-secret SLACK_USER_MAPPING (JSON-streng).
+          SLACK_VAL=""
+          if [ -n "$ACTOR" ] && [ -n "${SLACK_USER_MAPPING:-}" ]; then
+            SLACK_VAL=$(printf '%s' "$SLACK_USER_MAPPING" | jq -r --arg a "$ACTOR" '.[$a] // ""')
+          fi
+          if [[ "$SLACK_VAL" =~ ^U[A-Z0-9]+$ ]]; then
+            MENTION="<@${SLACK_VAL}>"
+          elif [ -n "$SLACK_VAL" ]; then
+            MENTION="@${SLACK_VAL}"
+          elif [ -n "$ACTOR" ]; then
+            MENTION="@${ACTOR}"
+          else
+            MENTION=""
+          fi
+
+          # Testresultater fra test-summary.json
+          RESULTS_BLOCK=""
+          SUMMARY_JSON="test-summary/test-summary.json"
+          if [ -f "$SUMMARY_JSON" ]; then
+            PASSED=$(jq '[.tests[] | select(.status == "passed" and .totalAttempts == 1)] | length' "$SUMMARY_JSON")
+            FAILED=$(jq '[.tests[] | select(.status == "failed" and (.isKnownError | not))] | length' "$SUMMARY_JSON")
+            FLAKY=$(jq '[.tests[] | select(.status == "passed" and .totalAttempts > 1)] | length' "$SUMMARY_JSON")
+            SKIPPED=$(jq '[.tests[] | select(.status == "skipped")] | length' "$SUMMARY_JSON")
+            KNOWN_FAILED=$(jq '[.tests[] | select(.status == "failed" and .isKnownError)] | length' "$SUMMARY_JSON")
+            TOTAL=$(jq '.tests | length' "$SUMMARY_JSON")
+
+            RESULTS_BLOCK="*Resultater:* ✅ ${PASSED} passed · ❌ ${FAILED} failed · 🔄 ${FLAKY} flaky · ⏭️ ${SKIPPED} skipped"
+            if [ "$KNOWN_FAILED" -gt 0 ]; then
+              RESULTS_BLOCK="${RESULTS_BLOCK} · ⚠️ ${KNOWN_FAILED} known-error"
+            fi
+            RESULTS_BLOCK="${RESULTS_BLOCK} (av ${TOTAL} totalt)"
+
+            # Liste opp feilede tester (ikke known-errors), maks 5
+            FAILED_LIST=$(jq -r '
+              [.tests[] | select(.status == "failed" and (.isKnownError | not)) | .title]
+              | .[0:5]
+              | map("• " + .)
+              | join("\n")
+            ' "$SUMMARY_JSON")
+            if [ -n "$FAILED_LIST" ] && [ "$FAILED_LIST" != "" ]; then
+              RESULTS_BLOCK="${RESULTS_BLOCK}\n\n*Feilede tester:*\n${FAILED_LIST}"
+              if [ "$FAILED" -gt 5 ]; then
+                EXTRA=$((FAILED - 5))
+                RESULTS_BLOCK="${RESULTS_BLOCK}\n_... og ${EXTRA} til_"
+              fi
+            fi
+
+            # Flaky-tester (passed etter retry), maks 3
+            FLAKY_LIST=$(jq -r '
+              [.tests[] | select(.status == "passed" and .totalAttempts > 1) | .title]
+              | .[0:3]
+              | map("• " + .)
+              | join("\n")
+            ' "$SUMMARY_JSON")
+            if [ -n "$FLAKY_LIST" ] && [ "$FLAKY_LIST" != "" ]; then
+              RESULTS_BLOCK="${RESULTS_BLOCK}\n\n*Flaky (passed etter retry):*\n${FLAKY_LIST}"
+            fi
+          else
+            RESULTS_BLOCK="_Testresultater ikke tilgjengelig (test-summary.json mangler)._"
+          fi
+
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          COMMIT_URL="https://github.com/navikt/${SOURCE_REPO}/commit/${COMMIT_SHA}"
+          REPO_URL="https://github.com/navikt/${SOURCE_REPO}"
+
+          MESSAGE="${MENTION} E2E-tester feilet etter image-push fra ${SOURCE_REPO}.\n\n"
+          MESSAGE="${MESSAGE}*Repo:* <${REPO_URL}|${SOURCE_REPO}>\n"
+          MESSAGE="${MESSAGE}*Commit:* <${COMMIT_URL}|\`${SHORT_SHA}\`> — ${COMMIT_MSG}\n"
+          MESSAGE="${MESSAGE}*Image tag:* \`${IMAGE_TAG}\`\n\n"
+          MESSAGE="${MESSAGE}${RESULTS_BLOCK}\n\n"
+          MESSAGE="${MESSAGE}*Workflow run:* <${RUN_URL}|#${{ github.run_id }}>"
+
+          {
+            echo 'SLACK_MESSAGE<<SLACK_EOF'
+            printf '%b' "$MESSAGE"
+            echo
+            echo 'SLACK_EOF'
+          } >> "$GITHUB_OUTPUT"
+
+      - name: Slack Notification
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_USERNAME: Github Actions
+          SLACK_ICON: https://github.com/github.png?size=48
+          SLACK_COLOR: danger
+          SLACK_TITLE: "E2E-tester feilet"
+          SLACK_FOOTER: "melosys-e2e-tests"
+          SLACK_MESSAGE: ${{ steps.ctx.outputs.SLACK_MESSAGE }}
+          MSG_MINIMAL: "true"
