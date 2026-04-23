@@ -121,27 +121,9 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
 
     // Legg til andre inntektskilde: Uføretrygd
     // Samlet 2×5000×12=120000 > minstebeløpet, men avgift > 25% av overskudd → sammenslåing
-    // Sett opp respons-lytter FØR vi gjør endringer, slik at alle utløste PUT'er fanges opp.
-    const beregningResponse = page
-      .waitForResponse(
-        (resp) =>
-          resp.url().includes('eos-pensjonist/beregning') &&
-          resp.request().method() === 'PUT' &&
-          resp.status() === 200,
-        { timeout: 15000 },
-      )
-      .catch(() => null);
-
-    await page.getByRole('button', { name: 'Legg til inntekt' }).click();
-    await page.locator('select[name="inntektskilder[1].kildetype"]').selectOption({ label: 'Uføretrygd' });
-
-    const bruttoinntektFelt = page.locator('input[name="inntektskilder[1].bruttoInntekt"]');
-    await bruttoinntektFelt.click();
-    await bruttoinntektFelt.fill('5000');
-    await bruttoinntektFelt.press('Tab');
-
-    await beregningResponse;
-    await page.waitForLoadState('networkidle');
+    await trygdeavgift.klikkLeggTilInntekt();
+    await trygdeavgift.velgInntektskildeForIndeks(1, 'Uføretrygd');
+    await trygdeavgift.fyllInnBruttoinntektForIndeksMedApiVent(1, '5000');
 
     await trygdeavgift.verifiserTrygdeavgiftsTabellSynlig();
     await expect(page.getByRole('cell', { name: '***' })).toBeVisible();

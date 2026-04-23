@@ -18,18 +18,28 @@ import { BasePage } from '../shared/base.page';
  * await trygdeavgift.fyllInnBruttoinntektMedApiVent('8000');
  */
 export class EuEosPensjonistTrygdeavgiftPage extends BasePage {
-  private readonly skatteforholdsGroup = this.page.getByRole('group', { name: 'Skattepliktig' });
+  private readonly skattepliktigGroup = this.page.getByRole('group', { name: 'Skattepliktig' });
 
   private readonly inntektskildeDropdown = this.page.getByLabel('Inntektskilde');
 
   private readonly bruttoinntektField = this.page.getByLabel('Bruttoinntekt');
 
+  private readonly leggTilInntektKnapp = this.page.getByRole('button', { name: 'Legg til inntekt' });
+
   constructor(page: Page) {
     super(page);
   }
 
+  private inntektskildeForIndeks(index: number) {
+    return this.page.locator(`select[name="inntektskilder[${index}].kildetype"]`);
+  }
+
+  private bruttoinntektForIndeks(index: number) {
+    return this.page.locator(`input[name="inntektskilder[${index}].bruttoInntekt"]`);
+  }
+
   async ventPåSideLastet(): Promise<void> {
-    await this.skatteforholdsGroup.waitFor({ state: 'visible', timeout: 15000 });
+    await this.skattepliktigGroup.waitFor({ state: 'visible', timeout: 15000 });
   }
 
   async velgSkattepliktig(): Promise<void> {
@@ -56,7 +66,7 @@ export class EuEosPensjonistTrygdeavgiftPage extends BasePage {
       )
       .catch(() => null);
 
-    await this.skatteforholdsGroup.getByRole('radio', { name: navn }).click();
+    await this.skattepliktigGroup.getByRole('radio', { name: navn }).click();
 
     const response = await beregningResponsePromise;
     if (!response) {
@@ -79,22 +89,42 @@ export class EuEosPensjonistTrygdeavgiftPage extends BasePage {
   }
 
   async fyllInnBruttoinntektMedApiVent(beløp: string): Promise<void> {
-    const beregningResponsePromise = this.page.waitForResponse(
-      (resp) => resp.url().includes('eos-pensjonist/beregning') && resp.status() === 200,
-      { timeout: 15000 },
-    );
-    await this.fyllInnBruttoinntekt(beløp);
-    await this.bruttoinntektField.press('Tab');
-    await beregningResponsePromise;
+    await this.ventPåBeregning(async () => {
+      await this.fyllInnBruttoinntekt(beløp);
+      await this.bruttoinntektField.press('Tab');
+    });
   }
 
   async ventPåBeregning(action: () => Promise<void>): Promise<void> {
     const beregningResponsePromise = this.page.waitForResponse(
-      (resp) => resp.url().includes('eos-pensjonist/beregning') && resp.status() === 200,
+      (resp) =>
+        resp.url().includes('eos-pensjonist/beregning') &&
+        resp.request().method() === 'PUT' &&
+        resp.status() === 200,
       { timeout: 15000 },
     );
     await action();
     await beregningResponsePromise;
+  }
+
+  async klikkLeggTilInntekt(): Promise<void> {
+    await this.leggTilInntektKnapp.click();
+  }
+
+  async velgInntektskildeForIndeks(index: number, label: string): Promise<void> {
+    const dropdown = this.inntektskildeForIndeks(index);
+    await dropdown.waitFor({ state: 'visible', timeout: 15000 });
+    await expect(dropdown).toBeEnabled();
+    await dropdown.selectOption({ label });
+  }
+
+  async fyllInnBruttoinntektForIndeksMedApiVent(index: number, beløp: string): Promise<void> {
+    await this.ventPåBeregning(async () => {
+      const felt = this.bruttoinntektForIndeks(index);
+      await felt.click();
+      await felt.fill(beløp);
+      await felt.press('Tab');
+    });
   }
 
   async verifiserInfomeldingMinstebeløpSynlig(): Promise<void> {
