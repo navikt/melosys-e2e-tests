@@ -42,9 +42,26 @@ export class EuEosPensjonistTrygdeavgiftPage extends BasePage {
 
   private async velgSkattepliktigAlternativ(erSkattepliktig: boolean): Promise<void> {
     const navn = erSkattepliktig ? 'Ja' : 'Nei';
-    await this.ventPåBeregning(async () => {
-      await this.skatteforholdsGroup.getByRole('radio', { name: navn }).click();
-    });
+    // Radio-klikket trigger ikke alltid en PUT mot /eos-pensjonist/beregning
+    // (form-useEffect avhenger av antall perioder, ikke skatteplikttype-verdien).
+    // Tolerant vent: fang evt. debounced PUT, ellers fall tilbake til kort pause.
+    // Den definitive PUT'en garanteres av fyllInnBruttoinntektMedApiVent senere.
+    const beregningResponsePromise = this.page
+      .waitForResponse(
+        (resp) =>
+          resp.url().includes('eos-pensjonist/beregning') &&
+          resp.request().method() === 'PUT' &&
+          resp.status() === 200,
+        { timeout: 3000 },
+      )
+      .catch(() => null);
+
+    await this.skatteforholdsGroup.getByRole('radio', { name: navn }).click();
+
+    const response = await beregningResponsePromise;
+    if (!response) {
+      await this.page.waitForTimeout(1500);
+    }
   }
 
   async velgInntektskilde(inntektskildetype: string): Promise<void> {

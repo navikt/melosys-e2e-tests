@@ -1,5 +1,5 @@
 import { test, expect } from '../../fixtures';
-import { Page } from '@playwright/test';
+import { Page, APIRequestContext } from '@playwright/test';
 import { AuthHelper } from '../../helpers/auth-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
@@ -7,12 +7,18 @@ import { EuEosPensjonistInngangPage } from '../../pages/behandling/eu-eos-pensjo
 import { EuEosPensjonistTrygdeavgiftPage } from '../../pages/trygdeavgift/eu-eos-pensjonist-trygdeavgift.page';
 import { AARSAK, BEHANDLINGSTEMA, SAKSTEMA, SAKSTYPER, USER_ID_VALID } from '../../pages/shared/constants';
 import { waitForProcessInstances } from '../../helpers/api-helper';
+import { UnleashHelper } from '../../helpers/unleash-helper';
 
 const inneværendeÅr = new Date().getFullYear();
 const helÅrFra = `01.01.${inneværendeÅr}`;
 const helÅrTil = `31.12.${inneværendeÅr}`;
 
-async function opprettEøsPensjonistTrygdeavgiftSak(page: Page) {
+async function opprettEøsPensjonistTrygdeavgiftSak(page: Page, request: APIRequestContext) {
+  // Cleanup-fixturen resetter alle Unleash-toggles før hver test;
+  // 25%-regelen må derfor enables eksplisitt her.
+  const unleash = new UnleashHelper(request);
+  await unleash.enableFeature('melosys.trygdeavgift.25-prosentregel');
+
   const auth = new AuthHelper(page);
   await auth.login();
 
@@ -48,10 +54,10 @@ async function opprettEøsPensjonistTrygdeavgiftSak(page: Page) {
  * - Regresjonstest: Ordinær beregning → tabell synlig, ingen infomelding
  */
 test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
-  test('skal vise infomelding når inntekten er under minstebeløpet', async ({ page }) => {
+  test('skal vise infomelding når inntekten er under minstebeløpet', async ({ page, request }) => {
     test.setTimeout(120000);
 
-    await opprettEøsPensjonistTrygdeavgiftSak(page);
+    await opprettEøsPensjonistTrygdeavgiftSak(page, request);
 
     const inngang = new EuEosPensjonistInngangPage(page);
     await inngang.ventPåSideLastet();
@@ -70,10 +76,10 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
   });
 
   // AC2: 25%-regel → tabell med * i sats-kolonnen og fotnote
-  test('skal vise tabell med asterisk (*) for 25%-regel', async ({ page }) => {
+  test('skal vise tabell med asterisk (*) for 25%-regel', async ({ page, request }) => {
     test.setTimeout(120000);
 
-    await opprettEøsPensjonistTrygdeavgiftSak(page);
+    await opprettEøsPensjonistTrygdeavgiftSak(page, request);
 
     const inngang = new EuEosPensjonistInngangPage(page);
     await inngang.ventPåSideLastet();
@@ -94,10 +100,10 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
   });
 
   // AC4: Sammenslåtte inntektskilder → *** i inntektskilde-kolonnen og fotnote
-  test('skal vise *** for sammenslåtte inntektskilder', async ({ page }) => {
+  test('skal vise *** for sammenslåtte inntektskilder', async ({ page, request }) => {
     test.setTimeout(120000);
 
-    await opprettEøsPensjonistTrygdeavgiftSak(page);
+    await opprettEøsPensjonistTrygdeavgiftSak(page, request);
 
     const inngang = new EuEosPensjonistInngangPage(page);
     await inngang.ventPåSideLastet();
@@ -115,18 +121,27 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
 
     // Legg til andre inntektskilde: Uføretrygd
     // Samlet 2×5000×12=120000 > minstebeløpet, men avgift > 25% av overskudd → sammenslåing
+    // Sett opp respons-lytter FØR vi gjør endringer, slik at alle utløste PUT'er fanges opp.
+    const beregningResponse = page
+      .waitForResponse(
+        (resp) =>
+          resp.url().includes('eos-pensjonist/beregning') &&
+          resp.request().method() === 'PUT' &&
+          resp.status() === 200,
+        { timeout: 15000 },
+      )
+      .catch(() => null);
+
     await page.getByRole('button', { name: 'Legg til inntekt' }).click();
     await page.locator('select[name="inntektskilder[1].kildetype"]').selectOption({ label: 'Uføretrygd' });
 
-    const beregningResponse = page.waitForResponse(
-      (resp) => resp.url().includes('eos-pensjonist/beregning') && resp.status() === 200,
-      { timeout: 15000 },
-    );
     const bruttoinntektFelt = page.locator('input[name="inntektskilder[1].bruttoInntekt"]');
     await bruttoinntektFelt.click();
     await bruttoinntektFelt.fill('5000');
     await bruttoinntektFelt.press('Tab');
+
     await beregningResponse;
+    await page.waitForLoadState('networkidle');
 
     await trygdeavgift.verifiserTrygdeavgiftsTabellSynlig();
     await expect(page.getByRole('cell', { name: '***' })).toBeVisible();
@@ -134,10 +149,10 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
   });
 
   // Ordinær beregning (baseline) → tabell synlig, ingen infomeldinger
-  test('skal vise tabell ved ordinær beregning', async ({ page }) => {
+  test('skal vise tabell ved ordinær beregning', async ({ page, request }) => {
     test.setTimeout(120000);
 
-    await opprettEøsPensjonistTrygdeavgiftSak(page);
+    await opprettEøsPensjonistTrygdeavgiftSak(page, request);
 
     const inngang = new EuEosPensjonistInngangPage(page);
     await inngang.ventPåSideLastet();
