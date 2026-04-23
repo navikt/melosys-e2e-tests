@@ -217,6 +217,8 @@ services:
       SPRING_DATASOURCE_PASSWORD: mysecretpassword
       SPRING_FLYWAY_ENABLED: "true"
       KAFKA_BROKERS: "kafka.melosys.docker-internal:9092"
+      UNLEASH_URL: "http://unleash.melosys.docker-internal:4242/api"
+      UNLEASH_TOKEN: "*:development.unleash-insecure-client-api-token"
     networks:
       melosys.docker-internal:
         aliases:
