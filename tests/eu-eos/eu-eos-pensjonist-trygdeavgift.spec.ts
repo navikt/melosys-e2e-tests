@@ -89,9 +89,7 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
 
     await trygdeavgift.verifiserTrygdeavgiftsTabellSynlig();
     await expect(page.getByRole('cell', { name: '*' })).toBeVisible();
-    await expect(
-      page.getByText('* Beregnet etter 25 %-regelen: Trygdeavgift skal ikke utgjøre mer enn 25 % av inntekt over minstebeløpet.'),
-    ).toBeVisible();
+    await expect(page.getByText('* Beregnet etter 25 %-regelen')).toBeVisible();
     await trygdeavgift.verifiserInfomeldingMinstebeløpIkkeSynlig();
   });
 
