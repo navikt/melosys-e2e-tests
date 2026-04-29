@@ -144,6 +144,48 @@ export class FaktureringHelper {
     return await response.json();
   }
 
+  /**
+   * Hent fakturaserie-kjede by referanse (inkluderer krediterings-serier via erstattet_med-kjeden)
+   *
+   * Bruker query-parameter-endepunktet som traverserer hele erstattet_med-kjeden,
+   * i motsetning til hentFakturaserie som kun returnerer én serie.
+   */
+  async hentFakturaserieKjede(referanse: string): Promise<Fakturaserie[]> {
+    const response = await this.callEndpoint('GET', `/fakturaserier?referanse=${referanse}`);
+
+    if (!response.ok()) {
+      const text = await response.text();
+      throw new Error(`Failed to get fakturaserie-kjede ${referanse}: ${response.status()} - ${text}`);
+    }
+
+    return await response.json();
+  }
+
+  /**
+   * Get total beløp for en hel fakturaserie-kjede (inkl. krediteringer), eventuelt filtrert på år
+   */
+  totalBelopKjede(serier: Fakturaserie[], aar?: number): number {
+    return serier.reduce((sum, serie) => sum + this.totalBelop(serie, aar), 0);
+  }
+
+  /**
+   * Hent og slå sammen flere fakturaserie-kjeder, deduplisert på referanse.
+   * Nødvendig når krediterings-serier lenkes til flere kjeder via erstattet_med.
+   */
+  async hentSammenslåttKjede(...referanser: string[]): Promise<Fakturaserie[]> {
+    const kjeder = await Promise.all(referanser.map(r => this.hentFakturaserieKjede(r)));
+    const sett = new Map<string, Fakturaserie>();
+    kjeder.flat().forEach(s => sett.set(s.fakturaserieReferanse, s));
+    return [...sett.values()];
+  }
+
+  /**
+   * Avrund beløp til 2 desimaler (unngår floating point epsilon-avvik)
+   */
+  avrundBelop(belop: number): number {
+    return parseFloat(belop.toFixed(2));
+  }
+
   // --- Convenience methods ---
 
   /**
