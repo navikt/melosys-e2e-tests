@@ -75,14 +75,13 @@ export class TrygdeavgiftPage extends BasePage {
       await this.skattepliktigGroup.waitFor({ state: 'visible', timeout: 10000 });
       console.log('✅ Trygdeavgift page loaded - Skattepliktig field visible');
 
-      // Wait for the initial GET /trygdeavgift/beregning that the useEffect fires
-      // on mount. The response triggers resetSkatteforholdsperioder/resetInntektskilder.
-      await this.page.waitForResponse(
-        resp => resp.url().includes('/trygdeavgift/beregning') &&
-                resp.request().method() === 'GET',
-        { timeout: 10000 }
-      ).catch(() => {
-        console.log('⚠️  No GET /trygdeavgift/beregning response detected (may have completed before listener)');
+      // The useEffect on mount fires GET /trygdeavgift/beregning and then resets
+      // form fields with resetSkatteforholdsperioder/resetInntektskilder. We must
+      // not interact until that response has been applied. waitForLoadState
+      // covers both cases: response already done (returns instantly) or in flight
+      // (waits until network is idle).
+      await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {
+        console.log('⚠️  Network did not reach idle within 5s (continuing anyway)');
       });
 
       // Let React process the response and re-render the form
