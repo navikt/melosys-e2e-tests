@@ -4,7 +4,7 @@
 
 // Test user data
 export const USER_ID_VALID = "30056928150";
-export const USER_ID_KOSOVO = "17016820148";
+export const USER_ID_KOSOVO = "17816810078";
 export const USER_ID_INVALID = "INVALID123";
 
 // Person names (must match mock data)
