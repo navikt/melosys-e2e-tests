@@ -248,4 +248,14 @@ export class TrygdeavgiftAssertions {
       console.log(`✅ Row ${i + 1}: Sats=${expected.sats}%, Avgift=${expected.avgiftPerMnd}`);
     }
   }
+
+  /**
+   * Verifiser at Helsedel og Pensjonsdel vises i dekning-kolonnen.
+   * Brukes ved frivillig medlemskap delt i helse- og pensjonsdel (AC3).
+   */
+  async verifiserHelsedelOgPensjonsdel(): Promise<void> {
+    await expect(this.page.getByRole('columnheader', { name: 'Dekning' })).toBeVisible();
+    await expect(this.page.getByRole('cell', { name: 'Helsedel' })).toBeVisible();
+    await expect(this.page.getByRole('cell', { name: 'Pensjonsdel' })).toBeVisible();
+  }
 }

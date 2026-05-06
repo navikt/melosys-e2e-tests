@@ -1,4 +1,4 @@
-import { test, expect } from '../../fixtures';
+import { test } from '../../fixtures';
 import { Page } from '@playwright/test';
 import { AuthHelper } from '../../helpers/auth-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
@@ -11,9 +11,8 @@ import { TrygdeavgiftPage } from '../../pages/trygdeavgift/trygdeavgift.page';
 import { AARSAK, SAKSTEMA, SAKSTYPER, USER_ID_VALID } from '../../pages/shared/constants';
 import { waitForProcessInstances } from '../../helpers/api-helper';
 
-const inneværendeÅr = new Date().getFullYear();
-const helÅrFra = `01.01.${inneværendeÅr}`;
-const helÅrTil = `31.12.${inneværendeÅr}`;
+const helÅrFra = `01.01.2026`;
+const helÅrTil = `31.12.2026`;
 
 /**
  * Oppretter en FTRL frivillig medlemskap-sak med helse- og pensjonsdel,
@@ -89,8 +88,6 @@ test.describe('FTRL Trygdeavgift - Helsedel og Pensjonsdel (AC3)', () => {
     await trygdeavgift.fyllInnBruttoinntektMedApiVent('9000');
 
     // Verifiser at tabellen viser Helsedel og Pensjonsdel i dekning-kolonnen
-    await expect(page.getByRole('columnheader', { name: 'Dekning' })).toBeVisible();
-    await expect(page.getByRole('cell', { name: 'Helsedel' })).toBeVisible();
-    await expect(page.getByRole('cell', { name: 'Pensjonsdel' })).toBeVisible();
+    await trygdeavgift.assertions.verifiserHelsedelOgPensjonsdel();
   });
 });

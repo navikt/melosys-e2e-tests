@@ -1,5 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+import { EuEosPensjonistTrygdeavgiftAssertions } from './eu-eos-pensjonist-trygdeavgift.assertions';
 
 /**
  * Page Object for Trygdeavgift-steget for EU/EØS Pensjonist
@@ -18,6 +19,8 @@ import { BasePage } from '../shared/base.page';
  * await trygdeavgift.fyllInnBruttoinntektMedApiVent('8000');
  */
 export class EuEosPensjonistTrygdeavgiftPage extends BasePage {
+  readonly assertions: EuEosPensjonistTrygdeavgiftAssertions;
+
   private readonly skattepliktigGroup = this.page.getByRole('group', { name: 'Skattepliktig' });
 
   private readonly inntektskildeDropdown = this.page.getByLabel('Inntektskilde');
@@ -28,6 +31,7 @@ export class EuEosPensjonistTrygdeavgiftPage extends BasePage {
 
   constructor(page: Page) {
     super(page);
+    this.assertions = new EuEosPensjonistTrygdeavgiftAssertions(page);
   }
 
   private inntektskildeForIndeks(index: number) {
@@ -125,25 +129,5 @@ export class EuEosPensjonistTrygdeavgiftPage extends BasePage {
       await felt.fill(beløp);
       await felt.press('Tab');
     });
-  }
-
-  async verifiserInfomeldingMinstebeløpSynlig(): Promise<void> {
-    await expect(
-      this.page.getByText('Trygdeavgift skal ikke betales da inntekten er under minstebeløpet.'),
-    ).toBeVisible();
-  }
-
-  async verifiserInfomeldingMinstebeløpIkkeSynlig(): Promise<void> {
-    await expect(
-      this.page.getByText('Trygdeavgift skal ikke betales da inntekten er under minstebeløpet.'),
-    ).not.toBeVisible();
-  }
-
-  async verifiserTrygdeavgiftsTabellSynlig(): Promise<void> {
-    await expect(this.page.getByRole('columnheader', { name: 'Trygdeperiode' })).toBeVisible();
-  }
-
-  async verifiserTrygdeavgiftsTabellIkkeSynlig(): Promise<void> {
-    await expect(this.page.getByRole('columnheader', { name: 'Trygdeperiode' })).not.toBeVisible();
   }
 }

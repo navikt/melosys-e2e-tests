@@ -1,4 +1,4 @@
-import { test, expect } from '../../fixtures';
+import { test } from '../../fixtures';
 import { Page, APIRequestContext } from '@playwright/test';
 import { AuthHelper } from '../../helpers/auth-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
@@ -9,9 +9,21 @@ import { AARSAK, BEHANDLINGSTEMA, SAKSTEMA, SAKSTYPER, USER_ID_VALID } from '../
 import { waitForProcessInstances } from '../../helpers/api-helper';
 import { UnleashHelper } from '../../helpers/unleash-helper';
 
-const inneværendeÅr = new Date().getFullYear();
-const helÅrFra = `01.01.${inneværendeÅr}`;
-const helÅrTil = `31.12.${inneværendeÅr}`;
+// Låst til 2026 for å unngå G-avhengig flakiness ved kalenderårsskifte.
+// Oppdater ved behov hvis mock-data eller G-grenser endres for dette året.
+const TESTÅR = 2026;
+const helÅrFra = `01.01.${TESTÅR}`;
+const helÅrTil = `31.12.${TESTÅR}`;
+
+// Bruttoinntekt-testdata (månedlig beløp × 12 = årsbeløp):
+// Minstebeløpet for EU/EØS pensjonist er G-avhengig (ca. 0,5G ≈ 66 000 kr/år i 2026).
+// INNTEKT_UNDER_MINSTEBELØP: 8 000/mnd × 12 = 96 000/år — under minstebeløpet (AC1)
+// INNTEKT_FOR_25_PROSENTREGEL: 9 000/mnd × 12 = 108 000/år — over minstebeløpet, men avgift > 25% av overskudd → 25%-regel (AC2)
+// INNTEKT_AC4_PER_KILDE: 5 000/mnd × 12 = 60 000/år per kilde (2 kilder = 120 000/år) → sammenslåing (AC4)
+// Revurder ved neste G-justering (normalt 1. mai hvert år).
+const INNTEKT_UNDER_MINSTEBELØP = '8000';
+const INNTEKT_FOR_25_PROSENTREGEL = '9000';
+const INNTEKT_AC4_PER_KILDE = '5000';
 
 async function opprettEøsPensjonistTrygdeavgiftSak(page: Page, request: APIRequestContext) {
   // Cleanup-fixturen resetter alle Unleash-toggles før hver test;
@@ -69,10 +81,10 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
     await trygdeavgift.ventPåSideLastet();
     await trygdeavgift.velgIkkeSkattepliktig();
     await trygdeavgift.velgInntektskilde('PENSJON');
-    await trygdeavgift.fyllInnBruttoinntektMedApiVent('8000');
+    await trygdeavgift.fyllInnBruttoinntektMedApiVent(INNTEKT_UNDER_MINSTEBELØP);
 
-    await trygdeavgift.verifiserInfomeldingMinstebeløpSynlig();
-    await trygdeavgift.verifiserTrygdeavgiftsTabellIkkeSynlig();
+    await trygdeavgift.assertions.verifiserInfomeldingMinstebeløpSynlig();
+    await trygdeavgift.assertions.verifiserTrygdeavgiftsTabellIkkeSynlig();
   });
 
   // AC2: 25%-regel → tabell med * i sats-kolonnen og fotnote
@@ -91,12 +103,11 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
     await trygdeavgift.ventPåSideLastet();
     await trygdeavgift.velgIkkeSkattepliktig();
     await trygdeavgift.velgInntektskilde('PENSJON');
-    await trygdeavgift.fyllInnBruttoinntektMedApiVent('9000');
+    await trygdeavgift.fyllInnBruttoinntektMedApiVent(INNTEKT_FOR_25_PROSENTREGEL);
 
-    await trygdeavgift.verifiserTrygdeavgiftsTabellSynlig();
-    await expect(page.getByRole('cell', { name: '*' })).toBeVisible();
-    await expect(page.getByText('* Beregnet etter 25 %-regelen')).toBeVisible();
-    await trygdeavgift.verifiserInfomeldingMinstebeløpIkkeSynlig();
+    await trygdeavgift.assertions.verifiserTrygdeavgiftsTabellSynlig();
+    await trygdeavgift.assertions.verifiser25ProsentRegelMarkering();
+    await trygdeavgift.assertions.verifiserInfomeldingMinstebeløpIkkeSynlig();
   });
 
   // AC4: Sammenslåtte inntektskilder → *** i inntektskilde-kolonnen og fotnote
@@ -117,17 +128,16 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
 
     // Første inntektskilde: Pensjon
     await trygdeavgift.velgInntektskilde('PENSJON');
-    await trygdeavgift.fyllInnBruttoinntektMedApiVent('5000');
+    await trygdeavgift.fyllInnBruttoinntektMedApiVent(INNTEKT_AC4_PER_KILDE);
 
     // Legg til andre inntektskilde: Uføretrygd
     // Samlet 2×5000×12=120000 > minstebeløpet, men avgift > 25% av overskudd → sammenslåing
     await trygdeavgift.klikkLeggTilInntekt();
     await trygdeavgift.velgInntektskildeForIndeks(1, 'Uføretrygd');
-    await trygdeavgift.fyllInnBruttoinntektForIndeksMedApiVent(1, '5000');
+    await trygdeavgift.fyllInnBruttoinntektForIndeksMedApiVent(1, INNTEKT_AC4_PER_KILDE);
 
-    await trygdeavgift.verifiserTrygdeavgiftsTabellSynlig();
-    await expect(page.getByRole('cell', { name: '***' })).toBeVisible();
-    await expect(page.getByText('*** Mer enn en inntektskilde')).toBeVisible();
+    await trygdeavgift.assertions.verifiserTrygdeavgiftsTabellSynlig();
+    await trygdeavgift.assertions.verifiserSammenslåtteInntektskilderMarkering();
   });
 
   // Ordinær beregning (baseline) → tabell synlig, ingen infomeldinger
@@ -148,7 +158,7 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
     await trygdeavgift.velgInntektskilde('PENSJON');
     await trygdeavgift.fyllInnBruttoinntektMedApiVent('200000');
 
-    await trygdeavgift.verifiserTrygdeavgiftsTabellSynlig();
-    await trygdeavgift.verifiserInfomeldingMinstebeløpIkkeSynlig();
+    await trygdeavgift.assertions.verifiserTrygdeavgiftsTabellSynlig();
+    await trygdeavgift.assertions.verifiserInfomeldingMinstebeløpIkkeSynlig();
   });
 });

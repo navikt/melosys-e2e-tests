@@ -1,5 +1,6 @@
 import { Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+import { EuEosPensjonistInngangAssertions } from './eu-eos-pensjonist-inngang.assertions';
 
 /**
  * Page Object for Inngang-steget for EU/EØS Pensjonist TRYGDEAVGIFT
@@ -18,6 +19,8 @@ import { BasePage } from '../shared/base.page';
  * await inngang.klikkBekreftOgFortsett();
  */
 export class EuEosPensjonistInngangPage extends BasePage {
+  readonly assertions: EuEosPensjonistInngangAssertions;
+
   private readonly fraOgMedField = this.page.getByRole('textbox', { name: 'Fra og med' });
   private readonly tilOgMedField = this.page.getByRole('textbox', { name: 'Til og med' });
   private readonly bostedslandSelect = this.page.getByLabel('Bostedsland');
@@ -25,6 +28,7 @@ export class EuEosPensjonistInngangPage extends BasePage {
 
   constructor(page: Page) {
     super(page);
+    this.assertions = new EuEosPensjonistInngangAssertions(page);
   }
 
   async ventPåSideLastet(): Promise<void> {
