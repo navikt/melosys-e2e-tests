@@ -80,7 +80,6 @@ test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
         console.log('📝 Step 7: Filling trygdeavgift...');
         await trygdeavgift.ventPåSideLastet();
         await trygdeavgift.velgSkattepliktig(false);
-        await trygdeavgift.velgSkattepliktig(false);
 
         await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
         await trygdeavgift.velgBetalesAga(false);

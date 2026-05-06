@@ -90,23 +90,29 @@ export class AarsavregningPage extends BasePage {
   }
 
   /**
-   * Answer "Nei" to the first radio question on the page
-   * Used for the initial Nei/Ja question in årsavregning
+   * Radio group for "Avviker innbetalt trygdeavgift..." / "Skal du legge til trygdeavgift..."
+   * Label varies based on ÅRSAVREGNING_EØS_PENSJONIST feature toggle state.
+   */
+  private readonly trygdeavgiftAvvikGroup = this.page.getByRole('group', {
+    name: /Avviker innbetalt|Skal du legge til trygdeavgift/,
+  });
+
+  /**
+   * Answer "Nei" to the initial årsavregning question about innbetalt trygdeavgift
+   * (label varies by feature toggle).
    */
   async svarNei(): Promise<void> {
-    const neiRadio = this.page.getByRole('radio', { name: 'Nei' });
-    await neiRadio.waitFor({ state: 'visible', timeout: 5000 });
-    await neiRadio.check();
+    await this.trygdeavgiftAvvikGroup.waitFor({ state: 'visible', timeout: 5000 });
+    await this.trygdeavgiftAvvikGroup.getByRole('radio', { name: 'Nei' }).check();
     console.log('✅ Answered Nei');
   }
 
   /**
-   * Answer "Ja" to the first radio question on the page
+   * Answer "Ja" to the initial årsavregning question about innbetalt trygdeavgift.
    */
   async svarJa(): Promise<void> {
-    const jaRadio = this.page.getByRole('radio', { name: 'Ja' });
-    await jaRadio.waitFor({ state: 'visible', timeout: 5000 });
-    await jaRadio.check();
+    await this.trygdeavgiftAvvikGroup.waitFor({ state: 'visible', timeout: 5000 });
+    await this.trygdeavgiftAvvikGroup.getByRole('radio', { name: 'Ja' }).check();
     console.log('✅ Answered Ja');
   }
 
