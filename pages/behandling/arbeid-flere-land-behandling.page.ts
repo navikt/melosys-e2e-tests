@@ -397,12 +397,16 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
    * @param arbeidsgiver - Arbeidsgiver å velge (default: 'Ståles Stål AS')
    * @param begrunnelse - Fritekst til begrunnelse (default: 'Lorem ipsum')
    * @param informasjon - Ytterligere informasjon (default: 'Dodatkowo')
+   * @param options - Valgfrie innstillinger
+   * @param options.skipFattVedtak - Hvis true, stoppes flyten før "Fatt vedtak"-steget.
+   *   Bruk dette når du trenger å gjøre egne handlinger (f.eks. velge EESSI-institusjon) før vedtaket fattes.
    */
   async fyllUtArbeidFlereLandBehandling(
     land: string = 'Norge',
     arbeidsgiver: string = 'Ståles Stål AS',
     begrunnelse: string = 'Lorem ipsum',
-    informasjon: string = 'Dodatkowo'
+    informasjon: string = 'Dodatkowo',
+    options: { skipFattVedtak?: boolean } = {}
   ): Promise<void> {
     // EU/EØS behandlinger har en tabbet UI med Inngang, Bosted, Virksomhet
     // "Bekreft og fortsett" navigerer automatisk til neste steg
@@ -460,8 +464,9 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     await this.fyllInnFritekstTilBegrunnelse(begrunnelse);
     await this.fyllInnYtterligereInformasjon(informasjon);
 
-    // Steg 8: Fatt vedtak
-    await this.fattVedtak();
+    if (!options.skipFattVedtak) {
+      await this.fattVedtak();
+    }
   }
 
   // ============================================================

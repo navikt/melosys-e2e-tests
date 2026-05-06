@@ -4,6 +4,7 @@
 
 // Test user data
 export const USER_ID_VALID = "30056928150";
+// Synthetic FNR for TREIG SALMANSEN — endret i melosys-docker-compose PR #140 (MELOSYS-8040)
 export const USER_ID_KOSOVO = "17816810078";
 export const USER_ID_INVALID = "INVALID123";
 
@@ -74,5 +75,9 @@ export const EU_EOS_LAND = {
   FRANKRIKE: 'Frankrike',
   NEDERLAND: 'Nederland',
   ESTLAND: 'Estland',
+  BELGIA: 'Belgia',
   NORGE: 'Norge',
+  // Ikke-EESSI-land som brukes i arbeid-i-flere-land-saker
+  FAROEYENE: 'Færøyene',
+  GRONLAND: 'Grønland',
 } as const;
