@@ -95,7 +95,7 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         await trygdeavgift.ventPåSideLastet();
         await trygdeavgift.velgSkattepliktig(false);
         await trygdeavgift.velgInntektskilde('ARBEIDSINNTEKT');
-        await trygdeavgift.fyllInnBruttoinntektMedApiVent('10000');
+        await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
         await trygdeavgift.klikkBekreftOgFortsett();
 
         // Step 8: Vedtak
@@ -153,20 +153,15 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         }
 
         const faktureringHelper = new FaktureringHelper(request);
-        const opprinneligFakturaserie = await faktureringHelper.hentFakturaserie(opprinneligFakturaserieReferanse);
-        const fakturaserie = await faktureringHelper.hentFakturaserie(fakturaserieReferanse);
+        const alleSerier = await faktureringHelper.hentSammenslåttKjede(opprinneligFakturaserieReferanse, fakturaserieReferanse);
 
-        faktureringHelper.loggFakturaserie(opprinneligFakturaserie);
-        faktureringHelper.loggFakturaserie(fakturaserie);
+        alleSerier.forEach(s => faktureringHelper.loggFakturaserie(s));
 
         const avregningsÅr = getYearFromDate(period.end)
-        const opprinneligTotal = faktureringHelper.totalBelop(opprinneligFakturaserie, avregningsÅr);
-        const nyTotal = faktureringHelper.totalBelop(fakturaserie, avregningsÅr);
-        const sum = opprinneligTotal + nyTotal;
+        const sum = faktureringHelper.avrundBelop(faktureringHelper.totalBelopKjede(alleSerier, avregningsÅr));
 
-        console.log(`Opprinnelig serie 2026: ${opprinneligTotal} kr`);
-        console.log(`Ny serie 2026: ${nyTotal} kr`);
+        console.log(`Sum kjede for ${avregningsÅr}: ${sum} kr`);
 
-        expect(sum, 'Sum av fakturaserier for 2026 skal være 0').toBe(0);
+        expect(sum, `Sum av fakturaserier for ${avregningsÅr} skal være 0`).toBe(0);
     });
 });
