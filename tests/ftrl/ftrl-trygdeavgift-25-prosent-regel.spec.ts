@@ -337,7 +337,7 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     for (let i = 0; i < rowCount; i++) {
       await trygdeavgift.assertions.verifiserInntektskildeKolonne(i, '***');
     }
-    await trygdeavgift.assertions.verifiserForklaringstekst('Mer enn en inntektskilde');
+    await trygdeavgift.assertions.verifiserForklaringstekst('Mer enn en inntekt');
 
     // Frivillig helse+pensjon: dekning splittes i helsedel og pensjonsdel
     // Radene alternerer mellom helsedel og pensjonsdel
