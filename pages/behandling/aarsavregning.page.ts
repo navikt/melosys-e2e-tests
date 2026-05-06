@@ -51,9 +51,17 @@ export class AarsavregningPage extends BasePage {
 
   private readonly skattepliktigGroup = this.page.getByRole('group', { name: 'Skattepliktig' });
 
+  private readonly avvikerInnbetaltGroup = this.page.getByRole('group', {
+    name: 'Avviker innbetalt'
+  });
+
   private readonly inntektskildeDropdown = this.page.getByLabel('Inntektskilde');
 
   private readonly bruttoinntektField = this.page.getByRole('textbox', { name: 'Bruttoinntekt' });
+
+  private readonly innbetaltTrygdeavgiftField = this.page.getByRole('textbox', {
+    name: 'Innbetalt trygdeavgift'
+  });
 
   private readonly bekreftButton = this.page.getByRole('button', { name: 'Bekreft og fortsett' });
 
@@ -108,6 +116,35 @@ export class AarsavregningPage extends BasePage {
     await jaRadio.waitFor({ state: 'visible', timeout: 5000 });
     await jaRadio.check();
     console.log('✅ Answered Ja');
+  }
+
+  /**
+   * Select whether paid trygdeavgift deviates from calculated value
+   *
+   * @param avviker - true for "Ja", false for "Nei"
+   */
+  async velgAvvikerInnbetalt(avviker: boolean): Promise<void> {
+    await this.avvikerInnbetaltGroup.waitFor({ state: 'visible', timeout: 5000 });
+
+    if (avviker) {
+      await this.avvikerInnbetaltGroup.getByLabel('Ja').check();
+    } else {
+      await this.avvikerInnbetaltGroup.getByLabel('Nei').check();
+    }
+
+    console.log(`✅ Selected Avviker innbetalt = ${avviker ? 'Ja' : 'Nei'}`);
+  }
+
+  /**
+   * Fill the paid trygdeavgift amount
+   *
+   * @param beløp - Amount as string (e.g. '300')
+   */
+  async fyllInnInnbetaltTrygdeavgift(beløp: string): Promise<void> {
+    await this.innbetaltTrygdeavgiftField.waitFor({ state: 'visible', timeout: 5000 });
+    await this.innbetaltTrygdeavgiftField.fill(beløp);
+    await this.innbetaltTrygdeavgiftField.press('Tab');
+    console.log(`✅ Fylte inn innbetalt trygdeavgift: ${beløp}`);
   }
 
   /**

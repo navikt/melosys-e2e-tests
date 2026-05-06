@@ -46,6 +46,14 @@ export class OpprettNySakPage extends BasePage {
 
   private readonly behandlingstypeDropdown = this.page.getByLabel('Behandlingstype');
 
+  private readonly pensjonistUforetrygdetOption = this.page.getByText('Pensjonist/uføretrygdet');
+
+  private readonly euEosTrygdeavgiftHeading = this.page.getByRole('heading', {
+    name: 'EU/EØS-land - Trygdeavgift'
+  });
+
+  private readonly aarsavregningOption = this.page.getByText('Årsavregning');
+
   private readonly aarsakDropdown = this.page.getByLabel('Årsak', { exact: true });
 
   private readonly leggIMineCheckbox = this.page.getByRole('checkbox', {
@@ -121,6 +129,36 @@ export class OpprettNySakPage extends BasePage {
    */
   async velgBehandlingstype(behandlingstype: string): Promise<void> {
     await this.behandlingstypeDropdown.selectOption(behandlingstype);
+  }
+
+  /**
+   * Select existing pensjonist/uføretrygdet sak for further treatment
+   */
+  async velgPensjonistUforetrygdet(): Promise<void> {
+    await this.pensjonistUforetrygdetOption.click();
+  }
+
+  /**
+   * Select EU/EØS-land - Trygdeavgift section for an existing sak
+   */
+  async velgEuEosLandTrygdeavgift(): Promise<void> {
+    await this.euEosTrygdeavgiftHeading.click();
+  }
+
+  /**
+   * Select Årsavregning behandling for the chosen sak
+   */
+  async velgAarsavregningBehandling(): Promise<void> {
+    await this.aarsavregningOption.click();
+  }
+
+  /**
+   * Select existing pensjonistsak and choose Årsavregning behandling
+   */
+  async velgPensjonistAarsavregning(): Promise<void> {
+    await this.velgPensjonistUforetrygdet();
+    await this.velgEuEosLandTrygdeavgift();
+    await this.velgAarsavregningBehandling();
   }
 
   /**
