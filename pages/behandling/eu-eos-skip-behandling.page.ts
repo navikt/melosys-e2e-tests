@@ -44,8 +44,11 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
     name: 'Navn på skip'
   });
 
-  // Fartsområde er nå radio-knapper (endret fra dropdown i melosys-web PR #3059)
-  private readonly fartsomradeRadios: Record<'INNENRIKS' | 'UTENRIKS', string> = {
+  private readonly fartsomradeCombobox = this.page.getByRole('combobox', {
+    name: 'Fartsområde'
+  });
+
+  private readonly fartsomradeOptions: Record<'INNENRIKS' | 'UTENRIKS', string> = {
     INNENRIKS: 'Innenfor territorialfarvann',
     UTENRIKS: 'Internasjonalt farvann',
   };
@@ -131,9 +134,8 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
    * @param fartsomrade - 'UTENRIKS' eller 'INNENRIKS'
    */
   async velgFartsomrade(fartsomrade: 'UTENRIKS' | 'INNENRIKS'): Promise<void> {
-    const radio = this.page.getByRole('radio', { name: this.fartsomradeRadios[fartsomrade] });
-    await radio.waitFor({ state: 'visible', timeout: 30000 });
-    await radio.check();
+    await this.fartsomradeCombobox.waitFor({ state: 'visible', timeout: 30000 });
+    await this.fartsomradeCombobox.selectOption({ label: this.fartsomradeOptions[fartsomrade] });
     // Allow time for any triggered API calls or field enabling
     await this.page.waitForTimeout(300);
     console.log(`✅ Valgte fartsområde: ${fartsomrade}`);
