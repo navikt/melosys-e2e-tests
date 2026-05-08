@@ -124,6 +124,9 @@ Source repositories (like `melosys-api`, `faktureringskomponenten`) can automati
 - `melosys-trygdeavgift-beregning-published`
 - `melosys-dokgen-published`
 - `melosys-trygdeavtale-published`
+- `melosys-inngangsvilkar-published`
+- `melosys-eessi-published`
+- `melosys-mock-published`
 
 ### Example Workflow Trigger
 
@@ -284,8 +287,7 @@ Failed tests:
 - PostgreSQL Felles-kodeverk (port 5433)
 
 **Messaging:**
-- Kafka (ports 9092, 29092)
-- Zookeeper (port 2181)
+- Kafka (ports 9092, 29092) — KRaft mode, no Zookeeper
 
 **Mock Services:**
 - mock-oauth2-server (ISSO) (port 8082)
@@ -726,7 +728,7 @@ on:
 ### Scripts (in this repo)
 ```
 scripts/
-└── kafka-entrypoint.sh  # Kafka startup with Zookeeper wait
+└── kafka-entrypoint.sh  # Kafka KRaft-mode startup (storage format + run)
 
 felles-kodeverk/
 └── felles-kodeverk-entrypoint.sh  # Felles-kodeverk startup
@@ -782,4 +784,4 @@ melosys-docker-compose/
 - **Fixtures Guide**: `docs/guides/FIXTURES.md` - Automatic cleanup and Docker log checking
 - **Helpers Guide**: `docs/guides/HELPERS.md` - Test helper utilities
 - **Troubleshooting Guide**: `docs/guides/TROUBLESHOOTING.md` - Common issues and solutions
-- **POM Guide**: `docs/pom/QUICK-START.md` - Page Object Model usage
+- **POMs**: see `CLAUDE.md` § Page Object Model (POM) Pattern

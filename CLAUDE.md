@@ -354,8 +354,6 @@ LOG_FILES_DIR=/tmp/melosys-logs
 
 ## Page Object Model (POM) Pattern
 
-**📖 See [docs/pom/MIGRATION-PLAN.md](docs/pom/MIGRATION-PLAN.md) for complete migration guide and strategy.**
-
 This project is migrating to use the Page Object Model pattern for better maintainability and reusability. POMs are being added incrementally - both old and new test styles can coexist.
 
 ### Why POM?
@@ -552,8 +550,6 @@ await assertErrors(page, [/påkrevd/i, "Ugyldig format"]);
    await myFeature.someAction();
    await myFeature.assertions.verifySomething();
    ```
-
-**See:** `docs/pom/MIGRATION-PLAN.md` for detailed style guide and examples.
 
 ### Available POMs
 
@@ -824,8 +820,6 @@ Key steps:
 - **Helpers**: `docs/guides/HELPERS.md` - FormHelper, DatabaseHelper, AuthHelper
 - **Fixtures**: `docs/guides/FIXTURES.md` - Auto-cleanup and Docker log checking
 - **Known Errors**: `docs/guides/KNOWN-ERRORS.md` - Using @known-error tag for expected failures
-- **POM Guide**: `docs/pom/QUICK-START.md` - Page Object Model quick reference
-- **POM Migration**: `docs/pom/MIGRATION-PLAN.md` - Complete POM strategy
 - **GitHub Actions**: `docs/ci-cd/GITHUB-ACTIONS.md` - CI/CD setup and usage
 - **E2E Coverage**: `docs/ci-cd/E2E-COVERAGE.md` - E2E code coverage collection for melosys-api
 - [Playwright Documentation](https://playwright.dev) - Official Playwright docs

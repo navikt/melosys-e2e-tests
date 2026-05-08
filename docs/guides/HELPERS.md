@@ -529,4 +529,4 @@ await formHelper.fillAndWaitForApi(
 
 - **Fixtures Guide**: `docs/guides/FIXTURES.md` - Automatic cleanup and monitoring
 - **Troubleshooting Guide**: `docs/guides/TROUBLESHOOTING.md` - Common issues and solutions
-- **POM Guide**: `docs/pom/QUICK-START.md` - Page Object Model usage (integrates helpers)
+- **POMs**: see `CLAUDE.md` § Page Object Model (POM) Pattern
