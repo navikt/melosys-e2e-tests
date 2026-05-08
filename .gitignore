@@ -12,6 +12,9 @@ pnpm-debug.log*
 /playwright/.cache/
 /playwright/.auth/
 
+# playwright-bdd generated test files
+.features-gen/
+
 # Test artifacts
 *.mp4
 *.webm

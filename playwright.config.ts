@@ -1,10 +1,27 @@
 import { defineConfig, devices } from '@playwright/test';
+import { defineBddConfig } from 'playwright-bdd';
 
 /**
  * Read environment variables from file.
  * https://github.com/motdotla/dotenv
  */
 // require('dotenv').config();
+
+/**
+ * BDD test generation — converts .feature files + step definitions
+ * into Playwright test files in .features-gen/
+ *
+ * This is the entry point for the ATDD four-layer model:
+ *   Layer 1: features/ (.feature files, structured text in Norwegian)
+ *   Layer 2: dsl/steps/ (bindings) + dsl/ (DSL classes)
+ *   Layer 3: pages/, helpers/ (protocol drivers — unchanged)
+ *   Layer 4: docker-compose (SUT — unchanged)
+ */
+const bddTestDir = defineBddConfig({
+  features: 'features/**/*.feature',
+  steps: ['dsl/steps/*.ts', 'dsl/fixtures.ts'],
+  language: 'no',
+});
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -80,6 +97,19 @@ export default defineConfig({
           // fungerer både lokalt og på CI (mock-oauth2 er publisert på localhost:8082 begge steder).
           args: ['--host-resolver-rules=MAP host.docker.internal 127.0.0.1'],
         }
+      },
+    },
+
+    // BDD project — runs .feature files via playwright-bdd
+    // Use: npx playwright test --project=bdd
+    {
+      name: 'bdd',
+      testDir: bddTestDir,
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: {
+          slowMo: 100,
+        },
       },
     },
 

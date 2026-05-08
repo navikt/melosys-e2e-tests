@@ -12,7 +12,6 @@
     "check:tests": "node scripts/check-vacuous-tests.mjs",
     "test:record": "RECORD_API=true playwright test",
     "replay": "ts-node scripts/replay-api-calls.ts",
-
     "generate-summary": "ts-node scripts/generate-summary-from-json.ts",
     "codegen": "playwright codegen http://localhost:3000/melosys/",
     "show-report": "playwright show-report",
@@ -32,6 +31,7 @@
     "@playwright/test": "^1.40.0",
     "@types/node": "^20.10.0",
     "@types/pg": "^8.16.0",
+    "playwright-bdd": "^8.5.0",
     "ts-node": "^10.9.2",
     "typescript": "^5.9.3"
   },
