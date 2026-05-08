@@ -79,7 +79,7 @@ make dev-eessi
 ```
 
 **Common culprits:**
-- **Kafka**: Needs Zookeeper to be ready first
+- **Kafka**: Runs in KRaft mode — slow storage format on first start
 - **Oracle**: Takes longest to start (~60-90 seconds)
 - **melosys-api**: Needs Oracle + Kafka ready
 
@@ -745,5 +745,5 @@ find test-results -name "trace.zip" -type f | head -1 | xargs npx playwright sho
 - **Fixtures Guide**: `docs/guides/FIXTURES.md` - Automatic cleanup and monitoring
 - **Helpers Guide**: `docs/guides/HELPERS.md` - FormHelper, DatabaseHelper, etc.
 - **GitHub Actions Guide**: `docs/ci-cd/GITHUB-ACTIONS.md` - CI/CD setup
-- **POM Guide**: `docs/pom/QUICK-START.md` - Page Object Model usage
+- **POMs**: see `CLAUDE.md` § Page Object Model (POM) Pattern
 - **Main README**: `README.md` - Complete project documentation

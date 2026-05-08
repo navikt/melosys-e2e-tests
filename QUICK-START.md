@@ -111,4 +111,4 @@ npm run clean-results     # Clean old results
 - **Full documentation**: `README.md`
 - **Troubleshooting**: `docs/guides/TROUBLESHOOTING.md`
 - **Test helpers**: `docs/guides/HELPERS.md`
-- **POMs**: `docs/pom/QUICK-START.md`
+- **POMs**: see `CLAUDE.md` § Page Object Model (POM) Pattern
