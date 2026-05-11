@@ -1,11 +1,10 @@
 # language: no
-Egenskap: Trygdeavtale - Komplett arbeidsflyt
-    Som en saksbehandler
-    ønsker jeg å opprette en trygdeavtale-sak og fatte vedtak
-    slik at bruker får et vedtak om medlemskap
+Egenskap: Trygdeavtale - fatte vedtak om medlemskap
+  Som saksbehandler
+  ønsker jeg å behandle en søknad om medlemskap som gjelder et land Norge har en trygdeavtale med
+  slik at søker får et vedtak om medlemskap
 
-  Scenario: Fullføre trygdeavtale-arbeidsflyt med vedtak
-    Gitt en trygdeavtale-sak er opprettet og sendt inn
-    Når behandlingen er fullført og innvilget
-    Og vedtak fattes
-    Så er vedtaket fattet
+  Scenario: Fullføre trygdeavtale-behandling med vedtak
+    Gitt en opprettet trygdeavtale-behandling
+    Når saksbehandler fatter vedtak med resultat "INNVILGET"
+    Så blir behandlingen fullført og søknad innvilget
