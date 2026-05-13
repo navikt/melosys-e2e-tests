@@ -8,6 +8,7 @@ export const USER_ID_KOSOVO = "17016820148";
 export const USER_ID_INVALID = "INVALID123";
 
 // Person names (must match mock data)
+export const BRUKERNAVN_VALID = "TRIVIELL KARAFFEL";
 export const PERSON_NAME_KOSOVO = "SALMANSEN TREIG";
 export const ORG_NUMBER_VALID = "999999999";
 

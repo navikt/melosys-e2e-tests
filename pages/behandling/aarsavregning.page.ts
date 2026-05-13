@@ -119,12 +119,21 @@ export class AarsavregningPage extends BasePage {
   }
 
   /**
-   * Select whether paid trygdeavgift deviates from calculated value
+   * Select whether paid trygdeavgift deviates from calculated value.
+   * Waits for the debounced PUT /trygdeavgift/beregning, mirrors velgSkattepliktig.
    *
    * @param avviker - true for "Ja", false for "Nei"
    */
   async velgAvvikerInnbetalt(avviker: boolean): Promise<void> {
     await this.avvikerInnbetaltGroup.waitFor({ state: 'visible', timeout: 5000 });
+
+    const responsePromise = this.page.waitForResponse(
+      response =>
+        response.url().includes('/trygdeavgift/beregning') &&
+        response.request().method() === 'PUT' &&
+        response.status() === 200,
+      { timeout: 3000 }
+    ).catch(() => null);
 
     if (avviker) {
       await this.avvikerInnbetaltGroup.getByLabel('Ja').check();
@@ -132,18 +141,34 @@ export class AarsavregningPage extends BasePage {
       await this.avvikerInnbetaltGroup.getByLabel('Nei').check();
     }
 
+    const response = await responsePromise;
+    if (response) {
+      console.log('✅ Debounced PUT /trygdeavgift/beregning completed - avviker saved');
+    } else {
+      await this.page.waitForTimeout(1500);
+    }
+
     console.log(`✅ Selected Avviker innbetalt = ${avviker ? 'Ja' : 'Nei'}`);
   }
 
   /**
-   * Fill the paid trygdeavgift amount
+   * Fill the paid trygdeavgift amount WITH API wait
+   * The field shares the /trygdeavgift/beregning PUT on blur — wait for it before proceeding.
    *
    * @param beløp - Amount as string (e.g. '300')
    */
-  async fyllInnInnbetaltTrygdeavgift(beløp: string): Promise<void> {
+  async fyllInnInnbetaltTrygdeavgiftMedApiVent(beløp: string): Promise<void> {
     await this.innbetaltTrygdeavgiftField.waitFor({ state: 'visible', timeout: 5000 });
+
+    const responsePromise = this.page.waitForResponse(
+      response => response.url().includes('/trygdeavgift/beregning') && response.status() === 200,
+      { timeout: 30000 }
+    );
+
     await this.innbetaltTrygdeavgiftField.fill(beløp);
     await this.innbetaltTrygdeavgiftField.press('Tab');
+
+    await responsePromise;
     console.log(`✅ Fylte inn innbetalt trygdeavgift: ${beløp}`);
   }
 
@@ -295,6 +320,17 @@ export class AarsavregningPage extends BasePage {
    */
   async klikkBekreftOgFortsett(): Promise<void> {
     await this.clickStepButtonWithRetry(this.bekreftButton);
+  }
+
+  /**
+   * Click the secondary "Bekreft og fortsett" button on the resultat/oppsummering
+   * step that follows årsavregning input. Relies on heading-change detection so
+   * we don't have to couple this page to whatever comes next in the wizard.
+   */
+  async klikkBekreftPaaResultatside(): Promise<void> {
+    await this.clickStepButtonWithRetry(this.bekreftButton, {
+      verifyHeadingChange: true,
+    });
   }
 
   /**

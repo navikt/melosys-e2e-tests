@@ -98,11 +98,15 @@ export class HovedsidePage extends BasePage {
   }
 
   /**
-   * Click on a case link by user name (e.g., "TRIVIELL KARAFFEL -")
+   * Open the first case whose link text contains the given substring. The
+   * hovedside link is rendered as "<NAVN> - <fnr>", so passing BRUKERNAVN_VALID
+   * (or USER_ID_VALID, or any unique substring of the link) will match.
    *
-   * @param userName - Part of the link text to match
+   * @param søketekst - Substring to match in the link text
    */
-  async åpneSak(userName: string): Promise<void> {
-    await this.page.getByRole('link', { name: userName }).click();
+  async åpneSak(søketekst: string): Promise<void> {
+    const lenke = this.page.getByRole('link', { name: new RegExp(søketekst) }).first();
+    await lenke.waitFor({ state: 'visible', timeout: 10000 });
+    await lenke.click();
   }
 }

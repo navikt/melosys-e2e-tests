@@ -46,13 +46,17 @@ export class OpprettNySakPage extends BasePage {
 
   private readonly behandlingstypeDropdown = this.page.getByLabel('Behandlingstype');
 
-  private readonly pensjonistUforetrygdetOption = this.page.getByText('Pensjonist/uføretrygdet');
+  private readonly pensjonistUforetrygdetOption = this.page.getByRole('button', {
+    name: 'Pensjonist/uføretrygdet',
+  });
 
   private readonly euEosTrygdeavgiftHeading = this.page.getByRole('heading', {
     name: 'EU/EØS-land - Trygdeavgift'
   });
 
-  private readonly aarsavregningOption = this.page.getByText('Årsavregning');
+  private readonly aarsavregningOption = this.page.getByRole('button', {
+    name: 'Årsavregning',
+  });
 
   private readonly aarsakDropdown = this.page.getByLabel('Årsak', { exact: true });
 
@@ -135,6 +139,7 @@ export class OpprettNySakPage extends BasePage {
    * Select existing pensjonist/uføretrygdet sak for further treatment
    */
   async velgPensjonistUforetrygdet(): Promise<void> {
+    await this.pensjonistUforetrygdetOption.waitFor({ state: 'visible', timeout: 5000 });
     await this.pensjonistUforetrygdetOption.click();
   }
 
@@ -142,6 +147,7 @@ export class OpprettNySakPage extends BasePage {
    * Select EU/EØS-land - Trygdeavgift section for an existing sak
    */
   async velgEuEosLandTrygdeavgift(): Promise<void> {
+    await this.euEosTrygdeavgiftHeading.waitFor({ state: 'visible', timeout: 5000 });
     await this.euEosTrygdeavgiftHeading.click();
   }
 
@@ -149,6 +155,7 @@ export class OpprettNySakPage extends BasePage {
    * Select Årsavregning behandling for the chosen sak
    */
   async velgAarsavregningBehandling(): Promise<void> {
+    await this.aarsavregningOption.waitFor({ state: 'visible', timeout: 5000 });
     await this.aarsavregningOption.click();
   }
 
