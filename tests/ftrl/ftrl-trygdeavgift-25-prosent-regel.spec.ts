@@ -149,6 +149,15 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     await trygdeavgift.assertions.verifiserDekningKolonne(1, /Pensjonsdel/);
 
     await trygdeavgift.klikkBekreftOgFortsett();
+
+    // Verifiser at backend har lagret riktig BEREGNINGSREGEL — dette er grunnlaget
+    // for at dokgen-mapperne i melosys-api PR #3333 sender riktige DTO-felter
+    // (beregningsregel + minstebeløp) til brevmalen.
+    await trygdeavgift.assertions.verifiserDbTrygdeavgiftsperioder([
+      { beregningsregel: 'TJUEFEM_PROSENT_REGEL', trygdesatsErNull: true, avgiftsdel: 'HELSE' },
+      { beregningsregel: 'TJUEFEM_PROSENT_REGEL', trygdesatsErNull: true, avgiftsdel: 'PENSJON' },
+    ]);
+
     const vedtak = new VedtakPage(page);
     await vedtak.klikkFattVedtak();
   });
@@ -167,6 +176,15 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     await trygdeavgift.assertions.verifiserIngenForklaringstekster();
 
     await trygdeavgift.klikkBekreftOgFortsett();
+
+    // Ordinær beregning: TRYGDESATS skal ha tallverdi, BEREGNINGSREGEL = ORDINÆR.
+    // AVGIFTSDEL er null for ordinære perioder (ikke splittet på helse/pensjon
+    // — den splittingen skjer kun ved 25%-regel/MINSTEBELOEP).
+    await trygdeavgift.assertions.verifiserDbTrygdeavgiftsperioder([
+      { beregningsregel: 'ORDINÆR', trygdesatsErNull: false, avgiftsdel: null },
+      { beregningsregel: 'ORDINÆR', trygdesatsErNull: false, avgiftsdel: null },
+    ]);
+
     const vedtak = new VedtakPage(page);
     await vedtak.klikkFattVedtak();
   });
@@ -187,6 +205,13 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     );
 
     await trygdeavgift.klikkBekreftOgFortsett();
+
+    // Full dekning (pliktig § 2-1): kun én periode, ingen helse/pensjon-split.
+    // AVGIFTSDEL er typisk null for full dekning. TRYGDESATS er null pga 25%-regel.
+    await trygdeavgift.assertions.verifiserDbTrygdeavgiftsperioder([
+      { beregningsregel: 'TJUEFEM_PROSENT_REGEL', trygdesatsErNull: true, avgiftsdel: null },
+    ]);
+
     const vedtak = new VedtakPage(page);
     await vedtak.klikkFattVedtak();
   });
@@ -209,6 +234,14 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     ).toBeVisible();
 
     await trygdeavgift.klikkBekreftOgFortsett();
+
+    // Minstebeløp: én samlet periode (ikke helse/pensjon-splittet siden ingen
+    // avgift skal betales). BEREGNINGSREGEL = MINSTEBELØP, TRYGDESATS = null,
+    // AVGIFTSDEL = null.
+    await trygdeavgift.assertions.verifiserDbTrygdeavgiftsperioder([
+      { beregningsregel: 'MINSTEBELØP', trygdesatsErNull: true, avgiftsdel: null },
+    ]);
+
     const vedtak = new VedtakPage(page);
     await vedtak.klikkFattVedtak();
   });
@@ -365,6 +398,14 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     await page.waitForLoadState('networkidle');
 
     await trygdeavgift.klikkBekreftOgFortsett();
+
+    // Alle perioder ender på 25%-regel (per Confluence Eksempel 1). Backend slår
+    // sammen til 2 perioder (HELSE + PENSJON) for frivillig helse+pensjon-dekning.
+    await trygdeavgift.assertions.verifiserDbTrygdeavgiftsperioder([
+      { beregningsregel: 'TJUEFEM_PROSENT_REGEL', trygdesatsErNull: true, avgiftsdel: 'HELSE' },
+      { beregningsregel: 'TJUEFEM_PROSENT_REGEL', trygdesatsErNull: true, avgiftsdel: 'PENSJON' },
+    ]);
+
     const vedtak = new VedtakPage(page);
     await vedtak.klikkFattVedtak();
   });

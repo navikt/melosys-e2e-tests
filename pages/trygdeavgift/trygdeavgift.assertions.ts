@@ -1,5 +1,19 @@
 import { Page, expect } from '@playwright/test';
 import { assertErrors } from '../../utils/assertions';
+import { withDatabase } from '../../helpers/db-helper';
+
+/**
+ * Forventet rad i TRYGDEAVGIFTSPERIODE etter at vedtak/lagring er ferdig.
+ * Brukes av {@link TrygdeavgiftAssertions.verifiserDbTrygdeavgiftsperioder}.
+ */
+export type ForventetTrygdeavgiftsperiodeDb = {
+  /** Verdi i BEREGNINGSREGEL-kolonnen (f.eks. 'TJUEFEM_PROSENT_REGEL', 'MINSTEBELOEP', 'ORDINAER'). */
+  beregningsregel: string | null;
+  /** true: TRYGDESATS skal være NULL. false: skal ha tallverdi. Hopper over sjekken hvis utelatt. */
+  trygdesatsErNull?: boolean;
+  /** Forventet AVGIFTSDEL (f.eks. 'HELSE' / 'PENSJON'). Hopper over hvis utelatt. */
+  avgiftsdel?: string | null;
+};
 
 /**
  * Assertion methods for TrygdeavgiftPage
@@ -341,5 +355,61 @@ export class TrygdeavgiftAssertions {
 
       console.log(`✅ Row ${i + 1}: Sats=${expected.sats}%, Avgift=${expected.avgiftPerMnd}`);
     }
+  }
+
+  /**
+   * Verifiser at TRYGDEAVGIFTSPERIODE-radene i databasen matcher forventet.
+   *
+   * Bekrefter at melosys-api har lagret riktig BEREGNINGSREGEL (TJUEFEM_PROSENT_REGEL,
+   * MINSTEBELOEP, ORDINAER) — som styrer hvilken brev-tekst dokgen rendrer ihht.
+   * mapper-endringene i melosys-api PR #3333.
+   *
+   * Forutsetter at cleanupFixture har ryddet databasen før testen, slik at det kun
+   * finnes perioder for denne testens behandling.
+   *
+   * @param forventet - Array av forventede perioder, i samme rekkefølge som ID
+   *
+   * @example
+   * // 25%-regel med helse+pensjon-split (2 perioder):
+   * await trygdeavgift.assertions.verifiserDbTrygdeavgiftsperioder([
+   *   { beregningsregel: 'TJUEFEM_PROSENT_REGEL', trygdesatsErNull: true, avgiftsdel: 'HELSE' },
+   *   { beregningsregel: 'TJUEFEM_PROSENT_REGEL', trygdesatsErNull: true, avgiftsdel: 'PENSJON' },
+   * ]);
+   */
+  async verifiserDbTrygdeavgiftsperioder(
+    forventet: ForventetTrygdeavgiftsperiodeDb[]
+  ): Promise<void> {
+    await withDatabase(async (db) => {
+      const perioder = await db.query<{
+        BEREGNINGSREGEL: string | null;
+        TRYGDESATS: number | null;
+        AVGIFTSDEL: string | null;
+      }>(
+        `SELECT BEREGNINGSREGEL, TRYGDESATS, AVGIFTSDEL
+         FROM TRYGDEAVGIFTSPERIODE
+         ORDER BY ID`,
+        {}
+      );
+
+      expect(perioder, `Antall TRYGDEAVGIFTSPERIODE-rader (faktisk: ${perioder.length})`).toHaveLength(forventet.length);
+
+      forventet.forEach((f, i) => {
+        const p = perioder[i];
+        expect(p.BEREGNINGSREGEL, `Periode ${i}: BEREGNINGSREGEL`).toBe(f.beregningsregel);
+
+        if (f.trygdesatsErNull !== undefined) {
+          if (f.trygdesatsErNull) {
+            expect(p.TRYGDESATS, `Periode ${i}: TRYGDESATS skal være null`).toBeNull();
+          } else {
+            expect(p.TRYGDESATS, `Periode ${i}: TRYGDESATS skal ha tallverdi`).not.toBeNull();
+          }
+        }
+
+        if (f.avgiftsdel !== undefined) {
+          expect(p.AVGIFTSDEL, `Periode ${i}: AVGIFTSDEL`).toBe(f.avgiftsdel);
+        }
+      });
+      console.log(`✅ DB: ${perioder.length} trygdeavgiftsperioder verifisert`);
+    });
   }
 }
