@@ -9,7 +9,13 @@ import { LovvalgPage } from '../../pages/behandling/lovvalg.page';
 import { ResultatPeriodePage } from '../../pages/behandling/resultat-periode.page';
 import { TrygdeavgiftPage } from '../../pages/trygdeavgift/trygdeavgift.page';
 import { VedtakPage } from '../../pages/vedtak/vedtak.page';
-import { USER_ID_VALID } from '../../pages/shared/constants';
+import {
+  AARSAK,
+  BEHANDLINGSTEMA,
+  SAKSTEMA,
+  SAKSTYPER,
+  USER_ID_VALID,
+} from '../../pages/shared/constants';
 
 import { UnleashHelper } from '../../helpers/unleash-helper';
 
@@ -404,6 +410,87 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     await trygdeavgift.assertions.verifiserDbTrygdeavgiftsperioder([
       { beregningsregel: 'TJUEFEM_PROSENT_REGEL', trygdesatsErNull: true, avgiftsdel: 'HELSE' },
       { beregningsregel: 'TJUEFEM_PROSENT_REGEL', trygdesatsErNull: true, avgiftsdel: 'PENSJON' },
+    ]);
+
+    const vedtak = new VedtakPage(page);
+    await vedtak.klikkFattVedtak();
+  });
+});
+
+/**
+ * FTRL Pensjonist — 25%-regelen
+ *
+ * Dekker stegvelger 2 fra MELOSYS-7989: visning av 25%-regel for FTRL Pensjonist-saker.
+ * Pensjonist-flyten har 5 steg (uten Virksomhet): Inngang → Bestemmelse → Perioder
+ * → Trygdeavgift → Vedtak. Pliktig medlem etter § 2-5.
+ */
+test.describe('FTRL Pensjonist — 25%-regelen', () => {
+  test('25%-regelen for FTRL Pensjonist (14000 kr/md)', async ({ page, request }) => {
+    test.setTimeout(120000);
+
+    const unleash = new UnleashHelper(request);
+    await unleash.enableFeature('melosys.trygdeavgift.25-prosentregel');
+
+    const auth = new AuthHelper(page);
+    await auth.login();
+
+    const hovedside = new HovedsidePage(page);
+    const opprettSak = new OpprettNySakPage(page);
+
+    await hovedside.gotoOgOpprettNySak();
+    await opprettSak.fyllInnBrukerID(USER_ID_VALID);
+    await opprettSak.velgSakstype(SAKSTYPER.FTRL);
+    await opprettSak.velgSakstema(SAKSTEMA.MEDLEMSKAP_LOVVALG);
+    await opprettSak.velgBehandlingstema(BEHANDLINGSTEMA.PENSJONIST);
+    await opprettSak.velgAarsak(AARSAK.SØKNAD);
+    await opprettSak.leggBehandlingIMine();
+    await opprettSak.klikkOpprettNyBehandling();
+    await opprettSak.assertions.verifiserBehandlingOpprettet();
+
+    await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).click();
+
+    // Inngang (Medlemskap) — frivillig helse+pensjon-dekning
+    const medlemskap = new MedlemskapPage(page);
+    await medlemskap.velgPeriode('01.01.2026', '31.12.2026');
+    await medlemskap.velgFlereLandIkkeKjentHvilke();
+    await medlemskap.velgTrygdedekning('FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON');
+    await medlemskap.klikkBekreftOgFortsett();
+
+    // Bestemmelse (Lovvalg) — § 2-8 første ledd bokstav d (pensjonist)
+    const lovvalg = new LovvalgPage(page);
+    await lovvalg.velgBestemmelse('FTRL_KAP2_2_8_FØRSTE_LEDD_D');
+    await lovvalg.svarJaPaaFørsteSpørsmål();
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Mottar søker pensjon');
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker minst 30 års medlemskap');
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker minst 10 års medlemskap');
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker nær tilknytning');
+    await lovvalg.klikkBekreftOgFortsett();
+
+    // Perioder — default-verdier (Innvilget/Avslått/Innvilget) er gyldige for
+    // pensjonist + helse/pensjon-dekning. Bare bekreft og gå videre.
+    await page.waitForTimeout(3000);
+    const resultatPeriode = new ResultatPeriodePage(page);
+    await resultatPeriode.klikkBekreftOgFortsett();
+
+    // Trygdeavgift — 14000 kr/md (168 000/år, rett over minstebeløpet for pensjonist → 25%-regel)
+    const trygdeavgift = new TrygdeavgiftPage(page);
+    await trygdeavgift.ventPåSideLastet();
+    await trygdeavgift.velgSkattepliktig(false);
+    await trygdeavgift.velgInntektskilde('PENSJON');
+    await trygdeavgift.fyllInnBruttoinntektMedApiVent('14000');
+
+    await trygdeavgift.assertions.verifiserTrygdeavgiftBeregnet();
+    await trygdeavgift.assertions.verifiserSatsKolonne(0, '*');
+    await trygdeavgift.assertions.verifiserForklaringstekst(
+      'Beregnet etter 25 %-regelen'
+    );
+
+    await trygdeavgift.klikkBekreftOgFortsett();
+
+    // Frivillig pensjonist § 2-8 d med helse+pensjon-dekning: kun helsedel betales
+    // (pensjonsdel utgår siden søker allerede mottar pensjon → 1 periode med HELSE).
+    await trygdeavgift.assertions.verifiserDbTrygdeavgiftsperioder([
+      { beregningsregel: 'TJUEFEM_PROSENT_REGEL', trygdesatsErNull: true, avgiftsdel: 'HELSE' },
     ]);
 
     const vedtak = new VedtakPage(page);
