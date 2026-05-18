@@ -86,9 +86,11 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
   test('skal vise tabell med asterisk (*) for 25%-regel', async ({ page, request }) => {
     test.setTimeout(120000);
 
-    // Trygt over minstebeløpet, men lav nok til at 25%-regelen begrenser avgiften.
+    // Litt over minstebeløpet, men lav nok til at 25%-regelen begrenser avgiften.
+    // Ratio 1.085 er valgt for å speile det forholdet som fungerte med tidligere
+    // hardkodet verdi (9000 kr/md ved minstebeløp ~99k/år).
     const månedligMinstebeløp = Math.floor((await hentMinstebeløp(request, TESTÅR)) / 12);
-    const månedsinntektFor25ProsentRegel = String(Math.floor(månedligMinstebeløp * 1.5));
+    const månedsinntektFor25ProsentRegel = String(Math.floor(månedligMinstebeløp * 1.085));
 
     await opprettEøsPensjonistTrygdeavgiftSak(page, request);
 
@@ -113,10 +115,12 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
   test('skal vise *** for sammenslåtte inntektskilder', async ({ page, request }) => {
     test.setTimeout(120000);
 
-    // Hver enkelt kilde er like under minstebeløpet, totalt godt over — det er
-    // sammenslåingen som gjør at avgift skal beregnes.
+    // Hver enkelt kilde er klart under minstebeløpet, totalt over — det er
+    // sammenslåingen som gjør at avgift skal beregnes. Ratio 0.6 per kilde speiler
+    // det forholdet som fungerte med tidligere hardkodet verdi (5000 kr/md ved
+    // minstebeløp ~99k/år).
     const månedligMinstebeløp = Math.floor((await hentMinstebeløp(request, TESTÅR)) / 12);
-    const månedsinntektPerKilde = String(månedligMinstebeløp - 100);
+    const månedsinntektPerKilde = String(Math.floor(månedligMinstebeløp * 0.6));
 
     await opprettEøsPensjonistTrygdeavgiftSak(page, request);
 

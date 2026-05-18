@@ -53,10 +53,10 @@ export class EuEosPensjonistTrygdeavgiftAssertions {
   /**
    * Verifiserer sammenslåtte inntektskilder-markering:
    * - `***` i inntektskilde-kolonnen
-   * - fotnote "*** Mer enn en inntektskilde"
+   * - fotnote "*** Mer enn en inntekt"
    */
   async verifiserSammenslåtteInntektskilderMarkering(): Promise<void> {
     await expect(this.page.getByRole('cell', { name: '***' })).toBeVisible();
-    await expect(this.page.getByText('*** Mer enn en inntektskilde')).toBeVisible();
+    await expect(this.page.getByText('*** Mer enn en inntekt')).toBeVisible();
   }
 }
