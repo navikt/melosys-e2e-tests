@@ -48,11 +48,11 @@ async function opprettEøsPensjonistTrygdeavgiftSak(page: Page, request: APIRequ
  * Tester beregning av trygdeavgift for EU/EØS Pensjonist-saker
  * mot ekte backend (ingen mocking).
  *
- * Akseptansekriterier:
- * - AC1: Vis infomelding "Trygdeavgift skal ikke betales..." når alle perioder er under minstebeløpet
- * - AC2: 25%-regel → tabell med * i sats-kolonnen og fotnote
- * - AC4: Sammenslåtte inntektskilder → *** i inntektskilde-kolonnen og fotnote
- * - Regresjonstest: Ordinær beregning → tabell synlig, ingen infomelding
+ * Dekker:
+ * - Infomelding "Trygdeavgift skal ikke betales..." når alle perioder er under minstebeløpet
+ * - 25%-regel → tabell med * i sats-kolonnen og fotnote
+ * - Sammenslåtte inntektskilder → *** i inntektskilde-kolonnen og fotnote
+ * - Regresjon: Ordinær beregning → tabell synlig, ingen infomelding
  */
 test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
   test('skal vise infomelding når inntekten er under minstebeløpet (1000 kr/md)', async ({ page, request }) => {
@@ -77,7 +77,7 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
     await trygdeavgift.assertions.verifiserTrygdeavgiftsTabellIkkeSynlig();
   });
 
-  // AC2: 25%-regel → tabell med * i sats-kolonnen og fotnote
+  // 25%-regel → tabell med * i sats-kolonnen og fotnote
   test('skal vise tabell med asterisk (*) for 25%-regel (9000 kr/md)', async ({ page, request }) => {
     test.setTimeout(120000);
 
@@ -101,7 +101,7 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
     await trygdeavgift.assertions.verifiserInfomeldingMinstebeløpIkkeSynlig();
   });
 
-  // AC4: Sammenslåtte inntektskilder → *** i inntektskilde-kolonnen og fotnote
+  // Sammenslåtte inntektskilder → *** i inntektskilde-kolonnen og fotnote
   test('skal vise *** for sammenslåtte inntektskilder (2 × 5000 kr/md)', async ({ page, request }) => {
     test.setTimeout(120000);
 
