@@ -18,6 +18,9 @@ import {
 } from '../../pages/shared/constants';
 
 import { UnleashHelper } from '../../helpers/unleash-helper';
+import { hentMinstebeløp } from '../../helpers/trygdeavgift-beregning-helper';
+
+const TESTÅR = 2026;
 
 /**
  * FTRL Trygdeavgift — 25%-regelen og minstebeløp
@@ -25,11 +28,14 @@ import { UnleashHelper } from '../../helpers/unleash-helper';
  * Spec: specs/ftrl-trygdeavgift-25-prosent-regel.md
  *
  * Tester scenarioer for trygdeavgiftsberegning med 25%-regelen:
- * 1. 25%-regelen begrenser avgiften (10000 kr/md → sats viser *, dekning helsedel/pensjonsdel)
- * 2. Ordinær beregning uten begrensning (80000 kr/md → sats er numerisk)
+ * 1. 25%-regelen begrenser avgiften (sats viser *, dekning helsedel/pensjonsdel)
+ * 2. Ordinær beregning uten begrensning (sats er numerisk)
  * 3. 25%-regelen med Full dekning (pliktig medlem, § 2-1)
- * 4. Inntekt under minstebeløpet (4000 kr/md → sats viser **, avgift 0 nkr)
+ * 4. Inntekt under minstebeløpet (sats viser **, avgift 0 nkr)
  * 5. Confluence Eksempel 1 (flere skatteforhold/inntekter, ***, helsedel/pensjonsdel)
+ *
+ * Minstebeløp-sensitive tester henter faktisk minstebeløp via hentMinstebeløp()
+ * for å være robuste mot G-justering år for år.
  *
  * Oppsett scenario 1-2:
  * - Dekning: FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON (§ 2-8 a, frivillig)
@@ -135,14 +141,20 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     return trygdeavgift;
   }
 
-  test('25%-regelen begrenser avgiften (10000 kr/md)', async ({ page, request }) => {
+  test('25%-regelen begrenser avgiften', async ({ page, request }) => {
     test.setTimeout(120000);
     const trygdeavgift = await opprettSakFrivilligHelsePensjon(page, request);
+
+    // Litt over minstebeløpet, men lav nok til at 25%-regelen treffer.
+    // Ratio 1.21 speiler det forholdet som fungerte med tidligere hardkodet
+    // verdi (10000 kr/md ved minstebeløp ~99k/år).
+    const månedligMinstebeløp = Math.floor((await hentMinstebeløp(request, TESTÅR)) / 12);
+    const månedsinntekt = String(Math.floor(månedligMinstebeløp * 1.21));
 
     await trygdeavgift.velgSkattepliktig(false);
     await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
     await trygdeavgift.velgBetalesAga(false);
-    await trygdeavgift.fyllInnBruttoinntektMedApiVent('10000');
+    await trygdeavgift.fyllInnBruttoinntektMedApiVent(månedsinntekt);
 
     await trygdeavgift.assertions.verifiserTrygdeavgiftBeregnet();
     await trygdeavgift.assertions.verifiserSatsKolonne(0, '*');
@@ -195,14 +207,20 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     await vedtak.klikkFattVedtak();
   });
 
-  test('25%-regelen med Full dekning — pliktig medlem (10000 kr/md)', async ({ page, request }) => {
+  test('25%-regelen med Full dekning — pliktig medlem', async ({ page, request }) => {
     test.setTimeout(120000);
     const trygdeavgift = await opprettSakPliktigFullDekning(page, request);
+
+    // Litt over minstebeløpet, men lav nok til at 25%-regelen treffer.
+    // Ratio 1.21 speiler det forholdet som fungerte med tidligere hardkodet
+    // verdi (10000 kr/md ved minstebeløp ~99k/år).
+    const månedligMinstebeløp = Math.floor((await hentMinstebeløp(request, TESTÅR)) / 12);
+    const månedsinntekt = String(Math.floor(månedligMinstebeløp * 1.21));
 
     await page.waitForLoadState('networkidle');
     await trygdeavgift.velgSkattepliktig(false);
     await trygdeavgift.velgInntektskilde('ARBEIDSINNTEKT');
-    await trygdeavgift.fyllInnBruttoinntektMedApiVent('10000');
+    await trygdeavgift.fyllInnBruttoinntektMedApiVent(månedsinntekt);
 
     await trygdeavgift.assertions.verifiserTrygdeavgiftBeregnet();
     await trygdeavgift.assertions.verifiserSatsKolonne(0, '*');
@@ -222,14 +240,19 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     await vedtak.klikkFattVedtak();
   });
 
-  test('inntekt under minstebeløpet — avgift 0 kr (4000 kr/md)', async ({ page, request }) => {
+  test('inntekt under minstebeløpet — avgift 0 kr', async ({ page, request }) => {
     test.setTimeout(120000);
     const trygdeavgift = await opprettSakFrivilligHelsePensjon(page, request);
+
+    // Henter faktisk minstebeløp fra melosys-trygdeavgift-beregning og legger oss
+    // trygt under, slik at testen tåler G-justering år for år.
+    const månedligMinstebeløp = Math.floor((await hentMinstebeløp(request, TESTÅR)) / 12);
+    const månedsinntekt = String(månedligMinstebeløp - 100);
 
     await trygdeavgift.velgSkattepliktig(false);
     await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
     await trygdeavgift.velgBetalesAga(false);
-    await trygdeavgift.fyllInnBruttoinntektMedApiVent('4000');
+    await trygdeavgift.fyllInnBruttoinntektMedApiVent(månedsinntekt);
 
     // Under minstebeløpet: ingen tabell vises, kun infomelding.
     await expect(
@@ -425,8 +448,14 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
  * → Trygdeavgift → Vedtak. Pliktig medlem etter § 2-5.
  */
 test.describe('FTRL Pensjonist — 25%-regelen', () => {
-  test('25%-regelen for FTRL Pensjonist (14000 kr/md)', async ({ page, request }) => {
+  test('25%-regelen for FTRL Pensjonist', async ({ page, request }) => {
     test.setTimeout(120000);
+
+    // Trygt over minstebeløpet for pensjonist, men lav nok til at 25%-regelen
+    // treffer. Ratio 1.69 speiler det forholdet som fungerte med tidligere
+    // hardkodet verdi (14000 kr/md ved minstebeløp ~99k/år).
+    const månedligMinstebeløp = Math.floor((await hentMinstebeløp(request, TESTÅR)) / 12);
+    const månedsinntekt = String(Math.floor(månedligMinstebeløp * 1.69));
 
     const unleash = new UnleashHelper(request);
     await unleash.enableFeature('melosys.trygdeavgift.25-prosentregel');
@@ -472,12 +501,11 @@ test.describe('FTRL Pensjonist — 25%-regelen', () => {
     const resultatPeriode = new ResultatPeriodePage(page);
     await resultatPeriode.klikkBekreftOgFortsett();
 
-    // Trygdeavgift — 14000 kr/md (168 000/år, rett over minstebeløpet for pensjonist → 25%-regel)
     const trygdeavgift = new TrygdeavgiftPage(page);
     await trygdeavgift.ventPåSideLastet();
     await trygdeavgift.velgSkattepliktig(false);
     await trygdeavgift.velgInntektskilde('PENSJON');
-    await trygdeavgift.fyllInnBruttoinntektMedApiVent('14000');
+    await trygdeavgift.fyllInnBruttoinntektMedApiVent(månedsinntekt);
 
     await trygdeavgift.assertions.verifiserTrygdeavgiftBeregnet();
     await trygdeavgift.assertions.verifiserSatsKolonne(0, '*');
