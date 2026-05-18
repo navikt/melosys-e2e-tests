@@ -8,6 +8,7 @@ import { EuEosPensjonistTrygdeavgiftPage } from '../../pages/trygdeavgift/eu-eos
 import { AARSAK, BEHANDLINGSTEMA, SAKSTEMA, SAKSTYPER, USER_ID_VALID } from '../../pages/shared/constants';
 import { waitForProcessInstances } from '../../helpers/api-helper';
 import { UnleashHelper } from '../../helpers/unleash-helper';
+import { hentMinstebeløp } from '../../helpers/trygdeavgift-beregning-helper';
 
 // Låst til 2026 for å unngå G-avhengig flakiness ved kalenderårsskifte.
 const TESTÅR = 2026;
@@ -55,8 +56,13 @@ async function opprettEøsPensjonistTrygdeavgiftSak(page: Page, request: APIRequ
  * - Regresjon: Ordinær beregning → tabell synlig, ingen infomelding
  */
 test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
-  test('skal vise infomelding når inntekten er under minstebeløpet (1000 kr/md)', async ({ page, request }) => {
+  test('skal vise infomelding når inntekten er under minstebeløpet', async ({ page, request }) => {
     test.setTimeout(120000);
+
+    // Henter faktisk minstebeløp fra melosys-trygdeavgift-beregning og legger oss
+    // trygt under, slik at testen tåler G-justering år for år.
+    const månedligMinstebeløp = Math.floor((await hentMinstebeløp(request, TESTÅR)) / 12);
+    const månedsinntektUnder = String(månedligMinstebeløp - 100);
 
     await opprettEøsPensjonistTrygdeavgiftSak(page, request);
 
@@ -70,16 +76,19 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
     await trygdeavgift.ventPåSideLastet();
     await trygdeavgift.velgIkkeSkattepliktig();
     await trygdeavgift.velgInntektskilde('PENSJON');
-    // 1000 kr/md = 12 000 kr/år — klart under minstebeløpet (G-justert i melosys-trygdeavgift-beregning).
-    await trygdeavgift.fyllInnBruttoinntektMedApiVent('1000');
+    await trygdeavgift.fyllInnBruttoinntektMedApiVent(månedsinntektUnder);
 
     await trygdeavgift.assertions.verifiserInfomeldingMinstebeløpSynlig();
     await trygdeavgift.assertions.verifiserTrygdeavgiftsTabellIkkeSynlig();
   });
 
   // 25%-regel → tabell med * i sats-kolonnen og fotnote
-  test('skal vise tabell med asterisk (*) for 25%-regel (9000 kr/md)', async ({ page, request }) => {
+  test('skal vise tabell med asterisk (*) for 25%-regel', async ({ page, request }) => {
     test.setTimeout(120000);
+
+    // Trygt over minstebeløpet, men lav nok til at 25%-regelen begrenser avgiften.
+    const månedligMinstebeløp = Math.floor((await hentMinstebeløp(request, TESTÅR)) / 12);
+    const månedsinntektFor25ProsentRegel = String(Math.floor(månedligMinstebeløp * 1.5));
 
     await opprettEøsPensjonistTrygdeavgiftSak(page, request);
 
@@ -93,8 +102,7 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
     await trygdeavgift.ventPåSideLastet();
     await trygdeavgift.velgIkkeSkattepliktig();
     await trygdeavgift.velgInntektskilde('PENSJON');
-    // 9000 kr/md = 108 000 kr/år — over minstebeløpet, men lav nok til at 25%-regelen begrenser avgiften.
-    await trygdeavgift.fyllInnBruttoinntektMedApiVent('9000');
+    await trygdeavgift.fyllInnBruttoinntektMedApiVent(månedsinntektFor25ProsentRegel);
 
     await trygdeavgift.assertions.verifiserTrygdeavgiftsTabellSynlig();
     await trygdeavgift.assertions.verifiser25ProsentRegelMarkering();
@@ -102,8 +110,13 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
   });
 
   // Sammenslåtte inntektskilder → *** i inntektskilde-kolonnen og fotnote
-  test('skal vise *** for sammenslåtte inntektskilder (2 × 5000 kr/md)', async ({ page, request }) => {
+  test('skal vise *** for sammenslåtte inntektskilder', async ({ page, request }) => {
     test.setTimeout(120000);
+
+    // Hver enkelt kilde er like under minstebeløpet, totalt godt over — det er
+    // sammenslåingen som gjør at avgift skal beregnes.
+    const månedligMinstebeløp = Math.floor((await hentMinstebeløp(request, TESTÅR)) / 12);
+    const månedsinntektPerKilde = String(månedligMinstebeløp - 100);
 
     await opprettEøsPensjonistTrygdeavgiftSak(page, request);
 
@@ -117,15 +130,12 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
     await trygdeavgift.ventPåSideLastet();
     await trygdeavgift.velgIkkeSkattepliktig();
 
-    // Første inntektskilde: Pensjon. 5000 kr/md = 60 000 kr/år per kilde.
     await trygdeavgift.velgInntektskilde('PENSJON');
-    await trygdeavgift.fyllInnBruttoinntektMedApiVent('5000');
+    await trygdeavgift.fyllInnBruttoinntektMedApiVent(månedsinntektPerKilde);
 
-    // Andre inntektskilde: Uføretrygd. Sammen ≈ 120 000 kr/år, og avgift > 25% av overskudd
-    // gir sammenslåing av kildene (*** i tabellen).
     await trygdeavgift.klikkLeggTilInntekt();
     await trygdeavgift.velgInntektskildeForIndeks(1, 'Uføretrygd');
-    await trygdeavgift.fyllInnBruttoinntektForIndeksMedApiVent(1, '5000');
+    await trygdeavgift.fyllInnBruttoinntektForIndeksMedApiVent(1, månedsinntektPerKilde);
 
     await trygdeavgift.assertions.verifiserTrygdeavgiftsTabellSynlig();
     await trygdeavgift.assertions.verifiserSammenslåtteInntektskilderMarkering();
