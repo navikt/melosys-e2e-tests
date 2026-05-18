@@ -1,5 +1,4 @@
 import { Page } from '@playwright/test';
-import { AuthHelper } from '../../helpers/auth-helper';
 import { waitForProcessInstances } from '../../helpers/api-helper';
 import { AarsavregningPage } from '../../pages/behandling/aarsavregning.page';
 import { EuEosPensjonistBehandlingPage } from '../../pages/behandling/eu-eos-pensjonist-behandling.page';
@@ -30,9 +29,6 @@ export const PENSJONIST_AARSAVREGNING_TEST_DATA = {
 export async function setupPensjonistMedAarsavregning(
   page: Page
 ): Promise<{ aarsavregning: AarsavregningPage; vedtak: VedtakPage }> {
-  const auth = new AuthHelper(page);
-  await auth.login();
-
   const hovedside = new HovedsidePage(page);
   const opprettSak = new OpprettNySakPage(page);
   const pensjonistBehandling = new EuEosPensjonistBehandlingPage(page);

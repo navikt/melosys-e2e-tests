@@ -281,7 +281,10 @@ export class TrygdeavgiftPage extends BasePage {
     // CRITICAL: Create response promise BEFORE triggering action
     // This prevents race conditions where API response comes before we start listening
     const responsePromise = this.page.waitForResponse(
-      response => response.url().includes('/trygdeavgift/beregning') && response.status() === 200,
+      response =>
+        (response.url().includes('/trygdeavgift/beregning') ||
+          response.url().includes('/trygdeavgift/eos-pensjonist/beregning')) &&
+        response.status() === 200,
       { timeout: 30000 }
     );
 

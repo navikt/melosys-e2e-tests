@@ -31,17 +31,18 @@ export class EuEosPensjonistBehandlingPage extends BasePage {
     console.log('✅ EU/EØS pensjonist behandling page loaded');
   }
 
+  // NB: Ingen .press('Enter') etter fill — debounced lagring (500ms) i
+  // vurderingOpplysninger.tsx kan komme i ugyldig tilstand når Enter trigger
+  // tidlig submit/blur før de andre feltene er fylt.
   async fyllInnFraOgMed(dato: string): Promise<void> {
     await this.fraOgMedField.click();
     await this.fraOgMedField.fill(dato);
-    await this.fraOgMedField.press('Enter');
     console.log(`✅ Fylte inn fra og med: ${dato}`);
   }
 
   async fyllInnTilOgMed(dato: string): Promise<void> {
     await this.tilOgMedField.click();
     await this.tilOgMedField.fill(dato);
-    await this.tilOgMedField.press('Enter');
     console.log(`✅ Fylte inn til og med: ${dato}`);
   }
 
@@ -58,7 +59,17 @@ export class EuEosPensjonistBehandlingPage extends BasePage {
     await this.ventPåSideLastet();
     await this.fyllInnFraOgMed(fraOgMed);
     await this.fyllInnTilOgMed(tilOgMed);
+
+    // Sett opp lytter FØR siste handling for å unngå race med debounced lagring
+    const periodeLagret = this.page.waitForResponse(
+      response =>
+        response.url().includes('/helseutgift-dekkes-perioder') &&
+        response.request().method() !== 'GET',
+      { timeout: 5000 },
+    );
+
     await this.velgBostedsland(bostedsland);
+    await periodeLagret;
   }
 
   async klikkBekreftOgFortsett(): Promise<void> {
