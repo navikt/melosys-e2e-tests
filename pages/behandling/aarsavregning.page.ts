@@ -65,6 +65,8 @@ export class AarsavregningPage extends BasePage {
 
   private readonly bekreftButton = this.page.getByRole('button', { name: 'Bekreft og fortsett' });
 
+  private readonly fattVedtakButton = this.page.getByRole('button', { name: 'Fatt vedtak' });
+
   constructor(page: Page) {
     super(page);
     this.assertions = new AarsavregningAssertions(page);
@@ -155,31 +157,15 @@ export class AarsavregningPage extends BasePage {
 
   /**
    * Fill the paid trygdeavgift amount.
-   * This field does not consistently trigger its own calculation request; the value is included
-   * in the later årsavregning calculation when the remaining required fields are filled.
+   * The value is included in the later årsavregning calculation.
    *
    * @param beløp - Amount as string (e.g. '300')
    */
-  async fyllInnInnbetaltTrygdeavgiftMedApiVent(beløp: string): Promise<void> {
+  async fyllInnInnbetaltTrygdeavgift(beløp: string): Promise<void> {
     await this.innbetaltTrygdeavgiftField.waitFor({ state: 'visible', timeout: 5000 });
-
-    const responsePromise = this.page.waitForResponse(
-      response =>
-        (response.url().includes('/trygdeavgift/beregning') ||
-          response.url().includes('/trygdeavgift/eos-pensjonist/beregning')) &&
-        response.status() === 200,
-      { timeout: 3000 }
-    ).catch(() => null);
-
     await this.innbetaltTrygdeavgiftField.fill(beløp);
     await this.innbetaltTrygdeavgiftField.press('Tab');
     await expect(this.innbetaltTrygdeavgiftField).toHaveValue(beløp, { timeout: 5000 });
-
-    const response = await responsePromise;
-    if (!response) {
-      await this.page.waitForTimeout(500);
-    }
-
     console.log(`✅ Fylte inn innbetalt trygdeavgift: ${beløp}`);
   }
 
@@ -344,6 +330,7 @@ export class AarsavregningPage extends BasePage {
    */
   async klikkBekreftPaaResultatside(): Promise<void> {
     await this.clickStepButtonWithRetry(this.bekreftButton, {
+      waitForContent: this.fattVedtakButton,
       verifyHeadingChange: true,
     });
   }

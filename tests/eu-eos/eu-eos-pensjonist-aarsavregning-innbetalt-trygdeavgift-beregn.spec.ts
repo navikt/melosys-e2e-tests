@@ -20,7 +20,7 @@ test.describe('EU/EØS Trygdeavgift - Pensjonist årsavregning med avvik', () =>
     await aarsavregning.ventPåSideLastet();
     await aarsavregning.velgÅr(PENSJONIST_AARSAVREGNING_TEST_DATA.år);
     await aarsavregning.velgAvvikerInnbetalt(true);
-    await aarsavregning.fyllInnInnbetaltTrygdeavgiftMedApiVent(
+    await aarsavregning.fyllInnInnbetaltTrygdeavgift(
       PENSJONIST_AARSAVREGNING_TEST_DATA.innbetaltAvvik
     );
     await aarsavregning.velgSkattepliktig(false);

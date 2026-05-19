@@ -26,6 +26,23 @@ export class EuEosPensjonistBehandlingPage extends BasePage {
     this.assertions = new EuEosPensjonistBehandlingAssertions(page);
   }
 
+  private isPensjonistIverksettEndpoint(url: string): boolean {
+    const endpointPrefix = '/api/saksflyt/iverksett/trygdeavgift/';
+    const endpointSuffix = '/pensjonist';
+    const pathname = new URL(url).pathname;
+
+    if (!pathname.startsWith(endpointPrefix) || !pathname.endsWith(endpointSuffix)) {
+      return false;
+    }
+
+    const behandlingId = pathname.slice(
+      endpointPrefix.length,
+      pathname.length - endpointSuffix.length
+    );
+
+    return behandlingId !== '' && !behandlingId.includes('/') && Number.isInteger(Number(behandlingId));
+  }
+
   async ventPåSideLastet(): Promise<void> {
     await this.fraOgMedField.waitFor({ state: 'visible', timeout: 10000 });
     console.log('✅ EU/EØS pensjonist behandling page loaded');
@@ -75,13 +92,25 @@ export class EuEosPensjonistBehandlingPage extends BasePage {
   async klikkBekreftOgFortsett(): Promise<void> {
     await this.clickStepButtonWithRetry(this.bekreftOgFortsettButton, {
       waitForContent: this.skattepliktigGroup,
+      verifyHeadingChange: true,
     });
   }
 
   async klikkBekreftOgSend(): Promise<void> {
     await this.bekreftOgSendButton.waitFor({ state: 'visible', timeout: 10000 });
     await expect(this.bekreftOgSendButton).toBeEnabled({ timeout: 10000 });
+
+    const responsePromise = this.page.waitForResponse(
+      response =>
+        response.request().method() === 'POST' &&
+        this.isPensjonistIverksettEndpoint(response.url()) &&
+        response.status() >= 200 &&
+        response.status() < 300,
+      { timeout: 60000 }
+    );
+
     await this.bekreftOgSendButton.click();
+    await responsePromise;
     console.log('✅ Bekreftet og sendte pensjonistbehandling');
   }
 }
