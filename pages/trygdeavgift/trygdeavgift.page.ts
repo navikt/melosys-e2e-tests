@@ -101,9 +101,11 @@ export class TrygdeavgiftPage extends BasePage {
 
     // Set up response listener BEFORE clicking to catch the debounced PUT
     const responsePromise = this.page.waitForResponse(
-      response => response.url().includes('/trygdeavgift/beregning') &&
-                  response.request().method() === 'PUT' &&
-                  response.status() === 200,
+      response =>
+        (response.url().includes('/trygdeavgift/beregning') ||
+          response.url().includes('/trygdeavgift/eos-pensjonist/beregning')) &&
+        response.request().method() === 'PUT' &&
+        response.status() === 200,
       { timeout: 3000 } // 500ms debounce + 2500ms for API
     ).catch(() => null); // Don't fail if no PUT (form might prevent it)
 
@@ -360,7 +362,10 @@ export class TrygdeavgiftPage extends BasePage {
 
     // Create response promise BEFORE action
     const responsePromise = this.page.waitForResponse(
-      response => response.url().includes('/trygdeavgift/beregning') && response.status() === 200,
+      response =>
+        (response.url().includes('/trygdeavgift/beregning') ||
+          response.url().includes('/trygdeavgift/eos-pensjonist/beregning')) &&
+        response.status() === 200,
       { timeout: 30000 }
     );
 

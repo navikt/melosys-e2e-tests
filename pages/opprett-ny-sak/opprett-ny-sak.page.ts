@@ -46,15 +46,13 @@ export class OpprettNySakPage extends BasePage {
 
   private readonly behandlingstypeDropdown = this.page.getByLabel('Behandlingstype');
 
-  private readonly pensjonistUforetrygdetOption = this.page.getByRole('button', {
-    name: 'Pensjonist/uføretrygdet',
-  });
+  private readonly eksisterendeSakCheckbox = this.page.getByLabel('', { exact: true });
 
   private readonly euEosTrygdeavgiftHeading = this.page.getByRole('heading', {
     name: 'EU/EØS-land - Trygdeavgift'
   });
 
-  private readonly aarsavregningOption = this.page.getByRole('button', {
+  private readonly aarsavregningOption = this.page.getByRole('radio', {
     name: 'Årsavregning',
   });
 
@@ -136,11 +134,10 @@ export class OpprettNySakPage extends BasePage {
   }
 
   /**
-   * Select existing pensjonist/uføretrygdet sak for further treatment
+   * Select Pensjonist/uføretrygdet treatment theme for an existing sak
    */
   async velgPensjonistUforetrygdet(): Promise<void> {
-    await this.pensjonistUforetrygdetOption.waitFor({ state: 'visible', timeout: 5000 });
-    await this.pensjonistUforetrygdetOption.click();
+    await this.velgBehandlingstema(BEHANDLINGSTEMA.PENSJONIST);
   }
 
   /**
@@ -163,8 +160,8 @@ export class OpprettNySakPage extends BasePage {
    * Select existing pensjonistsak and choose Årsavregning behandling
    */
   async velgPensjonistAarsavregning(): Promise<void> {
-    await this.velgPensjonistUforetrygdet();
     await this.velgEuEosLandTrygdeavgift();
+    await this.velgPensjonistUforetrygdet();
     await this.velgAarsavregningBehandling();
   }
 
@@ -221,8 +218,7 @@ export class OpprettNySakPage extends BasePage {
    */
   async opprettNyVurdering(fnr: string, aarsak: string = AARSAK.SØKNAD): Promise<void> {
     await this.fyllInnBrukerID(fnr);
-    // The checkbox for selecting existing case (unnamed label)
-    await this.page.getByLabel('', { exact: true }).check();
+    await this.eksisterendeSakCheckbox.check();
     await this.velgNyVurdering();
     await this.velgAarsak(aarsak);
     await this.leggBehandlingIMine();
