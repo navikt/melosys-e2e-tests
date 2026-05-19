@@ -127,19 +127,21 @@ export class AarsavregningPage extends BasePage {
   async velgAvvikerInnbetalt(avviker: boolean): Promise<void> {
     await this.avvikerInnbetaltGroup.waitFor({ state: 'visible', timeout: 5000 });
 
+    const expectedValue = avviker ? 'true' : 'false';
+    const radioInput = this.avvikerInnbetaltGroup.locator(`input[value="${expectedValue}"]`);
+
     const responsePromise = this.page.waitForResponse(
       response =>
-        response.url().includes('/trygdeavgift/beregning') &&
+        (response.url().includes('/trygdeavgift/beregning') ||
+          response.url().includes('/trygdeavgift/eos-pensjonist/beregning')) &&
         response.request().method() === 'PUT' &&
         response.status() === 200,
       { timeout: 3000 }
     ).catch(() => null);
 
-    if (avviker) {
-      await this.avvikerInnbetaltGroup.getByLabel('Ja').check();
-    } else {
-      await this.avvikerInnbetaltGroup.getByLabel('Nei').check();
-    }
+    await radioInput.waitFor({ state: 'attached', timeout: 5000 });
+    await radioInput.click({ force: true });
+    await expect(radioInput).toBeChecked({ timeout: 5000 });
 
     const response = await responsePromise;
     if (response) {
@@ -152,8 +154,9 @@ export class AarsavregningPage extends BasePage {
   }
 
   /**
-   * Fill the paid trygdeavgift amount WITH API wait
-   * The field shares the /trygdeavgift/beregning PUT on blur — wait for it before proceeding.
+   * Fill the paid trygdeavgift amount.
+   * This field does not consistently trigger its own calculation request; the value is included
+   * in the later årsavregning calculation when the remaining required fields are filled.
    *
    * @param beløp - Amount as string (e.g. '300')
    */
@@ -161,14 +164,22 @@ export class AarsavregningPage extends BasePage {
     await this.innbetaltTrygdeavgiftField.waitFor({ state: 'visible', timeout: 5000 });
 
     const responsePromise = this.page.waitForResponse(
-      response => response.url().includes('/trygdeavgift/beregning') && response.status() === 200,
-      { timeout: 30000 }
-    );
+      response =>
+        (response.url().includes('/trygdeavgift/beregning') ||
+          response.url().includes('/trygdeavgift/eos-pensjonist/beregning')) &&
+        response.status() === 200,
+      { timeout: 3000 }
+    ).catch(() => null);
 
     await this.innbetaltTrygdeavgiftField.fill(beløp);
     await this.innbetaltTrygdeavgiftField.press('Tab');
+    await expect(this.innbetaltTrygdeavgiftField).toHaveValue(beløp, { timeout: 5000 });
 
-    await responsePromise;
+    const response = await responsePromise;
+    if (!response) {
+      await this.page.waitForTimeout(500);
+    }
+
     console.log(`✅ Fylte inn innbetalt trygdeavgift: ${beløp}`);
   }
 
@@ -225,7 +236,8 @@ export class AarsavregningPage extends BasePage {
     // Set up response listener BEFORE clicking to catch the debounced PUT
     const responsePromise = this.page.waitForResponse(
       response =>
-        response.url().includes('/trygdeavgift/beregning') &&
+        (response.url().includes('/trygdeavgift/beregning') ||
+          response.url().includes('/trygdeavgift/eos-pensjonist/beregning')) &&
         response.request().method() === 'PUT' &&
         response.status() === 200,
       { timeout: 3000 }
@@ -301,7 +313,10 @@ export class AarsavregningPage extends BasePage {
 
     // CRITICAL: Create response promise BEFORE triggering action
     const responsePromise = this.page.waitForResponse(
-      response => response.url().includes('/trygdeavgift/beregning') && response.status() === 200,
+      response =>
+        (response.url().includes('/trygdeavgift/beregning') ||
+          response.url().includes('/trygdeavgift/eos-pensjonist/beregning')) &&
+        response.status() === 200,
       { timeout: 30000 }
     );
 
