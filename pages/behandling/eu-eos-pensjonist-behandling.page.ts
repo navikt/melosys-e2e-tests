@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
-import { TIMEOUT_LONG, TIMEOUT_MEDIUM } from '../shared/constants';
+import { TIMEOUT_LONG, TIMEOUT_MEDIUM, TIMEOUT_VEDTAK } from '../shared/constants';
 import { EuEosPensjonistBehandlingAssertions } from './eu-eos-pensjonist-behandling.assertions';
 
 export class EuEosPensjonistBehandlingPage extends BasePage {
@@ -96,7 +96,7 @@ export class EuEosPensjonistBehandlingPage extends BasePage {
         this.isPensjonistIverksettEndpoint(response.url()) &&
         response.status() >= 200 &&
         response.status() < 300,
-      { timeout: 60000 }
+      { timeout: TIMEOUT_VEDTAK }
     );
 
     await this.bekreftOgSendButton.click();

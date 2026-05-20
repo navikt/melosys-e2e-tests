@@ -26,6 +26,16 @@ export const PENSJONIST_AARSAVREGNING_TEST_DATA = {
   inntektskilde: 'PENSJON',
 } as const;
 
+function hentSaksnummerFraUrl(url: string): string {
+  const saksnummer = new URL(url).pathname.match(/\b(MEL-\d+|\d{10,})\b/)?.[1];
+
+  if (!saksnummer) {
+    throw new Error(`Fant ikke saksnummer i URL-en: ${url}`);
+  }
+
+  return decodeURIComponent(saksnummer);
+}
+
 export async function setupPensjonistMedAarsavregning(
   page: Page
 ): Promise<{ aarsavregning: AarsavregningPage; vedtak: VedtakPage }> {
@@ -51,6 +61,7 @@ export async function setupPensjonistMedAarsavregning(
   await waitForProcessInstances(page.request, 30);
   await hovedside.goto();
   await hovedside.åpneSak(BRUKERNAVN_VALID);
+  const saksnummer = hentSaksnummerFraUrl(page.url());
   await pensjonistBehandling.fyllUtPeriodeOgBostedsland(
     PENSJONIST_AARSAVREGNING_TEST_DATA.periodeFra,
     PENSJONIST_AARSAVREGNING_TEST_DATA.periodeTil,
@@ -84,7 +95,7 @@ export async function setupPensjonistMedAarsavregning(
   console.log('📝 Venter på prosessinstanser etter opprettelse av årsavregning...');
   await waitForProcessInstances(page.request, 30);
   await hovedside.goto();
-  await hovedside.åpneSak(BRUKERNAVN_VALID);
+  await hovedside.åpneAarsavregningForSaksnummer(saksnummer);
 
   return { aarsavregning, vedtak };
 }

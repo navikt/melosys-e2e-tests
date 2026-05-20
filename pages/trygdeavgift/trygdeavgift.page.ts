@@ -1,5 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+import { isTrygdeavgiftBeregningResponse } from '../shared/trygdeavgift-api';
 import { TrygdeavgiftAssertions } from './trygdeavgift.assertions';
 
 /**
@@ -102,10 +103,8 @@ export class TrygdeavgiftPage extends BasePage {
     // Set up response listener BEFORE clicking to catch the debounced PUT
     const responsePromise = this.page.waitForResponse(
       response =>
-        (response.url().includes('/trygdeavgift/beregning') ||
-          response.url().includes('/trygdeavgift/eos-pensjonist/beregning')) &&
-        response.request().method() === 'PUT' &&
-        response.status() === 200,
+        isTrygdeavgiftBeregningResponse(response) &&
+        response.request().method() === 'PUT',
       { timeout: 3000 } // 500ms debounce + 2500ms for API
     ).catch(() => null); // Don't fail if no PUT (form might prevent it)
 
@@ -283,10 +282,7 @@ export class TrygdeavgiftPage extends BasePage {
     // CRITICAL: Create response promise BEFORE triggering action
     // This prevents race conditions where API response comes before we start listening
     const responsePromise = this.page.waitForResponse(
-      response =>
-        (response.url().includes('/trygdeavgift/beregning') ||
-          response.url().includes('/trygdeavgift/eos-pensjonist/beregning')) &&
-        response.status() === 200,
+      response => isTrygdeavgiftBeregningResponse(response),
       { timeout: 30000 }
     );
 
@@ -362,10 +358,7 @@ export class TrygdeavgiftPage extends BasePage {
 
     // Create response promise BEFORE action
     const responsePromise = this.page.waitForResponse(
-      response =>
-        (response.url().includes('/trygdeavgift/beregning') ||
-          response.url().includes('/trygdeavgift/eos-pensjonist/beregning')) &&
-        response.status() === 200,
+      response => isTrygdeavgiftBeregningResponse(response),
       { timeout: 30000 }
     );
 

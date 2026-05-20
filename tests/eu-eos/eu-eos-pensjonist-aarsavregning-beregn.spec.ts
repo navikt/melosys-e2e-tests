@@ -19,8 +19,9 @@ test.describe('EU/EØS Trygdeavgift - Pensjonist med årsavregning', () => {
 
     await aarsavregning.ventPåSideLastet();
     await aarsavregning.velgÅr(PENSJONIST_AARSAVREGNING_TEST_DATA.år);
+    // Dette scenariet bruker tidligere grunnlag direkte og går derfor via en egen resultatside.
     await aarsavregning.klikkBekreftOgFortsett();
-    await aarsavregning.klikkBekreftPaaResultatside();
+    await aarsavregning.klikkBekreftPåResultatside();
 
     await vedtak.assertions.verifiserFattVedtakKnapp();
     await vedtak.klikkFattVedtak();

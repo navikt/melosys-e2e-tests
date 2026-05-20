@@ -28,7 +28,7 @@ test.describe('EU/EØS Trygdeavgift - Pensjonist årsavregning med avvik', () =>
     await aarsavregning.fyllInnBruttoinntektMedApiVent(
       PENSJONIST_AARSAVREGNING_TEST_DATA.aarsavregningBruttoinntekt
     );
-    await aarsavregning.klikkBekreftOgFortsett();
+    await aarsavregning.klikkBekreftPåResultatside();
 
     await vedtak.assertions.verifiserFattVedtakKnapp();
     await vedtak.klikkFattVedtak();

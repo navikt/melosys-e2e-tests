@@ -46,6 +46,7 @@ export class OpprettNySakPage extends BasePage {
 
   private readonly behandlingstypeDropdown = this.page.getByLabel('Behandlingstype');
 
+  // melosys-web renders the existing-sak checkbox without an accessible label.
   private readonly eksisterendeSakCheckbox = this.page.getByLabel('', { exact: true });
 
   private readonly euEosTrygdeavgiftHeading = this.page.getByRole('heading', {

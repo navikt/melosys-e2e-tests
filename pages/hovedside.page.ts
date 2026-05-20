@@ -1,6 +1,6 @@
-import { Page } from '@playwright/test';
+import { expect, Page } from '@playwright/test';
 import { BasePage } from './shared/base.page';
-import { MELOSYS_URL } from './shared/constants';
+import { MELOSYS_URL, TIMEOUT_LONG } from './shared/constants';
 
 /**
  * Page Object for the Melosys main page (hovedside)
@@ -106,7 +106,16 @@ export class HovedsidePage extends BasePage {
    */
   async åpneSak(søketekst: string): Promise<void> {
     const lenke = this.page.getByRole('link', { name: new RegExp(søketekst) }).first();
-    await lenke.waitFor({ state: 'visible', timeout: 10000 });
+    await lenke.waitFor({ state: 'visible', timeout: TIMEOUT_LONG });
     await lenke.click();
+  }
+
+  async åpneAarsavregningForSaksnummer(saksnummer: string): Promise<void> {
+    const lenker = this.page
+      .locator(`a[href*="${saksnummer}"]`)
+      .filter({ hasText: /Årsavregning/ });
+
+    await expect(lenker).toHaveCount(1, { timeout: TIMEOUT_LONG });
+    await lenker.first().click();
   }
 }

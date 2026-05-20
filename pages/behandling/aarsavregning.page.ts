@@ -1,6 +1,7 @@
 import { Page, expect } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 import { TIMEOUT_API, TIMEOUT_LONG, TIMEOUT_MEDIUM } from '../shared/constants';
+import { isTrygdeavgiftBeregningResponse } from '../shared/trygdeavgift-api';
 import { AarsavregningAssertions } from './aarsavregning.assertions';
 
 /**
@@ -135,10 +136,8 @@ export class AarsavregningPage extends BasePage {
 
     const responsePromise = this.page.waitForResponse(
       response =>
-        (response.url().includes('/trygdeavgift/beregning') ||
-          response.url().includes('/trygdeavgift/eos-pensjonist/beregning')) &&
-        response.request().method() === 'PUT' &&
-        response.status() === 200,
+        isTrygdeavgiftBeregningResponse(response) &&
+        response.request().method() === 'PUT',
       { timeout: TIMEOUT_MEDIUM }
     ).catch(() => null);
 
@@ -167,10 +166,8 @@ export class AarsavregningPage extends BasePage {
 
     const responsePromise = this.page.waitForResponse(
       response =>
-        (response.url().includes('/trygdeavgift/beregning') ||
-          response.url().includes('/trygdeavgift/eos-pensjonist/beregning')) &&
-        response.request().method() === 'PUT' &&
-        response.status() === 200,
+        isTrygdeavgiftBeregningResponse(response) &&
+        response.request().method() === 'PUT',
       { timeout: TIMEOUT_MEDIUM }
     ).catch(() => null);
 
@@ -241,10 +238,8 @@ export class AarsavregningPage extends BasePage {
     // Set up response listener BEFORE clicking to catch the debounced PUT
     const responsePromise = this.page.waitForResponse(
       response =>
-        (response.url().includes('/trygdeavgift/beregning') ||
-          response.url().includes('/trygdeavgift/eos-pensjonist/beregning')) &&
-        response.request().method() === 'PUT' &&
-        response.status() === 200,
+        isTrygdeavgiftBeregningResponse(response) &&
+        response.request().method() === 'PUT',
       { timeout: TIMEOUT_MEDIUM }
     ).catch(() => null); // Don't fail if no PUT
 
@@ -318,10 +313,7 @@ export class AarsavregningPage extends BasePage {
 
     // CRITICAL: Create response promise BEFORE triggering action
     const responsePromise = this.page.waitForResponse(
-      response =>
-        (response.url().includes('/trygdeavgift/beregning') ||
-          response.url().includes('/trygdeavgift/eos-pensjonist/beregning')) &&
-        response.status() === 200,
+      response => isTrygdeavgiftBeregningResponse(response),
       { timeout: 30000 }
     );
 
@@ -347,7 +339,7 @@ export class AarsavregningPage extends BasePage {
    * step that follows årsavregning input. Relies on heading-change detection so
    * we don't have to couple this page to whatever comes next in the wizard.
    */
-  async klikkBekreftPaaResultatside(): Promise<void> {
+  async klikkBekreftPåResultatside(): Promise<void> {
     await this.clickStepButtonWithRetry(this.bekreftButton, {
       waitForContent: this.fattVedtakButton,
       verifyHeadingChange: true,
