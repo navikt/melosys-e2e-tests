@@ -48,6 +48,23 @@ export class OpprettNySakPage extends BasePage {
 
   private readonly aarsakDropdown = this.page.getByLabel('Årsak', { exact: true });
 
+  // Søknadsperiode (vises for EU/EØS-saker som krever periode og land)
+  private readonly soknadsperiodeGroup = this.page.getByRole('group', {
+    name: /Søknadsperiode/i,
+  });
+  private readonly soknadsperiodeFraField = this.soknadsperiodeGroup.getByRole('textbox', {
+    name: 'Fra',
+  });
+  private readonly soknadsperiodeTilField = this.soknadsperiodeGroup.getByRole('textbox', {
+    name: 'Til',
+  });
+
+  // Arbeidsland (React Select / MultiSelect, vises for EU/EØS-saker)
+  private readonly arbeidslandGroup = this.page.getByRole('group', {
+    name: /I hvilke land/i,
+  });
+  private readonly arbeidslandCombobox = this.arbeidslandGroup.getByRole('combobox');
+
   private readonly leggIMineCheckbox = this.page.getByRole('checkbox', {
     name: 'Legg behandlingen i mine',
   });
@@ -130,6 +147,38 @@ export class OpprettNySakPage extends BasePage {
    */
   async velgAarsak(aarsak: string): Promise<void> {
     await this.aarsakDropdown.selectOption(aarsak);
+  }
+
+  /**
+   * Fill the application period (Søknadsperiode) on EU/EØS case creation.
+   *
+   * Uses the date textboxes directly instead of clicking through the calendar
+   * widget — this is deterministic and does not depend on which month the
+   * datepicker happens to default to.
+   *
+   * @param fra - Start date in format DD.MM.YYYY (e.g., "01.01.2024")
+   * @param til - End date in format DD.MM.YYYY (e.g., "31.12.2024")
+   */
+  async velgSøknadsperiode(fra: string, til: string): Promise<void> {
+    await this.soknadsperiodeFraField.fill(fra);
+    await this.soknadsperiodeFraField.press('Enter');
+    await this.soknadsperiodeTilField.fill(til);
+    await this.soknadsperiodeTilField.press('Enter');
+  }
+
+  /**
+   * Select work country (Arbeidsland) on EU/EØS case creation.
+   *
+   * Scopes to the "I hvilke land skal arbeidet/næringen utføres i?" fieldset and
+   * its combobox instead of a positional CSS selector, so it survives field
+   * reordering on the form.
+   *
+   * @param land - Country name (e.g., "Bulgaria")
+   */
+  async velgArbeidsland(land: string): Promise<void> {
+    await this.arbeidslandCombobox.click();
+    await this.arbeidslandCombobox.fill(land);
+    await this.page.getByRole('option', { name: new RegExp(`^${land}`, 'i') }).first().click();
   }
 
   /**

@@ -46,20 +46,20 @@ test.describe('FTRL Pensjonist - Automatisk årsavregning', () => {
     await opprettSak.klikkOpprettNyBehandling();
     await opprettSak.assertions.verifiserBehandlingOpprettet();
 
+    // Vent på at asynkrone prosessinstanser fra saksopprettelsen er ferdige
+    console.log('Venter på prosessinstanser etter saksopprettelse...');
+    await waitForProcessInstances(page.request, 30);
+    await hovedside.goto();
+
     // Step 2: Open behandling
     console.log('Step 2: Opening behandling...');
     await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).click();
+    await page.waitForLoadState('networkidle');
 
-    // Step 3: Medlemskap - Velg land, full dekning
+    // Step 3: Medlemskap - Velg periode (foregående år), land, full dekning
+    // Perioden må ligge i et foregående år for at årsavregning skal opprettes automatisk.
     console.log('Step 3: Filling medlemskap...');
-    // Datovelger: Fra og med
-    await page.getByRole('button', { name: 'Åpne datovelger' }).first().click();
-    await page.getByRole('dialog').getByLabel('År').selectOption('2025');
-    await page.getByRole('button', { name: /\b16\b/ }).click();
-    // Datovelger: Til og med
-    await page.getByRole('button', { name: 'Åpne datovelger' }).nth(1).click();
-    await page.getByRole('button', { name: /\b16\b/ }).click();
-    // Land og trygdedekning
+    await medlemskap.velgPeriode('01.01.2025', '31.12.2025');
     await medlemskap.velgLand('Afghanistan');
     await medlemskap.velgTrygdedekning('FULL_DEKNING_FTRL');
     await medlemskap.klikkBekreftOgFortsett();

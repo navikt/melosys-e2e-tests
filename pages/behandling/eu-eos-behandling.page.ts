@@ -446,6 +446,22 @@ export class EuEosBehandlingPage extends BasePage {
   }
 
   /**
+   * Velg lovvalgsbestemmelse på lovvalgssteget ved å klikke valg-teksten.
+   *
+   * I EU/EØS-flyten velges bestemmelsen som et klikkbart tekstvalg (ikke en
+   * nedtrekksliste). Bruk konstantene i EU_EOS_LOVVALG for teksten.
+   *
+   * @param bestemmelseTekst - Synlig tekst for bestemmelsen
+   *                           (f.eks. 'Rfo. 883/2004 art.11(3)(b)')
+   */
+  async velgLovvalgsbestemmelse(bestemmelseTekst: string): Promise<void> {
+    const valg = this.page.getByText(bestemmelseTekst, { exact: false });
+    await valg.waitFor({ state: 'visible', timeout: 15000 });
+    await valg.click();
+    console.log(`✅ Valgte lovvalgsbestemmelse: ${bestemmelseTekst}`);
+  }
+
+  /**
    * Velg mottaker-institusjon fra dropdown på vedtak-steget
    * Denne må velges før "Fatt vedtak" kan klikkes
    *
