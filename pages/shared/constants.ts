@@ -8,7 +8,6 @@ export const USER_ID_KOSOVO = "17016820148";
 export const USER_ID_INVALID = "INVALID123";
 
 // Person names (must match mock data)
-export const BRUKERNAVN_VALID = "TRIVIELL KARAFFEL";
 export const PERSON_NAME_KOSOVO = "SALMANSEN TREIG";
 export const ORG_NUMBER_VALID = "999999999";
 
@@ -21,7 +20,6 @@ export const TIMEOUT_SHORT = 2000;
 export const TIMEOUT_MEDIUM = 5000;
 export const TIMEOUT_LONG = 10000;
 export const TIMEOUT_API = 15000;
-export const TIMEOUT_VEDTAK = 60000;
 
 // Common dropdown values
 export const SAKSTYPER = {
@@ -41,6 +39,7 @@ export const BEHANDLINGSTEMA = {
   SELVSTENDIG: 'SELVSTENDIG',
   UTSENDT_ARBEIDSTAKER: 'UTSENDT_ARBEIDSTAKER',
   ARBEID_FLERE_LAND: 'ARBEID_FLERE_LAND',
+  ARBEID_TJENESTEPERSON_ELLER_FLY: 'ARBEID_TJENESTEPERSON_ELLER_FLY',
   PENSJONIST: 'PENSJONIST',
 } as const;
 
@@ -79,8 +78,15 @@ export const EU_EOS_LAND = {
   NEDERLAND: 'Nederland',
   ESTLAND: 'Estland',
   BELGIA: 'Belgia',
+  BULGARIA: 'Bulgaria',
   NORGE: 'Norge',
   // Ikke-EESSI-land som brukes i arbeid-i-flere-land-saker
   FAROEYENE: 'Færøyene',
   GRONLAND: 'Grønland',
+} as const;
+
+// EU/EØS lovvalgsbestemmelser (synlig tekst i lovvalgssteget)
+export const EU_EOS_LOVVALG = {
+  // Offentlig tjenesteperson, jf. rfo. 883/2004 art.11(3)(b) (FO_883_2004_ART11_3B)
+  ART_11_3_B: 'Rfo. 883/2004 art.11(3)(b)',
 } as const;
