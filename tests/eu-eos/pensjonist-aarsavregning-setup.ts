@@ -27,7 +27,10 @@ export const PENSJONIST_AARSAVREGNING_TEST_DATA = {
 } as const;
 
 function hentSaksnummerFraUrl(url: string): string {
-  const saksnummer = new URL(url).pathname.match(/\b(MEL-\d+|\d{10,})\b/)?.[1];
+  // Anker på «saksbehandling/»-segmentet slik at vi ikke ved et uhell plukker
+  // opp fødselsnummeret (11 siffer) som også matcher \d{10,} hvis det skulle
+  // dukke opp tidligere i URL-en.
+  const saksnummer = new URL(url).pathname.match(/saksbehandling\/(MEL-\d+|\d{10,})/)?.[1];
 
   if (!saksnummer) {
     throw new Error(`Fant ikke saksnummer i URL-en: ${url}`);
