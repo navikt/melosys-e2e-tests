@@ -27,10 +27,15 @@ export const PENSJONIST_AARSAVREGNING_TEST_DATA = {
 } as const;
 
 function hentSaksnummerFraUrl(url: string): string {
-  // Anker på «saksbehandling/»-segmentet slik at vi ikke ved et uhell plukker
-  // opp fødselsnummeret (11 siffer) som også matcher \d{10,} hvis det skulle
-  // dukke opp tidligere i URL-en.
-  const saksnummer = new URL(url).pathname.match(/saksbehandling\/(MEL-\d+|\d{10,})/)?.[1];
+  // Saksnummer er enten «MEL-<n>» (EU/EØS-flyten, f.eks.
+  // /melosys/EU_EOS/pensjonist/MEL-40/) eller et rent tall (FTRL-flyten,
+  // f.eks. /FTRL/saksbehandling/2024000001). MEL- prioriteres siden det er
+  // entydig og aldri kan forveksles med fødselsnummeret (11 siffer). Det rene
+  // tallet ankres derfor på «saksbehandling/» for å unngå å plukke opp fnr.
+  const pathname = new URL(url).pathname;
+  const saksnummer =
+    pathname.match(/\b(MEL-\d+)\b/)?.[1] ??
+    pathname.match(/saksbehandling\/(\d{10,})/)?.[1];
 
   if (!saksnummer) {
     throw new Error(`Fant ikke saksnummer i URL-en: ${url}`);
