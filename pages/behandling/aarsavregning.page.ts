@@ -1,5 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+import { TIMEOUT_API, TIMEOUT_LONG, TIMEOUT_MEDIUM } from '../shared/constants';
 import { AarsavregningAssertions } from './aarsavregning.assertions';
 
 /**
@@ -78,7 +79,7 @@ export class AarsavregningPage extends BasePage {
    */
   async ventPåSideLastet(): Promise<void> {
     try {
-      await this.aarVelger.waitFor({ state: 'visible', timeout: 10000 });
+      await this.aarVelger.waitFor({ state: 'visible', timeout: TIMEOUT_LONG });
       console.log('✅ Årsavregning page loaded - year selector visible');
     } catch (error) {
       console.error('❌ Failed to reach Årsavregning page');
@@ -94,7 +95,7 @@ export class AarsavregningPage extends BasePage {
    * @param år - Year to select (e.g., '2025', '2024')
    */
   async velgÅr(år: string): Promise<void> {
-    await this.aarVelger.waitFor({ state: 'visible', timeout: 5000 });
+    await this.aarVelger.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
     await this.aarVelger.selectOption(år);
     console.log(`✅ Selected år = ${år}`);
   }
@@ -105,7 +106,7 @@ export class AarsavregningPage extends BasePage {
    */
   async svarNei(): Promise<void> {
     const neiRadio = this.page.getByRole('radio', { name: 'Nei' });
-    await neiRadio.waitFor({ state: 'visible', timeout: 5000 });
+    await neiRadio.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
     await neiRadio.check();
     console.log('✅ Answered Nei');
   }
@@ -115,7 +116,7 @@ export class AarsavregningPage extends BasePage {
    */
   async svarJa(): Promise<void> {
     const jaRadio = this.page.getByRole('radio', { name: 'Ja' });
-    await jaRadio.waitFor({ state: 'visible', timeout: 5000 });
+    await jaRadio.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
     await jaRadio.check();
     console.log('✅ Answered Ja');
   }
@@ -127,7 +128,7 @@ export class AarsavregningPage extends BasePage {
    * @param avviker - true for "Ja", false for "Nei"
    */
   async velgAvvikerInnbetalt(avviker: boolean): Promise<void> {
-    await this.avvikerInnbetaltGroup.waitFor({ state: 'visible', timeout: 5000 });
+    await this.avvikerInnbetaltGroup.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
 
     const expectedValue = avviker ? 'true' : 'false';
     const radioInput = this.avvikerInnbetaltGroup.locator(`input[value="${expectedValue}"]`);
@@ -138,12 +139,12 @@ export class AarsavregningPage extends BasePage {
           response.url().includes('/trygdeavgift/eos-pensjonist/beregning')) &&
         response.request().method() === 'PUT' &&
         response.status() === 200,
-      { timeout: 3000 }
+      { timeout: TIMEOUT_MEDIUM }
     ).catch(() => null);
 
-    await radioInput.waitFor({ state: 'attached', timeout: 5000 });
+    await radioInput.waitFor({ state: 'attached', timeout: TIMEOUT_MEDIUM });
     await radioInput.click({ force: true });
-    await expect(radioInput).toBeChecked({ timeout: 5000 });
+    await expect(radioInput).toBeChecked({ timeout: TIMEOUT_MEDIUM });
 
     const response = await responsePromise;
     if (response) {
@@ -162,10 +163,28 @@ export class AarsavregningPage extends BasePage {
    * @param beløp - Amount as string (e.g. '300')
    */
   async fyllInnInnbetaltTrygdeavgift(beløp: string): Promise<void> {
-    await this.innbetaltTrygdeavgiftField.waitFor({ state: 'visible', timeout: 5000 });
+    await this.innbetaltTrygdeavgiftField.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
+
+    const responsePromise = this.page.waitForResponse(
+      response =>
+        (response.url().includes('/trygdeavgift/beregning') ||
+          response.url().includes('/trygdeavgift/eos-pensjonist/beregning')) &&
+        response.request().method() === 'PUT' &&
+        response.status() === 200,
+      { timeout: TIMEOUT_MEDIUM }
+    ).catch(() => null);
+
     await this.innbetaltTrygdeavgiftField.fill(beløp);
     await this.innbetaltTrygdeavgiftField.press('Tab');
-    await expect(this.innbetaltTrygdeavgiftField).toHaveValue(beløp, { timeout: 5000 });
+    await expect(this.innbetaltTrygdeavgiftField).toHaveValue(beløp, { timeout: TIMEOUT_MEDIUM });
+
+    const response = await responsePromise;
+    if (response) {
+      console.log('✅ Debounced PUT /trygdeavgift/beregning completed - innbetalt saved');
+    } else {
+      await this.page.waitForTimeout(1500);
+    }
+
     console.log(`✅ Fylte inn innbetalt trygdeavgift: ${beløp}`);
   }
 
@@ -175,7 +194,7 @@ export class AarsavregningPage extends BasePage {
    * @param bestemmelse - Regulation code (e.g., 'FTRL_KAP2_2_1')
    */
   async velgBestemmelse(bestemmelse: string): Promise<void> {
-    await this.bestemmelseDropdown.waitFor({ state: 'visible', timeout: 5000 });
+    await this.bestemmelseDropdown.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
     await this.bestemmelseDropdown.selectOption(bestemmelse);
     console.log(`✅ Selected bestemmelse = ${bestemmelse}`);
   }
@@ -215,7 +234,7 @@ export class AarsavregningPage extends BasePage {
   async velgSkattepliktig(erSkattepliktig: boolean): Promise<void> {
     console.log(`📝 velgSkattepliktig: Setting to ${erSkattepliktig ? 'Ja' : 'Nei'}...`);
 
-    await this.skattepliktigGroup.waitFor({ state: 'visible', timeout: 5000 });
+    await this.skattepliktigGroup.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
 
     const expectedValue = erSkattepliktig ? 'SKATTEPLIKTIG' : 'IKKE_SKATTEPLIKTIG';
 
@@ -226,11 +245,11 @@ export class AarsavregningPage extends BasePage {
           response.url().includes('/trygdeavgift/eos-pensjonist/beregning')) &&
         response.request().method() === 'PUT' &&
         response.status() === 200,
-      { timeout: 3000 }
+      { timeout: TIMEOUT_MEDIUM }
     ).catch(() => null); // Don't fail if no PUT
 
     const radioInput = this.skattepliktigGroup.locator(`input[value="${expectedValue}"]`);
-    await radioInput.waitFor({ state: 'attached', timeout: 5000 });
+    await radioInput.waitFor({ state: 'attached', timeout: TIMEOUT_MEDIUM });
     await radioInput.click({ force: true });
 
     await this.page.waitForTimeout(200);
@@ -243,7 +262,7 @@ export class AarsavregningPage extends BasePage {
       await this.page.waitForTimeout(200);
     }
 
-    await expect(radioInput).toBeChecked({ timeout: 5000 });
+    await expect(radioInput).toBeChecked({ timeout: TIMEOUT_MEDIUM });
 
     const response = await responsePromise;
     if (response) {
@@ -271,8 +290,8 @@ export class AarsavregningPage extends BasePage {
    * - 'PENSJON_KILDESKATT'
    */
   async velgInntektskilde(inntektskilde: string): Promise<void> {
-    await this.inntektskildeDropdown.waitFor({ state: 'visible', timeout: 5000 });
-    await expect(this.inntektskildeDropdown).toBeEnabled({ timeout: 10000 });
+    await this.inntektskildeDropdown.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
+    await expect(this.inntektskildeDropdown).toBeEnabled({ timeout: TIMEOUT_LONG });
 
     // Wait for options to populate
     await this.page.waitForFunction(
@@ -281,7 +300,7 @@ export class AarsavregningPage extends BasePage {
         return dropdown && dropdown.options.length > 1;
       },
       'select[name="inntektskilder[0].kildetype"]',
-      { timeout: 10000 }
+      { timeout: TIMEOUT_LONG }
     );
 
     await this.inntektskildeDropdown.selectOption(inntektskilde);
@@ -295,7 +314,7 @@ export class AarsavregningPage extends BasePage {
    * @param beløp - Amount as string (e.g., '3213')
    */
   async fyllInnBruttoinntektMedApiVent(beløp: string): Promise<void> {
-    await this.bruttoinntektField.waitFor({ state: 'visible', timeout: 5000 });
+    await this.bruttoinntektField.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
 
     // CRITICAL: Create response promise BEFORE triggering action
     const responsePromise = this.page.waitForResponse(
@@ -312,7 +331,7 @@ export class AarsavregningPage extends BasePage {
     await responsePromise;
     console.log('✅ Trygdeavgift calculation API completed');
 
-    await expect(this.bekreftButton).toBeEnabled({ timeout: 15000 });
+    await expect(this.bekreftButton).toBeEnabled({ timeout: TIMEOUT_API });
     console.log('✅ Bekreft og fortsett button is enabled');
   }
 

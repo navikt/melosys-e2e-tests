@@ -20,8 +20,8 @@ export const PENSJONIST_AARSAVREGNING_TEST_DATA = {
   periodeTil: '05.04.2024',
   bostedsland: 'BE',
   år: '2024',
-  bruttoinntekt: '32313',
-  bruttoinntektAvvik: '23313',
+  trygdeavgiftBruttoinntekt: '32313',
+  aarsavregningBruttoinntekt: '23313',
   innbetaltAvvik: '300',
   inntektskilde: 'PENSJON',
 } as const;
@@ -62,7 +62,7 @@ export async function setupPensjonistMedAarsavregning(
   await trygdeavgift.velgSkattepliktig(false);
   await trygdeavgift.velgInntektskilde(PENSJONIST_AARSAVREGNING_TEST_DATA.inntektskilde);
   await trygdeavgift.fyllInnBruttoinntektMedApiVent(
-    PENSJONIST_AARSAVREGNING_TEST_DATA.bruttoinntekt
+    PENSJONIST_AARSAVREGNING_TEST_DATA.trygdeavgiftBruttoinntekt
   );
   await trygdeavgift.klikkBekreftOgFortsett();
 

@@ -1,7 +1,7 @@
 import { Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 import { OpprettNySakAssertions } from './opprett-ny-sak.assertions';
-import { SAKSTYPER, SAKSTEMA, BEHANDLINGSTEMA, AARSAK } from '../shared/constants';
+import { SAKSTYPER, SAKSTEMA, BEHANDLINGSTEMA, AARSAK, TIMEOUT_MEDIUM } from '../shared/constants';
 
 /**
  * Page Object for creating a new case in Melosys
@@ -144,7 +144,8 @@ export class OpprettNySakPage extends BasePage {
    * Select EU/EØS-land - Trygdeavgift section for an existing sak
    */
   async velgEuEosLandTrygdeavgift(): Promise<void> {
-    await this.euEosTrygdeavgiftHeading.waitFor({ state: 'visible', timeout: 5000 });
+    await this.euEosTrygdeavgiftHeading.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
+    // The accordion/disclosure is exposed as a heading in melosys-web's a11y tree.
     await this.euEosTrygdeavgiftHeading.click();
   }
 
@@ -152,7 +153,7 @@ export class OpprettNySakPage extends BasePage {
    * Select Årsavregning behandling for the chosen sak
    */
   async velgAarsavregningBehandling(): Promise<void> {
-    await this.aarsavregningOption.waitFor({ state: 'visible', timeout: 5000 });
+    await this.aarsavregningOption.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
     await this.aarsavregningOption.click();
   }
 

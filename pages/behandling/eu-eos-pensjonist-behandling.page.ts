@@ -1,8 +1,11 @@
 import { Page, expect } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+import { TIMEOUT_LONG, TIMEOUT_MEDIUM } from '../shared/constants';
 import { EuEosPensjonistBehandlingAssertions } from './eu-eos-pensjonist-behandling.assertions';
 
 export class EuEosPensjonistBehandlingPage extends BasePage {
+  private static readonly IVERKSETT_URL = /\/api\/saksflyt\/iverksett\/trygdeavgift\/\d+\/pensjonist$/;
+
   readonly assertions: EuEosPensjonistBehandlingAssertions;
 
   private readonly fraOgMedField = this.page.getByRole('textbox', { name: 'Fra og med' });
@@ -27,24 +30,11 @@ export class EuEosPensjonistBehandlingPage extends BasePage {
   }
 
   private isPensjonistIverksettEndpoint(url: string): boolean {
-    const endpointPrefix = '/api/saksflyt/iverksett/trygdeavgift/';
-    const endpointSuffix = '/pensjonist';
-    const pathname = new URL(url).pathname;
-
-    if (!pathname.startsWith(endpointPrefix) || !pathname.endsWith(endpointSuffix)) {
-      return false;
-    }
-
-    const behandlingId = pathname.slice(
-      endpointPrefix.length,
-      pathname.length - endpointSuffix.length
-    );
-
-    return behandlingId !== '' && !behandlingId.includes('/') && Number.isInteger(Number(behandlingId));
+    return EuEosPensjonistBehandlingPage.IVERKSETT_URL.test(new URL(url).pathname);
   }
 
   async ventPåSideLastet(): Promise<void> {
-    await this.fraOgMedField.waitFor({ state: 'visible', timeout: 10000 });
+    await this.fraOgMedField.waitFor({ state: 'visible', timeout: TIMEOUT_LONG });
     console.log('✅ EU/EØS pensjonist behandling page loaded');
   }
 
@@ -82,7 +72,7 @@ export class EuEosPensjonistBehandlingPage extends BasePage {
       response =>
         response.url().includes('/helseutgift-dekkes-perioder') &&
         response.request().method() !== 'GET',
-      { timeout: 5000 },
+      { timeout: TIMEOUT_MEDIUM },
     );
 
     await this.velgBostedsland(bostedsland);
@@ -97,8 +87,8 @@ export class EuEosPensjonistBehandlingPage extends BasePage {
   }
 
   async klikkBekreftOgSend(): Promise<void> {
-    await this.bekreftOgSendButton.waitFor({ state: 'visible', timeout: 10000 });
-    await expect(this.bekreftOgSendButton).toBeEnabled({ timeout: 10000 });
+    await this.bekreftOgSendButton.waitFor({ state: 'visible', timeout: TIMEOUT_LONG });
+    await expect(this.bekreftOgSendButton).toBeEnabled({ timeout: TIMEOUT_LONG });
 
     const responsePromise = this.page.waitForResponse(
       response =>
