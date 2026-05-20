@@ -15,6 +15,12 @@ export const ORG_NUMBER_VALID = "999999999";
 export const BASE_URL = "http://localhost:3000";
 export const MELOSYS_URL = `${BASE_URL}/melosys/`;
 
+// Foregående år (kalenderår). Brukes for medlemskaps-/søknadsperioder i tester
+// av automatisk årsavregning, der avgiftspliktig periode MÅ ligge i et foregående
+// år for at årsavregning skal opprettes automatisk (jf. MELOSYS-7828). Beregnes
+// dynamisk slik at testene ikke ruster når årstallet ruller over.
+export const FORRIGE_AAR = new Date().getFullYear() - 1;
+
 // Timeouts (ms)
 export const TIMEOUT_SHORT = 2000;
 export const TIMEOUT_MEDIUM = 5000;
