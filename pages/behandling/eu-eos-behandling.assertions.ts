@@ -44,6 +44,21 @@ export class EuEosBehandlingAssertions {
   }
 
   /**
+   * Verifiser interim-oppførselen for sakstyper der automatisk årsavregning ennå
+   * ikke er implementert (jf. MELOSYS-7828): behandlingen viser varselet om at
+   * årsavregning ikke kan opprettes.
+   *
+   * NB: Når MELOSYS-7828 lander for EU/EØS off. tjenesteperson (FO_883_2004_ART11_3B)
+   * skal denne erstattes med en verifisering av at årsavregningsbehandlingen
+   * faktisk opprettes (slik FTRL-pensjonist-testen gjør).
+   */
+  async verifiserKanIkkeÅrsavregneEnda(): Promise<void> {
+    await expect(this.page.getByText('Du kan ikke årsavregne disse')).toBeVisible({
+      timeout: 15000,
+    });
+  }
+
+  /**
    * Verifiser at en spesifikk feilmelding vises
    *
    * @param feilmelding - Forventet feilmeldingstekst

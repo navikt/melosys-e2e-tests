@@ -1,4 +1,4 @@
-import { test, expect } from '../../fixtures';
+import { test } from '../../fixtures';
 import { AuthHelper } from '../../helpers/auth-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
@@ -12,6 +12,7 @@ import {
   AARSAK,
   EU_EOS_LAND,
   EU_EOS_LOVVALG,
+  FORRIGE_AAR,
 } from '../../pages/shared/constants';
 import { waitForProcessInstances } from '../../helpers/api-helper';
 
@@ -48,6 +49,9 @@ test.describe('EØS Medlemskap Lovvalg - Offentlig tjenesteperson 11.3b', () => 
     const behandling = new EuEosBehandlingPage(page);
     const vedtak = new VedtakPage(page);
 
+    // Lenketeksten i saksoversikten inkluderer fnr, sakstema og behandlingstema
+    const behandlingLenke = new RegExp(`${USER_ID_VALID}.*Medlemskap og lovvalg.*Offentlig`);
+
     // Step 1: Create case
     console.log('Step 1: Creating new EØS Medlemskap Lovvalg Offentlig tjenesteperson case...');
     await hovedside.gotoOgOpprettNySak();
@@ -59,7 +63,7 @@ test.describe('EØS Medlemskap Lovvalg - Offentlig tjenesteperson 11.3b', () => 
     await opprettSak.velgAarsak(AARSAK.SØKNAD);
 
     // Søknadsperiode (foregående år) og arbeidsland
-    await opprettSak.velgSøknadsperiode('01.01.2024', '31.12.2024');
+    await opprettSak.velgSøknadsperiode(`01.01.${FORRIGE_AAR}`, `31.12.${FORRIGE_AAR}`);
     await opprettSak.velgArbeidsland(EU_EOS_LAND.BULGARIA);
 
     await opprettSak.leggBehandlingIMine();
@@ -73,7 +77,7 @@ test.describe('EØS Medlemskap Lovvalg - Offentlig tjenesteperson 11.3b', () => 
 
     // Step 2: Open behandling
     console.log('Step 2: Opening behandling...');
-    await page.getByRole('link', { name: new RegExp(`${USER_ID_VALID}.*Medlemskap og lovvalg.*Offentlig`) }).click();
+    await hovedside.åpneBehandling(behandlingLenke);
     await page.waitForLoadState('networkidle');
 
     // Step 3: Medlemskap - Bekreft og fortsett
@@ -102,8 +106,8 @@ test.describe('EØS Medlemskap Lovvalg - Offentlig tjenesteperson 11.3b', () => 
     await waitForProcessInstances(page.request, 60);
     await hovedside.goto();
 
-    await page.getByRole('link', { name: new RegExp(`${USER_ID_VALID}.*Medlemskap og lovvalg.*Offentlig`) }).click();
-    await expect(page.getByText('Du kan ikke årsavregne disse')).toBeVisible({ timeout: 15000 });
+    await hovedside.åpneBehandling(behandlingLenke);
+    await behandling.assertions.verifiserKanIkkeÅrsavregneEnda();
     console.log('✅ Bekreftet: Årsavregning kan ikke opprettes for denne sakstypen (enda)');
   });
 });

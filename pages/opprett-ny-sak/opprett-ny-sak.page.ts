@@ -178,7 +178,12 @@ export class OpprettNySakPage extends BasePage {
   async velgArbeidsland(land: string): Promise<void> {
     await this.arbeidslandCombobox.click();
     await this.arbeidslandCombobox.fill(land);
-    await this.page.getByRole('option', { name: new RegExp(`^${land}`, 'i') }).first().click();
+    // Escape regex-metategn slik at landnavn med spesialtegn matcher som ren tekst
+    const landEscaped = land.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    await this.page
+      .getByRole('option', { name: new RegExp(`^${landEscaped}`, 'i') })
+      .first()
+      .click();
   }
 
   /**

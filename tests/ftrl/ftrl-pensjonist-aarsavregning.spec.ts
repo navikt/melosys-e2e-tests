@@ -5,7 +5,7 @@ import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page
 import { MedlemskapPage } from '../../pages/behandling/medlemskap.page';
 import { LovvalgPage } from '../../pages/behandling/lovvalg.page';
 import { VedtakPage } from '../../pages/vedtak/vedtak.page';
-import { USER_ID_VALID, SAKSTYPER, SAKSTEMA, BEHANDLINGSTEMA, AARSAK } from '../../pages/shared/constants';
+import { USER_ID_VALID, SAKSTYPER, SAKSTEMA, BEHANDLINGSTEMA, AARSAK, FORRIGE_AAR } from '../../pages/shared/constants';
 import { waitForProcessInstances } from '../../helpers/api-helper';
 
 /**
@@ -53,13 +53,13 @@ test.describe('FTRL Pensjonist - Automatisk årsavregning', () => {
 
     // Step 2: Open behandling
     console.log('Step 2: Opening behandling...');
-    await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).click();
+    await hovedside.åpneBehandling('TRIVIELL KARAFFEL -');
     await page.waitForLoadState('networkidle');
 
     // Step 3: Medlemskap - Velg periode (foregående år), land, full dekning
     // Perioden må ligge i et foregående år for at årsavregning skal opprettes automatisk.
     console.log('Step 3: Filling medlemskap...');
-    await medlemskap.velgPeriode('01.01.2025', '31.12.2025');
+    await medlemskap.velgPeriode(`01.01.${FORRIGE_AAR}`, `31.12.${FORRIGE_AAR}`);
     await medlemskap.velgLand('Afghanistan');
     await medlemskap.velgTrygdedekning('FULL_DEKNING_FTRL');
     await medlemskap.klikkBekreftOgFortsett();
@@ -81,11 +81,15 @@ test.describe('FTRL Pensjonist - Automatisk årsavregning', () => {
     await vedtak.klikkFattVedtak();
 
     // Step 6: Verifiser at årsavregning er automatisk opprettet
+    // Lenken dukker opp i saksoversikten når den asynkrone auto-opprettelsen er ferdig;
+    // ventPåBehandlingslenke laster saksoversikten på nytt til lenken er synlig.
     console.log('Step 6: Verifying årsavregning was auto-created...');
     await waitForProcessInstances(page.request, 60);
     await hovedside.goto();
 
-    const aarsavregningLink = page.getByRole('link', { name: new RegExp(`${USER_ID_VALID}.*Pensjonist.*Årsavregning`) });
+    const aarsavregningLink = await hovedside.ventPåBehandlingslenke(
+      new RegExp(`${USER_ID_VALID}.*Pensjonist.*Årsavregning`)
+    );
     await expect(aarsavregningLink).toBeVisible({ timeout: 15000 });
     console.log('✅ Årsavregning-behandling er automatisk opprettet');
   });

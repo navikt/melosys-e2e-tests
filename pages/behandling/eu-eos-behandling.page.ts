@@ -455,7 +455,9 @@ export class EuEosBehandlingPage extends BasePage {
    *                           (f.eks. 'Rfo. 883/2004 art.11(3)(b)')
    */
   async velgLovvalgsbestemmelse(bestemmelseTekst: string): Promise<void> {
-    const valg = this.page.getByText(bestemmelseTekst, { exact: false });
+    // .first() unngår strict-mode-brudd dersom teksten finnes flere steder
+    // (f.eks. både som valg og som valgt-visning) på lovvalgssteget.
+    const valg = this.page.getByText(bestemmelseTekst, { exact: false }).first();
     await valg.waitFor({ state: 'visible', timeout: 15000 });
     await valg.click();
     console.log(`✅ Valgte lovvalgsbestemmelse: ${bestemmelseTekst}`);
