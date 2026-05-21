@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
-import { TIMEOUT_API, TIMEOUT_LONG, TIMEOUT_MEDIUM } from '../shared/constants';
+import { TIMEOUT_API, TIMEOUT_LONG, TIMEOUT_MEDIUM, TIMEOUT_VEDTAK } from '../shared/constants';
 import { isTrygdeavgiftBeregningResponse } from '../shared/trygdeavgift-api';
 import { AarsavregningAssertions } from './aarsavregning.assertions';
 
@@ -340,6 +340,22 @@ export class AarsavregningPage extends BasePage {
    * we don't have to couple this page to whatever comes next in the wizard.
    */
   async klikkBekreftPåResultatside(): Promise<void> {
+    // klikkBekreftOgFortsett() (simple-modus) returnerer etter bare 500 ms, så
+    // resultatsteget kan fortsatt rendre når vi kommer hit. På CI kan «Bekreft
+    // og fortsett» på resultatsiden bruke >10 s, og clickStepButtonWithRetry sin
+    // interne 10 s-venting (base.page.ts) rakk ikke overgangen → timeout.
+    // La forrige overgang roe seg og vent eksplisitt (lengre) på resultatsidens
+    // knapp før vi driver neste steg.
+    await this.page.waitForLoadState('networkidle', { timeout: TIMEOUT_LONG }).catch(() => {});
+
+    // Hvis forrige steg dobbel-avanserte rett til vedtakssteget, finnes det
+    // ingen «Bekreft og fortsett» igjen — da er vi allerede der vi skal.
+    if (await this.fattVedtakButton.isVisible().catch(() => false)) {
+      console.log('✅ Allerede på vedtakssteget — hopper over Bekreft på resultatside');
+      return;
+    }
+
+    await this.bekreftButton.waitFor({ state: 'visible', timeout: TIMEOUT_VEDTAK });
     await this.clickStepButtonWithRetry(this.bekreftButton, {
       waitForContent: this.fattVedtakButton,
       verifyHeadingChange: true,
