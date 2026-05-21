@@ -341,9 +341,14 @@ export class AarsavregningPage extends BasePage {
 
     await this.bruttoinntektField.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
 
-    // CRITICAL: Create response promise BEFORE triggering action
+    // CRITICAL: Create response promise BEFORE triggering action.
+    // Filtrer på PUT: matcher treffer også GET-en som henter beregningen ved
+    // innlasting, og siden «Innbetalt trygdeavgift» fylles før denne lytteren
+    // settes opp (ny flyt) kan en GET ellers løse promisen for tidlig. Selve
+    // beregningen ved bruttoinntekt-endring er alltid en PUT.
     const responsePromise = this.page.waitForResponse(
-      response => isTrygdeavgiftBeregningResponse(response),
+      response =>
+        isTrygdeavgiftBeregningResponse(response) && response.request().method() === 'PUT',
       { timeout: 30000 }
     );
 
@@ -369,10 +374,7 @@ export class AarsavregningPage extends BasePage {
    * @param beløp - Innbetalt beløp (default '0' = ingenting innbetalt)
    */
   private async fyllInnInnbetaltTrygdeavgiftHvisPåkrevd(beløp: string = '0'): Promise<void> {
-    const synlig = await this.innbetaltTrygdeavgiftField
-      .waitFor({ state: 'visible', timeout: TIMEOUT_SHORT })
-      .then(() => true)
-      .catch(() => false);
+    const synlig = await this.isElementVisible(this.innbetaltTrygdeavgiftField, TIMEOUT_SHORT);
     if (!synlig) {
       return;
     }
