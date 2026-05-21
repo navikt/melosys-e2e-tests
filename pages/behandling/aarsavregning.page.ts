@@ -1,6 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
-import { TIMEOUT_API, TIMEOUT_LONG, TIMEOUT_MEDIUM, TIMEOUT_VEDTAK } from '../shared/constants';
+import { TIMEOUT_API, TIMEOUT_LONG, TIMEOUT_MEDIUM, TIMEOUT_SHORT, TIMEOUT_VEDTAK } from '../shared/constants';
 import { isTrygdeavgiftBeregningResponse } from '../shared/trygdeavgift-api';
 import { AarsavregningAssertions } from './aarsavregning.assertions';
 
@@ -102,14 +102,38 @@ export class AarsavregningPage extends BasePage {
   }
 
   /**
-   * Answer "Nei" to the first radio question on the page
-   * Used for the initial Nei/Ja question in årsavregning
+   * Besvar «Avviker innbetalt trygdeavgift …?» med «Nei» (gammel flyt).
+   *
+   * Gammel flyt viser en Ja/Nei-radio for innbetalt trygdeavgift som må
+   * besvares for å avdekke resten av årsavregningsskjemaet. Den nye
+   * eos_pensjonist-flyten (toggle `melosys.arsavregning.eos_pensjonist`)
+   * skjuler radioen når det ikke finnes tidligere trygdeavgiftsgrunnlag og
+   * setter `harInnbetaltTrygdeavgift = true` automatisk – da rendres skjemaet
+   * med en gang, og «Innbetalt trygdeavgift» blir et påkrevd felt i stedet
+   * (se fyllInnBruttoinntektMedApiVent). Metoden er derfor adaptiv: klikker
+   * «Nei» hvis radioen finnes, ellers hopper den over (ny flyt).
    */
   async svarNei(): Promise<void> {
-    const neiRadio = this.page.getByRole('radio', { name: 'Nei' });
-    await neiRadio.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
-    await neiRadio.check();
-    console.log('✅ Answered Nei');
+    const avvikerNei = this.avvikerInnbetaltGroup.getByRole('radio', { name: 'Nei' });
+
+    // Etter årsvalg/innlasting dukker enten avvik-radioen (gammel flyt) eller
+    // innbetalt-feltet (ny flyt) opp. Vent på det første som blir synlig.
+    await Promise.race([
+      avvikerNei.waitFor({ state: 'visible', timeout: TIMEOUT_LONG }).catch(() => {}),
+      this.innbetaltTrygdeavgiftField
+        .waitFor({ state: 'visible', timeout: TIMEOUT_LONG })
+        .catch(() => {}),
+    ]);
+
+    if (await avvikerNei.isVisible().catch(() => false)) {
+      await avvikerNei.check();
+      console.log('✅ Svarte Nei på «Avviker innbetalt trygdeavgift» (gammel flyt)');
+      return;
+    }
+
+    console.log(
+      'ℹ️ Ny eos_pensjonist-flyt: «Avviker innbetalt»-radio er skjult – hopper over svarNei'
+    );
   }
 
   /**
@@ -309,11 +333,22 @@ export class AarsavregningPage extends BasePage {
    * @param beløp - Amount as string (e.g., '3213')
    */
   async fyllInnBruttoinntektMedApiVent(beløp: string): Promise<void> {
+    // Ny eos_pensjonist-flyt uten tidligere grunnlag krever at «Innbetalt
+    // trygdeavgift» fylles ut – ellers er skjemaet ugyldig og PUT-en mot
+    // /trygdeavgift/beregning kjøres aldri (waitForResponse under timer da ut).
+    // I gammel flyt finnes ikke feltet, så dette blir et no-op.
+    await this.fyllInnInnbetaltTrygdeavgiftHvisPåkrevd('0');
+
     await this.bruttoinntektField.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
 
-    // CRITICAL: Create response promise BEFORE triggering action
+    // CRITICAL: Create response promise BEFORE triggering action.
+    // Filtrer på PUT: matcher treffer også GET-en som henter beregningen ved
+    // innlasting, og siden «Innbetalt trygdeavgift» fylles før denne lytteren
+    // settes opp (ny flyt) kan en GET ellers løse promisen for tidlig. Selve
+    // beregningen ved bruttoinntekt-endring er alltid en PUT.
     const responsePromise = this.page.waitForResponse(
-      response => isTrygdeavgiftBeregningResponse(response),
+      response =>
+        isTrygdeavgiftBeregningResponse(response) && response.request().method() === 'PUT',
       { timeout: 30000 }
     );
 
@@ -325,6 +360,35 @@ export class AarsavregningPage extends BasePage {
 
     await expect(this.bekreftButton).toBeEnabled({ timeout: TIMEOUT_API });
     console.log('✅ Bekreft og fortsett button is enabled');
+  }
+
+  /**
+   * Fyll «Innbetalt trygdeavgift» hvis feltet er synlig og tomt.
+   *
+   * I den nye eos_pensjonist-flyten (uten tidligere trygdeavgiftsgrunnlag)
+   * er dette feltet påkrevd og må fylles før trygdeavgiftsberegningen kjører.
+   * I gammel flyt finnes ikke feltet, og metoden gjør ingenting. Idempotent:
+   * tester som allerede har fylt feltet (f.eks. eu-eos-pensjonist via
+   * velgAvvikerInnbetalt + fyllInnInnbetaltTrygdeavgift) påvirkes ikke.
+   *
+   * @param beløp - Innbetalt beløp (default '0' = ingenting innbetalt)
+   */
+  private async fyllInnInnbetaltTrygdeavgiftHvisPåkrevd(beløp: string = '0'): Promise<void> {
+    const synlig = await this.isElementVisible(this.innbetaltTrygdeavgiftField, TIMEOUT_SHORT);
+    if (!synlig) {
+      return;
+    }
+
+    const eksisterende = (
+      await this.innbetaltTrygdeavgiftField.inputValue().catch(() => '')
+    ).trim();
+    if (eksisterende !== '') {
+      return;
+    }
+
+    await this.innbetaltTrygdeavgiftField.fill(beløp);
+    await this.innbetaltTrygdeavgiftField.press('Tab');
+    console.log(`✅ Ny eos_pensjonist-flyt: fylte «Innbetalt trygdeavgift» = ${beløp}`);
   }
 
   /**
