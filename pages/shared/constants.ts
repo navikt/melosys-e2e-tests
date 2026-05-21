@@ -9,6 +9,7 @@ export const USER_ID_INVALID = "INVALID123";
 
 // Person names (must match mock data)
 export const PERSON_NAME_KOSOVO = "SALMANSEN TREIG";
+export const BRUKERNAVN_VALID = "TRIVIELL KARAFFEL";
 export const ORG_NUMBER_VALID = "999999999";
 
 // URLs
@@ -26,6 +27,7 @@ export const TIMEOUT_SHORT = 2000;
 export const TIMEOUT_MEDIUM = 5000;
 export const TIMEOUT_LONG = 10000;
 export const TIMEOUT_API = 15000;
+export const TIMEOUT_VEDTAK = 60000;
 
 // Common dropdown values
 export const SAKSTYPER = {
@@ -37,6 +39,7 @@ export const SAKSTYPER = {
 
 export const SAKSTEMA = {
   MEDLEMSKAP_LOVVALG: 'MEDLEMSKAP_LOVVALG',
+  TRYGDEAVGIFT: 'TRYGDEAVGIFT',
 } as const;
 
 export const BEHANDLINGSTEMA = {

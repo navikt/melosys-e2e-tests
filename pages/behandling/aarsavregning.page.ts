@@ -1,5 +1,7 @@
 import { Page, expect } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+import { TIMEOUT_API, TIMEOUT_LONG, TIMEOUT_MEDIUM, TIMEOUT_VEDTAK } from '../shared/constants';
+import { isTrygdeavgiftBeregningResponse } from '../shared/trygdeavgift-api';
 import { AarsavregningAssertions } from './aarsavregning.assertions';
 
 /**
@@ -51,11 +53,21 @@ export class AarsavregningPage extends BasePage {
 
   private readonly skattepliktigGroup = this.page.getByRole('group', { name: 'Skattepliktig' });
 
+  private readonly avvikerInnbetaltGroup = this.page.getByRole('group', {
+    name: 'Avviker innbetalt'
+  });
+
   private readonly inntektskildeDropdown = this.page.getByLabel('Inntektskilde');
 
   private readonly bruttoinntektField = this.page.getByRole('textbox', { name: 'Bruttoinntekt' });
 
+  private readonly innbetaltTrygdeavgiftField = this.page.getByRole('textbox', {
+    name: 'Innbetalt trygdeavgift'
+  });
+
   private readonly bekreftButton = this.page.getByRole('button', { name: 'Bekreft og fortsett' });
+
+  private readonly fattVedtakButton = this.page.getByRole('button', { name: 'Fatt vedtak' });
 
   constructor(page: Page) {
     super(page);
@@ -68,7 +80,7 @@ export class AarsavregningPage extends BasePage {
    */
   async ventPåSideLastet(): Promise<void> {
     try {
-      await this.aarVelger.waitFor({ state: 'visible', timeout: 10000 });
+      await this.aarVelger.waitFor({ state: 'visible', timeout: TIMEOUT_LONG });
       console.log('✅ Årsavregning page loaded - year selector visible');
     } catch (error) {
       console.error('❌ Failed to reach Årsavregning page');
@@ -84,7 +96,7 @@ export class AarsavregningPage extends BasePage {
    * @param år - Year to select (e.g., '2025', '2024')
    */
   async velgÅr(år: string): Promise<void> {
-    await this.aarVelger.waitFor({ state: 'visible', timeout: 5000 });
+    await this.aarVelger.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
     await this.aarVelger.selectOption(år);
     console.log(`✅ Selected år = ${år}`);
   }
@@ -95,7 +107,7 @@ export class AarsavregningPage extends BasePage {
    */
   async svarNei(): Promise<void> {
     const neiRadio = this.page.getByRole('radio', { name: 'Nei' });
-    await neiRadio.waitFor({ state: 'visible', timeout: 5000 });
+    await neiRadio.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
     await neiRadio.check();
     console.log('✅ Answered Nei');
   }
@@ -105,9 +117,72 @@ export class AarsavregningPage extends BasePage {
    */
   async svarJa(): Promise<void> {
     const jaRadio = this.page.getByRole('radio', { name: 'Ja' });
-    await jaRadio.waitFor({ state: 'visible', timeout: 5000 });
+    await jaRadio.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
     await jaRadio.check();
     console.log('✅ Answered Ja');
+  }
+
+  /**
+   * Select whether paid trygdeavgift deviates from calculated value.
+   * Waits for the debounced PUT /trygdeavgift/beregning, mirrors velgSkattepliktig.
+   *
+   * @param avviker - true for "Ja", false for "Nei"
+   */
+  async velgAvvikerInnbetalt(avviker: boolean): Promise<void> {
+    await this.avvikerInnbetaltGroup.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
+
+    const expectedValue = avviker ? 'true' : 'false';
+    const radioInput = this.avvikerInnbetaltGroup.locator(`input[value="${expectedValue}"]`);
+
+    const responsePromise = this.page.waitForResponse(
+      response =>
+        isTrygdeavgiftBeregningResponse(response) &&
+        response.request().method() === 'PUT',
+      { timeout: TIMEOUT_MEDIUM }
+    ).catch(() => null);
+
+    await radioInput.waitFor({ state: 'attached', timeout: TIMEOUT_MEDIUM });
+    await radioInput.click({ force: true });
+    await expect(radioInput).toBeChecked({ timeout: TIMEOUT_MEDIUM });
+
+    const response = await responsePromise;
+    if (response) {
+      console.log('✅ Debounced PUT /trygdeavgift/beregning completed - avviker saved');
+    } else {
+      await this.page.waitForTimeout(1500);
+    }
+
+    console.log(`✅ Selected Avviker innbetalt = ${avviker ? 'Ja' : 'Nei'}`);
+  }
+
+  /**
+   * Fill the paid trygdeavgift amount.
+   * The value is included in the later årsavregning calculation.
+   *
+   * @param beløp - Amount as string (e.g. '300')
+   */
+  async fyllInnInnbetaltTrygdeavgift(beløp: string): Promise<void> {
+    await this.innbetaltTrygdeavgiftField.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
+
+    const responsePromise = this.page.waitForResponse(
+      response =>
+        isTrygdeavgiftBeregningResponse(response) &&
+        response.request().method() === 'PUT',
+      { timeout: TIMEOUT_MEDIUM }
+    ).catch(() => null);
+
+    await this.innbetaltTrygdeavgiftField.fill(beløp);
+    await this.innbetaltTrygdeavgiftField.press('Tab');
+    await expect(this.innbetaltTrygdeavgiftField).toHaveValue(beløp, { timeout: TIMEOUT_MEDIUM });
+
+    const response = await responsePromise;
+    if (response) {
+      console.log('✅ Debounced PUT /trygdeavgift/beregning completed - innbetalt saved');
+    } else {
+      await this.page.waitForTimeout(1500);
+    }
+
+    console.log(`✅ Fylte inn innbetalt trygdeavgift: ${beløp}`);
   }
 
   /**
@@ -116,7 +191,7 @@ export class AarsavregningPage extends BasePage {
    * @param bestemmelse - Regulation code (e.g., 'FTRL_KAP2_2_1')
    */
   async velgBestemmelse(bestemmelse: string): Promise<void> {
-    await this.bestemmelseDropdown.waitFor({ state: 'visible', timeout: 5000 });
+    await this.bestemmelseDropdown.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
     await this.bestemmelseDropdown.selectOption(bestemmelse);
     console.log(`✅ Selected bestemmelse = ${bestemmelse}`);
   }
@@ -156,21 +231,20 @@ export class AarsavregningPage extends BasePage {
   async velgSkattepliktig(erSkattepliktig: boolean): Promise<void> {
     console.log(`📝 velgSkattepliktig: Setting to ${erSkattepliktig ? 'Ja' : 'Nei'}...`);
 
-    await this.skattepliktigGroup.waitFor({ state: 'visible', timeout: 5000 });
+    await this.skattepliktigGroup.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
 
     const expectedValue = erSkattepliktig ? 'SKATTEPLIKTIG' : 'IKKE_SKATTEPLIKTIG';
 
     // Set up response listener BEFORE clicking to catch the debounced PUT
     const responsePromise = this.page.waitForResponse(
       response =>
-        response.url().includes('/trygdeavgift/beregning') &&
-        response.request().method() === 'PUT' &&
-        response.status() === 200,
-      { timeout: 3000 }
+        isTrygdeavgiftBeregningResponse(response) &&
+        response.request().method() === 'PUT',
+      { timeout: TIMEOUT_MEDIUM }
     ).catch(() => null); // Don't fail if no PUT
 
     const radioInput = this.skattepliktigGroup.locator(`input[value="${expectedValue}"]`);
-    await radioInput.waitFor({ state: 'attached', timeout: 5000 });
+    await radioInput.waitFor({ state: 'attached', timeout: TIMEOUT_MEDIUM });
     await radioInput.click({ force: true });
 
     await this.page.waitForTimeout(200);
@@ -183,7 +257,7 @@ export class AarsavregningPage extends BasePage {
       await this.page.waitForTimeout(200);
     }
 
-    await expect(radioInput).toBeChecked({ timeout: 5000 });
+    await expect(radioInput).toBeChecked({ timeout: TIMEOUT_MEDIUM });
 
     const response = await responsePromise;
     if (response) {
@@ -211,8 +285,8 @@ export class AarsavregningPage extends BasePage {
    * - 'PENSJON_KILDESKATT'
    */
   async velgInntektskilde(inntektskilde: string): Promise<void> {
-    await this.inntektskildeDropdown.waitFor({ state: 'visible', timeout: 5000 });
-    await expect(this.inntektskildeDropdown).toBeEnabled({ timeout: 10000 });
+    await this.inntektskildeDropdown.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
+    await expect(this.inntektskildeDropdown).toBeEnabled({ timeout: TIMEOUT_LONG });
 
     // Wait for options to populate
     await this.page.waitForFunction(
@@ -221,7 +295,7 @@ export class AarsavregningPage extends BasePage {
         return dropdown && dropdown.options.length > 1;
       },
       'select[name="inntektskilder[0].kildetype"]',
-      { timeout: 10000 }
+      { timeout: TIMEOUT_LONG }
     );
 
     await this.inntektskildeDropdown.selectOption(inntektskilde);
@@ -235,11 +309,11 @@ export class AarsavregningPage extends BasePage {
    * @param beløp - Amount as string (e.g., '3213')
    */
   async fyllInnBruttoinntektMedApiVent(beløp: string): Promise<void> {
-    await this.bruttoinntektField.waitFor({ state: 'visible', timeout: 5000 });
+    await this.bruttoinntektField.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
 
     // CRITICAL: Create response promise BEFORE triggering action
     const responsePromise = this.page.waitForResponse(
-      response => response.url().includes('/trygdeavgift/beregning') && response.status() === 200,
+      response => isTrygdeavgiftBeregningResponse(response),
       { timeout: 30000 }
     );
 
@@ -249,7 +323,7 @@ export class AarsavregningPage extends BasePage {
     await responsePromise;
     console.log('✅ Trygdeavgift calculation API completed');
 
-    await expect(this.bekreftButton).toBeEnabled({ timeout: 15000 });
+    await expect(this.bekreftButton).toBeEnabled({ timeout: TIMEOUT_API });
     console.log('✅ Bekreft og fortsett button is enabled');
   }
 
@@ -258,6 +332,34 @@ export class AarsavregningPage extends BasePage {
    */
   async klikkBekreftOgFortsett(): Promise<void> {
     await this.clickStepButtonWithRetry(this.bekreftButton);
+  }
+
+  /**
+   * Click the secondary "Bekreft og fortsett" button on the resultat/oppsummering
+   * step that follows årsavregning input. Relies on heading-change detection so
+   * we don't have to couple this page to whatever comes next in the wizard.
+   */
+  async klikkBekreftPåResultatside(): Promise<void> {
+    // klikkBekreftOgFortsett() (simple-modus) returnerer etter bare 500 ms, så
+    // resultatsteget kan fortsatt rendre når vi kommer hit. På CI kan «Bekreft
+    // og fortsett» på resultatsiden bruke >10 s, og clickStepButtonWithRetry sin
+    // interne 10 s-venting (base.page.ts) rakk ikke overgangen → timeout.
+    // La forrige overgang roe seg og vent eksplisitt (lengre) på resultatsidens
+    // knapp før vi driver neste steg.
+    await this.page.waitForLoadState('networkidle', { timeout: TIMEOUT_LONG }).catch(() => {});
+
+    // Hvis forrige steg dobbel-avanserte rett til vedtakssteget, finnes det
+    // ingen «Bekreft og fortsett» igjen — da er vi allerede der vi skal.
+    if (await this.fattVedtakButton.isVisible().catch(() => false)) {
+      console.log('✅ Allerede på vedtakssteget — hopper over Bekreft på resultatside');
+      return;
+    }
+
+    await this.bekreftButton.waitFor({ state: 'visible', timeout: TIMEOUT_VEDTAK });
+    await this.clickStepButtonWithRetry(this.bekreftButton, {
+      waitForContent: this.fattVedtakButton,
+      verifyHeadingChange: true,
+    });
   }
 
   /**

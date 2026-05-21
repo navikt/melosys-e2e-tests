@@ -1,7 +1,7 @@
 import { Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 import { OpprettNySakAssertions } from './opprett-ny-sak.assertions';
-import { SAKSTYPER, SAKSTEMA, BEHANDLINGSTEMA, AARSAK } from '../shared/constants';
+import { SAKSTYPER, SAKSTEMA, BEHANDLINGSTEMA, AARSAK, TIMEOUT_MEDIUM } from '../shared/constants';
 
 /**
  * Page Object for creating a new case in Melosys
@@ -45,6 +45,17 @@ export class OpprettNySakPage extends BasePage {
   private readonly behandlingstemaDropdown = this.page.getByLabel('Behandlingstema');
 
   private readonly behandlingstypeDropdown = this.page.getByLabel('Behandlingstype');
+
+  // melosys-web renders the existing-sak checkbox without an accessible label.
+  private readonly eksisterendeSakCheckbox = this.page.getByLabel('', { exact: true });
+
+  private readonly euEosTrygdeavgiftHeading = this.page.getByRole('heading', {
+    name: 'EU/EØS-land - Trygdeavgift'
+  });
+
+  private readonly aarsavregningOption = this.page.getByRole('radio', {
+    name: 'Årsavregning',
+  });
 
   private readonly aarsakDropdown = this.page.getByLabel('Årsak', { exact: true });
 
@@ -141,6 +152,39 @@ export class OpprettNySakPage extends BasePage {
   }
 
   /**
+   * Select Pensjonist/uføretrygdet treatment theme for an existing sak
+   */
+  async velgPensjonistUforetrygdet(): Promise<void> {
+    await this.velgBehandlingstema(BEHANDLINGSTEMA.PENSJONIST);
+  }
+
+  /**
+   * Select EU/EØS-land - Trygdeavgift section for an existing sak
+   */
+  async velgEuEosLandTrygdeavgift(): Promise<void> {
+    await this.euEosTrygdeavgiftHeading.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
+    // The accordion/disclosure is exposed as a heading in melosys-web's a11y tree.
+    await this.euEosTrygdeavgiftHeading.click();
+  }
+
+  /**
+   * Select Årsavregning behandling for the chosen sak
+   */
+  async velgAarsavregningBehandling(): Promise<void> {
+    await this.aarsavregningOption.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
+    await this.aarsavregningOption.click();
+  }
+
+  /**
+   * Select existing pensjonistsak and choose Årsavregning behandling
+   */
+  async velgPensjonistAarsavregning(): Promise<void> {
+    await this.velgEuEosLandTrygdeavgift();
+    await this.velgPensjonistUforetrygdet();
+    await this.velgAarsavregningBehandling();
+  }
+
+  /**
    * Select reason (Årsak)
    *
    * @param aarsak - Reason value (e.g., 'SØKNAD')
@@ -230,8 +274,7 @@ export class OpprettNySakPage extends BasePage {
    */
   async opprettNyVurdering(fnr: string, aarsak: string = AARSAK.SØKNAD): Promise<void> {
     await this.fyllInnBrukerID(fnr);
-    // The checkbox for selecting existing case (unnamed label)
-    await this.page.getByLabel('', { exact: true }).check();
+    await this.eksisterendeSakCheckbox.check();
     await this.velgNyVurdering();
     await this.velgAarsak(aarsak);
     await this.leggBehandlingIMine();
