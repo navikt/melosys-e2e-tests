@@ -1,7 +1,7 @@
 import { Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 import { OpprettNySakAssertions } from './opprett-ny-sak.assertions';
-import { SAKSTYPER, SAKSTEMA, BEHANDLINGSTEMA, AARSAK } from '../shared/constants';
+import { SAKSTYPER, SAKSTEMA, BEHANDLINGSTEMA, AARSAK, TIMEOUT_MEDIUM } from '../shared/constants';
 
 /**
  * Page Object for creating a new case in Melosys
@@ -46,7 +46,35 @@ export class OpprettNySakPage extends BasePage {
 
   private readonly behandlingstypeDropdown = this.page.getByLabel('Behandlingstype');
 
+  // melosys-web renders the existing-sak checkbox without an accessible label.
+  private readonly eksisterendeSakCheckbox = this.page.getByLabel('', { exact: true });
+
+  private readonly euEosTrygdeavgiftHeading = this.page.getByRole('heading', {
+    name: 'EU/EØS-land - Trygdeavgift'
+  });
+
+  private readonly aarsavregningOption = this.page.getByRole('radio', {
+    name: 'Årsavregning',
+  });
+
   private readonly aarsakDropdown = this.page.getByLabel('Årsak', { exact: true });
+
+  // Søknadsperiode (vises for EU/EØS-saker som krever periode og land)
+  private readonly soknadsperiodeGroup = this.page.getByRole('group', {
+    name: /Søknadsperiode/i,
+  });
+  private readonly soknadsperiodeFraField = this.soknadsperiodeGroup.getByRole('textbox', {
+    name: 'Fra',
+  });
+  private readonly soknadsperiodeTilField = this.soknadsperiodeGroup.getByRole('textbox', {
+    name: 'Til',
+  });
+
+  // Arbeidsland (React Select / MultiSelect, vises for EU/EØS-saker)
+  private readonly arbeidslandGroup = this.page.getByRole('group', {
+    name: /I hvilke land/i,
+  });
+  private readonly arbeidslandCombobox = this.arbeidslandGroup.getByRole('combobox');
 
   private readonly leggIMineCheckbox = this.page.getByRole('checkbox', {
     name: 'Legg behandlingen i mine',
@@ -124,12 +152,82 @@ export class OpprettNySakPage extends BasePage {
   }
 
   /**
+   * Select Pensjonist/uføretrygdet treatment theme for an existing sak
+   */
+  async velgPensjonistUforetrygdet(): Promise<void> {
+    await this.velgBehandlingstema(BEHANDLINGSTEMA.PENSJONIST);
+  }
+
+  /**
+   * Select EU/EØS-land - Trygdeavgift section for an existing sak
+   */
+  async velgEuEosLandTrygdeavgift(): Promise<void> {
+    await this.euEosTrygdeavgiftHeading.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
+    // The accordion/disclosure is exposed as a heading in melosys-web's a11y tree.
+    await this.euEosTrygdeavgiftHeading.click();
+  }
+
+  /**
+   * Select Årsavregning behandling for the chosen sak
+   */
+  async velgAarsavregningBehandling(): Promise<void> {
+    await this.aarsavregningOption.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
+    await this.aarsavregningOption.click();
+  }
+
+  /**
+   * Select existing pensjonistsak and choose Årsavregning behandling
+   */
+  async velgPensjonistAarsavregning(): Promise<void> {
+    await this.velgEuEosLandTrygdeavgift();
+    await this.velgPensjonistUforetrygdet();
+    await this.velgAarsavregningBehandling();
+  }
+
+  /**
    * Select reason (Årsak)
    *
    * @param aarsak - Reason value (e.g., 'SØKNAD')
    */
   async velgAarsak(aarsak: string): Promise<void> {
     await this.aarsakDropdown.selectOption(aarsak);
+  }
+
+  /**
+   * Fill the application period (Søknadsperiode) on EU/EØS case creation.
+   *
+   * Uses the date textboxes directly instead of clicking through the calendar
+   * widget — this is deterministic and does not depend on which month the
+   * datepicker happens to default to.
+   *
+   * @param fra - Start date in format DD.MM.YYYY (e.g., "01.01.2024")
+   * @param til - End date in format DD.MM.YYYY (e.g., "31.12.2024")
+   */
+  async velgSøknadsperiode(fra: string, til: string): Promise<void> {
+    await this.soknadsperiodeFraField.fill(fra);
+    await this.soknadsperiodeFraField.press('Enter');
+    await this.soknadsperiodeTilField.fill(til);
+    await this.soknadsperiodeTilField.press('Enter');
+  }
+
+  /**
+   * Select work country (Arbeidsland) on EU/EØS case creation.
+   *
+   * Scopes to the "I hvilke land skal arbeidet/næringen utføres i?" fieldset and
+   * its combobox instead of a positional CSS selector, so it survives field
+   * reordering on the form.
+   *
+   * @param land - Country name (e.g., "Bulgaria")
+   */
+  async velgArbeidsland(land: string): Promise<void> {
+    await this.arbeidslandCombobox.click();
+    await this.arbeidslandCombobox.fill(land);
+    // Escape regex-metategn slik at landnavn med spesialtegn matcher som ren tekst
+    const landEscaped = land.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    await this.page
+      .getByRole('option', { name: new RegExp(`^${landEscaped}`, 'i') })
+      .first()
+      .click();
   }
 
   /**
@@ -176,8 +274,7 @@ export class OpprettNySakPage extends BasePage {
    */
   async opprettNyVurdering(fnr: string, aarsak: string = AARSAK.SØKNAD): Promise<void> {
     await this.fyllInnBrukerID(fnr);
-    // The checkbox for selecting existing case (unnamed label)
-    await this.page.getByLabel('', { exact: true }).check();
+    await this.eksisterendeSakCheckbox.check();
     await this.velgNyVurdering();
     await this.velgAarsak(aarsak);
     await this.leggBehandlingIMine();
