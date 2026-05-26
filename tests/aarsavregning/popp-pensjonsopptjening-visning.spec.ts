@@ -19,6 +19,7 @@ import {
 } from '../../pages/shared/constants';
 import { waitForProcessInstances } from '../../helpers/api-helper';
 import { UnleashHelper } from '../../helpers/unleash-helper';
+import { clearPoppSeed, seedPoppInntekt, PoppInntektSeed } from '../../helpers/mock-helper';
 
 /**
  * Visning av eksisterende pensjonsopptjening (PGI) fra POPP under årsavregning.
@@ -30,10 +31,13 @@ import { UnleashHelper } from '../../helpers/unleash-helper';
  * - Toggle: BÅDE `melosys.vis_pensjonsopptjening_popp` (api, underscores) OG
  *   `melosys.vis-pensjonsopptjening-popp` (web, hyphens) må enables — begge er registrert i
  *   Unleash. Begge må av default være «på» (default-fixturen tar dem, men eksplisitt = trygt).
- * - Mock: melosys-mock returnerer kanonisk data (`kilde="MOCK"`, FL_PGI_LOENN + SUM_PI rader
- *   for de siste 5 år) for alle fnrs unntatt `00000000000` som gir 404. Ingen seed-rute
- *   eksisterer for å differensiere kilder pr fnr — Scenarios 2/3/4 stubber derfor responsen
- *   via `page.route(...)` for å kunne teste UI-rendering deterministisk.
+ * - Mock: melosys-mock har nå seed-rute (`POST /popp/admin/inntekt/seed`) som overstyrer
+ *   default kanonisk respons (kilde="SKD", FL_PGI_LOENN + SUM_PI for siste 5 år) per fnr.
+ *   Alle scenario seeder eksplisitt for å være deterministisk uavhengig av default-mockens
+ *   kilde-verdier — API-en (PensjonsopptjeningOppslag) passerer `kilde` uendret videre,
+ *   og UI rendrer kun SKATT/AVGIFTSSYSTEMET/MELOSYS som «Skatt»/«Avgiftssystemet»/«Melosys»
+ *   (andre verdier vises rått). Default-seeden ryddes per test i beforeEach — `clearMockData`
+ *   rører ikke POPP.
  * - UI: ingen `data-testid`-er; selektorer er tekst-/role-baserte.
  * - Sidemenyen er panel-basert (ingen URL-endring).
  */
@@ -44,42 +48,6 @@ const POPP_TOGGLE_NAMES = [
 ];
 const ÅRSAVREGNING_LINK_REGEX = new RegExp(`${USER_ID_VALID}.*Pensjonist.*Årsavregning`);
 const BRUKERNAVN = 'TRIVIELL KARAFFEL';
-
-type PoppPeriode = { aar: number; pgi: number; kilde: string };
-
-/**
- * Stub responsen fra `/api/behandlinger/{id}/pensjonsopptjening` med oppgitt
- * periode-liste. Brukes for å teste UI-rendering av kombinasjoner av kilder
- * (Skatt+Avgiftssystemet+Melosys) som melosys-mock ikke kan produsere uten
- * seed-mekanisme. Returnerer en `hits()`-funksjon slik at testen kan
- * verifisere at stubben faktisk fyrte (i Scenario 4 skiller dette ekte
- * tom-respons fra «stub bommet — vi traff ekte mock som tilfeldigvis returnerte
- * tomt»).
- */
-async function stubPoppResponse(
-  page: Page,
-  perioder: PoppPeriode[],
-  inntektsAr: number = FORRIGE_AAR,
-): Promise<{ hits: () => number }> {
-  let hits = 0;
-  await page.route('**/api/behandlinger/*/pensjonsopptjening', async (route) => {
-    if (route.request().method() !== 'GET') {
-      await route.fallback();
-      return;
-    }
-    hits++;
-    await route.fulfill({
-      status: 200,
-      contentType: 'application/json',
-      body: JSON.stringify({
-        inntektsAr,
-        behandletAr: inntektsAr,
-        perioder,
-      }),
-    });
-  });
-  return { hits: () => hits };
-}
 
 /**
  * Gå gjennom hele pensjonist-flyten og fatt vedtak slik at en årsavregning-
@@ -140,12 +108,23 @@ test.describe('POPP — visning av pensjonsopptjening under årsavregning', () =
     for (const name of POPP_TOGGLE_NAMES) {
       await unleash.enableFeature(name);
     }
+    // clearMockData (cleanup-fixturen) rører ikke POPP-seeden — rydd eksplisitt
+    // så hver test starter med ren baseline.
+    await clearPoppSeed(request, USER_ID_VALID);
   });
 
-  test('Scenario 1 — seksjonen vises med rader fra POPP (kilde fra mock)', async ({ page }) => {
+  test('Scenario 1 — seksjonen vises med 5 år SKATT-rader (seeded)', async ({ page, request }) => {
     test.setTimeout(180000);
 
-    // Bruker reell melosys-mock-data (kilde="MOCK", siste 5 år, kanoniske beløp).
+    // Seed eksplisitt med SKATT for hele 5-års-vinduet. Default mock returnerer
+    // kilde="SKD" som API-en passerer uendret, og UI rendrer rått (ikke «Skatt»).
+    // For å verifisere visningsnavn-mappingen seeder vi SKATT direkte.
+    const skattRader: PoppInntektSeed[] = [];
+    for (let aar = FORRIGE_AAR - 4; aar <= FORRIGE_AAR; aar++) {
+      skattRader.push({ inntektAr: aar, belop: 540_000, kilde: POPP_KILDE.SKATT });
+    }
+    await seedPoppInntekt(request, USER_ID_VALID, skattRader);
+
     const auth = new AuthHelper(page);
     await auth.login();
 
@@ -157,27 +136,17 @@ test.describe('POPP — visning av pensjonsopptjening under årsavregning', () =
     await popp.assertions.verifiserSeksjonVises();
     const rader = await popp.lesRader();
 
-    // «Hver oppføring viser år, PGI, kilde» — mocken returnerer kilde="MOCK"
-    // for alle fnrs. Når seed-/stubbing-rute lander i melosys-mock og vi kan
-    // teste mot ekte SKATT-kilde, bytt 'MOCK' → POPP_KILDE_VISNING.SKATT.
-    await popp.assertions.verifiserAlleRaderHarKilde(rader, 'MOCK');
-
-    // «Nyeste år øverst» (monotont synkende)
+    await popp.assertions.verifiserAlleRaderHarKilde(rader, POPP_KILDE_VISNING.SKATT);
     await popp.assertions.verifiserNyesteÅrØverst(rader);
-
-    // Inntil 5 år tilbake (mock dekker det)
-    const fra = FORRIGE_AAR - 4;
-    const til = FORRIGE_AAR;
-    await popp.assertions.verifiserAarIntervall(rader, fra, til);
+    await popp.assertions.verifiserAarIntervall(rader, FORRIGE_AAR - 4, FORRIGE_AAR);
   });
 
-  test('Scenario 2 — delt grunnlag: Skatt og Avgiftssystemet samme år (stubbed)', async ({ page }) => {
+  test('Scenario 2 — delt grunnlag: Skatt og Avgiftssystemet samme år (seeded)', async ({ page, request }) => {
     test.setTimeout(180000);
 
-    // Stubber API-responsen — mocken kan ikke differensiere kilder pr fnr i dag.
-    await stubPoppResponse(page, [
-      { aar: FORRIGE_AAR, pgi: 540_000, kilde: POPP_KILDE.SKATT },
-      { aar: FORRIGE_AAR, pgi: 120_000, kilde: POPP_KILDE.AVGIFTSSYSTEMET },
+    await seedPoppInntekt(request, USER_ID_VALID, [
+      { inntektAr: FORRIGE_AAR, belop: 540_000, kilde: POPP_KILDE.SKATT },
+      { inntektAr: FORRIGE_AAR, belop: 120_000, kilde: POPP_KILDE.AVGIFTSSYSTEMET },
     ]);
 
     const auth = new AuthHelper(page);
@@ -198,13 +167,13 @@ test.describe('POPP — visning av pensjonsopptjening under årsavregning', () =
     ]);
   });
 
-  test('Scenario 3 — alle tre kilder: Skatt + Avgiftssystemet + Melosys (stubbed)', async ({ page }) => {
+  test('Scenario 3 — alle tre kilder: Skatt + Avgiftssystemet + Melosys (seeded)', async ({ page, request }) => {
     test.setTimeout(180000);
 
-    await stubPoppResponse(page, [
-      { aar: FORRIGE_AAR, pgi: 540_000, kilde: POPP_KILDE.SKATT },
-      { aar: FORRIGE_AAR, pgi: 120_000, kilde: POPP_KILDE.AVGIFTSSYSTEMET },
-      { aar: FORRIGE_AAR, pgi: 80_000, kilde: POPP_KILDE.MELOSYS },
+    await seedPoppInntekt(request, USER_ID_VALID, [
+      { inntektAr: FORRIGE_AAR, belop: 540_000, kilde: POPP_KILDE.SKATT },
+      { inntektAr: FORRIGE_AAR, belop: 120_000, kilde: POPP_KILDE.AVGIFTSSYSTEMET },
+      { inntektAr: FORRIGE_AAR, belop: 80_000, kilde: POPP_KILDE.MELOSYS },
     ]);
 
     const auth = new AuthHelper(page);
@@ -226,11 +195,11 @@ test.describe('POPP — visning av pensjonsopptjening under årsavregning', () =
     ]);
   });
 
-  test('Scenario 4 — ingen pensjonsopptjening: tom-melding vises (stubbed)', async ({ page }) => {
+  test('Scenario 4 — ingen pensjonsopptjening: tom-melding vises (seeded tom)', async ({ page, request }) => {
     test.setTimeout(180000);
 
-    // Stubber tom respons — mocken returnerer alltid data for ekte fnr.
-    const stub = await stubPoppResponse(page, []);
+    // Tom seed overstyrer default-data og gir 0 perioder fra API.
+    await seedPoppInntekt(request, USER_ID_VALID, []);
 
     const auth = new AuthHelper(page);
     await auth.login();
@@ -245,16 +214,11 @@ test.describe('POPP — visning av pensjonsopptjening under årsavregning', () =
 
     const rader = await popp.lesRader();
     expect(rader).toEqual([]);
-
-    // Verifiser at stubben faktisk fyrte — uten dette kan testen bli grønn
-    // fordi vi traff ekte mock som tilfeldigvis returnerte tomt for personen
-    // (eller fordi URL-glob bommet og kallet gikk forbi stubben).
-    expect(stub.hits()).toBeGreaterThan(0);
   });
 
   test.fixme(
     'Scenario 5 — årsavregning eldre enn 5 år: visning utvides til avregningsåret',
-    async ({ page }) => {
+    async ({ page, request }) => {
       // BLOKKERT: auto-opprettelses-flyten (FTRL Pensjonist → vedtak) gir alltid
       // en årsavregning for FORRIGE_AAR. Vi har ingen produksjonsklar måte å
       // sette opp en årsavregning med inntektsÅr ≥ 6 år tilbake på i E2E-stacken
@@ -264,11 +228,9 @@ test.describe('POPP — visning av pensjonsopptjening under årsavregning', () =
 
       const GAMMELT_AAR = new Date().getFullYear() - 8;
 
-      await stubPoppResponse(
-        page,
-        [{ aar: GAMMELT_AAR, pgi: 400_000, kilde: POPP_KILDE.SKATT }],
-        GAMMELT_AAR, // inntektsAr må matche periodenes år, ellers selvmotsigende respons
-      );
+      await seedPoppInntekt(request, USER_ID_VALID, [
+        { inntektAr: GAMMELT_AAR, belop: 400_000, kilde: POPP_KILDE.SKATT },
+      ]);
 
       const auth = new AuthHelper(page);
       await auth.login();

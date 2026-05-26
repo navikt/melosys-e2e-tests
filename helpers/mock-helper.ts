@@ -331,6 +331,96 @@ export interface CreateJournalpostForSakOptions {
  * console.log('Created journalpost:', result.journalpostId);
  * console.log('Document IDs:', result.dokumentInfoIds);
  */
+/**
+ * Pensjonsopptjening (POPP) inntekt-rad for seeding.
+ *
+ * Mocken eksponerer `POST /popp/admin/inntekt/seed` som overstyrer den
+ * kanoniske default-responsen per fnr. Påkrevde felter for at API-en
+ * (`PensjonsopptjeningOppslag` med `inntektType=SUM_PI`-filter) skal se
+ * raden er `inntektAr`, `belop`, `inntektType="SUM_PI"` og `kilde`. Kilde-
+ * verdier sendes uendret videre til melosys-web, som rendrer SKATT/
+ * AVGIFTSSYSTEMET/MELOSYS som «Skatt»/«Avgiftssystemet»/«Melosys» — andre
+ * verdier vises som rå-tekst (default-branchen i `kildeLabel`).
+ */
+export interface PoppInntektSeed {
+  inntektAr: number;
+  belop: number;
+  kilde: string;
+  inntektType?: string;
+  inntektTypeDekode?: string;
+}
+
+/**
+ * Seed POPP-inntekter for et fnr i melosys-mock.
+ *
+ * Overstyrer mockens default kanoniske data (SKD-kilde, FL_PGI_LOENN +
+ * SUM_PI for siste 5 år). Bruk i POPP-pensjonsopptjenings-tester for
+ * deterministisk styring av kilde-mix og år-vindu uten å gå via
+ * `page.route(...)`-stubbing.
+ *
+ * Default `inntektType="SUM_PI"` matcher hva API-en spør om — endre kun
+ * hvis du tester at annet/feil inntektstype filtreres bort.
+ *
+ * @example
+ * await seedPoppInntekt(request, '30056928150', [
+ *   { inntektAr: 2025, belop: 540_000, kilde: 'SKATT' },
+ *   { inntektAr: 2025, belop: 120_000, kilde: 'AVGIFTSSYSTEMET' },
+ * ]);
+ */
+export async function seedPoppInntekt(
+  request: APIRequestContext,
+  fnr: string,
+  inntekter: PoppInntektSeed[],
+): Promise<void> {
+  const payload = {
+    fnr,
+    inntekter: inntekter.map((i) => ({
+      inntektAr: i.inntektAr,
+      belop: i.belop,
+      kilde: i.kilde,
+      inntektType: i.inntektType ?? 'SUM_PI',
+      inntektTypeDekode: i.inntektTypeDekode,
+      fnr,
+    })),
+  };
+
+  const response = await request.post('http://localhost:8083/popp/admin/inntekt/seed', {
+    data: payload,
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  if (!response.ok()) {
+    const errorText = await response.text();
+    throw new Error(
+      `Failed to seed POPP inntekt for fnr=${fnr}: ${response.status()} - ${errorText}`,
+    );
+  }
+}
+
+/**
+ * Fjern POPP-seed for et fnr (eller alle hvis `fnr` ikke oppgis).
+ *
+ * `clearMockData` rører ikke POPP-seeden — bruk denne eksplisitt før hver
+ * test for å sikre ren baseline, ellers vil seeden persisten på tvers av
+ * tester i samme mock-prosess.
+ */
+export async function clearPoppSeed(
+  request: APIRequestContext,
+  fnr?: string,
+): Promise<void> {
+  const url = fnr
+    ? `http://localhost:8083/popp/admin/inntekt/seed/${encodeURIComponent(fnr)}`
+    : 'http://localhost:8083/popp/admin/inntekt/seed';
+
+  const response = await request.delete(url);
+
+  if (!response.ok()) {
+    throw new Error(
+      `Failed to clear POPP seed${fnr ? ` for fnr=${fnr}` : ''}: ${response.status()}`,
+    );
+  }
+}
+
 export async function createJournalpostForSak(
   request: APIRequestContext,
   options: CreateJournalpostForSakOptions
