@@ -1,5 +1,6 @@
 import { Page, expect } from '@playwright/test';
-import { PensjonsopptjeningPage, PoppRad } from './pensjonsopptjening.page';
+import { TIMEOUT_LONG } from '../shared/constants';
+import type { PoppRad } from './pensjonsopptjening.page';
 
 /**
  * Assertion methods for PensjonsopptjeningPage.
@@ -14,9 +15,11 @@ export class PensjonsopptjeningAssertions {
    * Verifiser at seksjonen «Pensjonsopptjening» vises (overskrift synlig).
    */
   async verifiserSeksjonVises(): Promise<void> {
+    // Speil POM-ens seksjonOverskrift-locator (level: 2) og bruk samme
+    // tidsbudsjett som ventPåSeksjon for å unngå asymmetrisk flake.
     await expect(
-      this.page.getByRole('heading', { name: 'Pensjonsopptjening' }),
-    ).toBeVisible();
+      this.page.getByRole('heading', { name: 'Pensjonsopptjening', level: 2 }),
+    ).toBeVisible({ timeout: TIMEOUT_LONG });
   }
 
   /**
@@ -60,13 +63,13 @@ export class PensjonsopptjeningAssertions {
   }
 
   /**
-   * Verifiser at den første raden har år ≥ alle øvrige (nyeste først).
+   * Verifiser monotont synkende år (nyeste øverst). Tillater like år for
+   * multi-kilde-rader for samme inntektsår.
    */
   async verifiserNyesteÅrØverst(rader: PoppRad[]): Promise<void> {
     expect(rader.length).toBeGreaterThan(0);
-    const førsteAar = rader[0].aar;
-    for (const rad of rader) {
-      expect(førsteAar).toBeGreaterThanOrEqual(rad.aar);
+    for (let i = 1; i < rader.length; i++) {
+      expect(rader[i - 1].aar).toBeGreaterThanOrEqual(rader[i].aar);
     }
   }
 

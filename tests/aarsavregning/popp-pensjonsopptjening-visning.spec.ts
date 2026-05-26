@@ -1,5 +1,5 @@
 import { test, expect } from '../../fixtures';
-import { Page, APIRequestContext } from '@playwright/test';
+import { Page } from '@playwright/test';
 import { AuthHelper } from '../../helpers/auth-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
@@ -51,23 +51,34 @@ type PoppPeriode = { aar: number; pgi: number; kilde: string };
  * Stub responsen fra `/api/behandlinger/{id}/pensjonsopptjening` med oppgitt
  * periode-liste. Brukes for å teste UI-rendering av kombinasjoner av kilder
  * (Skatt+Avgiftssystemet+Melosys) som melosys-mock ikke kan produsere uten
- * seed-mekanisme.
+ * seed-mekanisme. Returnerer en `hits()`-funksjon slik at testen kan
+ * verifisere at stubben faktisk fyrte (i Scenario 4 skiller dette ekte
+ * tom-respons fra «stub bommet — vi traff ekte mock som tilfeldigvis returnerte
+ * tomt»).
  */
-async function stubPoppResponse(page: Page, perioder: PoppPeriode[]): Promise<void> {
+async function stubPoppResponse(
+  page: Page,
+  perioder: PoppPeriode[],
+  inntektsAr: number = FORRIGE_AAR,
+): Promise<{ hits: () => number }> {
+  let hits = 0;
   await page.route('**/api/behandlinger/*/pensjonsopptjening', async (route) => {
-    const url = new URL(route.request().url());
-    // Hent inntektsÅr fra path/body hvis vi vil — for stub holder vi det enkelt.
-    void url;
+    if (route.request().method() !== 'GET') {
+      await route.fallback();
+      return;
+    }
+    hits++;
     await route.fulfill({
       status: 200,
       contentType: 'application/json',
       body: JSON.stringify({
-        inntektsAr: FORRIGE_AAR,
-        behandletAr: FORRIGE_AAR,
+        inntektsAr,
+        behandletAr: inntektsAr,
         perioder,
       }),
     });
   });
+  return { hits: () => hits };
 }
 
 /**
@@ -146,15 +157,12 @@ test.describe('POPP — visning av pensjonsopptjening under årsavregning', () =
     await popp.assertions.verifiserSeksjonVises();
     const rader = await popp.lesRader();
 
-    // «Vises seksjonen + hver oppføring viser år, PGI, kilde»
-    expect(rader.length).toBeGreaterThan(0);
-    for (const rad of rader) {
-      expect(rad.aar).toBeGreaterThan(0);
-      expect(rad.pgi).toBeGreaterThan(0);
-      expect(rad.kilde.length).toBeGreaterThan(0);
-    }
+    // «Hver oppføring viser år, PGI, kilde» — mocken returnerer kilde="MOCK"
+    // for alle fnrs. Når seed-/stubbing-rute lander i melosys-mock og vi kan
+    // teste mot ekte SKATT-kilde, bytt 'MOCK' → POPP_KILDE_VISNING.SKATT.
+    await popp.assertions.verifiserAlleRaderHarKilde(rader, 'MOCK');
 
-    // «Nyeste år øverst»
+    // «Nyeste år øverst» (monotont synkende)
     await popp.assertions.verifiserNyesteÅrØverst(rader);
 
     // Inntil 5 år tilbake (mock dekker det)
@@ -222,7 +230,7 @@ test.describe('POPP — visning av pensjonsopptjening under årsavregning', () =
     test.setTimeout(180000);
 
     // Stubber tom respons — mocken returnerer alltid data for ekte fnr.
-    await stubPoppResponse(page, []);
+    const stub = await stubPoppResponse(page, []);
 
     const auth = new AuthHelper(page);
     await auth.login();
@@ -237,6 +245,11 @@ test.describe('POPP — visning av pensjonsopptjening under årsavregning', () =
 
     const rader = await popp.lesRader();
     expect(rader).toEqual([]);
+
+    // Verifiser at stubben faktisk fyrte — uten dette kan testen bli grønn
+    // fordi vi traff ekte mock som tilfeldigvis returnerte tomt for personen
+    // (eller fordi URL-glob bommet og kallet gikk forbi stubben).
+    expect(stub.hits()).toBeGreaterThan(0);
   });
 
   test.fixme(
@@ -251,9 +264,11 @@ test.describe('POPP — visning av pensjonsopptjening under årsavregning', () =
 
       const GAMMELT_AAR = new Date().getFullYear() - 8;
 
-      await stubPoppResponse(page, [
-        { aar: GAMMELT_AAR, pgi: 400_000, kilde: POPP_KILDE.SKATT },
-      ]);
+      await stubPoppResponse(
+        page,
+        [{ aar: GAMMELT_AAR, pgi: 400_000, kilde: POPP_KILDE.SKATT }],
+        GAMMELT_AAR, // inntektsAr må matche periodenes år, ellers selvmotsigende respons
+      );
 
       const auth = new AuthHelper(page);
       await auth.login();

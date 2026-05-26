@@ -1,6 +1,6 @@
 import { Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
-import { TIMEOUT_LONG, TIMEOUT_MEDIUM } from '../shared/constants';
+import { TIMEOUT_LONG } from '../shared/constants';
 import { PensjonsopptjeningAssertions } from './pensjonsopptjening.assertions';
 
 /**
@@ -34,13 +34,16 @@ export class PensjonsopptjeningPage extends BasePage {
   readonly assertions: PensjonsopptjeningAssertions;
 
   // Seksjons-overskrift «Pensjonsopptjening» (h2) direkte i main-content på årsavregningssiden.
-  private readonly seksjonOverskrift = this.page.getByRole('heading', { name: 'Pensjonsopptjening', level: 2 });
+  readonly seksjonOverskrift = this.page.getByRole('heading', { name: 'Pensjonsopptjening', level: 2 });
 
   // Tom-tilstand: Nav.Alert variant="info" med eksakt tekst (verbatim fra bygg).
-  private readonly tomTilstand = this.page.getByText('Ingen pensjonsopptjening registrert i POPP for personen.');
+  // Eksakt-match for å unngå substring-treff i aria-live-regioner / hjelpetekster.
+  private readonly tomTilstand = this.page.getByText('Ingen pensjonsopptjening registrert i POPP for personen.', { exact: true });
 
-  // Feil-tilstand: Nav.Alert variant="warning" (synlig hvis API svarer 5xx).
-  private readonly feilTilstand = this.page.getByText('Kunne ikke hente pensjonsopptjening fra POPP.');
+  // Anker tabellen direkte etter overskriften — første <table> i document order
+  // som følger seksjons-h2. Robust mot at bygget ikke wrapper seksjonen i en
+  // ARIA-region, og uavhengig av andre tabeller på årsavregningssiden.
+  private readonly seksjonsTabell = this.seksjonOverskrift.locator('xpath=following::table[1]');
 
   constructor(page: Page) {
     super(page);
@@ -48,11 +51,18 @@ export class PensjonsopptjeningPage extends BasePage {
   }
 
   /**
-   * Vent til «Pensjonsopptjening»-seksjonen er rendret på årsavregningssiden.
-   * Seksjonen rendres direkte i main-content — ingen sidemeny å klikke.
+   * Vent til «Pensjonsopptjening»-seksjonen er ferdig hydrert.
+   * Overskriften (h2) rendres synkront, men tabell/tom-tilstand kommer først
+   * når POPP-fetch resolver. Vi venter på at siden settler i én av tre
+   * terminal-tilstander (tabell, tom, feil), ellers risikerer kallere å lese
+   * en halvferdig DOM.
    */
   async ventPåSeksjon(): Promise<void> {
     await this.seksjonOverskrift.waitFor({ state: 'visible', timeout: TIMEOUT_LONG });
+    await Promise.race([
+      this.seksjonsTabell.waitFor({ state: 'visible', timeout: TIMEOUT_LONG }),
+      this.tomTilstand.waitFor({ state: 'visible', timeout: TIMEOUT_LONG }),
+    ]);
   }
 
   /**
@@ -69,26 +79,17 @@ export class PensjonsopptjeningPage extends BasePage {
       return [];
     }
 
-    // Lokaliser tabellen via dens posisjon i seksjons-panelet. Vi ankrer på
-    // overskriften og finner nærmeste tabell i samme region.
-    const seksjon = this.page.getByRole('region').filter({ has: this.seksjonOverskrift }).first();
-    const tabell = seksjon.getByRole('table');
-
-    // Hvis seksjonen ikke har en region-wrapper, falle tilbake til main + heading.
-    const tabellLocator = (await tabell.count()) > 0
-      ? tabell
-      : this.page.locator('main').getByRole('table').last();
-
-    if ((await tabellLocator.count()) === 0) {
+    if ((await this.seksjonsTabell.count()) === 0) {
       return [];
     }
 
-    const rader = tabellLocator.getByRole('row');
+    // tbody-scope dropper header-raden uavhengig av om bygget bruker
+    // <thead> eller eksplisitt role="row" på header-celler.
+    const rader = this.seksjonsTabell.locator('tbody').getByRole('row');
     const antall = await rader.count();
     const resultat: PoppRad[] = [];
 
-    // Hopp over header-rad (i = 0).
-    for (let i = 1; i < antall; i++) {
+    for (let i = 0; i < antall; i++) {
       const rad = rader.nth(i);
       const celler = rad.getByRole('cell');
       const cellTekster = await Promise.all([
@@ -101,11 +102,16 @@ export class PensjonsopptjeningPage extends BasePage {
       const pgiTekst = (cellTekster[1] ?? '').trim();
       const kildeTekst = (cellTekster[2] ?? '').trim();
 
-      resultat.push({
-        aar: Number.parseInt(aarTekst.replace(/\D/g, ''), 10),
-        pgi: Number.parseInt(pgiTekst.replace(/\D/g, ''), 10),
-        kilde: kildeTekst,
-      });
+      const aar = Number.parseInt(aarTekst.replace(/\D/g, ''), 10);
+      const pgi = Number.parseInt(pgiTekst.replace(/\D/g, ''), 10);
+      if (!Number.isFinite(aar) || !Number.isFinite(pgi)) {
+        throw new Error(
+          `POPP-rad ${i}: kunne ikke parse aar="${aarTekst}" / pgi="${pgiTekst}" — ` +
+            `kolonner kan ha endret rekkefølge i bygget, eller cellen er tom/under lasting.`,
+        );
+      }
+
+      resultat.push({ aar, pgi, kilde: kildeTekst });
     }
 
     return resultat;
@@ -116,12 +122,5 @@ export class PensjonsopptjeningPage extends BasePage {
    */
   async erTomVisning(): Promise<boolean> {
     return this.isElementVisible(this.tomTilstand, 1000);
-  }
-
-  /**
-   * Sjekk om feil-tilstand vises (warning-melding).
-   */
-  async erFeilVisning(): Promise<boolean> {
-    return this.isElementVisible(this.feilTilstand, 1000);
   }
 }
