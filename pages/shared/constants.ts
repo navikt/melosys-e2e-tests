@@ -98,3 +98,17 @@ export const EU_EOS_LOVVALG = {
   // Offentlig tjenesteperson, jf. rfo. 883/2004 art.11(3)(b) (FO_883_2004_ART11_3B)
   ART_11_3_B: 'Rfo. 883/2004 art.11(3)(b)',
 } as const;
+
+// POPP-kilde-enum (verbatim — slik POPP-API leverer dem, jf. MELOSYS-8073).
+export const POPP_KILDE = {
+  SKATT: 'SKATT',
+  AVGIFTSSYSTEMET: 'AVGIFTSSYSTEMET',
+  MELOSYS: 'MELOSYS',
+} as const;
+
+// POPP-kilde slik den vises i UI (verbatim — bygg bekrefter visningsnavn).
+export const POPP_KILDE_VISNING = {
+  SKATT: 'Skatt',
+  AVGIFTSSYSTEMET: 'Avgiftssystemet',
+  MELOSYS: 'Melosys',
+} as const;
