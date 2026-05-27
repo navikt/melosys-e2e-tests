@@ -28,6 +28,7 @@ export interface PoppRad {
   aar: number;
   pgi: number;
   kilde: string; // visningsnavn — «Skatt» / «Avgiftssystemet» / «Melosys» / rå-enum hvis ukjent
+  inntektType: string; // verbatim kode, f.eks. «SUM_PI», «FL_PGI_LOENN»
   registrert: string; // dd.MM.yyyy fra Utils.dato.formatterDatoTilNorsk, eller «—»
   oppdatert: string; // dd.MM.yyyy fra Utils.dato.formatterDatoTilNorsk, eller «—»
 }
@@ -103,13 +104,15 @@ export class PensjonsopptjeningPage extends BasePage {
         celler.nth(2).textContent(),
         celler.nth(3).textContent(),
         celler.nth(4).textContent(),
+        celler.nth(5).textContent(),
       ]);
 
       const aarTekst = (cellTekster[0] ?? '').trim();
       const pgiTekst = (cellTekster[1] ?? '').trim();
       const kildeTekst = (cellTekster[2] ?? '').trim();
-      const registrertTekst = (cellTekster[3] ?? '').trim();
-      const oppdatertTekst = (cellTekster[4] ?? '').trim();
+      const typeTekst = (cellTekster[3] ?? '').trim();
+      const registrertTekst = (cellTekster[4] ?? '').trim();
+      const oppdatertTekst = (cellTekster[5] ?? '').trim();
 
       const aar = Number.parseInt(aarTekst.replace(/\D/g, ''), 10);
       const pgi = Number.parseInt(pgiTekst.replace(/\D/g, ''), 10);
@@ -124,6 +127,7 @@ export class PensjonsopptjeningPage extends BasePage {
         aar,
         pgi,
         kilde: kildeTekst,
+        inntektType: typeTekst,
         registrert: registrertTekst,
         oppdatert: oppdatertTekst,
       });

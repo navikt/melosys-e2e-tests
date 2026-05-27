@@ -147,13 +147,24 @@ Gitt at saksbehandler behandler en årsavregning for et inntektsår som er eldre
     "inntektsAr": 2024,
     "behandletAr": 2024,
     "perioder": [
-      { "aar": 2024, "pgi": 540000, "kilde": "SKATT", "registrert": "2025-05-01", "oppdatert": "2025-05-12" },
-      { "aar": 2024, "pgi": 120000, "kilde": "AVGIFTSSYSTEMET", "registrert": "2025-05-01", "oppdatert": "2025-05-12" },
-      { "aar": 2023, "pgi": 510000, "kilde": "SKATT", "registrert": "2024-05-01", "oppdatert": "2024-05-01" }
+      { "aar": 2024, "pgi": 540000, "kilde": "SKATT", "inntektType": "SUM_PI", "inntektTypeDekode": "Sum pensjonsgivende inntekt", "registrert": "2025-05-01", "oppdatert": "2025-05-12" },
+      { "aar": 2024, "pgi": 420000, "kilde": "SKATT", "inntektType": "FL_PGI_LOENN", "inntektTypeDekode": "Fastland pensjonsgivende inntekt av lønnsinntekt", "registrert": "2025-05-01", "oppdatert": "2025-05-12" },
+      { "aar": 2024, "pgi": 120000, "kilde": "AVGIFTSSYSTEMET", "inntektType": "SUM_PI", "inntektTypeDekode": "Sum pensjonsgivende inntekt", "registrert": "2025-05-01", "oppdatert": "2025-05-12" }
     ]
   }
   ```
 - Kilde-enum (verbatim): `SKATT`, `AVGIFTSSYSTEMET`, `MELOSYS`.
+- InntektType-enum (verbatim — fra `no.nav.popp.domain.codestable.InntektTypeCode`): API filtrerer
+  responsen til kun PGI-relevante typer + SUM_PI: `SUM_PI`, `FL_PGI_LOENN`,
+  `FL_PGI_LOENN_PD`, `FL_PGI_NAERING`, `FL_PGI_NAERING_FFF`, `KSL_PGI_LOENN`,
+  `KSL_PGI_LOENN_PD`, `KSL_PGI_NAERING`, `KSL_PGI_NAERING_FFF`, `SVA_PGI_LOENN`,
+  `SVA_PGI_LOENN_PD`, `SVA_PGI_NAERING`, `SVA_PGI_NAERING_FFF`. Andre koder
+  (INN_*, SJO_*, UTE_*, DIP_*, RED_INT, AI, PI66, PGI_NAV) filtreres bort.
+- Sortering: `aar desc, kildePrioritet asc (SKATT < MELOSYS < AVGIFTSSYSTEMET),
+  inntektTypePrioritet asc (SUM_PI = 0, andre = 1), inntektType asc`.
+  SUM_PI vises som hovedrad per kilde/år; resterende PGI-typer er breakdown.
+- `inntektTypeDekode` er rå-dekoden fra POPP. UI har sin egen oversettelse fra
+  kode → norsk beskrivelse (forward-kompatibel hvis dekoden mangler).
 - Tidsstempler (`registrert`, `oppdatert`): ISO LocalDate (`yyyy-MM-dd`) eller `null`. Mappet fra
   POPP `changeStamp.createdDate` / `updatedDate` via `ZoneId.of("Europe/Oslo")`. Web formaterer
   til `dd.MM.yyyy` for visning, og rendrer null som «—» (em-dash, U+2014).
@@ -166,12 +177,16 @@ Gitt at saksbehandler behandler en årsavregning for et inntektsår som er eldre
   forventet) — under «Fra register»-gruppe i årsavregningsbehandlingens venstre meny.
 - Seksjons-overskrift: tekst «Pensjonsopptjening» (verbatim — h2/h3).
 - Rad-selektor: `data-testid="popp-rad"` (verbatim, forventet) — én rad per `perioder`-element.
-- Celler per rad (fem kolonner — `År`, `PGI`, `Kilde`, `Registrert`, `Oppdatert`):
+- Celler per rad (seks kolonner — `År`, `PGI`, `Kilde`, `Type`, `Registrert`, `Oppdatert`):
   - År: `data-testid="popp-rad-aar"` (verbatim, forventet)
   - PGI-beløp: `data-testid="popp-rad-pgi"` (verbatim, forventet) — vist formatert
     (tusenskille tolereres ved sammenligning, jf. `StatistikkPage.lesAntallFagsaker`).
   - Kilde: `data-testid="popp-rad-kilde"` (verbatim, forventet) — vist som *Skatt* /
     *Avgiftssystemet* / *Melosys* (norske visningsnavn, ikke enum-koden).
+  - Type: inntektType-kode (f.eks. `SUM_PI`, `FL_PGI_LOENN`) som synlig tekst.
+    Wrappes i Aksel `Tooltip` (eller `<abbr title>`-fallback) med norsk beskrivelse fra
+    `INNTEKT_TYPE_BESKRIVELSE`-map; faller tilbake til API-`inntektTypeDekode` hvis
+    koden ikke er kjent.
   - Registrert / Oppdatert: dd.MM.yyyy fra `Utils.dato.formatterDatoTilNorsk(iso, false, "—")`.
     Null/manglende verdi rendres som «—» (em-dash, U+2014).
 - Tom-tilstand: `data-testid="popp-ingen-data"` (verbatim, forventet) — vises når

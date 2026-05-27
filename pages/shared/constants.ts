@@ -112,3 +112,54 @@ export const POPP_KILDE_VISNING = {
   AVGIFTSSYSTEMET: 'Avgiftssystemet',
   MELOSYS: 'Melosys',
 } as const;
+
+/**
+ * InntektTypeCode (verbatim — fra
+ * no.nav.popp.domain.codestable.InntektTypeCode).
+ *
+ * Kun PGI-relevante typer + SUM_PI er listet her — det er hva
+ * `PensjonsopptjeningOppslag` slipper gjennom whitelist-filteret. Andre koder
+ * (INN_*, SJO_*, UTE_*, DIP_*, RED_INT, AI, PI66, PGI_NAV) er bevisst
+ * utelatt og filtreres bort i api-laget.
+ */
+export const POPP_INNTEKT_TYPE = {
+  SUM_PI: 'SUM_PI',
+  FL_PGI_LOENN: 'FL_PGI_LOENN',
+  FL_PGI_LOENN_PD: 'FL_PGI_LOENN_PD',
+  FL_PGI_NAERING: 'FL_PGI_NAERING',
+  FL_PGI_NAERING_FFF: 'FL_PGI_NAERING_FFF',
+  KSL_PGI_LOENN: 'KSL_PGI_LOENN',
+  KSL_PGI_LOENN_PD: 'KSL_PGI_LOENN_PD',
+  KSL_PGI_NAERING: 'KSL_PGI_NAERING',
+  KSL_PGI_NAERING_FFF: 'KSL_PGI_NAERING_FFF',
+  SVA_PGI_LOENN: 'SVA_PGI_LOENN',
+  SVA_PGI_LOENN_PD: 'SVA_PGI_LOENN_PD',
+  SVA_PGI_NAERING: 'SVA_PGI_NAERING',
+  SVA_PGI_NAERING_FFF: 'SVA_PGI_NAERING_FFF',
+} as const;
+
+/**
+ * Forventede tooltip-beskrivelser for inntektType-kodene — verbatim fra
+ * melosys-web `src/felleskomponenter/pensjonsopptjening/inntektTypeBeskrivelser.ts`.
+ *
+ * Web bruker em-dash («—», U+2014) som separator og kortform («lønn» istedenfor
+ * «lønnsinntekt», «næring» istedenfor «næringsinntekt») fordi Aksel `Tooltip`
+ * har default `maxChar={80}` og emitter console-warning ved lengre tekst.
+ * Originalen i `InntektTypeCode.java` (popp-domain) har full langform — disse
+ * er web's UI-versjon, ikke direkte Javadoc-strenger.
+ */
+export const POPP_INNTEKT_TYPE_BESKRIVELSE: Record<string, string> = {
+  SUM_PI: 'Sum pensjonsgivende inntekt',
+  FL_PGI_LOENN: 'Fastland — pensjonsgivende inntekt av lønn',
+  FL_PGI_LOENN_PD: 'Fastland — pensjonsgivende inntekt av lønn, bare pensjonsdel',
+  FL_PGI_NAERING: 'Fastland — pensjonsgivende inntekt av næring',
+  FL_PGI_NAERING_FFF: 'Fastland — pensjonsgivende inntekt av næring fra fiske, fangst eller familiebarnehage',
+  KSL_PGI_LOENN: 'Kildeskatt på lønn — pensjonsgivende inntekt av lønn',
+  KSL_PGI_LOENN_PD: 'Kildeskatt på lønn — pensjonsgivende inntekt av lønn, bare pensjonsdel',
+  KSL_PGI_NAERING: 'Kildeskatt på lønn — pensjonsgivende inntekt av næring',
+  KSL_PGI_NAERING_FFF: 'Kildeskatt på lønn — pensjonsgivende inntekt av næring fra fiske, fangst eller familiebarnehage',
+  SVA_PGI_LOENN: 'Svalbard — pensjonsgivende inntekt av lønn',
+  SVA_PGI_LOENN_PD: 'Svalbard — pensjonsgivende inntekt av lønn, bare pensjonsdel',
+  SVA_PGI_NAERING: 'Svalbard — pensjonsgivende inntekt av næring',
+  SVA_PGI_NAERING_FFF: 'Svalbard — pensjonsgivende inntekt av næring fra fiske, fangst eller familiebarnehage',
+};
