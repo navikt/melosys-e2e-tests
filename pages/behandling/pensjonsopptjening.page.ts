@@ -28,7 +28,12 @@ export interface PoppRad {
   aar: number;
   pgi: number;
   kilde: string; // visningsnavn — «Skatt» / «Avgiftssystemet» / «Melosys» / rå-enum hvis ukjent
+  registrert: string; // dd.MM.yyyy fra Utils.dato.formatterDatoTilNorsk, eller «—»
+  oppdatert: string; // dd.MM.yyyy fra Utils.dato.formatterDatoTilNorsk, eller «—»
 }
+
+/** Em-dash brukt av web som fallback for manglende dato (U+2014). */
+export const POPP_DATO_TOM = '—';
 
 export class PensjonsopptjeningPage extends BasePage {
   readonly assertions: PensjonsopptjeningAssertions;
@@ -96,11 +101,15 @@ export class PensjonsopptjeningPage extends BasePage {
         celler.nth(0).textContent(),
         celler.nth(1).textContent(),
         celler.nth(2).textContent(),
+        celler.nth(3).textContent(),
+        celler.nth(4).textContent(),
       ]);
 
       const aarTekst = (cellTekster[0] ?? '').trim();
       const pgiTekst = (cellTekster[1] ?? '').trim();
       const kildeTekst = (cellTekster[2] ?? '').trim();
+      const registrertTekst = (cellTekster[3] ?? '').trim();
+      const oppdatertTekst = (cellTekster[4] ?? '').trim();
 
       const aar = Number.parseInt(aarTekst.replace(/\D/g, ''), 10);
       const pgi = Number.parseInt(pgiTekst.replace(/\D/g, ''), 10);
@@ -111,7 +120,13 @@ export class PensjonsopptjeningPage extends BasePage {
         );
       }
 
-      resultat.push({ aar, pgi, kilde: kildeTekst });
+      resultat.push({
+        aar,
+        pgi,
+        kilde: kildeTekst,
+        registrert: registrertTekst,
+        oppdatert: oppdatertTekst,
+      });
     }
 
     return resultat;

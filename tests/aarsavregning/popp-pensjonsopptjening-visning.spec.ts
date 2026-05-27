@@ -167,13 +167,41 @@ test.describe('POPP — visning av pensjonsopptjening under årsavregning', () =
     ]);
   });
 
-  test('Scenario 3 — alle tre kilder: Skatt + Avgiftssystemet + Melosys (seeded)', async ({ page, request }) => {
+  test('Scenario 3 — alle tre kilder med ulike tidsstempler per kilde (seeded)', async ({ page, request }) => {
     test.setTimeout(180000);
 
+    // Tre forskjellige changeStamp-par så hver rad får distinkte
+    // Registrert/Oppdatert-verdier i UI. Datoer er Oslo-lokale (CEST i mai).
+    // API mapper ISO instant → LocalDate via Europe/Oslo, så 00:00 UTC
+    // bommer ikke datoen.
     await seedPoppInntekt(request, USER_ID_VALID, [
-      { inntektAr: FORRIGE_AAR, belop: 540_000, kilde: POPP_KILDE.SKATT },
-      { inntektAr: FORRIGE_AAR, belop: 120_000, kilde: POPP_KILDE.AVGIFTSSYSTEMET },
-      { inntektAr: FORRIGE_AAR, belop: 80_000, kilde: POPP_KILDE.MELOSYS },
+      {
+        inntektAr: FORRIGE_AAR,
+        belop: 540_000,
+        kilde: POPP_KILDE.SKATT,
+        changeStamp: {
+          createdDate: `${FORRIGE_AAR + 1}-05-01T08:00:00Z`,
+          updatedDate: `${FORRIGE_AAR + 1}-05-12T08:00:00Z`,
+        },
+      },
+      {
+        inntektAr: FORRIGE_AAR,
+        belop: 120_000,
+        kilde: POPP_KILDE.AVGIFTSSYSTEMET,
+        changeStamp: {
+          createdDate: `${FORRIGE_AAR + 1}-05-03T08:00:00Z`,
+          updatedDate: `${FORRIGE_AAR + 1}-05-03T08:00:00Z`,
+        },
+      },
+      {
+        inntektAr: FORRIGE_AAR,
+        belop: 80_000,
+        kilde: POPP_KILDE.MELOSYS,
+        changeStamp: {
+          createdDate: `${FORRIGE_AAR + 1}-05-15T08:00:00Z`,
+          updatedDate: `${FORRIGE_AAR + 1}-05-15T08:00:00Z`,
+        },
+      },
     ]);
 
     const auth = new AuthHelper(page);
@@ -193,6 +221,23 @@ test.describe('POPP — visning av pensjonsopptjening under årsavregning', () =
       POPP_KILDE_VISNING.AVGIFTSSYSTEMET,
       POPP_KILDE_VISNING.MELOSYS,
     ]);
+
+    // Tidsstempel-binding (spec-akseptansekriterium): hver kilde-rad for samme
+    // år viser sin egen Registrert/Oppdatert. Datoformat dd.MM.yyyy fra
+    // Utils.dato.formatterDatoTilNorsk.
+    const aarSuffix = `${FORRIGE_AAR + 1}`;
+    await popp.assertions.verifiserRadHarTidsstempler(rader, FORRIGE_AAR, POPP_KILDE_VISNING.SKATT, {
+      registrert: `01.05.${aarSuffix}`,
+      oppdatert: `12.05.${aarSuffix}`,
+    });
+    await popp.assertions.verifiserRadHarTidsstempler(rader, FORRIGE_AAR, POPP_KILDE_VISNING.AVGIFTSSYSTEMET, {
+      registrert: `03.05.${aarSuffix}`,
+      oppdatert: `03.05.${aarSuffix}`,
+    });
+    await popp.assertions.verifiserRadHarTidsstempler(rader, FORRIGE_AAR, POPP_KILDE_VISNING.MELOSYS, {
+      registrert: `15.05.${aarSuffix}`,
+      oppdatert: `15.05.${aarSuffix}`,
+    });
   });
 
   test('Scenario 4 — ingen pensjonsopptjening: tom-melding vises (seeded tom)', async ({ page, request }) => {

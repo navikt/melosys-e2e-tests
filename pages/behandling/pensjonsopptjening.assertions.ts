@@ -99,4 +99,28 @@ export class PensjonsopptjeningAssertions {
       this.page.getByText('Ingen pensjonsopptjening registrert i POPP for personen.'),
     ).toBeVisible();
   }
+
+  /**
+   * Verifiser at rad for gitt (år, kilde) viser forventede tidsstempler.
+   *
+   * Brukes for å speile spec-kravet om at hver rad viser «Registrert» og
+   * «Oppdatert» pr kilde — spesielt når samme år har flere rader.
+   *
+   * @param kilde - Visningsnavn («Skatt» / «Avgiftssystemet» / «Melosys»)
+   * @param forventet - Forventede dd.MM.yyyy-strenger (eller «—» for null/tom)
+   */
+  async verifiserRadHarTidsstempler(
+    rader: PoppRad[],
+    aar: number,
+    kilde: string,
+    forventet: { registrert: string; oppdatert: string },
+  ): Promise<void> {
+    const rad = rader.find(r => r.aar === aar && r.kilde === kilde);
+    expect(
+      rad,
+      `Fant ingen rad for år=${aar} kilde="${kilde}" (rader: ${JSON.stringify(rader)})`,
+    ).toBeDefined();
+    expect(rad!.registrert).toBe(forventet.registrert);
+    expect(rad!.oppdatert).toBe(forventet.oppdatert);
+  }
 }

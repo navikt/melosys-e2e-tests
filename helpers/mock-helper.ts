@@ -348,6 +348,18 @@ export interface PoppInntektSeed {
   kilde: string;
   inntektType?: string;
   inntektTypeDekode?: string;
+  /**
+   * Tidsstempel for POPP changeStamp. API mapper `createdDate` → `registrert`
+   * og `updatedDate` → `oppdatert` (LocalDate, Europe/Oslo). Sett eksplisitt
+   * for deterministisk testing av tidsstempel-rendering; default-data fra
+   * mocken bruker «1. mai året etter» som createdDate og «nå» som updatedDate.
+   */
+  changeStamp?: {
+    createdDate?: string; // ISO instant — sendes som JSON-string til mocken
+    updatedDate?: string;
+    createdBy?: string;
+    updatedBy?: string;
+  };
 }
 
 /**
@@ -380,6 +392,7 @@ export async function seedPoppInntekt(
       kilde: i.kilde,
       inntektType: i.inntektType ?? 'SUM_PI',
       inntektTypeDekode: i.inntektTypeDekode,
+      changeStamp: i.changeStamp,
       fnr,
     })),
   };

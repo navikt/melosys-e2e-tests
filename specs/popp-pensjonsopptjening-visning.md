@@ -50,12 +50,13 @@ Gitt at saksbehandler behandler en årsavregning for en person
 
 ```gherkin
 Gitt at saksbehandler behandler en årsavregning for en person
-  Og POPP inneholder pensjonsopptjening for inntektsåret med kilde Skatt
-  Og POPP inneholder pensjonsopptjening for samme inntektsår med kilde Avgiftssystemet
+  Og POPP inneholder pensjonsopptjening for inntektsåret med kilde Skatt registrert 01.05.2026
+  Og POPP inneholder pensjonsopptjening for samme inntektsår med kilde Avgiftssystemet oppdatert 12.05.2026
   Og Melosys har ikke overført PGI for dette inntektsåret ennå
  Når saksbehandler åpner årsavregningsbehandlingen
  Så vises seksjonen «Pensjonsopptjening» med separate rader for hvert kilde-beløp for det aktuelle året
-  Og det fremgår tydelig at samme år har bidrag fra to ulike kilder
+  Og hver rad viser når kilden ble registrert i POPP og når den sist ble oppdatert
+  Og det fremgår tydelig at samme år har bidrag fra to ulike kilder med ulike tidsstempler
   Og saksbehandler kan se samlet bilde av hva som er registrert i POPP for dette inntektsåret
 ```
 
@@ -95,9 +96,11 @@ Gitt at saksbehandler behandler en årsavregning for et inntektsår som er eldre
 
 - [ ] Saksbehandler ser seksjonen «Pensjonsopptjening» under «Fra register» i sidemenyen for alle årsavregningsbehandlinger.
 - [ ] Seksjonen viser år, PGI-beløp og kilde for hvert oppslag — der kilde kan være *Skatt*, *Avgiftssystemet* eller *Melosys*.
+- [ ] Hver rad viser i tillegg når kilden ble registrert i POPP og når den sist ble oppdatert (dd.MM.yyyy). Dette er spesielt viktig når samme inntektsår har bidrag fra flere kilder, slik at saksbehandler ser hvilken kilde som er nyest.
+- [ ] Manglende tidsstempel rendres som «—» (em-dash), ikke som tom celle eller «null».
 - [ ] Samme inntektsår kan ha flere rader dersom POPP inneholder bidrag fra mer enn én kilde.
 - [ ] Standard visning dekker inntil 5 år tilbake fra inntektsåret; ved eldre årsavregninger vises data tilbake til avregningsåret.
-- [ ] Nyeste år vises øverst.
+- [ ] Nyeste år vises øverst. Tidsstempler påvirker IKKE radsorteringen (sortering = år desc, så kilde-prioritet).
 - [ ] Dersom POPP ikke inneholder pensjonsopptjening for personen, vises en tydelig informasjonsmelding (ikke en feil, og ikke blank side).
 - [ ] Visningen er tilgjengelig selv når Melosys ikke har overført PGI for inntektsåret ennå — Skatt/Avgiftssystemet-data leses uavhengig av Melosys-overføring.
 
@@ -144,13 +147,16 @@ Gitt at saksbehandler behandler en årsavregning for et inntektsår som er eldre
     "inntektsAr": 2024,
     "behandletAr": 2024,
     "perioder": [
-      { "aar": 2024, "pgi": 540000, "kilde": "SKATT" },
-      { "aar": 2024, "pgi": 120000, "kilde": "AVGIFTSSYSTEMET" },
-      { "aar": 2023, "pgi": 510000, "kilde": "SKATT" }
+      { "aar": 2024, "pgi": 540000, "kilde": "SKATT", "registrert": "2025-05-01", "oppdatert": "2025-05-12" },
+      { "aar": 2024, "pgi": 120000, "kilde": "AVGIFTSSYSTEMET", "registrert": "2025-05-01", "oppdatert": "2025-05-12" },
+      { "aar": 2023, "pgi": 510000, "kilde": "SKATT", "registrert": "2024-05-01", "oppdatert": "2024-05-01" }
     ]
   }
   ```
 - Kilde-enum (verbatim): `SKATT`, `AVGIFTSSYSTEMET`, `MELOSYS`.
+- Tidsstempler (`registrert`, `oppdatert`): ISO LocalDate (`yyyy-MM-dd`) eller `null`. Mappet fra
+  POPP `changeStamp.createdDate` / `updatedDate` via `ZoneId.of("Europe/Oslo")`. Web formaterer
+  til `dd.MM.yyyy` for visning, og rendrer null som «—» (em-dash, U+2014).
 - Tom liste (`perioder: []`) ≡ "ingen pensjonsopptjening" — ikke 404.
 - Feature toggle: `melosys.vis-pensjonsopptjening-popp` (verbatim — påslås i testen via
   `UnleashHelper.enableFeature`; av default kan skjule seksjonen helt).
@@ -160,12 +166,14 @@ Gitt at saksbehandler behandler en årsavregning for et inntektsår som er eldre
   forventet) — under «Fra register»-gruppe i årsavregningsbehandlingens venstre meny.
 - Seksjons-overskrift: tekst «Pensjonsopptjening» (verbatim — h2/h3).
 - Rad-selektor: `data-testid="popp-rad"` (verbatim, forventet) — én rad per `perioder`-element.
-- Celler per rad:
+- Celler per rad (fem kolonner — `År`, `PGI`, `Kilde`, `Registrert`, `Oppdatert`):
   - År: `data-testid="popp-rad-aar"` (verbatim, forventet)
   - PGI-beløp: `data-testid="popp-rad-pgi"` (verbatim, forventet) — vist formatert
     (tusenskille tolereres ved sammenligning, jf. `StatistikkPage.lesAntallFagsaker`).
   - Kilde: `data-testid="popp-rad-kilde"` (verbatim, forventet) — vist som *Skatt* /
     *Avgiftssystemet* / *Melosys* (norske visningsnavn, ikke enum-koden).
+  - Registrert / Oppdatert: dd.MM.yyyy fra `Utils.dato.formatterDatoTilNorsk(iso, false, "—")`.
+    Null/manglende verdi rendres som «—» (em-dash, U+2014).
 - Tom-tilstand: `data-testid="popp-ingen-data"` (verbatim, forventet) — vises når
   `perioder` er tom; meldingstekst: «Ingen pensjonsopptjening er registrert i POPP for
   denne personen» (verbatim, forventet — bygg kan reconcile).
@@ -180,8 +188,8 @@ Gitt at saksbehandler behandler en årsavregning for et inntektsår som er eldre
 **Page Object: `PensjonsopptjeningPage` (ny — `pages/behandling/pensjonsopptjening.page.ts`)**
 - `goto(behandlingId: string)` — naviger til sidemeny-seksjonen for gitt årsavregning.
 - `klikkSidemeny()` — klikk «Pensjonsopptjening»-lenken under «Fra register».
-- `lesRader(): Promise<PoppRad[]>` — returnerer alle rader som `{ aar, pgi, kilde }` (kilde
-  som visningsnavn).
+- `lesRader(): Promise<PoppRad[]>` — returnerer alle rader som
+  `{ aar, pgi, kilde, registrert, oppdatert }` (kilde og datoer som visningsnavn).
 - `erTomVisning(): Promise<boolean>` — true hvis tom-tilstand vises.
 - `assertions: PensjonsopptjeningAssertions`:
   - `verifiserSeksjonVises()`
@@ -191,6 +199,8 @@ Gitt at saksbehandler behandler en årsavregning for et inntektsår som er eldre
   - `verifiserNyesteÅrØverst()` — første rad har `aar` ≥ alle øvrige.
   - `verifiserAarIntervall(fraAar: number, tilAar: number)` — alle rader ligger innenfor.
   - `verifiserTomMelding()` — tom-tilstand med tekst.
+  - `verifiserRadHarTidsstempler(aar, kilde, { registrert, oppdatert })` — verifiser
+    `dd.MM.yyyy`-formatert visning per kilde-rad. Null forventes som «—».
 
 **Testdata-konstanter (legges i `pages/shared/constants.ts` ved første testkjøring)**
 - `POPP_KILDE` (verbatim): `{ SKATT: 'SKATT', AVGIFTSSYSTEMET: 'AVGIFTSSYSTEMET', MELOSYS: 'MELOSYS' }`
