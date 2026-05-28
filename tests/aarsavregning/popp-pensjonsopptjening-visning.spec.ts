@@ -148,15 +148,8 @@ test.describe('POPP — visning av pensjonsopptjening under årsavregning', () =
     await popp.assertions.verifiserNyesteÅrØverst(rader);
     await popp.assertions.verifiserAarIntervall(rader, FORRIGE_AAR - 4, FORRIGE_AAR);
 
-    // Alle rader er SUM_PI-typen — verifiser at type-kolonnen rendres og at
-    // tooltip er på plass for hovedraden av nyeste år.
-    expect(rader.every(r => r.inntektType === POPP_INNTEKT_TYPE.SUM_PI)).toBe(true);
-    await popp.assertions.verifiserTooltipForInntektType(
-      FORRIGE_AAR,
-      POPP_KILDE_VISNING.SKATT,
-      POPP_INNTEKT_TYPE.SUM_PI,
-      POPP_INNTEKT_TYPE_BESKRIVELSE.SUM_PI,
-    );
+    // Alle rader er SUM_PI-typen — inntektstype-kolonnen viser dekoden direkte.
+    expect(rader.every(r => r.inntektstype === POPP_INNTEKT_TYPE_BESKRIVELSE.SUM_PI)).toBe(true);
   });
 
   test('Scenario 2 — delt grunnlag: Skatt og Avgiftssystemet samme år (seeded)', async ({ page, request }) => {
@@ -282,14 +275,16 @@ test.describe('POPP — visning av pensjonsopptjening under årsavregning', () =
     expect(rader).toEqual([]);
   });
 
-  test('Scenario 6 — flere inntektTyper per kilde rendres med tooltip-beskrivelse', async ({ page, request }) => {
+  test('Scenario 6 — flere inntektTyper per kilde rendres med dekode-beskrivelse', async ({ page, request }) => {
     test.setTimeout(180000);
 
     // Seed flere PGI-typer for SAMME år og SAMME kilde, slik at saksbehandler
     // ser breakdown av hva som inngår i SUM_PI. Verifiserer at:
     // (a) API-en slipper gjennom alle PGI-typene (ikke kun SUM_PI).
     // (b) Sortering har SUM_PI øverst, så øvrige typer alfabetisk.
-    // (c) UI rendrer hver kode med tooltip som forklarer hva koden betyr.
+    // (c) UI rendrer dekode-beskrivelsen direkte for hver type (mocken
+    //     auto-fyller `inntektTypeDekode` ut fra koden hvis kaller ikke
+    //     oppgir egen).
     await seedPoppInntekt(request, USER_ID_VALID, [
       {
         inntektAr: FORRIGE_AAR,
@@ -333,28 +328,30 @@ test.describe('POPP — visning av pensjonsopptjening under årsavregning', () =
     const skattRader = rader.filter(
       r => r.aar === FORRIGE_AAR && r.kilde === POPP_KILDE_VISNING.SKATT,
     );
-    expect(skattRader.map(r => r.inntektType).sort()).toEqual([
-      POPP_INNTEKT_TYPE.FL_PGI_LOENN,
-      POPP_INNTEKT_TYPE.KSL_PGI_LOENN,
-      POPP_INNTEKT_TYPE.SUM_PI,
-    ]);
+    expect(skattRader.map(r => r.inntektstype).sort()).toEqual(
+      [
+        POPP_INNTEKT_TYPE_BESKRIVELSE.SUM_PI,
+        POPP_INNTEKT_TYPE_BESKRIVELSE.FL_PGI_LOENN,
+        POPP_INNTEKT_TYPE_BESKRIVELSE.KSL_PGI_LOENN,
+      ].sort(),
+    );
 
-    // SUM_PI er hovedraden — verifiser tooltip-beskrivelse for alle tre kodene.
+    // Hver rad viser dekoden direkte (ingen tooltip lenger).
     for (const kode of [
       POPP_INNTEKT_TYPE.SUM_PI,
       POPP_INNTEKT_TYPE.FL_PGI_LOENN,
       POPP_INNTEKT_TYPE.KSL_PGI_LOENN,
     ]) {
-      await popp.assertions.verifiserTooltipForInntektType(
+      await popp.assertions.verifiserRadHarInntektstype(
+        rader,
         FORRIGE_AAR,
         POPP_KILDE_VISNING.SKATT,
-        kode,
         POPP_INNTEKT_TYPE_BESKRIVELSE[kode],
       );
     }
 
-    // INN_LON skal IKKE vises (filtrert bort av API).
-    expect(rader.find(r => r.inntektType === 'INN_LON')).toBeUndefined();
+    // INN_LON-dekoden skal IKKE vises (api-whitelist filtrerer den bort).
+    expect(rader.find(r => r.inntektstype === POPP_INNTEKT_TYPE_BESKRIVELSE.INN_LON)).toBeUndefined();
   });
 
   test.fixme(

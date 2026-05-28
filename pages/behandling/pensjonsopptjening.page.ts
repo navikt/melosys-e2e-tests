@@ -9,13 +9,19 @@ import { PensjonsopptjeningAssertions } from './pensjonsopptjening.assertions';
  *
  * Spec (kontrakt): specs/popp-pensjonsopptjening-visning.md
  *
- * **Reconcile-status (2026-05-26):**
- * Bygget i melosys-web rendrer seksjonen **direkte** i `aarsavregning/
- * saksbehandling.tsx` som egen seksjon i main-content (toggle + ÅRSAVREGNING-
- * gated) — IKKE via det legacy menypanelet. Dette fjernet menypanel-gating-
- * timing-risiko og forenkler test-flyten: ingen sidemeny å klikke, seksjonen
- * er der så lenge togglen er på og behandlingstypen er ÅRSAVREGNING.
- * Bygget bruker ikke `data-testid` — selektorer er tekst-/role-baserte.
+ * **Reconcile-status (2026-05-27):**
+ * Bygget i melosys-web (commit d5ef9f701) rendrer seksjonen som et eget
+ * menypunkt «Pensjonsopptjening» under «FRA REGISTER» i Opplysninger-sidemenyen
+ * — toggle- og ÅRSAVREGNING-gated i `linkgroupsFactory.tsx`. Menypunktet er
+ * en `<button>` (ikke `<a>`), så `getByRole('button', ...)` brukes for klikk-
+ * målet og `getByRole('heading', { level: 2 }, ...)` for tabell-overskriften —
+ * samme tekst, ulike roller diskriminerer rent.
+ *
+ * Tabellen har 6 kolonner: År | PGI | Kilde | Pensjonsgivende inntektstype |
+ * Registrert | Oppdatert. Inntektstype-cellen rendrer `inntektTypeDekode`
+ * direkte (ikke koden), med fallback til koden hvis dekoden mangler. Tooltip
+ * er fjernet — beskrivelsen leses direkte i tabellen. Under tabellen vises en
+ * footer-legend med forkortelses-forklaringer (FFF / JSF / KSL).
  *
  * Forutsetter at saksbehandler allerede står inne i en årsavregningsbehandling.
  *
@@ -28,7 +34,7 @@ export interface PoppRad {
   aar: number;
   pgi: number;
   kilde: string; // visningsnavn — «Skatt» / «Avgiftssystemet» / «Melosys» / rå-enum hvis ukjent
-  inntektType: string; // verbatim kode, f.eks. «SUM_PI», «FL_PGI_LOENN»
+  inntektstype: string; // dekode-streng fra API (mockens INNTEKT_TYPE_DEKODE), fallback til koden hvis dekoden mangler
   registrert: string; // dd.MM.yyyy fra Utils.dato.formatterDatoTilNorsk, eller «—»
   oppdatert: string; // dd.MM.yyyy fra Utils.dato.formatterDatoTilNorsk, eller «—»
 }
@@ -39,7 +45,12 @@ export const POPP_DATO_TOM = '—';
 export class PensjonsopptjeningPage extends BasePage {
   readonly assertions: PensjonsopptjeningAssertions;
 
-  // Seksjons-overskrift «Pensjonsopptjening» (h2) direkte i main-content på årsavregningssiden.
+  // Menypunkt-button «Pensjonsopptjening» under «FRA REGISTER» i Opplysninger-
+  // sidemenyen. Diskrimineres fra tabell-h2 ved rolle (button vs heading).
+  private readonly menypunktButton = this.page.getByRole('button', { name: 'Pensjonsopptjening' });
+
+  // Seksjons-overskrift «Pensjonsopptjening» (h2) i main-content etter at
+  // menypunktet er klikket.
   readonly seksjonOverskrift = this.page.getByRole('heading', { name: 'Pensjonsopptjening', level: 2 });
 
   // Tom-tilstand: Nav.Alert variant="info" med eksakt tekst (verbatim fra bygg).
@@ -57,13 +68,16 @@ export class PensjonsopptjeningPage extends BasePage {
   }
 
   /**
-   * Vent til «Pensjonsopptjening»-seksjonen er ferdig hydrert.
-   * Overskriften (h2) rendres synkront, men tabell/tom-tilstand kommer først
-   * når POPP-fetch resolver. Vi venter på at siden settler i én av tre
-   * terminal-tilstander (tabell, tom, feil), ellers risikerer kallere å lese
-   * en halvferdig DOM.
+   * Klikk menypunktet og vent til «Pensjonsopptjening»-seksjonen er ferdig hydrert.
+   * Default-aktivt menypunkt ved åpning av årsavregningen er «Person», så vi må
+   * eksplisitt klikke «Pensjonsopptjening» under «FRA REGISTER» først. Etterpå
+   * venter vi på h2 + (tabell|tom-tilstand) — ellers risikerer kallere å lese en
+   * halvferdig DOM mens POPP-fetch fortsatt resolver.
    */
   async ventPåSeksjon(): Promise<void> {
+    await this.menypunktButton.waitFor({ state: 'visible', timeout: TIMEOUT_LONG });
+    await this.menypunktButton.click();
+
     await this.seksjonOverskrift.waitFor({ state: 'visible', timeout: TIMEOUT_LONG });
     await Promise.race([
       this.seksjonsTabell.waitFor({ state: 'visible', timeout: TIMEOUT_LONG }),
@@ -72,10 +86,12 @@ export class PensjonsopptjeningPage extends BasePage {
   }
 
   /**
-   * Les alle rader fra Pensjonsopptjening-tabellen.
+   * Les alle rader fra Pensjonsopptjening-tabellen (6 kolonner:
+   * År | PGI | Kilde | Pensjonsgivende inntektstype | Registrert | Oppdatert).
    *
-   * Bygget rendrer en `<table>` (eller `Nav.Table`) under seksjons-overskriften.
-   * Vi finner tbody-rader og parser kolonnene År / PGI / Kilde.
+   * Inntektstype-cellen viser dekode-strengen direkte (f.eks. «Sum
+   * pensjonsgivende inntekt»), eller koden som fallback om dekoden mangler.
+   * Registrert/Oppdatert er enten dd.MM.yyyy eller em-dash «—».
    *
    * @returns Liste av rader i samme rekkefølge som de vises (typisk nyeste år
    *   øverst). Tom liste hvis tom-tilstand er aktiv eller ingen tabell rendret.
@@ -110,7 +126,7 @@ export class PensjonsopptjeningPage extends BasePage {
       const aarTekst = (cellTekster[0] ?? '').trim();
       const pgiTekst = (cellTekster[1] ?? '').trim();
       const kildeTekst = (cellTekster[2] ?? '').trim();
-      const typeTekst = (cellTekster[3] ?? '').trim();
+      const inntektstypeTekst = (cellTekster[3] ?? '').trim();
       const registrertTekst = (cellTekster[4] ?? '').trim();
       const oppdatertTekst = (cellTekster[5] ?? '').trim();
 
@@ -127,7 +143,7 @@ export class PensjonsopptjeningPage extends BasePage {
         aar,
         pgi,
         kilde: kildeTekst,
-        inntektType: typeTekst,
+        inntektstype: inntektstypeTekst,
         registrert: registrertTekst,
         oppdatert: oppdatertTekst,
       });

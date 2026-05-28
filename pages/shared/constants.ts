@@ -139,27 +139,46 @@ export const POPP_INNTEKT_TYPE = {
 } as const;
 
 /**
- * Forventede tooltip-beskrivelser for inntektType-kodene — verbatim fra
- * melosys-web `src/felleskomponenter/pensjonsopptjening/inntektTypeBeskrivelser.ts`.
+ * Forventede dekode-strenger for inntektType-kodene — verbatim fra mockens
+ * `INNTEKT_TYPE_DEKODE`-map (`PoppInntektApi.kt`), som speiler Javadoc-en i
+ * `no.nav.popp.domain.codestable.InntektTypeCode`.
  *
- * Web bruker em-dash («—», U+2014) som separator og kortform («lønn» istedenfor
- * «lønnsinntekt», «næring» istedenfor «næringsinntekt») fordi Aksel `Tooltip`
- * har default `maxChar={80}` og emitter console-warning ved lengre tekst.
- * Originalen i `InntektTypeCode.java` (popp-domain) har full langform — disse
- * er web's UI-versjon, ikke direkte Javadoc-strenger.
+ * Web rendrer `periode.inntektTypeDekode || periode.inntektType` direkte i
+ * «Pensjonsgivende inntektstype»-kolonnen. Mocken auto-fyller dekode både i
+ * default-radene og i seed-endepunktet hvis kaller ikke oppgir egen verdi,
+ * så testen kan stole på at disse strengene faktisk havner i UI-cellen.
  */
 export const POPP_INNTEKT_TYPE_BESKRIVELSE: Record<string, string> = {
   SUM_PI: 'Sum pensjonsgivende inntekt',
-  FL_PGI_LOENN: 'Fastland — pensjonsgivende inntekt av lønn',
-  FL_PGI_LOENN_PD: 'Fastland — pensjonsgivende inntekt av lønn, bare pensjonsdel',
-  FL_PGI_NAERING: 'Fastland — pensjonsgivende inntekt av næring',
-  FL_PGI_NAERING_FFF: 'Fastland — pensjonsgivende inntekt av næring fra fiske, fangst eller familiebarnehage',
-  KSL_PGI_LOENN: 'Kildeskatt på lønn — pensjonsgivende inntekt av lønn',
-  KSL_PGI_LOENN_PD: 'Kildeskatt på lønn — pensjonsgivende inntekt av lønn, bare pensjonsdel',
-  KSL_PGI_NAERING: 'Kildeskatt på lønn — pensjonsgivende inntekt av næring',
-  KSL_PGI_NAERING_FFF: 'Kildeskatt på lønn — pensjonsgivende inntekt av næring fra fiske, fangst eller familiebarnehage',
-  SVA_PGI_LOENN: 'Svalbard — pensjonsgivende inntekt av lønn',
-  SVA_PGI_LOENN_PD: 'Svalbard — pensjonsgivende inntekt av lønn, bare pensjonsdel',
-  SVA_PGI_NAERING: 'Svalbard — pensjonsgivende inntekt av næring',
-  SVA_PGI_NAERING_FFF: 'Svalbard — pensjonsgivende inntekt av næring fra fiske, fangst eller familiebarnehage',
+  AI: 'Antatt inntekt',
+  PI66: 'Pensjonsgivende inntekt 1966 - Konv',
+  PGI_NAV: 'PGI innland fastsatt av NAV',
+  RED_INT: 'Reduksjonsinntekt',
+  INN_LON: 'Innenlandsinntekt - Lønn',
+  INN_SEL: 'Innenlandsinntekt - Selvstendig',
+  INN_JSF: 'Innenlandsinntekt - Jord/Skog/Fisk',
+  SJO_LON: 'Sjøinntekt - Lønn',
+  SJO_SEL: 'Sjøinntekt - Selvstendig',
+  SJO_JSF: 'Sjøinntekt - Jord/Skog/Fisk',
+  UTE_LON: 'Utenlandsinntekt - Lønn',
+  UTE_SEL: 'Utenlandsinntekt - Selvstendig',
+  UTE_JSF: 'Utenlandsinntekt - Jord/Skog/Fisk',
+  SVA_LON: 'Svalbardinntekt - Lønn',
+  SVA_SEL: 'Svalbardinntekt - Selvstendig',
+  SVA_JSF: 'Svalbardinntekt - Jord/Skog/Fisk',
+  DIP_LON: 'Diplomatinntekt - Lønn',
+  DIP_SEL: 'Diplomatinntekt - Selvstendig',
+  DIP_JSF: 'Diplomatinntekt - Jord/Skog/Fisk',
+  FL_PGI_LOENN: 'Fastland pensjonsgivende inntekt av lønnsinntekt',
+  FL_PGI_LOENN_PD: 'Fastland pensjonsgivende inntekt av lønnsinntekt bare pensjonsdel',
+  FL_PGI_NAERING: 'Fastland pensjonsgivende inntekt av næringsinntekt',
+  FL_PGI_NAERING_FFF: 'Fastland pensjonsgivende inntekt av næringsinntekt fra fiske, fangst eller familiebarnehage',
+  KSL_PGI_LOENN: 'Kildeskatt på lønn pensjonsgivende inntekt av lønnsinntekt',
+  KSL_PGI_LOENN_PD: 'Kildeskatt på lønn pensjonsgivende inntekt av lønnsinntekt bare pensjonsdel',
+  KSL_PGI_NAERING: 'Kildeskatt på lønn pensjonsgivende inntekt av næringsinntekt',
+  KSL_PGI_NAERING_FFF: 'Kildeskatt på lønn pensjonsgivende inntekt av næringsinntekt fra fiske, fangst eller familiebarnehage',
+  SVA_PGI_LOENN: 'Svalbard pensjonsgivende inntekt av lønnsinntekt',
+  SVA_PGI_LOENN_PD: 'Svalbard pensjonsgivende inntekt av lønnsinntekt bare pensjonsdel',
+  SVA_PGI_NAERING: 'Svalbard pensjonsgivende inntekt av næringsinntekt',
+  SVA_PGI_NAERING_FFF: 'Svalbard pensjonsgivende inntekt av næringsinntekt fra fiske, fangst eller familiebarnehage',
 };

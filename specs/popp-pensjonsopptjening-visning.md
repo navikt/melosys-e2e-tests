@@ -177,18 +177,23 @@ Gitt at saksbehandler behandler en årsavregning for et inntektsår som er eldre
   forventet) — under «Fra register»-gruppe i årsavregningsbehandlingens venstre meny.
 - Seksjons-overskrift: tekst «Pensjonsopptjening» (verbatim — h2/h3).
 - Rad-selektor: `data-testid="popp-rad"` (verbatim, forventet) — én rad per `perioder`-element.
-- Celler per rad (seks kolonner — `År`, `PGI`, `Kilde`, `Type`, `Registrert`, `Oppdatert`):
+- Celler per rad (seks kolonner — `År`, `PGI`, `Kilde`,
+  `Pensjonsgivende inntektstype`, `Registrert`, `Oppdatert`):
   - År: `data-testid="popp-rad-aar"` (verbatim, forventet)
   - PGI-beløp: `data-testid="popp-rad-pgi"` (verbatim, forventet) — vist formatert
     (tusenskille tolereres ved sammenligning, jf. `StatistikkPage.lesAntallFagsaker`).
   - Kilde: `data-testid="popp-rad-kilde"` (verbatim, forventet) — vist som *Skatt* /
     *Avgiftssystemet* / *Melosys* (norske visningsnavn, ikke enum-koden).
-  - Type: inntektType-kode (f.eks. `SUM_PI`, `FL_PGI_LOENN`) som synlig tekst.
-    Wrappes i Aksel `Tooltip` (eller `<abbr title>`-fallback) med norsk beskrivelse fra
-    `INNTEKT_TYPE_BESKRIVELSE`-map; faller tilbake til API-`inntektTypeDekode` hvis
-    koden ikke er kjent.
+  - Pensjonsgivende inntektstype: dekode-strengen fra API
+    (`periode.inntektTypeDekode || periode.inntektType`). Mocken auto-fyller
+    dekoden ut fra koden (Javadoc-tekst fra `InntektTypeCode`), så cellen viser
+    f.eks. «Sum pensjonsgivende inntekt» eller «Fastland pensjonsgivende inntekt
+    av lønnsinntekt» — ikke selve koden. Tooltip-mønsteret fra tidligere iterasjoner
+    er fjernet; beskrivelsen leses direkte i tabellen.
   - Registrert / Oppdatert: dd.MM.yyyy fra `Utils.dato.formatterDatoTilNorsk(iso, false, "—")`.
     Null/manglende verdi rendres som «—» (em-dash, U+2014).
+- Under tabellen vises en footer-legend (Aksel `Detail`) som forklarer
+  forkortelsene FFF, JSF og KSL.
 - Tom-tilstand: `data-testid="popp-ingen-data"` (verbatim, forventet) — vises når
   `perioder` er tom; meldingstekst: «Ingen pensjonsopptjening er registrert i POPP for
   denne personen» (verbatim, forventet — bygg kan reconcile).
@@ -204,7 +209,8 @@ Gitt at saksbehandler behandler en årsavregning for et inntektsår som er eldre
 - `goto(behandlingId: string)` — naviger til sidemeny-seksjonen for gitt årsavregning.
 - `klikkSidemeny()` — klikk «Pensjonsopptjening»-lenken under «Fra register».
 - `lesRader(): Promise<PoppRad[]>` — returnerer alle rader som
-  `{ aar, pgi, kilde, registrert, oppdatert }` (kilde og datoer som visningsnavn).
+  `{ aar, pgi, kilde, inntektstype, registrert, oppdatert }` (alt som
+  visningstekst).
 - `erTomVisning(): Promise<boolean>` — true hvis tom-tilstand vises.
 - `assertions: PensjonsopptjeningAssertions`:
   - `verifiserSeksjonVises()`
@@ -216,6 +222,8 @@ Gitt at saksbehandler behandler en årsavregning for et inntektsår som er eldre
   - `verifiserTomMelding()` — tom-tilstand med tekst.
   - `verifiserRadHarTidsstempler(aar, kilde, { registrert, oppdatert })` — verifiser
     `dd.MM.yyyy`-formatert visning per kilde-rad. Null forventes som «—».
+  - `verifiserRadHarInntektstype(aar, kilde, forventetDekode)` — verifiser at en
+    rad har forventet dekode-streng i «Pensjonsgivende inntektstype»-kolonnen.
 
 **Testdata-konstanter (legges i `pages/shared/constants.ts` ved første testkjøring)**
 - `POPP_KILDE` (verbatim): `{ SKATT: 'SKATT', AVGIFTSSYSTEMET: 'AVGIFTSSYSTEMET', MELOSYS: 'MELOSYS' }`
