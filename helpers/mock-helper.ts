@@ -336,9 +336,14 @@ export interface CreateJournalpostForSakOptions {
  *
  * Mocken eksponerer `POST /popp/admin/inntekt/seed` som overstyrer den
  * kanoniske default-responsen per fnr. Påkrevde felter for at API-en
- * (`PensjonsopptjeningOppslag` med `inntektType=SUM_PI`-filter) skal se
- * raden er `inntektAr`, `belop`, `inntektType="SUM_PI"` og `kilde`. Kilde-
- * verdier sendes uendret videre til melosys-web, som rendrer SKATT/
+ * (`PensjonsopptjeningOppslag`, PGI-whitelist) skal se raden er `inntektAr`,
+ * `belop`, en PGI-`inntektType` (default `FL_PGI_LOENN`) og `kilde`.
+ *
+ * NB: POPP `/inntekt/hentgrunnlag` ekskluderer SUM_PI server-side (MELOSYS-8073,
+ * POPP-commit 9e82f205), og mocken speiler dette — seeder du `SUM_PI` blir den
+ * filtrert bort og dukker ikke opp i UI. Seed faktiske grunnlags-typer i stedet.
+ *
+ * Kilde-verdier sendes uendret videre til melosys-web, som rendrer SKATT/
  * AVGIFTSSYSTEMET/MELOSYS som «Skatt»/«Avgiftssystemet»/«Melosys» — andre
  * verdier vises som rå-tekst (default-branchen i `kildeLabel`).
  */
@@ -365,13 +370,14 @@ export interface PoppInntektSeed {
 /**
  * Seed POPP-inntekter for et fnr i melosys-mock.
  *
- * Overstyrer mockens default kanoniske data (SKD-kilde, FL_PGI_LOENN +
- * SUM_PI for siste 5 år). Bruk i POPP-pensjonsopptjenings-tester for
+ * Overstyrer mockens default kanoniske data (SKD-kilde, PGI-grunnlag for
+ * siste 5 år, uten SUM_PI). Bruk i POPP-pensjonsopptjenings-tester for
  * deterministisk styring av kilde-mix og år-vindu uten å gå via
  * `page.route(...)`-stubbing.
  *
- * Default `inntektType="SUM_PI"` matcher hva API-en spør om — endre kun
- * hvis du tester at annet/feil inntektstype filtreres bort.
+ * Default `inntektType="FL_PGI_LOENN"` er en gyldig grunnlags-type som
+ * slipper gjennom API-ets PGI-whitelist. Seed andre PGI-typer for å teste
+ * breakdown, eller en ikke-PGI/SUM_PI-type for å teste at den filtreres bort.
  *
  * @example
  * await seedPoppInntekt(request, '30056928150', [
@@ -390,7 +396,7 @@ export async function seedPoppInntekt(
       inntektAr: i.inntektAr,
       belop: i.belop,
       kilde: i.kilde,
-      inntektType: i.inntektType ?? 'SUM_PI',
+      inntektType: i.inntektType ?? 'FL_PGI_LOENN',
       inntektTypeDekode: i.inntektTypeDekode,
       changeStamp: i.changeStamp,
       fnr,

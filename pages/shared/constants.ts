@@ -117,10 +117,11 @@ export const POPP_KILDE_VISNING = {
  * InntektTypeCode (verbatim — fra
  * no.nav.popp.domain.codestable.InntektTypeCode).
  *
- * Kun PGI-relevante typer + SUM_PI er listet her — det er hva
- * `PensjonsopptjeningOppslag` slipper gjennom whitelist-filteret. Andre koder
- * (INN_*, SJO_*, UTE_*, DIP_*, RED_INT, AI, PI66, PGI_NAV) er bevisst
- * utelatt og filtreres bort i api-laget.
+ * Kun PGI-grunnlags-typene (FL/KSL/SVA) slipper gjennom whitelist-filteret i
+ * `PensjonsopptjeningOppslag`. SUM_PI ekskluderes nå server-side av POPP
+ * `/inntekt/hentgrunnlag` (MELOSYS-8073) og er kun listet her for å verifisere
+ * at den filtreres bort. Andre koder (INN_*, SJO_*, UTE_*, DIP_*, RED_INT, AI,
+ * PI66, PGI_NAV) er bevisst utelatt og filtreres bort i api-laget.
  */
 export const POPP_INNTEKT_TYPE = {
   SUM_PI: 'SUM_PI',
