@@ -148,13 +148,26 @@ class TestSummaryReporter implements Reporter {
       }
     }
 
+    // Collect Unleash toggle overrides pinned for this run (UNLEASH_FORCE_DISABLE/ENABLE)
+    const parseToggleList = (value?: string): string[] =>
+      (value || '').split(',').map(s => s.trim()).filter(Boolean);
+    const forceDisable = parseToggleList(process.env.UNLEASH_FORCE_DISABLE);
+    const forceEnable = parseToggleList(process.env.UNLEASH_FORCE_ENABLE);
+    const hasOverrides = forceDisable.length > 0 || forceEnable.length > 0;
+
     const summaryData: TestSummaryData = {
       status: ciStatus,
       startTime: result.startTime,
       duration: result.duration,
       tests: testData,
       tags: Object.keys(tags).length > 0 ? tags : undefined,
-      retriesDisabled: retriesDisabled || undefined
+      retriesDisabled: retriesDisabled || undefined,
+      unleashOverrides: hasOverrides
+        ? {
+            forceDisable: forceDisable.length > 0 ? forceDisable : undefined,
+            forceEnable: forceEnable.length > 0 ? forceEnable : undefined,
+          }
+        : undefined
     };
 
     // Generate summary using shared module
