@@ -1,7 +1,7 @@
 name: Copilot Analyze Failure
 
 on:
-  # Disabled: CoPilot integration not working - see docs/copilot-analysis-experiment.md
+  # Disabled: CoPilot integration not working - see melosys-kode-wiki: archive/melosys-e2e-tests/2026-01-09-copilot-analysis-experiment.md
   # issues:
   #   types: [labeled]
   workflow_dispatch:  # Manual trigger only

@@ -44,6 +44,10 @@ export interface TestSummaryData {
   tests: TestData[];
   tags?: Record<string, string>; // Docker image tags used in the test run
   retriesDisabled?: boolean; // When true, flaky tests are treated as failures
+  unleashOverrides?: {
+    forceDisable?: string[]; // Toggles forced OFF for the whole run
+    forceEnable?: string[]; // Toggles forced ON for the whole run
+  };
 }
 
 /**

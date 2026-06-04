@@ -96,6 +96,19 @@ export function generateMarkdownSummary(
     }
   }
 
+  // Display Unleash toggle overrides if any toggles were pinned for this run
+  const overrides = data.unleashOverrides;
+  if (overrides && ((overrides.forceDisable?.length ?? 0) > 0 || (overrides.forceEnable?.length ?? 0) > 0)) {
+    md += `## 🎚️ Unleash Toggle Overrides\n\n`;
+    for (const name of overrides.forceDisable ?? []) {
+      md += `- ❌ **OFF:** \`${name}\`\n`;
+    }
+    for (const name of overrides.forceEnable ?? []) {
+      md += `- ✅ **ON:** \`${name}\`\n`;
+    }
+    md += '\n';
+  }
+
   md += `## Overall Results\n\n`;
   md += `- ✅ Passed: ${passed}\n`;
   md += `- ❌ Failed: ${failed}\n`;

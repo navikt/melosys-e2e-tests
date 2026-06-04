@@ -234,6 +234,40 @@ test('my test with unleash', async ({ page, request }) => {
 - Unleash UI available at `http://localhost:4242` (admin/unleash4all)
 - See `tests/unleash-eksempel.spec.ts` for complete examples
 
+#### Pinning a toggle for an ENTIRE run (local + CI)
+
+Use this when you want to run the **whole suite** with a toggle forced on/off (e.g. validating that a backend branch doesn't break existing tests with a feature toggle disabled). The per-test `disableFeature()` above is for a single test; this pins it for every test.
+
+The cleanup fixture calls `UnleashHelper.resetToDefaults()` before/after each test, and that method honors two comma-separated env vars (also works for toggles not in the default list):
+
+- `UNLEASH_FORCE_DISABLE` — toggles forced **OFF** for the whole run
+- `UNLEASH_FORCE_ENABLE` — toggles forced **ON** for the whole run
+
+**Local:**
+```bash
+UNLEASH_FORCE_DISABLE=melosys.trygdeavgift.25-prosentregel npm test
+# or put the same line in .env.local (gitignored) and just run: npm test
+```
+
+**GitHub Actions** (the `E2E Tests` workflow is dispatch-only) — use the `unleash_force_disable` / `unleash_force_enable` inputs:
+```bash
+gh workflow run "E2E Tests" \
+  --ref <branch> \
+  -f environment=melosys-api:<image-tag> \
+  -f unleash_force_disable=melosys.trygdeavgift.25-prosentregel
+```
+> The new inputs/code must exist on the dispatched `--ref`, so push the branch first.
+
+**Confirming it took effect:**
+- Cleanup log (local + CI) prints `⚙️ Unleash override: ... force-disable=[...]` before each test
+- The `Run Playwright tests` step echoes `🎚️ Unleash overrides for this run: OFF: ...`
+- The summary report (test-summary.md / GitHub job summary) shows a `🎚️ Unleash Toggle Overrides` section under Docker Image Tags
+- Verify from a finished run: `gh run view <run-id> --log | grep -m1 "OFF: <toggle>"`
+
+> Caveat: trygdeavgift-beregning polls Unleash on an interval, so the very first test after a reset may briefly still see the old state; since the value only moves toward the pinned state for the whole run, it self-corrects for subsequent tests.
+
+See `docs/guides/UNLEASH-DEBUGGING.md` for more detail.
+
 ### Docker Services Architecture
 
 The test suite depends on a full Docker Compose stack (17 services). **Locally**, use `../melosys-docker-compose`. **CI** uses `docker-compose.yml` in this repo. Key services:
@@ -353,8 +387,6 @@ LOG_FILES_DIR=/tmp/melosys-logs
 - The fixture will parse these files for errors instead of Docker logs
 
 ## Page Object Model (POM) Pattern
-
-**📖 See [docs/pom/MIGRATION-PLAN.md](docs/pom/MIGRATION-PLAN.md) for complete migration guide and strategy.**
 
 This project is migrating to use the Page Object Model pattern for better maintainability and reusability. POMs are being added incrementally - both old and new test styles can coexist.
 
@@ -552,8 +584,6 @@ await assertErrors(page, [/påkrevd/i, "Ugyldig format"]);
    await myFeature.someAction();
    await myFeature.assertions.verifySomething();
    ```
-
-**See:** `docs/pom/MIGRATION-PLAN.md` for detailed style guide and examples.
 
 ### Available POMs
 
@@ -824,8 +854,6 @@ Key steps:
 - **Helpers**: `docs/guides/HELPERS.md` - FormHelper, DatabaseHelper, AuthHelper
 - **Fixtures**: `docs/guides/FIXTURES.md` - Auto-cleanup and Docker log checking
 - **Known Errors**: `docs/guides/KNOWN-ERRORS.md` - Using @known-error tag for expected failures
-- **POM Guide**: `docs/pom/QUICK-START.md` - Page Object Model quick reference
-- **POM Migration**: `docs/pom/MIGRATION-PLAN.md` - Complete POM strategy
 - **GitHub Actions**: `docs/ci-cd/GITHUB-ACTIONS.md` - CI/CD setup and usage
 - **E2E Coverage**: `docs/ci-cd/E2E-COVERAGE.md` - E2E code coverage collection for melosys-api
 - [Playwright Documentation](https://playwright.dev) - Official Playwright docs
