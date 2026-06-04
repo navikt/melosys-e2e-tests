@@ -382,7 +382,9 @@ export class UnleashHelper {
     for (const name of forceEnable) effective.set(name, true);
     for (const name of forceDisable) effective.set(name, false);
 
-    if (!silent && (forceEnable.length || forceDisable.length)) {
+    // Always log overrides (even in silent cleanup mode) so it is visible in the
+    // run output - both locally and on CI - that toggles were pinned for this run.
+    if (forceEnable.length || forceDisable.length) {
       console.log(
         `   ⚙️  Unleash override: force-enable=[${forceEnable.join(', ')}] force-disable=[${forceDisable.join(', ')}]`
       );
