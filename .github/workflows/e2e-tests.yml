@@ -32,6 +32,16 @@ on:
         required: false
         type: boolean
         default: false
+      unleash_force_disable:
+        description: 'Comma-separated Unleash toggles to force OFF for the whole run (e.g. melosys.trygdeavgift.25-prosentregel)'
+        required: false
+        type: string
+        default: ''
+      unleash_force_enable:
+        description: 'Comma-separated Unleash toggles to force ON for the whole run'
+        required: false
+        type: string
+        default: ''
 
   repository_dispatch:
     types:
@@ -482,6 +492,8 @@ jobs:
           CI: true
           RETRIES_DISABLED: ${{ inputs.disable_retries == true }}
           RECORD_API: ${{ inputs.record_api == true && 'true' || '' }}
+          UNLEASH_FORCE_DISABLE: ${{ inputs.unleash_force_disable }}
+          UNLEASH_FORCE_ENABLE: ${{ inputs.unleash_force_enable }}
 
       - name: Set test status outputs
         id: test-status
