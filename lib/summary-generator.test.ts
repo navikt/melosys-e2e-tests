@@ -757,6 +757,63 @@ describe('Summary Generator', () => {
 
   });
 
+  describe('Unleash Toggle Overrides', () => {
+
+    test('should render forced-off toggles', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [createTest({ status: 'passed' })],
+        unleashOverrides: { forceDisable: ['melosys.trygdeavgift.25-prosentregel'] }
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      assert(result.includes('## 🎚️ Unleash Toggle Overrides'));
+      assert(result.includes('❌ **OFF:** `melosys.trygdeavgift.25-prosentregel`'));
+    });
+
+    test('should render forced-on toggles', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [createTest({ status: 'passed' })],
+        unleashOverrides: { forceEnable: ['melosys.some.toggle'] }
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      assert(result.includes('## 🎚️ Unleash Toggle Overrides'));
+      assert(result.includes('✅ **ON:** `melosys.some.toggle`'));
+    });
+
+    test('should omit section when no overrides are set', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [createTest({ status: 'passed' })]
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      assert(!result.includes('Unleash Toggle Overrides'));
+    });
+
+    test('should omit section when override lists are empty', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [createTest({ status: 'passed' })],
+        unleashOverrides: { forceDisable: [], forceEnable: [] }
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      assert(!result.includes('Unleash Toggle Overrides'));
+    });
+
+  });
+
 });
 
 /**
