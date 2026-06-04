@@ -394,6 +394,54 @@ test('skal vise årsavregning advarsel når toggle er aktivert', ...)
 test('skal ikke vise årsavregning når toggle er deaktivert', ...)
 ```
 
+## Pinning a toggle for an entire run (local + CI)
+
+For per-test control use `unleash.disableFeature()` / `enableFeature()` inside the test. When you instead want the **whole suite** to run with a toggle forced on/off — e.g. validating that a backend branch doesn't break existing behaviour with a feature toggle disabled — use the run-level overrides.
+
+`UnleashHelper.resetToDefaults()` (called by the cleanup fixture before/after every test) reads two comma-separated env vars and applies them on top of the default toggle list, including toggles that are not part of that list:
+
+- `UNLEASH_FORCE_DISABLE` — toggles forced **OFF** for the whole run
+- `UNLEASH_FORCE_ENABLE` — toggles forced **ON** for the whole run
+
+### Local
+
+```bash
+UNLEASH_FORCE_DISABLE=melosys.trygdeavgift.25-prosentregel npm test
+# or add the line to .env.local (gitignored) and just run: npm test
+```
+
+Multiple toggles are comma-separated, e.g. `UNLEASH_FORCE_DISABLE=toggle.a,toggle.b`.
+
+### GitHub Actions
+
+The `E2E Tests` workflow is dispatch-only and exposes matching inputs:
+
+```bash
+gh workflow run "E2E Tests" \
+  --ref <branch> \
+  -f environment=melosys-api:<image-tag> \
+  -f unleash_force_disable=melosys.trygdeavgift.25-prosentregel \
+  -f unleash_force_enable=
+```
+
+The inputs are wired to the `UNLEASH_FORCE_DISABLE` / `UNLEASH_FORCE_ENABLE` env on the Playwright step. Because `gh workflow run` reads the workflow file from the remote `--ref`, push the branch first.
+
+### Confirming the override took effect
+
+1. **Cleanup log** (local + CI), printed before each test:
+   ```
+   ⚙️  Unleash override: force-enable=[] force-disable=[melosys.trygdeavgift.25-prosentregel]
+   ```
+2. **Workflow step echo** at the top of `Run Playwright tests`:
+   ```
+   🎚️  Unleash overrides for this run:
+       OFF: melosys.trygdeavgift.25-prosentregel
+   ```
+3. **Summary report** (`test-summary.md` / GitHub job summary / PR comment) shows a `🎚️ Unleash Toggle Overrides` section under Docker Image Tags.
+4. **From a finished run:** `gh run view <run-id> --log | grep -m1 "OFF: <toggle>"`
+
+> Caveat: trygdeavgift-beregning polls Unleash on an interval, so the very first test after a reset can briefly still see the old state. Since the value only ever moves toward the pinned state for the whole run, it self-corrects for subsequent tests.
+
 ## Configuration
 
 ### Timeout Settings
