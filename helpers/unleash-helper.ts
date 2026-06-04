@@ -336,6 +336,12 @@ export class UnleashHelper {
    * Reset all toggles to their default state (from seed script)
    * Default state: all toggles enabled except 'melosys.arsavregning.uten.flyt'
    *
+   * Per-run overrides (applied on top of the defaults, and to toggles not in the
+   * default list) can be supplied via comma-separated env vars:
+   *   - UNLEASH_FORCE_DISABLE - force these toggles OFF for the whole run
+   *   - UNLEASH_FORCE_ENABLE  - force these toggles ON for the whole run
+   * Example: UNLEASH_FORCE_DISABLE=melosys.trygdeavgift.25-prosentregel
+   *
    * @param silent - If true, suppresses individual toggle logging (default: false)
    * @param skipFrontendCheck - If true, only waits for Admin API (faster, for cleanup before test)
    */
@@ -361,11 +367,34 @@ export class UnleashHelper {
       { name: 'melosys.send_popp_hendelse', enabled: true },
     ];
 
-    for (const toggle of defaultToggles) {
-      if (toggle.enabled) {
-        await this.enableFeature(toggle.name, silent, skipFrontendCheck);
+    // Per-run overrides via env vars (comma-separated toggle names).
+    // Lets a whole test run pin specific toggles without code changes, e.g.
+    //   UNLEASH_FORCE_DISABLE=melosys.trygdeavgift.25-prosentregel
+    // Overrides are applied on top of the defaults above and also apply to
+    // toggles that are not part of the default list (like the 25-prosentregel).
+    const parseList = (value?: string): string[] =>
+      (value || '').split(',').map(s => s.trim()).filter(Boolean);
+    const forceEnable = parseList(process.env.UNLEASH_FORCE_ENABLE);
+    const forceDisable = parseList(process.env.UNLEASH_FORCE_DISABLE);
+
+    const effective = new Map<string, boolean>();
+    for (const toggle of defaultToggles) effective.set(toggle.name, toggle.enabled);
+    for (const name of forceEnable) effective.set(name, true);
+    for (const name of forceDisable) effective.set(name, false);
+
+    // Always log overrides (even in silent cleanup mode) so it is visible in the
+    // run output - both locally and on CI - that toggles were pinned for this run.
+    if (forceEnable.length || forceDisable.length) {
+      console.log(
+        `   ⚙️  Unleash override: force-enable=[${forceEnable.join(', ')}] force-disable=[${forceDisable.join(', ')}]`
+      );
+    }
+
+    for (const [name, enabled] of effective) {
+      if (enabled) {
+        await this.enableFeature(name, silent, skipFrontendCheck);
       } else {
-        await this.disableFeature(toggle.name, silent, skipFrontendCheck);
+        await this.disableFeature(name, silent, skipFrontendCheck);
       }
     }
   }

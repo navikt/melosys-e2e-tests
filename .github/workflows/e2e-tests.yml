@@ -32,6 +32,16 @@ on:
         required: false
         type: boolean
         default: false
+      unleash_force_disable:
+        description: 'Comma-separated Unleash toggles to force OFF for the whole run (e.g. melosys.trygdeavgift.25-prosentregel)'
+        required: false
+        type: string
+        default: ''
+      unleash_force_enable:
+        description: 'Comma-separated Unleash toggles to force ON for the whole run'
+        required: false
+        type: string
+        default: ''
 
   repository_dispatch:
     types:
@@ -416,6 +426,15 @@ jobs:
           echo "TEST_START_TIME=$TEST_START_TIME" >> $GITHUB_OUTPUT
           echo "⏰ Test start time: $TEST_START_TIME"
 
+          # Report Unleash toggle overrides for this run (visible confirmation)
+          if [ -n "${{ inputs.unleash_force_disable }}" ] || [ -n "${{ inputs.unleash_force_enable }}" ]; then
+            echo "🎚️  Unleash overrides for this run:"
+            [ -n "${{ inputs.unleash_force_disable }}" ] && echo "    OFF: ${{ inputs.unleash_force_disable }}"
+            [ -n "${{ inputs.unleash_force_enable }}" ] && echo "    ON:  ${{ inputs.unleash_force_enable }}"
+          else
+            echo "🎚️  Unleash overrides: none (defaults apply)"
+          fi
+
           # Build Playwright command with optional filters
           PLAYWRIGHT_CMD="npx playwright test --project=chromium"
 
@@ -482,6 +501,8 @@ jobs:
           CI: true
           RETRIES_DISABLED: ${{ inputs.disable_retries == true }}
           RECORD_API: ${{ inputs.record_api == true && 'true' || '' }}
+          UNLEASH_FORCE_DISABLE: ${{ inputs.unleash_force_disable }}
+          UNLEASH_FORCE_ENABLE: ${{ inputs.unleash_force_enable }}
 
       - name: Set test status outputs
         id: test-status
