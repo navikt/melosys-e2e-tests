@@ -451,11 +451,23 @@ test.describe('FTRL Pensjonist — 25%-regelen', () => {
   test('25%-regelen for FTRL Pensjonist', async ({ page, request }) => {
     test.setTimeout(120000);
 
-    // Trygt over minstebeløpet for pensjonist, men lav nok til at 25%-regelen
-    // treffer. Ratio 1.69 speiler det forholdet som fungerte med tidligere
-    // hardkodet verdi (14000 kr/md ved minstebeløp ~99k/år).
-    const månedligMinstebeløp = Math.floor((await hentMinstebeløp(request, TESTÅR)) / 12);
-    const månedsinntekt = String(Math.floor(månedligMinstebeløp * 1.69));
+    // Pensjonist-forskuddet beregnes for perioden «i dag → 31.12», som KRYMPER
+    // utover året. Backend teller hele kalendermåneder fra startmåneden t.o.m.
+    // desember (= 12 − getMonth()), og avkorter IKKE minstebeløpet for delår.
+    // Derfor kan vi ikke hardkode en månedsinntekt mot en 12-måneders antagelse:
+    // gjør vi det, faller periodeinntekten under minstebeløpet senere på året og
+    // beregningen blir MINSTEBELØP (`**`) i stedet for 25%-regel (`*`).
+    // Skaler i stedet månedsinntekten mot gjenstående måneder slik at
+    // periodeinntekten lander trygt inne i 25%-regel-båndet:
+    //   minstebeløp (99 650) < periodeinntekt < minstebeløp / (1 − 0,25/sats)
+    // Helsedel-sats for pensjon (HELSE_UTEN_SYKEPENGER, IKKE_SKATTEPLIKTIG,
+    // PENSJON_UFØRETRYGD) er 9,1 % → øvre grense ≈ 156 700. Vi sikter på
+    // 1,3 × minstebeløp (≈ 129 500), midt i båndet uansett kjøremåned.
+    const minstebeløp = await hentMinstebeløp(request, TESTÅR);
+    const restMånederIÅret = 12 - new Date().getMonth(); // forskudd: i dag → 31.12
+    const månedsinntekt = String(
+      Math.ceil((minstebeløp * 1.3) / restMånederIÅret),
+    );
 
     const unleash = new UnleashHelper(request);
     await unleash.enableFeature('melosys.trygdeavgift.25-prosentregel');
