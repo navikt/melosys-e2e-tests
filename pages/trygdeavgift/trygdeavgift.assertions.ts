@@ -1,5 +1,19 @@
 import { Page, expect } from '@playwright/test';
 import { assertErrors } from '../../utils/assertions';
+import { withDatabase } from '../../helpers/db-helper';
+
+/**
+ * Forventet rad i TRYGDEAVGIFTSPERIODE etter at vedtak/lagring er ferdig.
+ * Brukes av {@link TrygdeavgiftAssertions.verifiserDbTrygdeavgiftsperioder}.
+ */
+export type ForventetTrygdeavgiftsperiodeDb = {
+  /** Verdi i BEREGNINGSREGEL-kolonnen (f.eks. 'TJUEFEM_PROSENT_REGEL', 'MINSTEBELOEP', 'ORDINAER'). */
+  beregningsregel: string | null;
+  /** true: TRYGDESATS skal være NULL. false: skal ha tallverdi. Hopper over sjekken hvis utelatt. */
+  trygdesatsErNull?: boolean;
+  /** Forventet AVGIFTSDEL (f.eks. 'HELSE' / 'PENSJON'). Hopper over hvis utelatt. */
+  avgiftsdel?: string | null;
+};
 
 /**
  * Assertion methods for TrygdeavgiftPage
@@ -211,6 +225,100 @@ export class TrygdeavgiftAssertions {
   }
 
   /**
+   * Verify the sats (rate) column shows expected value for a specific row.
+   * Uses td.tall_felt to find the sats cell (first .tall_felt in each row).
+   *
+   * @param radIndex - Row index (0-based)
+   * @param forventetSats - Expected text: '*' (minstebeløp), '**' (25%-regel), or numeric like '6.8'
+   */
+  async verifiserSatsKolonne(radIndex: number, forventetSats: string | RegExp): Promise<void> {
+    const table = this.page.locator('table').filter({ has: this.page.getByText('Trygdeperiode') });
+    await expect(table).toBeVisible({ timeout: 5000 });
+
+    const row = table.locator('tbody tr').nth(radIndex);
+    const satsCell = row.locator('td.tall_felt').first();
+    await expect(satsCell).toHaveText(forventetSats);
+    console.log(`✅ Sats column row ${radIndex}: ${forventetSats}`);
+  }
+
+  /**
+   * Verify that a forklaringstekst (footnote) is visible below the table.
+   * The component renders these in div.forklaringstekster when beregningstype
+   * is MINSTEBELOEP or TJUEFEM_PROSENT_REGEL.
+   *
+   * @param tekst - Expected text (substring match) or RegExp
+   */
+  async verifiserForklaringstekst(tekst: string | RegExp): Promise<void> {
+    const forklaring = this.page.locator('.forklaringstekster');
+    await expect(forklaring).toBeVisible({ timeout: 5000 });
+    await expect(forklaring).toContainText(tekst);
+    console.log(`✅ Forklaringstekst verified`);
+  }
+
+  /**
+   * Verify that no forklaringstekster are visible (ordinær beregning).
+   * The div.forklaringstekster is only rendered when MINSTEBELOEP or
+   * TJUEFEM_PROSENT_REGEL is present.
+   */
+  async verifiserIngenForklaringstekster(): Promise<void> {
+    const forklaring = this.page.locator('.forklaringstekster');
+    await expect(forklaring).not.toBeVisible({ timeout: 2000 });
+    console.log(`✅ No forklaringstekster visible`);
+  }
+
+  /**
+   * Verify the Dekning column text for a specific row.
+   * Used for 25%-regel with split frivillig: "Helsedel" / "Pensjonsdel"
+   *
+   * Table columns: Trygdeperiode(0) | Dekning(1) | Inntektskilde(2) | Sats(3) | Avgift per md.(4)
+   *
+   * @param radIndex - Row index (0-based)
+   * @param forventetDekning - Expected text (substring or RegExp)
+   */
+  async verifiserDekningKolonne(radIndex: number, forventetDekning: string | RegExp): Promise<void> {
+    const table = this.page.locator('table').filter({ has: this.page.getByText('Trygdeperiode') });
+    await expect(table).toBeVisible({ timeout: 5000 });
+
+    const row = table.locator('tbody tr').nth(radIndex);
+    const dekningCell = row.locator('td').nth(1);
+    await expect(dekningCell).toContainText(forventetDekning);
+    console.log(`✅ Dekning column row ${radIndex}: ${forventetDekning}`);
+  }
+
+  /**
+   * Verify the Inntektskilde column text for a specific row.
+   * Shows "***" when harSammenslåtteInntektskilder=true, otherwise the source name.
+   *
+   * @param radIndex - Row index (0-based)
+   * @param forventetInntektskilde - Expected text (substring or RegExp)
+   */
+  async verifiserInntektskildeKolonne(radIndex: number, forventetInntektskilde: string | RegExp): Promise<void> {
+    const table = this.page.locator('table').filter({ has: this.page.getByText('Trygdeperiode') });
+    await expect(table).toBeVisible({ timeout: 5000 });
+
+    const row = table.locator('tbody tr').nth(radIndex);
+    const inntektskildeCell = row.locator('td').nth(2);
+    await expect(inntektskildeCell).toContainText(forventetInntektskilde);
+    console.log(`✅ Inntektskilde column row ${radIndex}: ${forventetInntektskilde}`);
+  }
+
+  /**
+   * Verify the Avgift per md. column text for a specific row.
+   *
+   * @param radIndex - Row index (0-based)
+   * @param forventetAvgift - Expected text (e.g., "0 nkr", "174 nkr")
+   */
+  async verifiserAvgiftPerMd(radIndex: number, forventetAvgift: string | RegExp): Promise<void> {
+    const table = this.page.locator('table').filter({ has: this.page.getByText('Trygdeperiode') });
+    await expect(table).toBeVisible({ timeout: 5000 });
+
+    const row = table.locator('tbody tr').nth(radIndex);
+    const avgiftCell = row.locator('td').last();
+    await expect(avgiftCell).toContainText(forventetAvgift);
+    console.log(`✅ Avgift per md. column row ${radIndex}: ${forventetAvgift}`);
+  }
+
+  /**
    * Verify calculated tax values in the table
    * @param expectedValues - Array of expected tax calculations for each period
    *
@@ -247,5 +355,61 @@ export class TrygdeavgiftAssertions {
 
       console.log(`✅ Row ${i + 1}: Sats=${expected.sats}%, Avgift=${expected.avgiftPerMnd}`);
     }
+  }
+
+  /**
+   * Verifiser at TRYGDEAVGIFTSPERIODE-radene i databasen matcher forventet.
+   *
+   * Bekrefter at melosys-api har lagret riktig BEREGNINGSREGEL (TJUEFEM_PROSENT_REGEL,
+   * MINSTEBELOEP, ORDINAER) — som styrer hvilken brev-tekst dokgen rendrer ihht.
+   * mapper-endringene i melosys-api PR #3333.
+   *
+   * Forutsetter at cleanupFixture har ryddet databasen før testen, slik at det kun
+   * finnes perioder for denne testens behandling.
+   *
+   * @param forventet - Array av forventede perioder, i samme rekkefølge som ID
+   *
+   * @example
+   * // 25%-regel med helse+pensjon-split (2 perioder):
+   * await trygdeavgift.assertions.verifiserDbTrygdeavgiftsperioder([
+   *   { beregningsregel: 'TJUEFEM_PROSENT_REGEL', trygdesatsErNull: true, avgiftsdel: 'HELSE' },
+   *   { beregningsregel: 'TJUEFEM_PROSENT_REGEL', trygdesatsErNull: true, avgiftsdel: 'PENSJON' },
+   * ]);
+   */
+  async verifiserDbTrygdeavgiftsperioder(
+    forventet: ForventetTrygdeavgiftsperiodeDb[]
+  ): Promise<void> {
+    await withDatabase(async (db) => {
+      const perioder = await db.query<{
+        BEREGNINGSREGEL: string | null;
+        TRYGDESATS: number | null;
+        AVGIFTSDEL: string | null;
+      }>(
+        `SELECT BEREGNINGSREGEL, TRYGDESATS, AVGIFTSDEL
+         FROM TRYGDEAVGIFTSPERIODE
+         ORDER BY ID`,
+        {}
+      );
+
+      expect(perioder, `Antall TRYGDEAVGIFTSPERIODE-rader (faktisk: ${perioder.length})`).toHaveLength(forventet.length);
+
+      forventet.forEach((f, i) => {
+        const p = perioder[i];
+        expect(p.BEREGNINGSREGEL, `Periode ${i}: BEREGNINGSREGEL`).toBe(f.beregningsregel);
+
+        if (f.trygdesatsErNull !== undefined) {
+          if (f.trygdesatsErNull) {
+            expect(p.TRYGDESATS, `Periode ${i}: TRYGDESATS skal være null`).toBeNull();
+          } else {
+            expect(p.TRYGDESATS, `Periode ${i}: TRYGDESATS skal ha tallverdi`).not.toBeNull();
+          }
+        }
+
+        if (f.avgiftsdel !== undefined) {
+          expect(p.AVGIFTSDEL, `Periode ${i}: AVGIFTSDEL`).toBe(f.avgiftsdel);
+        }
+      });
+      console.log(`✅ DB: ${perioder.length} trygdeavgiftsperioder verifisert`);
+    });
   }
 }

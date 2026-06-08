@@ -102,19 +102,31 @@ export class AarsavregningPage extends BasePage {
   }
 
   /**
-   * Besvar «Avviker innbetalt trygdeavgift …?» med «Nei» (gammel flyt).
+   * Radiogruppe for inngangsspørsmålet om innbetalt trygdeavgift.
+   * Etiketten varierer med toggle `melosys.arsavregning.eos_pensjonist`:
+   *   - toggle på  → «Avviker innbetalt trygdeavgift fra tidligere beregnet avgift?»
+   *   - toggle av  → «Skal du legge til trygdeavgift fra Avgiftssystemet …?»
+   * Vi matcher derfor begge etikettene.
+   */
+  private readonly trygdeavgiftAvvikGroup = this.page.getByRole('group', {
+    name: /Avviker innbetalt|Skal du legge til trygdeavgift/,
+  });
+
+  /**
+   * Besvar inngangsspørsmålet om innbetalt trygdeavgift med «Nei».
    *
-   * Gammel flyt viser en Ja/Nei-radio for innbetalt trygdeavgift som må
-   * besvares for å avdekke resten av årsavregningsskjemaet. Den nye
-   * eos_pensjonist-flyten (toggle `melosys.arsavregning.eos_pensjonist`)
-   * skjuler radioen når det ikke finnes tidligere trygdeavgiftsgrunnlag og
-   * setter `harInnbetaltTrygdeavgift = true` automatisk – da rendres skjemaet
-   * med en gang, og «Innbetalt trygdeavgift» blir et påkrevd felt i stedet
-   * (se fyllInnBruttoinntektMedApiVent). Metoden er derfor adaptiv: klikker
-   * «Nei» hvis radioen finnes, ellers hopper den over (ny flyt).
+   * Gammel flyt viser en Ja/Nei-radio (etikett varierer med feature toggle,
+   * se trygdeavgiftAvvikGroup) som må besvares for å avdekke resten av
+   * årsavregningsskjemaet. Den nye eos_pensjonist-flyten (toggle
+   * `melosys.arsavregning.eos_pensjonist`) skjuler radioen når det ikke finnes
+   * tidligere trygdeavgiftsgrunnlag og setter `harInnbetaltTrygdeavgift = true`
+   * automatisk – da rendres skjemaet med en gang, og «Innbetalt trygdeavgift»
+   * blir et påkrevd felt i stedet (se fyllInnBruttoinntektMedApiVent). Metoden
+   * er derfor adaptiv: klikker «Nei» hvis radioen finnes, ellers hopper den
+   * over (ny flyt).
    */
   async svarNei(): Promise<void> {
-    const avvikerNei = this.avvikerInnbetaltGroup.getByRole('radio', { name: 'Nei' });
+    const avvikerNei = this.trygdeavgiftAvvikGroup.getByRole('radio', { name: 'Nei' });
 
     // Etter årsvalg/innlasting dukker enten avvik-radioen (gammel flyt) eller
     // innbetalt-feltet (ny flyt) opp. Vent på det første som blir synlig.
@@ -127,22 +139,21 @@ export class AarsavregningPage extends BasePage {
 
     if (await avvikerNei.isVisible().catch(() => false)) {
       await avvikerNei.check();
-      console.log('✅ Svarte Nei på «Avviker innbetalt trygdeavgift» (gammel flyt)');
+      console.log('✅ Svarte Nei på inngangsspørsmålet om innbetalt trygdeavgift (gammel flyt)');
       return;
     }
 
     console.log(
-      'ℹ️ Ny eos_pensjonist-flyt: «Avviker innbetalt»-radio er skjult – hopper over svarNei'
+      'ℹ️ Ny eos_pensjonist-flyt: avvik-radioen er skjult – hopper over svarNei'
     );
   }
 
   /**
-   * Answer "Ja" to the first radio question on the page
+   * Answer "Ja" to the initial årsavregning question about innbetalt trygdeavgift.
    */
   async svarJa(): Promise<void> {
-    const jaRadio = this.page.getByRole('radio', { name: 'Ja' });
-    await jaRadio.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
-    await jaRadio.check();
+    await this.trygdeavgiftAvvikGroup.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
+    await this.trygdeavgiftAvvikGroup.getByRole('radio', { name: 'Ja' }).check();
     console.log('✅ Answered Ja');
   }
 
