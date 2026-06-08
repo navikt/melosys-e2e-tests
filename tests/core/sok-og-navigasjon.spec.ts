@@ -46,23 +46,11 @@ test.describe('Søk og navigasjon', () => {
     console.log('📝 Step 4: Verifying search found results...');
     await page.waitForLoadState('networkidle');
 
-    // After search, a "Vis behandling" button should appear if results were found
+    // Søk på FNR for nyopprettet sak SKAL gi treff: "Vis behandling"-knappen vises.
+    // (Robust: testene 'navigere til sak' og 'tilbake til forsiden' klikker samme knapp.)
     const visBehandlingButton = page.getByRole('button', { name: 'Vis behandling' });
-    const foundResults = await visBehandlingButton.isVisible({ timeout: 5000 }).catch(() => false);
-
-    if (foundResults) {
-      console.log('✅ Successfully found case by FNR search - Vis behandling button appeared');
-    } else {
-      // Alternative: check if we navigated directly to the case
-      const url = page.url();
-      if (url.includes('saksbehandling') || url.includes('behandling')) {
-        console.log('✅ Search navigated directly to case');
-      } else {
-        console.log('ℹ️ Search did not find results (may be normal for some scenarios)');
-      }
-    }
-
-    expect(true).toBe(true);
+    await expect(visBehandlingButton, 'Søk på FNR for opprettet sak skal gi treff').toBeVisible({ timeout: 10000 });
+    console.log('✅ Successfully found case by FNR search - Vis behandling button appeared');
   });
 
   test('skal vise ingen resultater for ukjent bruker', async ({ page }) => {
@@ -83,13 +71,9 @@ test.describe('Søk og navigasjon', () => {
     const visBehandlingButton = page.getByRole('button', { name: 'Vis behandling' });
     const hasResults = await visBehandlingButton.isVisible({ timeout: 3000 }).catch(() => false);
 
-    if (!hasResults) {
-      console.log('✅ Correctly showed no results for unknown user');
-    } else {
-      console.log('ℹ️ Found results (may be from existing data)');
-    }
-
-    expect(true).toBe(true);
+    // DB er deterministisk tom per cleanup-fixture, så ukjent FNR SKAL ikke gi treff.
+    expect(hasResults, 'Ukjent FNR skal ikke gi søketreff').toBe(false);
+    console.log('✅ Correctly showed no results for unknown user');
   });
 
   test('skal navigere til sak fra søkeresultat', async ({ page }) => {
@@ -116,7 +100,12 @@ test.describe('Søk og navigasjon', () => {
     console.log('✅ Successfully navigated to case from search');
   });
 
-  test('skal søke etter sak med saksnummer', async ({ page }) => {
+  // @manual: happy-path er i praksis unåbar — etter opprettStandardSak + verifiserBehandlingOpprettet
+  // står vi på forsiden (/melosys/$), så saksnummer-regexen mot page.url() blir alltid null og
+  // søke-blokken hoppes over (testen passerte via expect(true)). Hardning krever en pålitelig
+  // saksnummer-kilde (f.eks. DB) + sok.assertions.verifiserSakIResultat(...). Krever lokal kjøring
+  // for å verifisere. Se e2e-audit 2026-06-08.
+  test('skal søke etter sak med saksnummer @manual', async ({ page }) => {
     // Step 1: Create a case and capture saksnummer
     console.log('📝 Step 1: Creating a case...');
     await hovedside.gotoOgOpprettNySak();
@@ -161,7 +150,10 @@ test.describe('Søk og navigasjon', () => {
       console.log('⚠️ Could not extract saksnummer from URL');
     }
 
-    expect(true).toBe(true);
+    // @manual TODO: happy-path unåbar (saksnummer=null fra forside-URL). Hent saksnummer fra DB
+    // og bruk sok.assertions.verifiserSakIResultat(saksnummer). Inntil da feiler testen tydelig
+    // ved manuell kjøring i stedet for å passere tomt.
+    expect(saksnummer, 'Kunne ikke hente saksnummer (se @manual-merknad over)').not.toBeNull();
   });
 
   test('skal kunne navigere tilbake til forsiden fra søkeresultater', async ({ page }) => {
