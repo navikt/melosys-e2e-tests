@@ -70,6 +70,10 @@ test.describe('EU/EØS - Komplett arbeidsflyt', () => {
         await behandling.svarJaOgFortsett(); // Andre spørsmål
         await behandling.innvilgeOgFattVedtak();
 
+        // Database-verifisering: behandlingstema UTSENDT_ARBEIDSTAKER, lovvalgsland DK og persistert vedtak.
+        // Uten dette passerte et vedtak med feil behandlingstema/land grønt.
+        await behandling.assertions.verifiserKomplettBehandling(USER_ID_VALID, 'DK');
+
         console.log('✅ EU/EØS-arbeidsflyt fullført med hjelpemetoder');
     });
 });

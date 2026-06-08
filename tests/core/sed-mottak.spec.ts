@@ -118,13 +118,9 @@ test.describe('SED Mottak', () => {
          ORDER BY f.REGISTRERT_DATO DESC`
       );
 
-      if (fagsaker.length > 0) {
-        console.log(`   ✅ Fagsak found: SAKSNUMMER=${fagsaker[0].SAKSNUMMER}, GSAK=${fagsaker[0].GSAK_SAKSNUMMER}`);
-        expect(fagsaker.length).toBeGreaterThan(0);
-      } else {
-        console.log('   ⚠️ No recent fagsak found');
-        // Process completed, so fagsak should exist - this might indicate a schema issue
-      }
+      // Prosessen er fullført, så fagsak SKAL finnes — hard assert (ikke gated på if)
+      expect(fagsaker.length, 'Forventet minst én fagsak opprettet ved SED-mottak').toBeGreaterThan(0);
+      console.log(`   ✅ Fagsak found: SAKSNUMMER=${fagsaker[0].SAKSNUMMER}, GSAK=${fagsaker[0].GSAK_SAKSNUMMER}`);
 
       // Verify process completed
       expect(processResult.success).toBe(true);
@@ -318,6 +314,9 @@ test.describe('SED Mottak', () => {
       );
 
       console.log(`   Found ${prosessinstanser.length} recent MOTTAK_SED process instance(s)`);
+
+      // Hard assert: prosessen er fullført, så MOTTAK_SED-instansen SKAL finnes (ikke gated på if)
+      expect(prosessinstanser.length, 'Forventet minst én MOTTAK_SED prosessinstans').toBeGreaterThan(0);
 
       if (prosessinstanser.length > 0) {
         const latest = prosessinstanser[0];
