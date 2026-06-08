@@ -56,10 +56,12 @@ export class EuEosPensjonistTrygdeavgiftPage extends BasePage {
 
   private async velgSkattepliktigAlternativ(erSkattepliktig: boolean): Promise<void> {
     const navn = erSkattepliktig ? 'Ja' : 'Nei';
+    const radio = this.skattepliktigGroup.getByRole('radio', { name: navn });
+
     // Radio-klikket trigger ikke alltid en PUT mot /eos-pensjonist/beregning
     // (form-useEffect avhenger av antall perioder, ikke skatteplikttype-verdien).
-    // Tolerant vent: fang evt. debounced PUT, ellers fall tilbake til kort pause.
-    // Den definitive PUT'en garanteres av fyllInnBruttoinntektMedApiVent senere.
+    // Tolerant vent: fang evt. debounced PUT uten å gjøre oss avhengige av den.
+    // Den definitive beregningen garanteres av fyllInnBruttoinntektMedApiVent senere.
     const beregningResponsePromise = this.page
       .waitForResponse(
         (resp) =>
@@ -70,12 +72,18 @@ export class EuEosPensjonistTrygdeavgiftPage extends BasePage {
       )
       .catch(() => null);
 
-    await this.skattepliktigGroup.getByRole('radio', { name: navn }).click();
-
-    const response = await beregningResponsePromise;
-    if (!response) {
-      await this.page.waitForTimeout(1500);
+    // Robust radio-klikk (jf. TrygdeavgiftPage.velgSkattepliktig): force-klikk for å
+    // omgå evt. overlay, label-klikk som fallback, og poll på checked-state i stedet
+    // for en arbitrær waitForTimeout. På CI har vi sett radio-klikk som ikke
+    // registreres (jf. step-transition-bug).
+    await radio.click({ force: true });
+    if (!(await radio.isChecked())) {
+      await this.skattepliktigGroup.getByText(navn, { exact: true }).click();
     }
+    await expect(radio).toBeChecked({ timeout: 5000 });
+
+    // Vent ferdig på en evt. debounced PUT (bounded), men ikke feil hvis den uteblir.
+    await beregningResponsePromise;
   }
 
   async velgInntektskilde(inntektskildetype: string): Promise<void> {
@@ -115,11 +123,17 @@ export class EuEosPensjonistTrygdeavgiftPage extends BasePage {
     await this.leggTilInntektKnapp.click();
   }
 
-  async velgInntektskildeForIndeks(index: number, label: string): Promise<void> {
+  /**
+   * Velger inntektskilde for en gitt rad-indeks.
+   *
+   * Tar value-koden (f.eks. INNTEKTSKILDE.UFØRETRYGD), samme konvensjon som
+   * {@link velgInntektskilde}, slik at begge API-ene er konsistente.
+   */
+  async velgInntektskildeForIndeks(index: number, inntektskildetype: string): Promise<void> {
     const dropdown = this.inntektskildeForIndeks(index);
     await dropdown.waitFor({ state: 'visible', timeout: 15000 });
     await expect(dropdown).toBeEnabled();
-    await dropdown.selectOption({ label });
+    await dropdown.selectOption({ value: inntektskildetype });
   }
 
   async fyllInnBruttoinntektForIndeksMedApiVent(index: number, beløp: string): Promise<void> {

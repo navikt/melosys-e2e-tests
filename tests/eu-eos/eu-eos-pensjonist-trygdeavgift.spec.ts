@@ -5,7 +5,15 @@ import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import { EuEosPensjonistInngangPage } from '../../pages/behandling/eu-eos-pensjonist-inngang.page';
 import { EuEosPensjonistTrygdeavgiftPage } from '../../pages/trygdeavgift/eu-eos-pensjonist-trygdeavgift.page';
-import { AARSAK, BEHANDLINGSTEMA, SAKSTEMA, SAKSTYPER, USER_ID_VALID } from '../../pages/shared/constants';
+import {
+  AARSAK,
+  ARBEIDSLAND,
+  BEHANDLINGSTEMA,
+  INNTEKTSKILDE,
+  SAKSTEMA,
+  SAKSTYPER,
+  USER_ID_VALID,
+} from '../../pages/shared/constants';
 import { waitForProcessInstances } from '../../helpers/api-helper';
 import { UnleashHelper } from '../../helpers/unleash-helper';
 import { hentMinstebeløp } from '../../helpers/trygdeavgift-beregning-helper';
@@ -69,17 +77,16 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
     const inngang = new EuEosPensjonistInngangPage(page);
     await inngang.ventPåSideLastet();
     await inngang.fyllInnPeriode(helÅrFra, helÅrTil);
-    await inngang.velgBostedsland('SE');
+    await inngang.velgBostedsland(ARBEIDSLAND.SWEDEN);
     await inngang.klikkBekreftOgFortsett();
 
     const trygdeavgift = new EuEosPensjonistTrygdeavgiftPage(page);
     await trygdeavgift.ventPåSideLastet();
     await trygdeavgift.velgIkkeSkattepliktig();
-    await trygdeavgift.velgInntektskilde('PENSJON');
+    await trygdeavgift.velgInntektskilde(INNTEKTSKILDE.PENSJON);
     await trygdeavgift.fyllInnBruttoinntektMedApiVent(månedsinntektUnder);
 
-    await trygdeavgift.assertions.verifiserInfomeldingMinstebeløpSynlig();
-    await trygdeavgift.assertions.verifiserTrygdeavgiftsTabellIkkeSynlig();
+    await trygdeavgift.assertions.verifiserMinstebeløpModus();
   });
 
   // 25%-regel → tabell med * i sats-kolonnen og fotnote
@@ -97,13 +104,13 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
     const inngang = new EuEosPensjonistInngangPage(page);
     await inngang.ventPåSideLastet();
     await inngang.fyllInnPeriode(helÅrFra, helÅrTil);
-    await inngang.velgBostedsland('SE');
+    await inngang.velgBostedsland(ARBEIDSLAND.SWEDEN);
     await inngang.klikkBekreftOgFortsett();
 
     const trygdeavgift = new EuEosPensjonistTrygdeavgiftPage(page);
     await trygdeavgift.ventPåSideLastet();
     await trygdeavgift.velgIkkeSkattepliktig();
-    await trygdeavgift.velgInntektskilde('PENSJON');
+    await trygdeavgift.velgInntektskilde(INNTEKTSKILDE.PENSJON);
     await trygdeavgift.fyllInnBruttoinntektMedApiVent(månedsinntektFor25ProsentRegel);
 
     await trygdeavgift.assertions.verifiserTrygdeavgiftsTabellSynlig();
@@ -127,18 +134,18 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
     const inngang = new EuEosPensjonistInngangPage(page);
     await inngang.ventPåSideLastet();
     await inngang.fyllInnPeriode(helÅrFra, helÅrTil);
-    await inngang.velgBostedsland('SE');
+    await inngang.velgBostedsland(ARBEIDSLAND.SWEDEN);
     await inngang.klikkBekreftOgFortsett();
 
     const trygdeavgift = new EuEosPensjonistTrygdeavgiftPage(page);
     await trygdeavgift.ventPåSideLastet();
     await trygdeavgift.velgIkkeSkattepliktig();
 
-    await trygdeavgift.velgInntektskilde('PENSJON');
+    await trygdeavgift.velgInntektskilde(INNTEKTSKILDE.PENSJON);
     await trygdeavgift.fyllInnBruttoinntektMedApiVent(månedsinntektPerKilde);
 
     await trygdeavgift.klikkLeggTilInntekt();
-    await trygdeavgift.velgInntektskildeForIndeks(1, 'Uføretrygd');
+    await trygdeavgift.velgInntektskildeForIndeks(1, INNTEKTSKILDE.UFØRETRYGD);
     await trygdeavgift.fyllInnBruttoinntektForIndeksMedApiVent(1, månedsinntektPerKilde);
 
     await trygdeavgift.assertions.verifiserTrygdeavgiftsTabellSynlig();
@@ -154,13 +161,13 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
     const inngang = new EuEosPensjonistInngangPage(page);
     await inngang.ventPåSideLastet();
     await inngang.fyllInnPeriode(helÅrFra, helÅrTil);
-    await inngang.velgBostedsland('SE');
+    await inngang.velgBostedsland(ARBEIDSLAND.SWEDEN);
     await inngang.klikkBekreftOgFortsett();
 
     const trygdeavgift = new EuEosPensjonistTrygdeavgiftPage(page);
     await trygdeavgift.ventPåSideLastet();
     await trygdeavgift.velgIkkeSkattepliktig();
-    await trygdeavgift.velgInntektskilde('PENSJON');
+    await trygdeavgift.velgInntektskilde(INNTEKTSKILDE.PENSJON);
     await trygdeavgift.fyllInnBruttoinntektMedApiVent('200000');
 
     await trygdeavgift.assertions.verifiserTrygdeavgiftsTabellSynlig();

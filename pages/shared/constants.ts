@@ -59,6 +59,15 @@ export const BEHANDLINGSTYPE = {
   ÅRSAVREGNING: 'ÅRSAVREGNING',
 } as const;
 
+// Inntektskilde-kildetyper (value-koder) for EU/EØS Pensjonist trygdeavgift-dropdown.
+// Speiler MKV.Koder.inntektskildetype i melosys-web: <option value={kt.kode}> bruker
+// kt.kode som value, og for behandlingstema PENSJONIST er kodene PENSJON og UFØRETRYGD
+// (se felleskomponenter/trygdeavgift/komponenter/inntektskilder.tsx).
+export const INNTEKTSKILDE = {
+  PENSJON: 'PENSJON',
+  UFØRETRYGD: 'UFØRETRYGD',
+} as const;
+
 // Trygdeavtale constants
 export const ARBEIDSLAND = {
   AUSTRALIA: 'AU',

@@ -29,15 +29,19 @@ export class EuEosPensjonistTrygdeavgiftAssertions {
   }
 
   /**
-   * Verifiserer at beregningstabellen ikke er synlig.
+   * Verifiserer "under minstebeløp"-modus: infomeldingen er synlig OG
+   * beregningstabellen er fraværende.
    *
-   * Forutsetning: Kall etter `verifiserInfomeldingMinstebeløpSynlig()` for å sikre
-   * at React har ferdig-rendret siden (infomeldingen garanterer at beregningen er fullført).
-   * Uten denne forutsetningen kan assertion-en bestå for tidlig, siden assertionstimeout
-   * kan utløpe før tabellen eventuelt dukker opp i en sen React-render.
+   * Rekkefølgen håndheves bevisst: infomeldingen ventes på først (garanterer at
+   * beregningen er fullført og React har ferdig-rendret), deretter sjekkes at
+   * tabellen ikke finnes med `toHaveCount(0)`. I motsetning til `not.toBeVisible()`
+   * — som returnerer umiddelbart hvis elementet ikke er der akkurat nå og dermed kan
+   * bestå for tidlig — feiler `toHaveCount(0)` hvis tabellen dukker opp i en sen
+   * React-render innen default-timeout.
    */
-  async verifiserTrygdeavgiftsTabellIkkeSynlig(): Promise<void> {
-    await expect(this.page.getByRole('columnheader', { name: 'Trygdeperiode' })).not.toBeVisible();
+  async verifiserMinstebeløpModus(): Promise<void> {
+    await this.verifiserInfomeldingMinstebeløpSynlig();
+    await expect(this.page.getByRole('columnheader', { name: 'Trygdeperiode' })).toHaveCount(0);
   }
 
   /**

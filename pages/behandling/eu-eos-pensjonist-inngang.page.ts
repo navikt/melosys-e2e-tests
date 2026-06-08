@@ -32,9 +32,9 @@ export class EuEosPensjonistInngangPage extends BasePage {
   }
 
   async ventPåSideLastet(): Promise<void> {
-    await this.page
-      .getByRole('heading', { name: 'Oppgi opplysninger fra attest / S1', level: 1 })
-      .waitFor({ state: 'visible', timeout: 15000 });
+    // Selve heading-sjekken er en assertion og eies av assertions-fila
+    // (single source of truth). Page-metoden beholdes som lesbart steg-API.
+    await this.assertions.verifiserSideLastet();
   }
 
   async fyllInnFraDato(dato: string): Promise<void> {
