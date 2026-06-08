@@ -83,44 +83,9 @@ test.describe('EU/EØS 13.1 - Arbeid i flere land', () => {
       'Ytterligere informasjon om behandlingen'
     );
 
-    // Alternativ 2: Steg-for-steg kontroll (kommentert ut, men kan brukes for mer detaljert testing)
-    /*
-    // Steg 1: Bekreft første steg (periode og land er allerede fylt)
-    await behandling.klikkBekreftOgFortsett();
-
-    // Steg 2: Velg hovedland (Norge)
-    await behandling.velgLandRadio('Norge');
-    await behandling.klikkBekreftOgFortsett();
-
-    // Steg 3: Velg arbeidsgiver
-    await behandling.velgArbeidsgiver('Ståles Stål AS');
-    await behandling.klikkBekreftOgFortsett();
-
-    // Steg 4: Svar på arbeidslokasjon-spørsmål
-    await behandling.velgArbeidUtføresILandSomEr();
-    await behandling.klikkBekreftOgFortsett();
-
-    // Steg 5: Velg arbeidstype
-    await behandling.velgLønnetArbeidIToEllerFlereLand();
-    await behandling.klikkBekreftOgFortsett();
-
-    // Steg 6: Velg prosentandel
-    await behandling.velgProsentEllerMer();
-    await behandling.klikkBekreftOgFortsett();
-
-    // Steg 7: Fyll inn fritekst-felter
-    await behandling.fyllInnFritekstTilBegrunnelse('Lorem ipsum dolor sit amet');
-    await behandling.fyllInnYtterligereInformasjon('Ytterligere informasjon om behandlingen');
-
-    // Steg 8: Fatt vedtak
-    await behandling.fattVedtak();
-    */
-
     console.log('✅ "Arbeid i flere land" arbeidsflyt fullført med POM');
 
-    // Database-verifisering (valgfri - kan kommenteres inn ved behov)
-    /*
+    // Database-verifisering: behandlingstema ARBEID_FLERE_LAND, lovvalgsland NO og persistert vedtak
     await behandling.assertions.verifiserKomplettBehandling(USER_ID_VALID, 'NO');
-    */
   });
 });

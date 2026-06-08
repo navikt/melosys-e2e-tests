@@ -147,7 +147,10 @@ async function replayExchange(
  * The race occurs when HENT_REGISTEROPPLYSNINGER saga and frontend
  * oppfriskning both write to SaksopplysningKilde simultaneously.
  */
-test.describe('API Replay - Arbeid i flere land', () => {
+// @manual: diagnostisk repro-harness for SaksopplysningKilde-racet (OptimisticLockingFailureException).
+// Krever LOCAL_AUTH_TOKEN + recordings/*.json, og hard-feiler ikke på mismatch (eneste signal er
+// docker-logs-fixturen). Ikke en CI-regresjonstest — kjøres bevisst manuelt. Se audit 2026-06-08.
+test.describe('API Replay - Arbeid i flere land @manual', () => {
   test('replay recorded API sequence with original timing', async () => {
     test.setTimeout(120_000);
 
