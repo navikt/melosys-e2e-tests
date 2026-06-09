@@ -71,27 +71,18 @@ export class EuEosSkipBehandlingAssertions extends EuEosBehandlingAssertions {
    * @param fnr - Fødselsnummer for personen
    * @returns Behandling ID
    */
-  override async verifiserBehandlingIDatabase(fnr: string): Promise<string> {
+  override async verifiserBehandlingIDatabase(_fnr: string): Promise<string> {
     return await withDatabase(async (db) => {
-      const sak = await db.queryOne(
-        'SELECT * FROM SAK WHERE personnummer = :pnr ORDER BY SAK_ID DESC',
-        { pnr: fnr }
-      );
-
-      expect(sak).not.toBeNull();
-      console.log(`✅ Fant sak i database: SAK_ID=${sak.SAK_ID}`);
-
+      // Nyeste behandling = testens (ren DB per cleanup-fixture). Skjemaet har ingen SAK-tabell/
+      // personnummer-join; PK heter ID. (Skip-spesifikt tema asserteres ikke i denne overriden.)
       const behandling = await db.queryOne(
-        'SELECT * FROM BEHANDLING WHERE sak_id = :sakId ORDER BY BEHANDLING_ID DESC',
-        { sakId: sak.SAK_ID }
+        `SELECT ID, BEH_TEMA FROM BEHANDLING ORDER BY REGISTRERT_DATO DESC`
       );
 
       expect(behandling).not.toBeNull();
-      console.log(
-        `✅ Fant behandling i database: BEHANDLING_ID=${behandling.BEHANDLING_ID}`
-      );
+      console.log(`✅ Fant behandling i database: ID=${behandling.ID} (${behandling.BEH_TEMA})`);
 
-      return behandling.BEHANDLING_ID;
+      return behandling.ID;
     });
   }
 
