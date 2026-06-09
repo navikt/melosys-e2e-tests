@@ -68,11 +68,11 @@ test.describe('Søk og navigasjon', () => {
 
     // Step 3: Verify no "Vis behandling" button (no results found)
     console.log('📝 Step 3: Verifying no results...');
-    const visBehandlingButton = page.getByRole('button', { name: 'Vis behandling' });
-    const hasResults = await visBehandlingButton.isVisible({ timeout: 3000 }).catch(() => false);
-
     // DB er deterministisk tom per cleanup-fixture, så ukjent FNR SKAL ikke gi treff.
-    expect(hasResults, 'Ukjent FNR skal ikke gi søketreff').toBe(false);
+    // toHaveCount(0) er robust mot strict-mode: med isVisible().catch(()=>false) ville flere
+    // treff ha kastet og blitt svelget til false → en regresjon med treff hadde passert.
+    const visBehandlingButton = page.getByRole('button', { name: 'Vis behandling' });
+    await expect(visBehandlingButton, 'Ukjent FNR skal ikke gi søketreff').toHaveCount(0);
     console.log('✅ Correctly showed no results for unknown user');
   });
 
