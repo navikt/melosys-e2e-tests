@@ -82,33 +82,6 @@ export class ArbeidFlereLandBehandlingAssertions {
   }
 
   /**
-   * Verifiser periode-datoer i databasen
-   *
-   * @param fnr - Brukerens personnummer
-   * @param fraOgMed - Forventet startdato (DD.MM.YYYY)
-   * @param tilOgMed - Forventet sluttdato (DD.MM.YYYY)
-   */
-  async verifiserPeriodeIDatabase(
-    _fnr: string,
-    fraOgMed: string,
-    tilOgMed: string
-  ): Promise<void> {
-    await withDatabase(async (db) => {
-      // Nyeste lovvalgsperiode (ren DB per fixture). Kolonnene heter FOM_DATO/TOM_DATO.
-      const result = await db.queryOne(
-        `SELECT TO_CHAR(FOM_DATO, 'DD.MM.YYYY') as FOM_DATO,
-                TO_CHAR(TOM_DATO, 'DD.MM.YYYY') as TOM_DATO
-         FROM LOVVALG_PERIODE ORDER BY ID DESC`
-      );
-
-      expect(result).not.toBeNull();
-      expect(result.FOM_DATO).toBe(fraOgMed);
-      expect(result.TOM_DATO).toBe(tilOgMed);
-      console.log(`✅ Verifisert periode i database: ${fraOgMed} - ${tilOgMed}`);
-    });
-  }
-
-  /**
    * Verifiser at vedtak ble fattet (VEDTAK-tabellen)
    *
    * @param fnr - Brukerens personnummer
