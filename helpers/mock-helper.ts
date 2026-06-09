@@ -99,6 +99,39 @@ export async function findNewNavFormatSed(
 }
 
 /**
+ * Find the newest NAV-format SED document (full RinaDocumentInfo, incl. caseId)
+ * that was not present in a previous snapshot.
+ *
+ * Like {@link findNewNavFormatSed}, but returns the whole document — needed when
+ * the caller must know the RINA case id (`caseId` === rinaSaksnummer) of the
+ * outgoing SED, e.g. to reply on the SAME BUC by injecting an inbound SED with
+ * that rinaSaksnummer (the A001 → A002/A011 anmodning-om-unntak svar flow).
+ */
+export async function findNewRinaSedDocument(
+  request: APIRequestContext,
+  sedType: string,
+  before: RinaDocumentInfo[],
+  timeoutMs = 30000
+): Promise<RinaDocumentInfo> {
+  const beforeKeys = new Set(before.map(d => `${d.caseId}:${d.documentId}`));
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const after = await fetchStoredSedDocuments(request, sedType);
+    const navFormatDocs = after.filter(d => {
+      if (beforeKeys.has(`${d.caseId}:${d.documentId}`)) return false;
+      const c = d.content as Record<string, any>;
+      return c.sed !== undefined && c.sedVer !== undefined;
+    });
+    if (navFormatDocs.length > 0) {
+      return navFormatDocs[navFormatDocs.length - 1];
+    }
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+  throw new Error(`Timed out waiting for NAV-format ${sedType} document (${timeoutMs}ms)`);
+}
+
+/**
  * A journalpost stored in the SAF mock.
  * Mirrors JournalpostModell in melosys-mock.
  */
@@ -210,6 +243,34 @@ export async function fetchMedlPeriode(
   const response = await request.get(`http://localhost:8083/api/v1/medlemskapsunntak/${periodeId}`);
   if (!response.ok()) {
     throw new Error(`Failed to fetch MEDL periode ${periodeId}: ${response.status()}`);
+  }
+  return response.json();
+}
+
+/**
+ * An oppgave stored in the melosys-mock Oppgave register.
+ * Mirrors the relevant fields of Oppgave in melosys-mock's OppgaveApi.
+ */
+export interface OppgaveInfo {
+  id: number;
+  oppgavetype: string | null;
+  status: string | null;
+  saksreferanse: string | null;
+  aktoerId: string | null;
+  behandlingstema: string | null;
+}
+
+/**
+ * Fetch all oppgaver stored in the melosys-mock Oppgave register.
+ *
+ * Used to assert oppgave transitions end-to-end — e.g. that exactly ONE
+ * behandlingsoppgave (oppgavetype BEH_SAK_MK) exists for a sak, guarding
+ * against the MELOSYS-6836 "to oppgaver" bug on svar-anmodning-om-unntak.
+ */
+export async function fetchOppgaver(request: APIRequestContext): Promise<OppgaveInfo[]> {
+  const response = await request.get('http://localhost:8083/testdata/verification/oppgave');
+  if (!response.ok()) {
+    throw new Error(`Failed to fetch oppgaver: ${response.status()}`);
   }
   return response.json();
 }
