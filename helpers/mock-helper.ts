@@ -175,6 +175,45 @@ export async function findNewUtgaaendeJournalpost(
   return null;
 }
 
+/**
+ * A MEDL membership-exception period stored in the melosys-mock MEDL register.
+ * Mirrors MedlemskapsunntakForGet in melosys-mock.
+ *
+ * The `status` field is a PeriodestatusMedl code: 'GYLD' (gyldig/active),
+ * 'AVST' (avsluttet/withdrawn — set when melosys-api avviser a period) or 'UAVK'.
+ */
+export interface MedlPeriodeInfo {
+  unntakId: number;
+  status: string | null;
+  grunnlag: string | null;
+  lovvalg: string | null;
+  lovvalgsland: string | null;
+  fraOgMed: string | null;
+  tilOgMed: string | null;
+  medlem: boolean | null;
+}
+
+/**
+ * Fetch a single MEDL membership-exception period from the melosys-mock MEDL
+ * register by its periode id (the value stored in lovvalg_periode.medlperiode_id).
+ *
+ * Used to verify MEDL transitions end-to-end — e.g. that a period was avvist
+ * (status flips GYLD → AVST) when a sak is annullert.
+ *
+ * @param request   - Playwright APIRequestContext
+ * @param periodeId - The MEDL periode id (lovvalg_periode.medlperiode_id)
+ */
+export async function fetchMedlPeriode(
+  request: APIRequestContext,
+  periodeId: number
+): Promise<MedlPeriodeInfo> {
+  const response = await request.get(`http://localhost:8083/api/v1/medlemskapsunntak/${periodeId}`);
+  if (!response.ok()) {
+    throw new Error(`Failed to fetch MEDL periode ${periodeId}: ${response.status()}`);
+  }
+  return response.json();
+}
+
 export interface MockClearResponse {
   message: string;
   journalpostCleared?: string | number;
