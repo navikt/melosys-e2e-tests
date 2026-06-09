@@ -56,7 +56,8 @@ test.describe('EU/EØS - Nyvurdering (MEDL-overføring)', () => {
 
         await waitForProcessInstances(page.request, 30);
         await hovedside.goto();
-        await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).click();
+        // Robust mot async saksoversikt-lasting (reload-retry) i stedet for rå link-klikk
+        await hovedside.åpneBehandling('TRIVIELL KARAFFEL -');
         await page.waitForLoadState('networkidle');
 
         console.log('📝 Del A: Fullfører førstegangs behandling til vedtak...');
@@ -78,9 +79,9 @@ test.describe('EU/EØS - Nyvurdering (MEDL-overføring)', () => {
         await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
         await waitForProcessInstances(page.request, 30);
 
-        // Åpne den NYE aktive behandlingen (første lenke = nyeste)
+        // Åpne den NYE aktive behandlingen (åpneBehandling tar første lenke = nyeste, med reload-retry)
         await hovedside.goto();
-        await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).first().click();
+        await hovedside.åpneBehandling('TRIVIELL KARAFFEL -');
         await page.waitForLoadState('networkidle');
 
         // === DEL C: Forkort lovvalgsperioden og fatt nytt vedtak ===

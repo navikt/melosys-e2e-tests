@@ -53,7 +53,8 @@ test.describe('EU/EØS 12.1 - Iverksetting mottaker-kjede (UTSENDT_ARBEIDSTAKER)
 
         await waitForProcessInstances(page.request, 30);
         await hovedside.goto();
-        await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).click();
+        // Robust mot async saksoversikt-lasting (reload-retry) i stedet for rå link-klikk
+        await hovedside.åpneBehandling('TRIVIELL KARAFFEL -');
         await page.waitForLoadState('networkidle');
 
         // Gå gjennom behandlingen frem til (men ikke inkludert) "Fatt vedtak"

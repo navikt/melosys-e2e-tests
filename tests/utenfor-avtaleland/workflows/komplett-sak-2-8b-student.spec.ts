@@ -44,9 +44,9 @@ test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
         await opprettSak.opprettStandardSak(USER_ID_VALID);
         await opprettSak.assertions.verifiserBehandlingOpprettet();
 
-        // Step 2: Navigate to behandling
+        // Step 2: Navigate to behandling (robust mot async saksoversikt-lasting via reload-retry)
         console.log('📝 Step 2: Opening behandling...');
-        await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).click();
+        await hovedside.åpneBehandling('TRIVIELL KARAFFEL -');
 
         // Step 3: Fill Medlemskap (using dynamic dates to avoid year-boundary issues)
         const period = TestPeriods.standardPeriod;
