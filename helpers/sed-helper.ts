@@ -67,6 +67,17 @@ export interface SedConfig {
    * (LA_BUC_03) which fails its "open LA_BUC_02" check, and the reply SED is never sent.
    */
   opprettBucIRina?: boolean;
+  /**
+   * Svar på anmodning om unntak (Article 16) — set on inbound A002/A011 replies.
+   * Routes via melosys-api's SvarAnmodningUnntakSedRuter to the
+   * ANMODNING_OM_UNNTAK_SVAR process on the existing anmodning-behandling.
+   *   beslutning: 'INNVILGELSE' (A002 godkjent) | 'AVSLAG' (A011) | 'DELVIS_INNVILGELSE'
+   */
+  svarAnmodningUnntak?: {
+    beslutning: 'INNVILGELSE' | 'DELVIS_INNVILGELSE' | 'AVSLAG';
+    begrunnelse?: string;
+    delvisInnvilgetPeriode?: { fom: string; tom: string };
+  };
 }
 
 /**
