@@ -58,6 +58,15 @@ export interface SedConfig {
   sedType?: string;
   /** SED version (default: 1) */
   sedVersjon?: string;
+  /**
+   * When true, the mock also registers an OPEN BUC (of bucType) in the RINA store for the
+   * generated rinaSaksnummer, with the foreign sender as participant. Required for inbound
+   * SEDs that melosys-api must answer on the EXISTING BUC — e.g. an inbound A003 where Norway
+   * is designated (Norge utpekt) and replies with an outbound A012. Without it the direct
+   * mottak path leaves no BUC in RINA, melosys-api falls back to the file-based default BUC
+   * (LA_BUC_03) which fails its "open LA_BUC_02" check, and the reply SED is never sent.
+   */
+  opprettBucIRina?: boolean;
 }
 
 /**
