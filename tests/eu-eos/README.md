@@ -8,7 +8,7 @@ EU/EØS-saker håndterer tilfeller hvor arbeidstakere sendes ut til EU/EØS-land
 
 ## Testfiler
 
-### `eu-eos-fullfort-vedtak.spec.ts`
+### `eu-eos-12.1-utsent-arbeidstager-fullfort-vedtak.spec.ts`
 
 **Komplett arbeidsflyt test** som dekker:
 1. Opprett ny EU/EØS-sak (UTSENDT_ARBEIDSTAKER)
@@ -100,9 +100,14 @@ Verifiseringsmetoder for database og UI:
 - `verifiserIngenFeil()` - Ingen feil på siden
 - `verifiserBehandlingIDatabase(fnr)` - Verifiser behandling i DB
 - `verifiserLovvalgsperiodeIDatabase(fnr, land)` - Verifiser lovvalgsperiode i DB
-- `verifiserPeriodeIDatabase(fnr, fraOgMed, tilOgMed)` - Verifiser periode i DB
 - `verifiserVedtakIDatabase(fnr)` - Verifiser vedtak i DB
 - `verifiserKomplettBehandling(fnr, land)` - Komplett verifisering
+
+> **Merk:** `fnr`-argumentet brukes ikke som filter. Cleanup-fixturen tømmer Oracle-DB-en
+> før hver test, så assertion-metodene leser nyeste rad (høyest `id`) = testens behandling.
+> `land` = `LOVVALGSLAND` (landet hvis lovgivning gjelder), ikke destinasjonslandet — for en
+> norsk utsendt arbeidstaker er dette `'NO'`. Trenger du å assertere periode-datoer, gjør det
+> inline (se `eu-eos-12.1-iverksetting-mottaker-kjede.spec.ts`).
 
 ### `ArbeidFlereLandBehandlingPage`
 **Lokasjon:** `pages/behandling/arbeid-flere-land-behandling.page.ts`
@@ -137,9 +142,8 @@ Verifiseringsmetoder for "Arbeid i flere land" workflow:
 - `verifiserIngenFeil()` - Ingen feil på siden
 - `verifiserBehandlingIDatabase(fnr)` - Verifiser behandling (ARBEID_FLERE_LAND)
 - `verifiserLovvalgsperiodeIDatabase(fnr, land)` - Verifiser lovvalgsperiode
-- `verifiserPeriodeIDatabase(fnr, fraOgMed, tilOgMed)` - Verifiser periode
 - `verifiserVedtakIDatabase(fnr)` - Verifiser vedtak
-- `verifiserKomplettBehandling(fnr, land)` - Komplett verifisering
+- `verifiserKomplettBehandling(fnr, land)` - Komplett verifisering (jf. merknaden over om `fnr`/`land`)
 
 ## Konstanter
 
@@ -308,15 +312,17 @@ await behandling.fattVedtak();
 
 ## Database-verifisering
 
-Alle tester rydder automatisk data via cleanup-fixture. Du kan verifisere database-tilstand:
+Alle tester rydder automatisk data via cleanup-fixture, så assertion-metodene leser nyeste rad
+(`fnr` brukes ikke som filter). `land` = `LOVVALGSLAND` — for en norsk utsendt arbeidstaker er
+dette `'NO'`, ikke destinasjonslandet. Du kan verifisere database-tilstand:
 
 ```typescript
 await behandling.assertions.verifiserBehandlingIDatabase(USER_ID_VALID);
-await behandling.assertions.verifiserLovvalgsperiodeIDatabase(USER_ID_VALID, 'DK');
+await behandling.assertions.verifiserLovvalgsperiodeIDatabase(USER_ID_VALID, 'NO');
 await behandling.assertions.verifiserVedtakIDatabase(USER_ID_VALID);
 
-// Eller komplett verifisering
-await behandling.assertions.verifiserKomplettBehandling(USER_ID_VALID, 'DK');
+// Eller komplett verifisering (utelat land når domene-verdien er usikker)
+await behandling.assertions.verifiserKomplettBehandling(USER_ID_VALID);
 ```
 
 ## Kjøre tester
