@@ -226,9 +226,24 @@ export class VedtakPage extends BasePage {
       );
     }
 
+    // Sett opp respons-lytter FØR klikk: POST /api/saksflyt/vedtak/{id}/fatt er det
+    // kritiske endepunktet som faktisk oppretter vedtaket (kan ta 30-60s på CI).
+    // Uten denne ventingen var klikkFattVedtak «fire-and-forget» og en feilet/no-op
+    // fatte-vedtak passerte grønt. Speiler ArbeidFlereLandBehandlingPage.fattVedtak.
+    const fattResponse = this.page.waitForResponse(
+      response =>
+        response.url().includes('/api/saksflyt/vedtak/') &&
+        response.url().includes('/fatt') &&
+        response.request().method() === 'POST' &&
+        (response.status() === 200 || response.status() === 204),
+      { timeout: 60000 }
+    );
+
     // Normal click
     await this.fattVedtakButton.click();
-    console.log('✅ Workflow completed - Vedtak submitted');
+
+    const response = await fattResponse;
+    console.log(`✅ Vedtak fattet - API fullført: ${response.url()} -> ${response.status()}`);
   }
 
   /**

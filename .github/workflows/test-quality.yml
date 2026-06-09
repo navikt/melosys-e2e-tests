@@ -1,0 +1,31 @@
+name: Test Quality
+
+# Lett guardrail mot grønn-men-meningsløs e2e-test (jf. e2e-audit 2026-06-08).
+# Ren Node, ingen docker-stack — kjører på sekunder.
+
+on:
+  pull_request:
+    paths:
+      - 'tests/**'
+      - 'pages/**'
+      - 'scripts/check-vacuous-tests.mjs'
+  push:
+    branches: [main]
+    paths:
+      - 'tests/**'
+      - 'pages/**'
+      - 'scripts/check-vacuous-tests.mjs'
+
+permissions:
+  contents: read
+
+jobs:
+  check-vacuous-tests:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Sjekk for expect(true) og svelge-catcher
+        run: npm run check:tests

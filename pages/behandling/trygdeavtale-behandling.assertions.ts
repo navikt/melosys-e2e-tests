@@ -60,20 +60,15 @@ export class TrygdeavtaleBehandlingAssertions {
    * @param fnr - User's national ID
    * @param bestemmelse - Expected bestemmelse code (e.g., 'AUS_ART9_3')
    */
-  async verifiserBestemmelseIDatabase(fnr: string, bestemmelse: string): Promise<void> {
+  async verifiserBestemmelseIDatabase(_fnr: string, bestemmelse: string): Promise<void> {
     await withDatabase(async (db) => {
+      // Nyeste lovvalgsperiode (ren DB per fixture). Kolonnen heter LOVVALG_BESTEMMELSE.
       const result = await db.queryOne(
-        `SELECT lp.BESTEMMELSE, s.PERSONNUMMER
-         FROM LOVVALG_PERIODE lp
-         JOIN BEHANDLING b ON lp.BEHANDLING_ID = b.BEHANDLING_ID
-         JOIN SAK s ON b.SAK_ID = s.SAK_ID
-         WHERE s.personnummer = :pnr
-         ORDER BY lp.LOVVALG_PERIODE_ID DESC`,
-        { pnr: fnr }
+        `SELECT LOVVALG_BESTEMMELSE FROM LOVVALG_PERIODE ORDER BY ID DESC`
       );
 
       expect(result).not.toBeNull();
-      expect(result.BESTEMMELSE).toBe(bestemmelse);
+      expect(result.LOVVALG_BESTEMMELSE).toBe(bestemmelse);
       console.log(`✅ Verified bestemmelse in database: ${bestemmelse}`);
     });
   }
@@ -85,20 +80,15 @@ export class TrygdeavtaleBehandlingAssertions {
    * @param fnr - User's national ID
    * @param landkode - Expected country code (e.g., 'AU', 'SE')
    */
-  async verifiserArbeidslandIDatabase(fnr: string, landkode: string): Promise<void> {
+  async verifiserArbeidslandIDatabase(_fnr: string, landkode: string): Promise<void> {
     await withDatabase(async (db) => {
+      // Nyeste lovvalgsperiode. Land lagres i LOVVALGSLAND (ingen egen LAND-kolonne i skjemaet).
       const result = await db.queryOne(
-        `SELECT lp.LAND, s.PERSONNUMMER
-         FROM LOVVALG_PERIODE lp
-         JOIN BEHANDLING b ON lp.BEHANDLING_ID = b.BEHANDLING_ID
-         JOIN SAK s ON b.SAK_ID = s.SAK_ID
-         WHERE s.personnummer = :pnr
-         ORDER BY lp.LOVVALG_PERIODE_ID DESC`,
-        { pnr: fnr }
+        `SELECT LOVVALGSLAND FROM LOVVALG_PERIODE ORDER BY ID DESC`
       );
 
       expect(result).not.toBeNull();
-      expect(result.LAND).toBe(landkode);
+      expect(result.LOVVALGSLAND).toBe(landkode);
       console.log(`✅ Verified arbeidsland in database: ${landkode}`);
     });
   }
@@ -111,27 +101,21 @@ export class TrygdeavtaleBehandlingAssertions {
    * @param tilOgMed - Expected end date (DD.MM.YYYY)
    */
   async verifiserPeriodeIDatabase(
-    fnr: string,
+    _fnr: string,
     fraOgMed: string,
     tilOgMed: string
   ): Promise<void> {
     await withDatabase(async (db) => {
+      // Nyeste lovvalgsperiode (ren DB per fixture). Kolonnene heter FOM_DATO/TOM_DATO.
       const result = await db.queryOne(
-        `SELECT
-           TO_CHAR(lp.FRA_OG_MED, 'DD.MM.YYYY') as FRA_OG_MED,
-           TO_CHAR(lp.TIL_OG_MED, 'DD.MM.YYYY') as TIL_OG_MED,
-           s.PERSONNUMMER
-         FROM LOVVALG_PERIODE lp
-         JOIN BEHANDLING b ON lp.BEHANDLING_ID = b.BEHANDLING_ID
-         JOIN SAK s ON b.SAK_ID = s.SAK_ID
-         WHERE s.personnummer = :pnr
-         ORDER BY lp.LOVVALG_PERIODE_ID DESC`,
-        { pnr: fnr }
+        `SELECT TO_CHAR(FOM_DATO, 'DD.MM.YYYY') as FOM_DATO,
+                TO_CHAR(TOM_DATO, 'DD.MM.YYYY') as TOM_DATO
+         FROM LOVVALG_PERIODE ORDER BY ID DESC`
       );
 
       expect(result).not.toBeNull();
-      expect(result.FRA_OG_MED).toBe(fraOgMed);
-      expect(result.TIL_OG_MED).toBe(tilOgMed);
+      expect(result.FOM_DATO).toBe(fraOgMed);
+      expect(result.TOM_DATO).toBe(tilOgMed);
       console.log(`✅ Verified period in database: ${fraOgMed} - ${tilOgMed}`);
     });
   }

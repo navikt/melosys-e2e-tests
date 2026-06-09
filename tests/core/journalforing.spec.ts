@@ -8,19 +8,19 @@ import { USER_ID_VALID } from '../../pages/shared/constants';
 import { createJournalforingOppgaver } from '../../helpers/mock-helper';
 
 /**
- * Test suite for Journalføring (document registration) functionality
+ * @manual — hele Journalføring-suiten er midlertidig manuell (kjøres ikke i CI).
  *
- * Tests cover:
- * - Navigating to journalføring from task list
- * - Linking document to existing case (KNYTT)
- * - Creating new case from document (OPPRETT)
- * - Creating new assessment from document (NY_VURDERING)
+ * Status (e2e-audit 2026-06-08): alle 5 testene passerte tidligere uten å verifisere noe
+ * (gated bak if(journalforingCount>0)/if(saksnummer) med expect(true) i else; én happy-path
+ * var dessuten unåbar, og verifiserSakOpprettet inneholder null expect). De er nå hardnet med
+ * ekte assertions, men tagget @manual fordi de avhenger av at mock-tjenestens journalføring-
+ * oppgaver faktisk dukker opp i UI-lista (getJournalforingOppgaveAntall > 0) — en timing/
+ * pålitelighet vi ikke har kunnet verifisere uten lokal kjøring (delt Oracle-DB).
  *
- * Note: Journalføring tests require journalpost/oppgave data to exist.
- * This is typically created by the mock service or as a side effect of other operations.
- * Some tests may be skipped if no journalføring tasks are available.
+ * For å promotere til CI: kjør lokalt (MANUAL_TESTS=true), bekreft at createJournalforingOppgaver
+ * pålitelig gir journalforingCount>0, fiks TODO-ene under, og fjern @manual.
  */
-test.describe('Journalføring', () => {
+test.describe('Journalføring @manual', () => {
   let auth: AuthHelper;
   let hovedside: HovedsidePage;
   let oppgaver: OppgaverPage;
@@ -36,191 +36,140 @@ test.describe('Journalføring', () => {
   });
 
   test('skal kunne navigere til journalføring-side fra oppgave', async ({ page, request }) => {
-    // Step 1: Create journalføring oppgaver via mock service
     console.log('📝 Step 1: Creating journalføring oppgaver...');
     const created = await createJournalforingOppgaver(request, { antall: 1 });
+    expect(created, 'createJournalforingOppgaver skal lykkes').toBeTruthy();
 
-    if (!created) {
-      console.log('⚠️ Could not create journalføring oppgaver - skipping test');
-      expect(true).toBe(true);
-      return;
-    }
-
-    // Step 2: Go to forside and check for journalføring tasks
     console.log('📝 Step 2: Navigating to forside...');
     await hovedside.goto();
     await oppgaver.ventPåOppgaverLastet();
 
-    // Step 3: Check if there are any journalføring tasks
     console.log('📝 Step 3: Checking for journalføring tasks...');
     const journalforingCount = await oppgaver.getJournalforingOppgaveAntall();
     console.log(`   Found ${journalforingCount} journalføring oppgaver`);
+    expect(journalforingCount, 'Opprettet journalføring-oppgave skal vises i lista').toBeGreaterThan(0);
 
-    if (journalforingCount > 0) {
-      // Step 4: Click on the first journalføring task
-      console.log('📝 Step 4: Clicking on journalføring task...');
-      await oppgaver.klikkJournalforingOppgaveIndex(0);
+    console.log('📝 Step 4: Clicking on journalføring task...');
+    await oppgaver.klikkJournalforingOppgaveIndex(0);
 
-      // Step 5: Verify we're on journalføring page
-      console.log('📝 Step 5: Verifying navigation to journalføring...');
-      await oppgaver.assertions.verifiserNavigertTilJournalforing();
-      await journalforing.assertions.verifiserSideLaster();
+    console.log('📝 Step 5: Verifying navigation to journalføring...');
+    await oppgaver.assertions.verifiserNavigertTilJournalforing();
+    await journalforing.assertions.verifiserSideLaster();
 
-      console.log('✅ Successfully navigated to journalføring page');
-    } else {
-      console.log('ℹ️ No journalføring tasks visible (may take time to appear)');
-      expect(true).toBe(true);
-    }
+    console.log('✅ Successfully navigated to journalføring page');
   });
 
   test('skal vise journalføring-skjema med dokument', async ({ page, request }) => {
-    // Step 1: Create journalføring oppgaver
     console.log('📝 Step 1: Creating journalføring oppgaver...');
     await createJournalforingOppgaver(request, { antall: 1, medVedlegg: true });
 
-    // Step 2: Navigate to forside
     console.log('📝 Step 2: Navigating to forside...');
     await hovedside.goto();
     await oppgaver.ventPåOppgaverLastet();
 
     const journalforingCount = await oppgaver.getJournalforingOppgaveAntall();
     console.log(`   Found ${journalforingCount} journalføring oppgaver`);
+    expect(journalforingCount, 'Opprettet journalføring-oppgave skal vises i lista').toBeGreaterThan(0);
 
-    if (journalforingCount > 0) {
-      // Step 3: Navigate to journalføring
-      console.log('📝 Step 3: Opening journalføring task...');
-      await oppgaver.klikkJournalforingOppgaveIndex(0);
-      await journalforing.ventPåSkjemaLastet();
+    console.log('📝 Step 3: Opening journalføring task...');
+    await oppgaver.klikkJournalforingOppgaveIndex(0);
+    await journalforing.ventPåSkjemaLastet();
 
-      // Step 4: Verify form elements
-      console.log('📝 Step 4: Verifying form is ready...');
-      await journalforing.assertions.verifiserSkjemaKlart();
+    console.log('📝 Step 4: Verifying form is ready...');
+    await journalforing.assertions.verifiserSkjemaKlart();
 
-      // Step 5: Check if document is visible
-      console.log('📝 Step 5: Checking for document preview...');
-      const harDokument = await journalforing.erDokumentSynlig();
-      console.log(`   Document preview visible: ${harDokument}`);
+    // Oppgaven ble opprettet med medVedlegg:true, så dokument-preview SKAL vises (testens hele poeng).
+    console.log('📝 Step 5: Verifying document preview...');
+    expect(await journalforing.erDokumentSynlig(), 'Dokument-preview skal vises (medVedlegg:true)').toBe(true);
 
-      console.log('✅ Journalføring form is ready');
-    } else {
-      console.log('ℹ️ No journalføring tasks visible');
-      expect(true).toBe(true);
-    }
+    console.log('✅ Journalføring form with document is ready');
   });
 
   test('skal kunne knytte dokument til eksisterende sak', async ({ page, request }) => {
-    // Step 1: Create a case that we can link to
     console.log('📝 Step 1: Creating a case to link to...');
     await hovedside.gotoOgOpprettNySak();
     const opprettSak = new OpprettNySakPage(page);
     await opprettSak.opprettStandardSak(USER_ID_VALID);
     await opprettSak.assertions.verifiserBehandlingOpprettet();
 
-    // Extract saksnummer from URL if possible
+    // TODO: etter verifiserBehandlingOpprettet står vi på forsiden (/melosys/$), så saksnummer-regexen
+    // mot page.url() blir alltid null — happy-path var derfor tidligere unåbar. Hent saksnummer fra DB
+    // (withDatabase SELECT på FAGSAK for USER_ID_VALID) før KNYTT for å gjøre dette robust.
     const url = page.url();
-    let saksnummer: string | null = null;
     let match = url.match(/saksbehandling\/(\d{10,})/);
     if (!match) {
       match = url.match(/saksbehandling\/(MEL-\d+)/);
     }
-    saksnummer = match ? match[1] : null;
-
+    const saksnummer = match ? match[1] : null;
     console.log(`   Created case with saksnummer: ${saksnummer || 'unknown'}`);
+    expect(saksnummer, 'TODO: trenger pålitelig saksnummer-kilde (DB) — se kommentar').not.toBeNull();
 
-    // Step 2: Create journalføring oppgaver
     console.log('📝 Step 2: Creating journalføring oppgaver...');
     await createJournalforingOppgaver(request, { antall: 1 });
 
-    // Step 3: Check for journalføring tasks
     console.log('📝 Step 3: Checking for journalføring tasks...');
     await hovedside.goto();
     await oppgaver.ventPåOppgaverLastet();
-
     const journalforingCount = await oppgaver.getJournalforingOppgaveAntall();
     console.log(`   Found ${journalforingCount} journalføring oppgaver`);
+    expect(journalforingCount, 'Opprettet journalføring-oppgave skal vises i lista').toBeGreaterThan(0);
 
-    if (journalforingCount > 0 && saksnummer) {
-      // Step 4: Open journalføring
-      console.log('📝 Step 4: Opening journalføring...');
-      await oppgaver.klikkJournalforingOppgaveIndex(0);
-      await journalforing.ventPåSkjemaLastet();
+    console.log('📝 Step 4: Opening journalføring...');
+    await oppgaver.klikkJournalforingOppgaveIndex(0);
+    await journalforing.ventPåSkjemaLastet();
 
-      // Step 5: Link to existing case
-      console.log('📝 Step 5: Linking to existing case...');
-      await journalforing.knyttTilSak(saksnummer);
+    console.log('📝 Step 5: Linking to existing case...');
+    await journalforing.knyttTilSak(saksnummer!);
 
-      // Step 6: Verify success
-      console.log('📝 Step 6: Verifying journalføring success...');
-      await journalforing.assertions.verifiserJournalføringVellykket();
+    // TODO: verifiserJournalføringVellykket er lempelig (Promise.race i .catch). Erstatt med
+    // withDatabase-sjekk på at journalposten faktisk er koblet til fagsaken.
+    console.log('📝 Step 6: Verifying journalføring success...');
+    await journalforing.assertions.verifiserJournalføringVellykket();
 
-      console.log('✅ Successfully linked document to existing case');
-    } else {
-      console.log('ℹ️ Prerequisites not met for KNYTT test');
-      console.log(`   Journalføring tasks: ${journalforingCount}`);
-      console.log(`   Saksnummer: ${saksnummer || 'not found'}`);
-      expect(true).toBe(true);
-    }
+    console.log('✅ Successfully linked document to existing case');
   });
 
   test('skal kunne opprette ny sak fra journalpost', async ({ page, request }) => {
-    // Step 1: Create journalføring oppgaver
     console.log('📝 Step 1: Creating journalføring oppgaver...');
     await createJournalforingOppgaver(request, { antall: 1 });
 
-    // Step 2: Check for journalføring tasks
     console.log('📝 Step 2: Navigating to forside...');
     await hovedside.goto();
     await oppgaver.ventPåOppgaverLastet();
-
     const journalforingCount = await oppgaver.getJournalforingOppgaveAntall();
     console.log(`   Found ${journalforingCount} journalføring oppgaver`);
+    expect(journalforingCount, 'Opprettet journalføring-oppgave skal vises i lista').toBeGreaterThan(0);
 
-    if (journalforingCount > 0) {
-      // Step 3: Open journalføring
-      console.log('📝 Step 3: Opening journalføring...');
-      await oppgaver.klikkJournalforingOppgaveIndex(0);
-      await journalforing.ventPåSkjemaLastet();
+    console.log('📝 Step 3: Opening journalføring...');
+    await oppgaver.klikkJournalforingOppgaveIndex(0);
+    await journalforing.ventPåSkjemaLastet();
 
-      // Step 4: Create new case from document
-      // Use correct dropdown labels: "EU/EØS-land", "Avtaleland", "Utenfor avtaleland"
-      console.log('📝 Step 4: Filling form and submitting...');
-      await journalforing.opprettNySakOgJournalfør({
-        sakstype: 'EU/EØS-land',
-      });
+    console.log('📝 Step 4: Filling form and submitting...');
+    await journalforing.opprettNySakOgJournalfør({
+      sakstype: 'EU/EØS-land',
+    });
 
-      // Step 5: Verify case was created
-      console.log('📝 Step 5: Verifying case creation...');
-      await journalforing.assertions.verifiserSakOpprettet();
+    // TODO: verifiserSakOpprettet inneholder null expect og "lykkes" på enhver URL. Erstatt med en
+    // withDatabase-sjekk på at en ny FAGSAK/BEHANDLING faktisk ble opprettet fra journalposten
+    // (mønster: sed-mottak full-eessi-flow), og pin behandlingstype.
+    console.log('📝 Step 5: Verifying case creation...');
+    await journalforing.assertions.verifiserSakOpprettet();
 
-      console.log('✅ Successfully created new case from document');
-    } else {
-      console.log('ℹ️ No journalføring tasks visible');
-      expect(true).toBe(true);
-    }
+    console.log('✅ Successfully created new case from document');
   });
 
   test('skal håndtere journalføring-side uten data gracefully @expect-docker-errors', async ({ page }) => {
-    // Try to navigate directly to a non-existent journalpost
     console.log('📝 Step 1: Navigating to non-existent journalpost...');
-
-    // Navigate to a journalpost that doesn't exist
     await journalforing.gotoJournalpost('non-existent-123', 'non-existent-456');
 
-    // Step 2: Check how the page handles this
     console.log('📝 Step 2: Checking error handling...');
-
-    // The page should either:
-    // 1. Show an error message
-    // 2. Redirect to another page
-    // 3. Show empty state
-    const currentUrl = page.url();
     const hasError = await page.getByText(/ikke funnet|feil|error|404/i).isVisible().catch(() => false);
-
-    console.log(`   Current URL: ${currentUrl}`);
+    console.log(`   Current URL: ${page.url()}`);
     console.log(`   Error message visible: ${hasError}`);
 
-    // Test passes as long as the page doesn't crash
-    console.log('✅ Page handles missing data gracefully');
-    expect(true).toBe(true);
+    // TODO: definer den faktiske produktkontrakten for en ikke-eksisterende journalpost og
+    // hard-asserter den (verifiserFeilmelding(/ikke funnet/) ELLER toHaveURL-redirect til forside).
+    // Inntil kontrakten er bekreftet lokalt er dette kun en røyktest på at siden ikke kræsjer.
+    console.log('✅ Page handled missing data without crashing');
   });
 });
