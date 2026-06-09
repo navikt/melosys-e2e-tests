@@ -43,6 +43,10 @@ export class AnnulleringAssertions {
      * @param medlPeriodeId - MEDL-periode-id fra den opprinnelige lovvalgsperioden
      */
     async verifiserAnnulleringIverksatt(request: APIRequestContext, medlPeriodeId: number): Promise<void> {
+        // Databasen renses før hver test (cleanup-fixture), så "nyeste rad" / "eneste rad"
+        // = denne testens behandling. Derfor trengs ingen tidsfilter på prosessinstans-
+        // spørringene nedenfor (et SYSDATE-vindu ville bare vært sårbart for klokkeskew
+        // mellom api- og oracle-containeren).
         await withDatabase(async (db) => {
             // === Fagsak satt til ANNULLERT ===
             const fagsak = await db.queryOne<{ SAKSNUMMER: string; STATUS: string }>(
@@ -78,13 +82,12 @@ export class AnnulleringAssertions {
 
             // === Ingen feilede prosessinstanser + ANNULLER_SAK fullført ===
             const feilede = await db.query<{ PROSESS_TYPE: string; STATUS: string }>(
-                `SELECT prosess_type, status FROM prosessinstans
-                 WHERE status = 'FEILET' AND registrert_dato > SYSDATE - INTERVAL '15' MINUTE`, {});
+                `SELECT prosess_type, status FROM prosessinstans WHERE status = 'FEILET'`, {});
             expect(feilede, `Forventet ingen feilede prosessinstanser, fant: ${JSON.stringify(feilede)}`).toHaveLength(0);
 
             const annullerProsess = await db.queryOne<{ STATUS: string; SIST_FULLFORT_STEG: string }>(
                 `SELECT status, sist_fullfort_steg FROM prosessinstans
-                 WHERE prosess_type = 'ANNULLER_SAK' AND registrert_dato > SYSDATE - INTERVAL '15' MINUTE
+                 WHERE prosess_type = 'ANNULLER_SAK'
                  ORDER BY registrert_dato DESC FETCH FIRST 1 ROWS ONLY`, {});
             expect(annullerProsess, 'Forventet en ANNULLER_SAK-prosessinstans').not.toBeNull();
             expect(annullerProsess!.STATUS, 'ANNULLER_SAK skal være FERDIG').toBe('FERDIG');
