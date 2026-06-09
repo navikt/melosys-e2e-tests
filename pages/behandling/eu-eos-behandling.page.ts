@@ -508,6 +508,22 @@ export class EuEosBehandlingPage extends BasePage {
   }
 
   /**
+   * Velg obligatorisk "grunn for nytt vedtak" på vedtak-steget.
+   * For en nyvurdering (NV) er feltet påkrevd, og "Fatt vedtak" forblir
+   * deaktivert til en grunn er valgt.
+   *
+   * @param grunn - Grunn-kode (f.eks. 'FEIL_I_BEHANDLING')
+   */
+  async velgGrunnForNyttVedtak(grunn: string): Promise<void> {
+    const dropdown = this.page.getByRole('combobox', {
+      name: /Oppgi grunn for nytt vedtak/
+    });
+    await dropdown.waitFor({ state: 'visible', timeout: 10000 });
+    await dropdown.selectOption(grunn);
+    console.log(`✅ Valgte grunn for nytt vedtak: ${grunn}`);
+  }
+
+  /**
    * Klikk "Fatt vedtak" knapp for å fullføre behandlingen
    * EU/EØS fatter vedtak direkte uten egen vedtaksside
    *

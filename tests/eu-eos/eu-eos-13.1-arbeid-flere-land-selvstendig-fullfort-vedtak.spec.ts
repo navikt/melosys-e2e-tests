@@ -1,4 +1,4 @@
-import { test } from '../../fixtures';
+import { test, expect } from '../../fixtures';
 import { AuthHelper } from '../../helpers/auth-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
@@ -6,6 +6,7 @@ import { EuEosBehandlingPage } from '../../pages/behandling/eu-eos-behandling.pa
 import { ArbeidFlereLandBehandlingPage } from '../../pages/behandling/arbeid-flere-land-behandling.page';
 import { USER_ID_VALID, EU_EOS_LAND } from '../../pages/shared/constants';
 import { waitForProcessInstances } from '../../helpers/api-helper';
+import { fetchStoredSedDocuments, findNewNavFormatSed } from '../../helpers/mock-helper';
 
 /**
  * EU/EØS 13.1 - Arbeid i flere land (Selvstendig næringsvirksomhet variant)
@@ -29,7 +30,7 @@ import { waitForProcessInstances } from '../../helpers/api-helper';
  * Denne testen dekker varianten med selvstendig næringsvirksomhet og SED-dokument popup.
  */
 test.describe('EU/EØS 13.1 - Arbeid i flere land (Selvstendig variant)', () => {
-  test('skal fullføre "Arbeid i flere land" med selvstendig næringsvirksomhet og SED-dokument', async ({ page }) => {
+  test('skal fullføre "Arbeid i flere land" med selvstendig næringsvirksomhet og SED-dokument', async ({ page, request }) => {
     // Øk test timeout til 120 sekunder (vedtak kan ta lang tid på CI)
     test.setTimeout(120000);
 
@@ -105,14 +106,34 @@ test.describe('EU/EØS 13.1 - Arbeid i flere land (Selvstendig variant)', () => 
     // Steg 8: Velg institusjon som skal motta SED
     await behandling.velgInstitusjonSomSkalMottaSed('Sverige');
 
+    // Snapshot A003-dokumenter før vedtak (SED sendes ved iverksetting av vedtak)
+    const docsBefore = await fetchStoredSedDocuments(request, 'A003');
+
     // Steg 9: Fatt vedtak
     await behandling.fattVedtak();
 
     console.log('✅ "Arbeid i flere land" (Selvstendig variant) arbeidsflyt fullført med POM');
 
-    // Database-verifisering (valgfri - kan kommenteres inn ved behov)
-    /*
-    await behandling.assertions.verifiserKomplettBehandling(USER_ID_VALID, 'NO');
-    */
+    // === Verifiser SED A003-innhold (lovvalgsvedtak til utland) ===
+    // Gap: a003-ut-innholds-assertion. A003 sendes implisitt av flere vedtak-tester,
+    // men ingen asserterer innholdet slik A001/A008 gjøres.
+    const sedContent = await findNewNavFormatSed(request, 'A003', docsBefore);
+    expect(sedContent.sed).toBe('A003');
+    expect(sedContent.sedVer).toBe('4');
+    expect(sedContent.sedGVer).toBe('4');
+
+    const medlemskap = sedContent.medlemskap as Record<string, any>;
+
+    // Artikkel: selvstendig næringsvirksomhet i flere land = art. 13(2)(a)
+    expect(medlemskap.relevantartikkelfor8832004eller9872009).toBe('13_2_a');
+
+    // Lovvalgsland og vedtaksperiode skal speile saken (NO, 19.11.2025–18.11.2026)
+    const vedtak = medlemskap.vedtak as Record<string, any>;
+    expect(vedtak.land).toBe('NO');
+    expect(vedtak.gjelderperiode?.startdato).toBe('2025-11-19');
+    expect(vedtak.gjelderperiode?.sluttdato).toBe('2026-11-18');
+    expect(vedtak.eropprinneligvedtak).toBe('ja');
+
+    console.log('✅ SED A003-innhold verifisert (art. 13(2)(a), lovvalgsland NO, periode 19.11.2025–18.11.2026)');
   });
 });
