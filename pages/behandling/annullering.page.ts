@@ -1,5 +1,6 @@
 import {Page} from '@playwright/test';
 import {BasePage} from '../shared/base.page';
+import {AnnulleringAssertions} from './annullering.assertions';
 
 /**
  * Page Object for annulling (cancelling) a behandling
@@ -12,8 +13,11 @@ import {BasePage} from '../shared/base.page';
  * @example
  * const annullering = new AnnulleringPage(page);
  * await annullering.annullerSak();
+ * await annullering.assertions.verifiserAnnulleringIverksatt(request, medlPeriodeId);
  */
 export class AnnulleringPage extends BasePage {
+    readonly assertions: AnnulleringAssertions;
+
     private readonly behandlingsmenyButton = this.page.getByRole('button', {name: 'Behandlingsmeny'});
     private readonly avsluttBehandlingButton = this.page.getByRole('button', {name: 'Avslutt behandling'});
     private readonly sakenErAnnullertButton = this.page.getByRole('button', {name: 'Saken er annullert'});
@@ -21,6 +25,7 @@ export class AnnulleringPage extends BasePage {
 
     constructor(page: Page) {
         super(page);
+        this.assertions = new AnnulleringAssertions(page);
     }
 
     async åpneBehandlingsmeny(): Promise<void> {
