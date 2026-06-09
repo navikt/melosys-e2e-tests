@@ -16,6 +16,9 @@ on:
       - 'pages/**'
       - 'scripts/check-vacuous-tests.mjs'
 
+permissions:
+  contents: read
+
 jobs:
   check-vacuous-tests:
     runs-on: ubuntu-latest
