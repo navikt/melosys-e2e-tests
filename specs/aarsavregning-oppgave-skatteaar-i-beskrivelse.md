@@ -1,7 +1,7 @@
 ---
 jira: MELOSYS-8123
 epic: MELOSYS-6579 — Automatisk opprette årsavregningsbehandlinger på ikke skattepliktige
-status: implemented
+status: verified
 test: tests/utenfor-avtaleland/workflows/arsavregning-oppgave-aar-i-beskrivelse.spec.ts
 toggles: {}        # default-state; per-trigger-koreografi av melosys.faktureringskomponenten.ikke-tidligere-perioder er testmekanikk (se binding)
 tags: [årsavregning, oppgave, gosys, skattehendelse, ikke-skattepliktig, ftrl]
