@@ -86,6 +86,25 @@ export class EuEosPensjonistBehandlingPage extends BasePage {
     });
   }
 
+  /**
+   * Gå videre fra periode-steget når Trygdeavgift-steget er TOMT.
+   *
+   * Når hele perioden ligger i et tidligere år (og default-togglene står, dvs.
+   * `melosys.faktureringskomponenten.ikke-tidligere-perioder` er PÅ) viser
+   * Trygdeavgift-steget kun varselet «Trygdeavgift for tidligere år skal
+   * fastsettes på årsavregning…» — ingen skattepliktig/inntekt-felter. Da kan
+   * vi ikke vente på skattepliktig-gruppen slik klikkBekreftOgFortsett gjør;
+   * vi venter på varselet i stedet.
+   */
+  async klikkBekreftOgFortsettTilTomtTrygdeavgiftSteg(): Promise<void> {
+    await this.clickStepButtonWithRetry(this.bekreftOgFortsettButton, {
+      waitForContent: this.page
+        .getByText(/tidligere år skal fastsettes på årsavregning/i)
+        .first(),
+      verifyHeadingChange: true,
+    });
+  }
+
   async klikkBekreftOgSend(): Promise<void> {
     await this.bekreftOgSendButton.waitFor({ state: 'visible', timeout: TIMEOUT_LONG });
     await expect(this.bekreftOgSendButton).toBeEnabled({ timeout: TIMEOUT_LONG });
