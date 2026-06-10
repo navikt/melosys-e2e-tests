@@ -258,6 +258,8 @@ export interface OppgaveInfo {
   saksreferanse: string | null;
   aktoerId: string | null;
   behandlingstema: string | null;
+  tema: string | null;
+  beskrivelse: string | null;
 }
 
 /**
