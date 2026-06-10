@@ -166,6 +166,19 @@ export const TestPeriods = {
       end: formatDateNorwegian(end),
     };
   },
+
+  /**
+   * Full current year period (Jan 1st to Dec 31st of current year)
+   * Useful when fakturaserie-assertions need a deterministic full-year split
+   * (e.g. 4 quarterly fakturaer for KVARTAL-intervall)
+   */
+  get fullCurrentYearPeriod(): { start: string; end: string } {
+    const currentYear = new Date().getFullYear();
+    return {
+      start: `01.01.${currentYear}`,
+      end: `31.12.${currentYear}`,
+    };
+  },
 };
 
 /**
@@ -186,6 +199,18 @@ export const TestPeriodsISO = {
     return {
       start: `${currentYear}-01-01`,
       end: formatDateISO(end),
+    };
+  },
+
+  /**
+   * Full current year period (Jan 1st to Dec 31st) in ISO format —
+   * twin of TestPeriods.fullCurrentYearPeriod
+   */
+  get fullCurrentYearPeriod(): { start: string; end: string } {
+    const currentYear = new Date().getFullYear();
+    return {
+      start: `${currentYear}-01-01`,
+      end: `${currentYear}-12-31`,
     };
   },
 };
