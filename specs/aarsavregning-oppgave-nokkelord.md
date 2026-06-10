@@ -60,9 +60,10 @@ enkelt-sjekke.
 
 **Mock:** krever mock-image med Oppgave-API v2 (melosys-docker-compose PR #148):
 `GET/PATCH /api/v2/oppgaver/{id}` — samme oppgave-id-er som v1; PATCH erstatter hele
-nokkelord-listen. Re-sjekken etter prosess-fullføring asserter at nøkkelordet finnes etter
-oppdatering/rebuild av oppgaven (v1-PUT) — invarianten holder uavhengig av om mocken bevarer
-nokkelord ved v1-PUT (mock-oppførsel fra #148-review) eller backend re-setter det.
+nokkelord-listen; **v1-PUT nullstiller nokkelord** (asserted semantikk i mocken med egen
+test, jf. #148 — om ekte v1-PUT nullstiller er ukjent og verifiseres i Q, men backend har
+re-assert-vern i oppdaterOppgave uansett). Det er nullstillingen som gjør re-sjekken etter
+prosess-fullføring til en reell regresjonsvakt for re-assert-vernet.
 
 **Assertions** (helper `verifiserNokkelordPaaOppgave` i testfila):
 1. `verifiserAarsavregningsoppgaveMedSkatteaar` (8123) returnerer nå oppgave-id
