@@ -277,6 +277,37 @@ export async function fetchOppgaver(request: APIRequestContext): Promise<Oppgave
   return response.json();
 }
 
+/**
+ * An oppgave as returned by the melosys-mock Oppgave API v2.
+ * Same oppgave-ids as v1; v2 additionally exposes the nokkelord list
+ * (MELOSYS-8128 — «Årsavregning <år>» settes via PATCH /api/v2/oppgaver/{id}).
+ */
+export interface OppgaveV2Info {
+  id: number;
+  versjon: number;
+  status: string | null;
+  beskrivelse: string | null;
+  nokkelord: string[];
+}
+
+/**
+ * Fetch a single oppgave from the melosys-mock Oppgave API v2.
+ *
+ * Used to assert nøkkelord set by melosys-api via PATCH /api/v2/oppgaver/{id}
+ * (MELOSYS-8128). Requires a mock image with the v2 endpoints
+ * (melosys-docker-compose branch 8128-oppgave-v2-nokkelord-mock or newer).
+ */
+export async function fetchOppgaveV2(
+  request: APIRequestContext,
+  oppgaveId: number
+): Promise<OppgaveV2Info> {
+  const response = await request.get(`http://localhost:8083/api/v2/oppgaver/${oppgaveId}`);
+  if (!response.ok()) {
+    throw new Error(`Failed to fetch oppgave ${oppgaveId} from Oppgave API v2: ${response.status()}`);
+  }
+  return response.json();
+}
+
 export interface MockClearResponse {
   message: string;
   journalpostCleared?: string | number;

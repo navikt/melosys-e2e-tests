@@ -365,6 +365,7 @@ export class UnleashHelper {
         enabled: true,
       },
       { name: 'melosys.send_popp_hendelse', enabled: true },
+      { name: 'melosys.oppgave_nokkelord', enabled: true },
     ];
 
     // Per-run overrides via env vars (comma-separated toggle names).

@@ -12,18 +12,21 @@ import {VedtakPage} from '../../../pages/vedtak/vedtak.page';
 import {FORRIGE_AAR, USER_ID_VALID} from '../../../pages/shared/constants';
 import {UnleashHelper} from '../../../helpers/unleash-helper';
 import {AdminApiHelper, waitForProcessInstances} from '../../../helpers/api-helper';
-import {fetchOppgaver} from '../../../helpers/mock-helper';
+import {fetchOppgaver, fetchOppgaveV2} from '../../../helpers/mock-helper';
 import {publishSkattehendelse} from '../../../helpers/skattehendelse-helper';
 import {TestPeriods, TestPeriodsISO} from '../../../helpers/date-helper';
 import {withFaktureringDatabase} from '../../../helpers/pg-db-helper';
 
 /**
  * MELOSYS-8123: Angi år i beskrivelse ved opprettelse av årsavregningsoppgave
+ * MELOSYS-8128: Sett år som nøkkelord på årsavregningsoppgaver via Oppgave-API v2
  *
- * Spec: specs/aarsavregning-oppgave-skatteaar-i-beskrivelse.md
+ * Spec: specs/aarsavregning-oppgave-skatteaar-i-beskrivelse.md (8123)
+ * Spec: specs/aarsavregning-oppgave-nokkelord.md (8128)
  *
- * Verifiserer at skatteåret settes i beskrivelsesfeltet på BEH_ARSAVREG-oppgaven
- * for alle tre automatiske opprettelses-triggere:
+ * Verifiserer at skatteåret settes i beskrivelsesfeltet (8123) og som nøkkelordet
+ * «Årsavregning <år>» (8128) på BEH_ARSAVREG-oppgaven for alle tre automatiske
+ * opprettelses-triggere:
  *   1. Skattehendelse fra Skatteetaten (Kafka)
  *   2. Periodisk jobb for ikke-skattepliktige
  *   3. Saksbehandlingsflyt som berører tidligere år
@@ -96,14 +99,15 @@ async function opprettVedtattIkkeSkattepliktigSak(
 }
 
 /**
- * Binder «Så»-linjene i speken: poller til nøyaktig én BEH_ARSAVREG-oppgave
+ * Binder «Så»-linjene i 8123-speken: poller til nøyaktig én BEH_ARSAVREG-oppgave
  * finnes i mockens oppgaveregister, og verifiserer beskrivelse (skatteår),
- * tema, oppgavetype og gjelderfelt.
+ * tema, oppgavetype og gjelderfelt. Returnerer oppgave-id for videre
+ * nøkkelord-verifisering (8128) — samme id i v1 og v2 av Oppgave-API-et.
  */
 async function verifiserAarsavregningsoppgaveMedSkatteaar(
     request: APIRequestContext,
     skatteaar: number
-): Promise<void> {
+): Promise<number> {
     await expect
         .poll(
             async () => {
@@ -131,6 +135,35 @@ async function verifiserAarsavregningsoppgaveMedSkatteaar(
     expect(oppgave.tema, 'Oppgaven skal ha tema Trygdeavgift').toBe('TRY');
     expect(oppgave.behandlingstema, 'FTRL/YRKESAKTIV → UTENFOR_AVTALAND_YRKESAKTIV').toBe('ab0484');
     expect(oppgave.aktoerId, 'Oppgaven skal gjelde testbrukeren').toBe(AKTOER_ID_VALID);
+
+    return oppgave.id;
+}
+
+/**
+ * Binder «Så»-linjene i 8128-speken: nøkkelordet «Årsavregning <år>» settes av
+ * melosys-api i et separat PATCH-kall (Oppgave-API v2) rett ETTER at oppgaven
+ * er opprettet/oppdatert — poll til det er på plass. Eksakt format fra
+ * OppgaveService: `Årsavregning ${skatteaar}`.
+ */
+async function verifiserNokkelordPaaOppgave(
+    request: APIRequestContext,
+    oppgaveId: number,
+    skatteaar: number
+): Promise<void> {
+    const forventet = `Årsavregning ${skatteaar}`;
+    await expect
+        .poll(
+            async () => {
+                const oppgave = await fetchOppgaveV2(request, oppgaveId);
+                return oppgave.nokkelord;
+            },
+            {
+                message: `Venter på nøkkelordet «${forventet}» på oppgave ${oppgaveId} (Oppgave-API v2)`,
+                timeout: 30_000,
+            }
+        )
+        .toContain(forventet);
+    console.log(`🔑 Oppgave ${oppgaveId} har nøkkelordet «${forventet}»`);
 }
 
 test.describe('Årsavregningsoppgave — skatteår i beskrivelse (MELOSYS-8123)', () => {
@@ -158,8 +191,14 @@ test.describe('Årsavregningsoppgave — skatteår i beskrivelse (MELOSYS-8123)'
             hendelsetype: 'NY',
         });
 
-        await verifiserAarsavregningsoppgaveMedSkatteaar(request, FORRIGE_AAR);
+        const oppgaveId = await verifiserAarsavregningsoppgaveMedSkatteaar(request, FORRIGE_AAR);
+        await verifiserNokkelordPaaOppgave(request, oppgaveId, FORRIGE_AAR);
         await waitForProcessInstances(page.request, 30);
+
+        // Oppdatering/rebuild av oppgaven går via v1-PUT som nullstiller nokkelord
+        // i mocken; backend skal re-sette nøkkelordet etterpå. Re-sjekken etter at
+        // alle prosessinstanser er ferdige fanger derfor reell regresjon.
+        await verifiserNokkelordPaaOppgave(request, oppgaveId, FORRIGE_AAR);
     });
 
     test('ikke-skattepliktig-jobben for skatteår X gir årsavregningsoppgave med X i beskrivelsen', async ({
@@ -185,8 +224,14 @@ test.describe('Årsavregningsoppgave — skatteår i beskrivelse (MELOSYS-8123)'
         const jobbStatus = await adminApi.waitForIkkeSkattepliktigeSakerJob(request, 60, 1000);
         expect(jobbStatus.antallProsessert, 'Jobben skal prosessere saken').toBe(1);
 
-        await verifiserAarsavregningsoppgaveMedSkatteaar(request, FORRIGE_AAR);
+        const oppgaveId = await verifiserAarsavregningsoppgaveMedSkatteaar(request, FORRIGE_AAR);
+        await verifiserNokkelordPaaOppgave(request, oppgaveId, FORRIGE_AAR);
         await waitForProcessInstances(page.request, 30);
+
+        // Oppdatering/rebuild av oppgaven går via v1-PUT som nullstiller nokkelord
+        // i mocken; backend skal re-sette nøkkelordet etterpå. Re-sjekken etter at
+        // alle prosessinstanser er ferdige fanger derfor reell regresjon.
+        await verifiserNokkelordPaaOppgave(request, oppgaveId, FORRIGE_AAR);
     });
 
     test('saksbehandlingsflyt som berører tidligere år X gir årsavregningsoppgave med X i beskrivelsen', async ({
@@ -256,7 +301,13 @@ test.describe('Årsavregningsoppgave — skatteår i beskrivelse (MELOSYS-8123)'
         await vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING');
         await waitForProcessInstances(page.request, 30);
 
-        await verifiserAarsavregningsoppgaveMedSkatteaar(request, FORRIGE_AAR);
+        const oppgaveId = await verifiserAarsavregningsoppgaveMedSkatteaar(request, FORRIGE_AAR);
+        await verifiserNokkelordPaaOppgave(request, oppgaveId, FORRIGE_AAR);
         await waitForProcessInstances(page.request, 30);
+
+        // Oppdatering/rebuild av oppgaven går via v1-PUT som nullstiller nokkelord
+        // i mocken; backend skal re-sette nøkkelordet etterpå. Re-sjekken etter at
+        // alle prosessinstanser er ferdige fanger derfor reell regresjon.
+        await verifiserNokkelordPaaOppgave(request, oppgaveId, FORRIGE_AAR);
     });
 });
