@@ -111,10 +111,24 @@ export class TrygdeavtaleArbeidsstedPage extends BasePage {
   /**
    * Click "Fatt vedtak" button to submit the decision
    * For Trygdeavtale, this directly submits without a separate vedtak page
+   *
+   * Waits for POST /api/saksflyt/vedtak/{id}/fatt to complete (can take
+   * 30-60s on CI) so callers don't race ahead before the vedtak exists.
    */
   async fattVedtak(): Promise<void> {
+    const responsePromise = this.page.waitForResponse(
+      response =>
+        response.url().includes('/api/saksflyt/vedtak/') &&
+        response.url().includes('/fatt') &&
+        response.request().method() === 'POST' &&
+        (response.status() === 200 || response.status() === 204),
+      { timeout: 60000 }
+    );
+
     await this.fattVedtakButton.click();
-    console.log('✅ Submitted vedtak');
+
+    const response = await responsePromise;
+    console.log(`✅ Submitted vedtak - API fullført: ${response.url()} -> ${response.status()}`);
   }
 
   /**

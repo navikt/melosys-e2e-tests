@@ -61,6 +61,31 @@ export class TrygdeavtaleBehandlingPage extends BasePage {
     name: 'Bekreft og fortsett'
   });
 
+  // Locators - Vedtak step (NV). Stegvelger wrapper hvert steg i <div id={stegnavn}>
+  // (felleskomponenter/stegFane), så #VEDTAK scoper til vedtak-steget. Periode-
+  // redigeringen ligger i en span med BEM-klassen vurderingVedtak__datofelt.
+  private readonly vedtakSteg = this.page.locator('#VEDTAK');
+
+  private readonly vedtakPeriodeEndreButton = this.vedtakSteg.getByRole('button', {
+    name: 'Endre'
+  });
+
+  private readonly vedtakPeriodeTomFelt = this.vedtakSteg.locator(
+    '.vurderingVedtak__datofelt input'
+  );
+
+  private readonly vedtakPeriodeLagreButton = this.vedtakSteg
+    .locator('.vurderingVedtak__datofelt')
+    .getByRole('button', { name: 'Lagre' });
+
+  private readonly grunnForNyttVedtakDropdown = this.page.getByRole('combobox', {
+    name: /Oppgi grunn for nytt vedtak/
+  });
+
+  private readonly fattVedtakButton = this.page.getByRole('button', {
+    name: 'Fatt vedtak'
+  });
+
   constructor(page: Page) {
     super(page);
     this.assertions = new TrygdeavtaleBehandlingAssertions(page);
@@ -200,5 +225,99 @@ export class TrygdeavtaleBehandlingPage extends BasePage {
     await this.fyllUtPeriodeOgLand();
     await this.velgArbeidsgiverOgFortsett();
     await this.innvilgeOgVelgBestemmelse();
+  }
+
+  // ── Nyvurdering (NV) ─────────────────────────────────────────────────
+
+  /**
+   * NV Inngang-steget: feltene er prefilled fra forrige behandling — endre kun
+   * "Til og med" (forkort/forleng perioden) og bekreft.
+   *
+   * NB: bruk fill() (erstatter innholdet); pressSequentially appender til
+   * den prefilled datoen.
+   *
+   * @param tilOgMed - Ny sluttdato i format DD.MM.YYYY (f.eks. '31.12.2025')
+   */
+  async endreInngangTilOgMedOgFortsett(tilOgMed: string): Promise<void> {
+    await this.tilOgMedField.waitFor({ state: 'visible', timeout: 15000 });
+    await this.tilOgMedField.click();
+    await this.tilOgMedField.fill(tilOgMed);
+    console.log(`✅ NV Inngang: endret "Til og med" til ${tilOgMed}`);
+    await this.klikkBekreftOgFortsett();
+  }
+
+  /**
+   * Vedtak-steget (NV): synk vedtaksperiodens TOM-dato med Inngang-endringen.
+   *
+   * GOTCHA: Periode-visningen på vedtak-steget viser GAMMEL TOM — den synker
+   * IKKE automatisk fra Inngang-steget. Må klikke "Endre" → fylle inline
+   * TOM-felt (kun TOM er redigerbart, FOM er låst) → "Lagre".
+   *
+   * @param tilOgMed - Ny sluttdato i format DD.MM.YYYY (f.eks. '31.12.2025')
+   */
+  async endreVedtaksperiodeTom(tilOgMed: string): Promise<void> {
+    await this.vedtakPeriodeEndreButton.waitFor({ state: 'visible', timeout: 30000 });
+    await this.vedtakPeriodeEndreButton.click();
+
+    await this.vedtakPeriodeTomFelt.waitFor({ state: 'visible', timeout: 10000 });
+    await this.vedtakPeriodeTomFelt.click();
+    await this.vedtakPeriodeTomFelt.fill(tilOgMed);
+
+    // "Lagre" trigger PUT /trygdeavtale-flyt/{behandlingID}; DOM-en oppdateres
+    // optimistisk FØR svaret, så vent på selve lagringen for å unngå at
+    // etterfølgende steg racer persisteringen på treg CI
+    const lagrePromise = this.page.waitForResponse(
+      (response) =>
+        response.url().includes('/trygdeavtale-flyt/') &&
+        response.request().method() === 'PUT' &&
+        response.ok(),
+      { timeout: 30000 }
+    );
+    await this.vedtakPeriodeLagreButton.click();
+    await lagrePromise;
+
+    // Etter lagring rendres datoen som ren tekst i periode-visningen
+    await this.vedtakSteg
+      .locator('.vurderingVedtak__datofelt_wrapper')
+      .getByText(tilOgMed)
+      .waitFor({ state: 'visible', timeout: 10000 });
+    console.log(`✅ Vedtaksperiode TOM endret og lagret: ${tilOgMed}`);
+  }
+
+  /**
+   * Velg obligatorisk "grunn for nytt vedtak" på vedtak-steget.
+   * For en nyvurdering (NV) er feltet påkrevd, og "Fatt vedtak" forblir
+   * deaktivert til en grunn er valgt.
+   *
+   * @param grunn - Grunn-kode ('NYE_OPPLYSNINGER', 'FEIL_I_BEHANDLING' eller 'Fritekst')
+   */
+  async velgGrunnForNyttVedtak(grunn: string): Promise<void> {
+    await this.grunnForNyttVedtakDropdown.waitFor({ state: 'visible', timeout: 10000 });
+    await this.grunnForNyttVedtakDropdown.selectOption(grunn);
+    console.log(`✅ Valgte grunn for nytt vedtak: ${grunn}`);
+  }
+
+  /**
+   * Klikk "Fatt vedtak" på vedtak-steget og vent på at vedtaket faktisk fattes.
+   * Venter på POST /api/saksflyt/vedtak/{id}/fatt (kan ta 30-60s på CI) slik at
+   * vi ikke fortsetter før backend har registrert vedtaket.
+   */
+  async fattVedtak(): Promise<void> {
+    await this.page.waitForLoadState('networkidle', { timeout: 10000 }).catch(() => {});
+    await this.fattVedtakButton.waitFor({ state: 'visible', timeout: 10000 });
+
+    const responsePromise = this.page.waitForResponse(
+      response =>
+        response.url().includes('/api/saksflyt/vedtak/') &&
+        response.url().includes('/fatt') &&
+        response.request().method() === 'POST' &&
+        (response.status() === 200 || response.status() === 204),
+      { timeout: 60000 }
+    );
+
+    await this.fattVedtakButton.click();
+
+    const response = await responsePromise;
+    console.log(`✅ Vedtak fattet - API fullført: ${response.url()} -> ${response.status()}`);
   }
 }
