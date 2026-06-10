@@ -195,9 +195,9 @@ test.describe('Årsavregningsoppgave — skatteår i beskrivelse (MELOSYS-8123)'
         await verifiserNokkelordPaaOppgave(request, oppgaveId, FORRIGE_AAR);
         await waitForProcessInstances(page.request, 30);
 
-        // Oppdatering/rebuild av oppgaven går via v1-PUT som nullstiller nokkelord
-        // i mocken; backend skal re-sette nøkkelordet etterpå. Re-sjekken etter at
-        // alle prosessinstanser er ferdige fanger derfor reell regresjon.
+        // Nøkkelordet skal finnes også etter at alle prosessinstanser er ferdige —
+        // oppdatering/rebuild av oppgaven (v1-PUT) skal ikke ende med at det mangler,
+        // uavhengig av om mocken bevarer det eller backend re-setter det.
         await verifiserNokkelordPaaOppgave(request, oppgaveId, FORRIGE_AAR);
     });
 
@@ -228,9 +228,9 @@ test.describe('Årsavregningsoppgave — skatteår i beskrivelse (MELOSYS-8123)'
         await verifiserNokkelordPaaOppgave(request, oppgaveId, FORRIGE_AAR);
         await waitForProcessInstances(page.request, 30);
 
-        // Oppdatering/rebuild av oppgaven går via v1-PUT som nullstiller nokkelord
-        // i mocken; backend skal re-sette nøkkelordet etterpå. Re-sjekken etter at
-        // alle prosessinstanser er ferdige fanger derfor reell regresjon.
+        // Nøkkelordet skal finnes også etter at alle prosessinstanser er ferdige —
+        // oppdatering/rebuild av oppgaven (v1-PUT) skal ikke ende med at det mangler,
+        // uavhengig av om mocken bevarer det eller backend re-setter det.
         await verifiserNokkelordPaaOppgave(request, oppgaveId, FORRIGE_AAR);
     });
 
@@ -305,9 +305,9 @@ test.describe('Årsavregningsoppgave — skatteår i beskrivelse (MELOSYS-8123)'
         await verifiserNokkelordPaaOppgave(request, oppgaveId, FORRIGE_AAR);
         await waitForProcessInstances(page.request, 30);
 
-        // Oppdatering/rebuild av oppgaven går via v1-PUT som nullstiller nokkelord
-        // i mocken; backend skal re-sette nøkkelordet etterpå. Re-sjekken etter at
-        // alle prosessinstanser er ferdige fanger derfor reell regresjon.
+        // Nøkkelordet skal finnes også etter at alle prosessinstanser er ferdige —
+        // oppdatering/rebuild av oppgaven (v1-PUT) skal ikke ende med at det mangler,
+        // uavhengig av om mocken bevarer det eller backend re-setter det.
         await verifiserNokkelordPaaOppgave(request, oppgaveId, FORRIGE_AAR);
     });
 });

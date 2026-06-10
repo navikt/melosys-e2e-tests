@@ -58,10 +58,11 @@ OppgaveService setter nøkkelordet i et **separat kall** (`PATCH /api/v2/oppgave
 ETTER opprettelse/oppdatering → assertions må **polle** (`expect.poll`, 30 s), ikke
 enkelt-sjekke.
 
-**Mock:** krever mock-image med Oppgave-API v2 (melosys-docker-compose branch
-`8128-oppgave-v2-nokkelord-mock`): `GET/PATCH /api/v2/oppgaver/{id}` — samme oppgave-id-er som
-v1; PATCH erstatter hele nokkelord-listen; **v1-PUT nullstiller nokkelord** (det er dette som
-gjør re-sjekken etter prosess-fullføring til en reell regresjonsvakt).
+**Mock:** krever mock-image med Oppgave-API v2 (melosys-docker-compose PR #148):
+`GET/PATCH /api/v2/oppgaver/{id}` — samme oppgave-id-er som v1; PATCH erstatter hele
+nokkelord-listen. Re-sjekken etter prosess-fullføring asserter at nøkkelordet finnes etter
+oppdatering/rebuild av oppgaven (v1-PUT) — invarianten holder uavhengig av om mocken bevarer
+nokkelord ved v1-PUT (mock-oppførsel fra #148-review) eller backend re-setter det.
 
 **Assertions** (helper `verifiserNokkelordPaaOppgave` i testfila):
 1. `verifiserAarsavregningsoppgaveMedSkatteaar` (8123) returnerer nå oppgave-id
