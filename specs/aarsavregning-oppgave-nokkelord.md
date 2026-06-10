@@ -1,7 +1,7 @@
 ---
 jira: MELOSYS-8128
 epic: MELOSYS-6579 — Automatisk opprette årsavregningsbehandlinger på ikke skattepliktige
-status: draft
+status: verified
 test: tests/utenfor-avtaleland/workflows/arsavregning-oppgave-aar-i-beskrivelse.spec.ts
 toggles:
   melosys.oppgave_nokkelord: on   # gate for nøkkelord-funksjonaliteten; PÅ i default-lista
