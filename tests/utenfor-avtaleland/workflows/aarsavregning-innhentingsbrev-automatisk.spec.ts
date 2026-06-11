@@ -30,6 +30,14 @@ import {withDatabase} from '../../../helpers/db-helper';
  * 8122-auto-innhentingsbrev-arsavregning). Brevet scopes via prosessdata-flagget
  * SEND_INNHENTINGSBREV i de to auto-flytene — ingen dedikert brev-toggle (droppet etter
  * fagavklaring). Scenario 1+3 (mottaker=bruker) kjørbare; 2+4 (fullmektig) er test.fixme.
+ *
+ * KONSOLIDERING: Denne testen deler NØYAKTIG samme trigger-oppsett (sak→vedtak→skattehendelse/jobb)
+ * som MELOSYS-8123 (arsavregning-oppgave-aar-i-beskrivelse.spec.ts, oppgavebeskrivelse). Når begge
+ * sakene er på main kan de slås sammen til én «auto-årsavregning-trigger»-test som asserter både
+ * brev (8122) og oppgavebeskrivelse (8123) → fjerner ~90s duplisert oppsett. Holdt separate så lenge
+ * sakene er umergede (én Jira/AC per test + uavhengig image/PR-kobling).
+ *
+ * Tverr-repo flyt + fallgruver: melosys-kode-wiki/flows/aarsavregning-auto-innhentingsbrev.md
  */
 
 /** AktørId for USER_ID_VALID (30056928150) i PDL-mocken — brevets mottaker uten fullmektig */
@@ -134,6 +142,11 @@ async function verifiserInnhentingsbrevSendt(
 
     // Barn-prosessinstansen opprettes med STATUS=KLAR og plukkes asynkront av saga-workeren
     // (OPPRETT_OG_JOURNALFØR_BREV → DISTRIBUER_JOURNALPOST) før den blir FERDIG. Poll til FERDIG.
+    //
+    // DEBUG-HINT: Hvis denne henger på KLAR/aldri-FERDIG + api-loggen viser ORA-02291
+    // (FK_PIHEND_STEG) → det nye saksflyt-steget mangler rad i PROSESS_STEG-lookup (Flyway). Da blir
+    // også parent-prosessinstansen aldri FERDIG (notFinished i waitForProcessInstances). Se
+    // melosys-kode-wiki/flows/aarsavregning-auto-innhentingsbrev.md.
     let brev: BrevRad | undefined;
     await expect
         .poll(
