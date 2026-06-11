@@ -111,8 +111,8 @@ async function opprettVedtattIkkeSkattepliktigSak(page: Page): Promise<void> {
  * Binder «Så»-linjene: poller PROSESSINSTANS til en fersk brev-prosessinstans for
  * innhentingsbrevet finnes, og verifiserer at den er FERDIG og adressert til forventet mottaker.
  *
- * Brevet enqueues som SEND_BREV / OPPRETT_OG_DISTRIBUER_BREV med brevmal-identifikatoren i DATA
- * (samme JS-includes-mønster som vedtaksbrev-verifiseringen i eu-eos-12.1).
+ * Brevet enqueues som en OPPRETT_OG_DISTRIBUER_BREV-prosessinstans med brevmal-identifikatoren i
+ * DATA (samme JS-includes-mønster som vedtaksbrev-verifiseringen i eu-eos-12.1).
  *
  * @param mottakerIdentifikatorer mulige mottaker-identifikatorer (fnr og/eller aktørId). Det er
  *   uavklart om brevets DATA lagrer fnr eller aktørId for mottakeren (feature ikke implementert
@@ -130,11 +130,15 @@ async function verifiserInnhentingsbrevSendt(
     // "INNHENTING_AV_INNTEKTSOPPLYSNINGER" + den oppløste mottakerens ident.
     const hentInnhentingsbrev = async (): Promise<BrevRad | undefined> =>
         await withDatabase(async (db) => {
+            // ORDER BY DESC → .find() treffer den NYESTE matchende brev-prosessinstansen, ikke en
+            // vilkårlig rad. Gjør matchingen deterministisk og foretrekker dette testens ferske brev
+            // framfor en evt. sen innkommende rad fra forrige test (cleanup kjører før, ikke etter).
             const rader = await db.query<BrevRad>(
                 `SELECT PI.DATA, PI.STATUS, PI.PROSESS_TYPE
                  FROM PROSESSINSTANS PI
                  WHERE PI.PROSESS_TYPE = 'OPPRETT_OG_DISTRIBUER_BREV'
-                   AND PI.REGISTRERT_DATO > SYSDATE - INTERVAL '10' MINUTE`,
+                   AND PI.REGISTRERT_DATO > SYSDATE - INTERVAL '10' MINUTE
+                 ORDER BY PI.REGISTRERT_DATO DESC`,
                 {}
             );
             return rader.find((r) => (r.DATA || '').includes(BREVMAL_INNHENTING));
