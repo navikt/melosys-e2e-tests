@@ -187,6 +187,8 @@ services:
       UNLEASH_TOKEN: "*:development.unleash-insecure-client-api-token"
       UNLEASH_APP_NAME: "faktureringskomponenten"
       UNLEASH_ENVIRONMENT: "development"
+      NAIS_CLUSTER_NAME: "dev-gcp"
+      KAFKA_TOPIC_NAME_MANGLENDE_FAKTURABETALING: "teammelosys.manglende-fakturabetaling-local"
     networks:
       melosys.docker-internal:
         aliases:
