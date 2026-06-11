@@ -1,7 +1,7 @@
 ---
 jira: MELOSYS-8122
 epic: MELOSYS-6579 — Automatisk opprette årsavregningsbehandlinger på ikke skattepliktige
-status: implemented  # testen er skrevet; brev-assertions er røde til feature-branchen lander (se status-merknad i binding)
+status: verified     # scenario 1+3 grønne i CI mot api-feature-image (run 27353951522); scenario 2+4 fixme (fullmektig-fikstur mangler)
 test: tests/utenfor-avtaleland/workflows/aarsavregning-innhentingsbrev-automatisk.spec.ts
 toggles: {}          # default-state; per-trigger-koreografi av melosys.faktureringskomponenten.ikke-tidligere-perioder er testmekanikk (se binding)
 tags: [årsavregning, brev, innhenting, skattehendelse, fullmektig, ftrl]
