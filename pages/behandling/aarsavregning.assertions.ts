@@ -72,4 +72,64 @@ export class AarsavregningAssertions {
   async verifiserIngenFeil(): Promise<void> {
     await assertErrors(this.page, []);
   }
+
+  /**
+   * Verifiser at årsvelgeren har forhåndsvalgt forventet år.
+   * Auto-opprettede årsavregninger (prosess OPPRETT_NY_BEHANDLING_AARSAVREGNING)
+   * kjenner året fra førstegangsbehandlingen, så året skal IKKE velges manuelt.
+   */
+  async verifiserValgtÅr(år: string): Promise<void> {
+    await expect(this.page.locator('#aarVelger')).toHaveValue(år, { timeout: 10000 });
+    console.log(`✅ År ${år} er forhåndsvalgt i årsvelgeren`);
+  }
+
+  /**
+   * Verifiser uten-grunnlag-flyten (toggle `melosys.arsavregning.eos_pensjonist`
+   * + ingen tidligere trygdeavgiftsgrunnlag): info-alert vises og
+   * «Avviker innbetalt»-radioen er skjult (harInnbetaltTrygdeavgift settes
+   * automatisk til true av frontenden).
+   */
+  async verifiserUtenGrunnlagFlyt(): Promise<void> {
+    await expect(
+      this.page.getByText(
+        'Det er ingen informasjon om forskuddsvis fakturert trygdeavgift i Melosys.'
+      )
+    ).toBeVisible({ timeout: 10000 });
+    await expect(
+      this.page.getByRole('group', { name: /Avviker innbetalt/ })
+    ).toBeHidden();
+    console.log('✅ Uten-grunnlag-flyt: info-alert vises og avvik-radioen er skjult');
+  }
+
+  /**
+   * Verifiser SumArsavregning-tabellen (sumArsavregningTabell.tsx).
+   *
+   * Beløpene er norskformaterte («201,96»); negativ differanse bruker
+   * U+2212 MINUS SIGN (−), ikke bindestrek. Differanse-cellen har &nbsp;
+   * mellom beløp og «kr», så vi matcher kun beløpet der.
+   * Radene matches case-sensitivt slik at «Innbetalt trygdeavgift» ikke
+   * også treffer raden «Tidligere innbetalt trygdeavgift».
+   */
+  async verifiserSumTabell(forventet: {
+    endeligBeregnet: string;
+    innbetalt: string;
+    differanse: string;
+  }): Promise<void> {
+    const tabell = this.page.locator('.sumArsavregningTabell').first();
+    await expect(tabell).toBeVisible({ timeout: 15000 });
+
+    await expect(
+      tabell.getByRole('row').filter({ hasText: /Endelig beregnet trygdeavgift/ })
+    ).toContainText(`${forventet.endeligBeregnet} kr`);
+    await expect(
+      tabell.getByRole('row').filter({ hasText: /Innbetalt trygdeavgift/ })
+    ).toContainText(`${forventet.innbetalt} kr`);
+    await expect(
+      tabell.getByRole('row').filter({ hasText: /Differanse/ })
+    ).toContainText(forventet.differanse);
+
+    console.log(
+      `✅ Sum-tabell: endelig ${forventet.endeligBeregnet} / innbetalt ${forventet.innbetalt} / differanse ${forventet.differanse}`
+    );
+  }
 }
