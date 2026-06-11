@@ -38,16 +38,19 @@ import {FaktureringHelper} from '../../helpers/fakturering-helper';
  *   - faktureringskomponenten: KAFKA_TOPIC_NAME_MANGLENDE_FAKTURABETALING=
  *     teammelosys.manglende-fakturabetaling-local (samme topic som melosys-api lytter på)
  *
- * @expect-docker-errors fordi: opphørsvedtak-steget i melosys-web (VurderingVedtakOpphoer)
- * autolagrer fritekst via POST /api/behandlinger/{id}/resultat/fritekst med KUN
- * begrunnelseFritekst i payloaden. LagreFritekstDto.innledningFritekst blir null, og
- * BehandlingsresultatService.oppdaterFritekster (Kotlin, non-null String-parameter) kaster
- * NullPointerException → 500 ERROR i melosys-api-loggen. UI og flyt er upåvirket (kjent
- * frontend/backend-kontraktsbug). Å fylle friteksten i editoren hjelper IKKE — feltet
- * innledningFritekst mangler alltid i requesten, uavhengig av innhold.
+ * MELOSYS-8141 (regresjonsvern): opphørsvedtak-steget (VurderingVedtakOpphoer) autolagrer
+ * fritekst via POST /api/behandlinger/{id}/resultat/fritekst uten utfylt innledningsfelt
+ * (innledningen er standardisert for opphørsvedtak). Dette ga tidligere NPE/500 i
+ * melosys-api (non-null innledningFritekst). Testen vokter kontrakten på to nivåer:
+ *   1. Nettverksvakt: alle /resultat/fritekst-kall i opphørsflyten skal svare < 400
+ *      (virker også lokalt der melosys-api kjører på host og er usynlig for
+ *      docker-log-sjekken)
+ *   2. Docker-log-sjekk (CI): @expect-docker-errors er fjernet — ERROR i api-loggen
+ *      feiler testen
+ * Spec: specs/ftrl-opphor-fritekst-autolagring.md
  */
 test.describe('FTRL manglende innbetaling - opphør av frivillig medlemskap § 2-15', () => {
-    test('skal opprette manglende-innbetaling-behandling automatisk og fatte opphørsvedtak @expect-docker-errors', async ({page, request}) => {
+    test('skal opprette manglende-innbetaling-behandling automatisk og fatte opphørsvedtak', async ({page, request}) => {
         test.setTimeout(240000);
 
         // Setup
@@ -179,14 +182,37 @@ test.describe('FTRL manglende innbetaling - opphør av frivillig medlemskap § 2
         await behandlingsLenke.waitFor({state: 'visible', timeout: TIMEOUT_LONG});
         await behandlingsLenke.click();
 
+        // MELOSYS-8141-vakt: samle ALLE autolagrings-responser i opphørsflyten.
+        // VurderingVedtakOpphoer autolagrer også ved mount (debounced 1s), så samleren
+        // må stå på før stegovergangen — ikke bare rundt fritekst-utfyllingen.
+        const fritekstResponser: { url: string; status: number }[] = [];
+        page.on('response', (response) => {
+            if (response.url().includes('/resultat/fritekst') && response.request().method() === 'POST') {
+                fritekstResponser.push({url: response.url(), status: response.status()});
+            }
+        });
+
         console.log('📝 Steg 12: Velger «hele medlemskapsperioden» og går til opphørsvedtak...');
         await manglendeInnbetaling.ventPaaSteg();
         await manglendeInnbetaling.velgInnbetalingManglerHelePerioden();
         await manglendeInnbetaling.bekreftOgGaaTilOpphoersvedtak();
 
-        console.log('📝 Steg 13: Fatter opphørsvedtak...');
+        console.log('📝 Steg 13: Fyller begrunnelsesfritekst og venter på autolagring (MELOSYS-8141)...');
+        const begrunnelseTekst = 'Opphoer pga. manglende innbetaling av trygdeavgift - e2e MELOSYS-8141';
+        await manglendeInnbetaling.fyllInnBegrunnelseFritekstMedAutolagring(begrunnelseTekst);
+
+        console.log('📝 Steg 14: Fatter opphørsvedtak...');
         await vedtak.klikkFattVedtak();
         await waitForProcessInstances(page.request, 60);
+
+        // MELOSYS-8141: autolagringen skal aldri feile, heller ikke mount-kallet uten fritekst
+        expect(fritekstResponser.length, 'Minst ett autolagringskall (/resultat/fritekst) i opphørsflyten')
+            .toBeGreaterThan(0);
+        const feiledeAutolagringer = fritekstResponser.filter(r => r.status >= 400);
+        expect(feiledeAutolagringer,
+            `Autolagring av fritekst skal aldri gi HTTP-feil (MELOSYS-8141): ${JSON.stringify(feiledeAutolagringer)}`)
+            .toHaveLength(0);
+        console.log(`✅ ${fritekstResponser.length} autolagringskall, alle < 400`);
 
         // === DEL 5: Slutt-tilstand - behandling, fagsak og fakturaserie ===
 
@@ -202,6 +228,18 @@ test.describe('FTRL manglende innbetaling - opphør av frivillig medlemskap § 2
                 {id: nyBehandling.ID}
             );
             expect(resultat?.RESULTAT_TYPE, 'Behandlingsresultat skal være OPPHØRT').toBe('OPPHØRT');
+
+            // MELOSYS-8141: begrunnelsesfriteksten skal være bevart (autolagret) selv om
+            // innledningsfritekst aldri ble utfylt. LIKE-spørring fordi kolonnen kan være CLOB.
+            const fritekstLagret = await db.queryOne<{ ANTALL: number }>(
+                `SELECT COUNT(*) AS ANTALL
+                 FROM BEHANDLINGSRESULTAT
+                 WHERE BEHANDLING_ID = :id
+                   AND BEGRUNNELSE_FRITEKST LIKE '%MELOSYS-8141%'`,
+                {id: nyBehandling.ID}
+            );
+            expect(fritekstLagret?.ANTALL, 'Begrunnelsesfritekst skal være lagret på behandlingsresultatet')
+                .toBe(1);
 
             const fagsak = await db.queryOne<{ STATUS: string }>(
                 'SELECT STATUS FROM FAGSAK WHERE SAKSNUMMER = :saksnummer',

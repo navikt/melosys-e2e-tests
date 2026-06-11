@@ -76,4 +76,38 @@ export class ManglendeInnbetalingPage extends BasePage {
     });
     console.log('✅ På opphørsvedtak-steget («Opphør av frivillig medlemskap etter § 2-15»)');
   }
+
+  /**
+   * Fyll begrunnelsesfriteksten på opphørsvedtak-steget og vent på at autolagringen
+   * (debounced 1000 ms POST /resultat/fritekst fra VurderingVedtakOpphoer) fullfører
+   * FØR vedtaket fattes — ellers kan debounce-kallet kanselleres ved stegovergang.
+   *
+   * MELOSYS-8141: autolagringen sendte tidligere payload uten innledningFritekst og ga
+   * NPE/500 i melosys-api. Feiler med tydelig melding hvis autolagringen gir HTTP-feil.
+   *
+   * @param tekst - begrunnelsestekst (kun ASCII — matches mot rå request-payload)
+   */
+  async fyllInnBegrunnelseFritekstMedAutolagring(tekst: string): Promise<void> {
+    const autolagring = this.page.waitForResponse(
+      (response) =>
+        response.url().includes('/resultat/fritekst') &&
+        response.request().method() === 'POST' &&
+        (response.request().postData() ?? '').includes(tekst),
+      { timeout: 15000 }
+    );
+
+    // Eneste Quill-editor på opphørssteget er begrunnelsesfeltet («Fritekst til begrunnelse»)
+    const editor = this.page.locator('.vurderingVedtakOpphoer .ql-editor');
+    await editor.click();
+    await editor.fill(tekst);
+
+    const respons = await autolagring;
+    if (respons.status() >= 400) {
+      throw new Error(
+        `Autolagring av begrunnelsesfritekst feilet: POST ${respons.url()} -> ` +
+        `${respons.status()} (MELOSYS-8141-regresjon?)`
+      );
+    }
+    console.log(`✅ Begrunnelsesfritekst autolagret (HTTP ${respons.status()})`);
+  }
 }
