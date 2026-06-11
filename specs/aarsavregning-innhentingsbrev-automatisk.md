@@ -88,14 +88,15 @@ Gitt at en bruker har en sak med forskuddsvis fakturert trygdeavgift
 > og skal brukes **ordrett**. Ikke "korriger" dem mot eksempelverdier i POM-ens JSDoc — samme
 > dropdown bruker ulike koder i ulike flyter.
 
-> **Status-merknad:** Auto-utsending av innhentingsbrevet ved *automatisk* opprettelse av
-> årsavregning er **ikke implementert i melosys-api ennå** (MELOSYS-8122 er i «Utvikle og teste»).
-> Prosessflyten `OPPRETT_NY_BEHANDLING_ARSAVREGNING` består i dag kun av stegene
-> `OPPRETT_AARSAVREGNING_BEHANDLING` + `OPPRETT_OPPGAVE` — ingen brev-steg. Brev-assertionene
-> forventes derfor **røde** til feature-branchen lander; selve trigger-flyten (saksopprettelse,
-> vedtak, auto-opprettelse av årsavregningsbehandling) er grønn i dag. Dette er en
-> akseptanse-test skrevet *foran* implementasjonen, etter samme mønster som
-> [`aarsavregning-oppgave-skatteaar-i-beskrivelse.md`](aarsavregning-oppgave-skatteaar-i-beskrivelse.md).
+> **Status-merknad:** Auto-utsending av innhentingsbrevet er implementert i melosys-api på branch
+> `8122-auto-innhentingsbrev-arsavregning` (saksflyt-steg `SEND_INNHENTINGSBREV_AARSAVREGNING` i
+> `OPPRETT_NY_BEHANDLING_AARSAVREGNING`, bak toggle `melosys.arsavregning.innhentingsbrev`,
+> default AV). Verifiseres i CI mot et pushet image fra den branchen. Til feature-imaget er i CI
+> er brev-assertionene korrekt røde. Akseptanse-test skrevet sammen med implementasjonen, samme
+> mønster som [`aarsavregning-oppgave-skatteaar-i-beskrivelse.md`](aarsavregning-oppgave-skatteaar-i-beskrivelse.md).
+>
+> **Toggle:** `melosys.arsavregning.innhentingsbrev` (default AV) styrer brev-steget — testen
+> enabler den eksplisitt før triggeren; i CI-dispatch settes også `unleash_force_enable`.
 
 ### Forhold til MELOSYS-8123
 
@@ -177,19 +178,24 @@ finnes — å fake fullmektig-oppsettet ville gitt falsk dekning.
 ### Assertions (binder «Så»-linjene)
 
 Brevet verifiseres via `PROSESSINSTANS` i Oracle (`withDatabase`), samme mønster som vedtaksbrev-
-verifiseringen i `tests/eu-eos/eu-eos-12.1-iverksetting-mottaker-kjede.spec.ts`. Opprettelsen er
-asynkron (Kafka-consume / jobb → prosessinstans) → poll til en fersk brev-prosessinstans for
-innhentingsbrevet finnes:
+verifiseringen i `tests/eu-eos/eu-eos-12.1-iverksetting-mottaker-kjede.spec.ts`. Brev-steget
+`SEND_INNHENTINGSBREV_AARSAVREGNING` (inne i `OPPRETT_NY_BEHANDLING_AARSAVREGNING`) kaller dokgen-
+mal-produksjon som enqueuer en **egen barn-prosessinstans** `OPPRETT_OG_DISTRIBUER_BREV` (verifisert
+mot api-koden, ikke `SEND_BREV` — sistnevnte er doksys-forhåndsproduserte brev). Den opprettes med
+`STATUS=KLAR` og plukkes asynkront av saga-workeren (`OPPRETT_OG_JOURNALFØR_BREV` →
+`DISTRIBUER_JOURNALPOST`) før den blir `FERDIG` → **poll til FERDIG** (timeout 60 s):
 
-- brev-prosess: `PROSESS_TYPE IN ('SEND_BREV','OPPRETT_OG_DISTRIBUER_BREV')` med
-  `REGISTRERT_DATO > SYSDATE - INTERVAL '10' MINUTE` og `DATA` som inneholder
+- brev-prosess: `PROSESS_TYPE = 'OPPRETT_OG_DISTRIBUER_BREV'` med
+  `REGISTRERT_DATO > SYSDATE - INTERVAL '10' MINUTE` og `DATA` (serialisert DokgenBrevbestilling-
+  JSON, felt `"produserbartdokument":"INNHENTING_AV_INNTEKTSOPPLYSNINGER"`) som inneholder
   `INNHENTING_AV_INNTEKTSOPPLYSNINGER` ← **selve akseptansekriteriet** («brevet er sendt»)
 - `STATUS === 'FERDIG'` (brevet er produsert, journalført og distribuert)
-- **mottaker (scenario 1/3):** brev-prosessens `DATA` inneholder brukerens identifikator ← «til
-  bruker». Det er **uavklart** om `DATA` lagrer fnr eller aktørId for mottakeren (feature ikke
-  implementert ennå) → assertionen godtar at **minst én** av `USER_ID_VALID` (`30056928150`) og
-  aktørId `1111111111111` står i `DATA`. Eksakt identifikator pinnes når feature-branchen lander.
-  Helper-signatur: `verifiserInnhentingsbrevSendt(mottakerIdentifikatorer: string[])`.
+- **mottaker (scenario 1/3):** samme `DATA` inneholder mottakerens ident — fullmektig-substitusjon
+  skjer i `hentMottakere` FØR prosessinstansen lages, så identen er fullmektigens når
+  `FULLMEKTIG_SØKNAD` finnes, ellers brukers. Assertionen godtar **minst én** av `USER_ID_VALID`
+  (`30056928150`) og aktørId `1111111111111` (fnr/aktørId-format pinnes ved første grønne).
+  Helper-signatur: `verifiserInnhentingsbrevSendt(mottakerIdentifikatorer: string[])`. Det lages
+  nøyaktig ÉN slik prosessinstans (brevet går kun til én mottaker).
 
 > **Robusthet:** Helperen `verifiserInnhentingsbrevSendt` matcher brevmal-strengen og mottaker som
 > delstrenger i `DATA` (samme JS-`includes`-mønster som eu-eos-12.1 bruker på `INNVILGELSE_YRKESAKTIV`).

@@ -35,8 +35,14 @@ import {withDatabase} from '../../../helpers/db-helper';
 /** AktørId for USER_ID_VALID (30056928150) i PDL-mocken — brevets mottaker uten fullmektig */
 const AKTOER_ID_VALID = '1111111111111';
 
-/** Brevmal-identifikator slik den står i SEND_BREV/brevbestilling-DATA (melosys-api Produserbaredokumenter) */
+/** Brevmal-identifikator slik den står i brevbestilling-DATA (melosys-api Produserbaredokumenter) */
 const BREVMAL_INNHENTING = 'INNHENTING_AV_INNTEKTSOPPLYSNINGER';
+
+/**
+ * Feature-toggle som styrer auto-utsending av innhentingsbrevet (melosys-api). Default AV når
+ * udefinert — må enables eksplisitt før triggeren fyrer, ellers hopper saksflyt-steget over brevet.
+ */
+const TOGGLE_INNHENTINGSBREV = 'melosys.arsavregning.innhentingsbrev';
 
 /**
  * Felles forutsetning: vedtatt FTRL-sak med trygdeavgift som betales til NAV
@@ -116,37 +122,44 @@ async function verifiserInnhentingsbrevSendt(
 ): Promise<void> {
     type BrevRad = {DATA: string; STATUS: string; PROSESS_TYPE: string};
 
+    // Brevet enqueues av saksflyt-steget SEND_INNHENTINGSBREV_AARSAVREGNING som en egen barn-
+    // prosessinstans OPPRETT_OG_DISTRIBUER_BREV (dokgen-mal → produserOgDistribuerBrev). DATA-
+    // kolonnen er serialisert DokgenBrevbestilling-JSON med "produserbartdokument":
+    // "INNHENTING_AV_INNTEKTSOPPLYSNINGER" + den oppløste mottakerens ident.
     const hentInnhentingsbrev = async (): Promise<BrevRad | undefined> =>
         await withDatabase(async (db) => {
             const rader = await db.query<BrevRad>(
                 `SELECT PI.DATA, PI.STATUS, PI.PROSESS_TYPE
                  FROM PROSESSINSTANS PI
-                 WHERE PI.PROSESS_TYPE IN ('SEND_BREV', 'OPPRETT_OG_DISTRIBUER_BREV')
+                 WHERE PI.PROSESS_TYPE = 'OPPRETT_OG_DISTRIBUER_BREV'
                    AND PI.REGISTRERT_DATO > SYSDATE - INTERVAL '10' MINUTE`,
                 {}
             );
             return rader.find((r) => (r.DATA || '').includes(BREVMAL_INNHENTING));
         });
 
-    // Opprettelsen er asynkron (Kafka-consume / jobb → prosessinstans).
+    // Barn-prosessinstansen opprettes med STATUS=KLAR og plukkes asynkront av saga-workeren
+    // (OPPRETT_OG_JOURNALFØR_BREV → DISTRIBUER_JOURNALPOST) før den blir FERDIG. Poll til FERDIG.
+    let brev: BrevRad | undefined;
     await expect
-        .poll(async () => (await hentInnhentingsbrev()) !== undefined, {
-            message: `Venter på brev-prosessinstans for ${BREVMAL_INNHENTING}`,
-            timeout: 30_000,
-        })
-        .toBe(true);
+        .poll(
+            async () => {
+                brev = await hentInnhentingsbrev();
+                return brev?.STATUS;
+            },
+            {
+                message: `Venter på at innhentingsbrevet (${BREVMAL_INNHENTING}) blir FERDIG`,
+                timeout: 60_000,
+            }
+        )
+        .toBe('FERDIG');
 
-    const brev = (await hentInnhentingsbrev())!;
-    console.log(`🔍 Innhentingsbrev: prosess=${brev.PROSESS_TYPE}, status=${brev.STATUS}`);
+    console.log(`🔍 Innhentingsbrev: prosess=${brev!.PROSESS_TYPE}, status=${brev!.STATUS}`);
 
-    // «Så skal Melosys ha sendt brevet "Innhenting av inntektsopplysninger"»
-    expect(brev.STATUS, 'Innhentingsbrevet skal være produsert og distribuert (FERDIG)').toBe(
-        'FERDIG'
-    );
-
-    // «... til bruker» (scenario 1/3) — mottakeren skal stå i brevets DATA. Godtar fnr ELLER
-    // aktørId siden eksakt identifikator-format er uavklart til feature lander.
-    const dataHarMottaker = mottakerIdentifikatorer.some((id) => (brev.DATA || '').includes(id));
+    // «Så skal Melosys ha sendt brevet "Innhenting av inntektsopplysninger" ... til bruker»
+    // (scenario 1/3). Mottakerens ident står i samme DATA (fullmektig-substitusjon skjer FØR
+    // prosessinstansen lages). Godtar fnr ELLER aktørId — eksakt format pinnes ved første grønne.
+    const dataHarMottaker = mottakerIdentifikatorer.some((id) => (brev!.DATA || '').includes(id));
     expect(
         dataHarMottaker,
         `Brevet skal være adressert til bruker (en av ${mottakerIdentifikatorer.join(' / ')})`
@@ -170,6 +183,9 @@ test.describe('Automatisk innhentingsbrev ved årsavregning (MELOSYS-8122)', () 
         await opprettVedtattIkkeSkattepliktigSak(page);
 
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
+
+        // Auto-utsending av innhentingsbrevet er bak toggle (default AV) — slå på før triggeren.
+        await unleash.enableFeature(TOGGLE_INNHENTINGSBREV);
 
         console.log(`📨 Sender skattehendelse for skatteår ${FORRIGE_AAR}...`);
         publishSkattehendelse({
@@ -198,6 +214,9 @@ test.describe('Automatisk innhentingsbrev ved årsavregning (MELOSYS-8122)', () 
         await opprettVedtattIkkeSkattepliktigSak(page);
 
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
+
+        // Auto-utsending av innhentingsbrevet er bak toggle (default AV) — slå på før triggeren.
+        await unleash.enableFeature(TOGGLE_INNHENTINGSBREV);
 
         const periodeISO = TestPeriodsISO.previousYearPeriod;
         console.log(`⚙️ Kjører ikke-skattepliktige-jobben for ${periodeISO.start} - ${periodeISO.end}...`);
