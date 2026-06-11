@@ -26,10 +26,10 @@ import {withDatabase} from '../../../helpers/db-helper';
  * automatisk — til bruker når ingen fullmektig er registrert, til fullmektig (FULLMEKTIG_SØKNAD)
  * ellers.
  *
- * STATUS: Auto-utsending av brevet er ikke implementert i melosys-api ennå (MELOSYS-8122 er i
- * «Utvikle og teste»). Brev-assertionene er derfor korrekt RØDE til feature-branchen lander;
- * selve trigger-flyten (sak → vedtak → auto-opprettet årsavregning) er grønn i dag. Se
- * status-merknaden i speken.
+ * STATUS: Verifisert grønt i CI mot melosys-api-feature-imaget (branch
+ * 8122-auto-innhentingsbrev-arsavregning). Brevet scopes via prosessdata-flagget
+ * SEND_INNHENTINGSBREV i de to auto-flytene — ingen dedikert brev-toggle (droppet etter
+ * fagavklaring). Scenario 1+3 (mottaker=bruker) kjørbare; 2+4 (fullmektig) er test.fixme.
  */
 
 /** AktørId for USER_ID_VALID (30056928150) i PDL-mocken — brevets mottaker uten fullmektig */
@@ -37,12 +37,6 @@ const AKTOER_ID_VALID = '1111111111111';
 
 /** Brevmal-identifikator slik den står i brevbestilling-DATA (melosys-api Produserbaredokumenter) */
 const BREVMAL_INNHENTING = 'INNHENTING_AV_INNTEKTSOPPLYSNINGER';
-
-/**
- * Feature-toggle som styrer auto-utsending av innhentingsbrevet (melosys-api). Default AV når
- * udefinert — må enables eksplisitt før triggeren fyrer, ellers hopper saksflyt-steget over brevet.
- */
-const TOGGLE_INNHENTINGSBREV = 'melosys.arsavregning.innhentingsbrev';
 
 /**
  * Felles forutsetning: vedtatt FTRL-sak med trygdeavgift som betales til NAV
@@ -184,9 +178,6 @@ test.describe('Automatisk innhentingsbrev ved årsavregning (MELOSYS-8122)', () 
 
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
 
-        // Auto-utsending av innhentingsbrevet er bak toggle (default AV) — slå på før triggeren.
-        await unleash.enableFeature(TOGGLE_INNHENTINGSBREV);
-
         console.log(`📨 Sender skattehendelse for skatteår ${FORRIGE_AAR}...`);
         publishSkattehendelse({
             gjelderPeriode: String(FORRIGE_AAR),
@@ -214,9 +205,6 @@ test.describe('Automatisk innhentingsbrev ved årsavregning (MELOSYS-8122)', () 
         await opprettVedtattIkkeSkattepliktigSak(page);
 
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
-
-        // Auto-utsending av innhentingsbrevet er bak toggle (default AV) — slå på før triggeren.
-        await unleash.enableFeature(TOGGLE_INNHENTINGSBREV);
 
         const periodeISO = TestPeriodsISO.previousYearPeriod;
         console.log(`⚙️ Kjører ikke-skattepliktige-jobben for ${periodeISO.start} - ${periodeISO.end}...`);

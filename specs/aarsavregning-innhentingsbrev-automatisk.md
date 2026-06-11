@@ -90,13 +90,14 @@ Gitt at en bruker har en sak med forskuddsvis fakturert trygdeavgift
 
 > **Status-merknad:** Auto-utsending av innhentingsbrevet er implementert i melosys-api på branch
 > `8122-auto-innhentingsbrev-arsavregning` (saksflyt-steg `SEND_INNHENTINGSBREV_AARSAVREGNING` i
-> `OPPRETT_NY_BEHANDLING_AARSAVREGNING`, bak toggle `melosys.arsavregning.innhentingsbrev`,
-> default AV). Verifiseres i CI mot et pushet image fra den branchen. Til feature-imaget er i CI
-> er brev-assertionene korrekt røde. Akseptanse-test skrevet sammen med implementasjonen, samme
-> mønster som [`aarsavregning-oppgave-skatteaar-i-beskrivelse.md`](aarsavregning-oppgave-skatteaar-i-beskrivelse.md).
+> `OPPRETT_NY_BEHANDLING_AARSAVREGNING`, scopet via prosessdata-flagget `SEND_INNHENTINGSBREV`).
+> Verifisert grønt i CI mot pushet feature-image fra den branchen (run 27353951522 + re-kjøring
+> mot toggle-fri image). Akseptanse-test skrevet sammen med implementasjonen.
 >
-> **Toggle:** `melosys.arsavregning.innhentingsbrev` (default AV) styrer brev-steget — testen
-> enabler den eksplisitt før triggeren; i CI-dispatch settes også `unleash_force_enable`.
+> **Ingen brev-toggle:** Et dedikert brev-toggle ble vurdert, men droppet etter avklaring med
+> fagperson — begge flytene er allerede kontrollert oppstrøms (skattepliktige bak
+> `MELOSYS_SKATTEHENDELSE_CONSUMER`, ikke-skattepliktige = manuell admin-jobb), så brevet trigges
+> direkte via prosessdata-flagget i de to flytene. Testen trenger ingen toggle-aktivering for brevet.
 
 ### Forhold til MELOSYS-8123
 
