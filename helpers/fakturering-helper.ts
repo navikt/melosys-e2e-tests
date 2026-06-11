@@ -106,6 +106,11 @@ export class FaktureringHelper {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
+        // AuditorAwareFilter i faktureringskomponenten krever ident for sporing på
+        // POST/PUT (header Nav-User-Id ELLER NAVident/azp_name-claim i tokenet).
+        // CI-stackens mock-oauth2-token mangler claimene → uten header svarer
+        // filteret 400 "Ident må oppgis for sporing" (default Spring-error-body).
+        'Nav-User-Id': 'melosys-e2e-tests',
       },
       failOnStatusCode: false,
     };
