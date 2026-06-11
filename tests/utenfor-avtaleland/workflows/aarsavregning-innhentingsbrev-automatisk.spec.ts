@@ -1,0 +1,228 @@
+import {expect, test} from '../../../fixtures';
+import type {Page} from '@playwright/test';
+import {AuthHelper} from '../../../helpers/auth-helper';
+import {HovedsidePage} from '../../../pages/hovedside.page';
+import {OpprettNySakPage} from '../../../pages/opprett-ny-sak/opprett-ny-sak.page';
+import {MedlemskapPage} from '../../../pages/behandling/medlemskap.page';
+import {ArbeidsforholdPage} from '../../../pages/behandling/arbeidsforhold.page';
+import {LovvalgPage} from '../../../pages/behandling/lovvalg.page';
+import {ResultatPeriodePage} from '../../../pages/behandling/resultat-periode.page';
+import {TrygdeavgiftPage} from '../../../pages/trygdeavgift/trygdeavgift.page';
+import {VedtakPage} from '../../../pages/vedtak/vedtak.page';
+import {FORRIGE_AAR, USER_ID_VALID} from '../../../pages/shared/constants';
+import {UnleashHelper} from '../../../helpers/unleash-helper';
+import {AdminApiHelper, waitForProcessInstances} from '../../../helpers/api-helper';
+import {publishSkattehendelse} from '../../../helpers/skattehendelse-helper';
+import {TestPeriods, TestPeriodsISO} from '../../../helpers/date-helper';
+import {withDatabase} from '../../../helpers/db-helper';
+
+/**
+ * MELOSYS-8122: Automatisk sende innhentingsbrev ved automatisk opprettelse av årsavregning
+ *
+ * Spec: specs/aarsavregning-innhentingsbrev-automatisk.md
+ *
+ * Brev-søsknen til MELOSYS-8123: identisk auto-årsavregning-trigger, men asserterer at brevet
+ * "Innhenting av inntektsopplysninger" (brevmal INNHENTING_AV_INNTEKTSOPPLYSNINGER) sendes
+ * automatisk — til bruker når ingen fullmektig er registrert, til fullmektig (FULLMEKTIG_SØKNAD)
+ * ellers.
+ *
+ * STATUS: Auto-utsending av brevet er ikke implementert i melosys-api ennå (MELOSYS-8122 er i
+ * «Utvikle og teste»). Brev-assertionene er derfor korrekt RØDE til feature-branchen lander;
+ * selve trigger-flyten (sak → vedtak → auto-opprettet årsavregning) er grønn i dag. Se
+ * status-merknaden i speken.
+ */
+
+/** AktørId for USER_ID_VALID (30056928150) i PDL-mocken — brevets mottaker uten fullmektig */
+const AKTOER_ID_VALID = '1111111111111';
+
+/** Brevmal-identifikator slik den står i SEND_BREV/brevbestilling-DATA (melosys-api Produserbaredokumenter) */
+const BREVMAL_INNHENTING = 'INNHENTING_AV_INNTEKTSOPPLYSNINGER';
+
+/**
+ * Felles forutsetning: vedtatt FTRL-sak med trygdeavgift som betales til NAV
+ * (ikke-skattepliktig), avgiftsperiode i forrige år.
+ *
+ * Toggle melosys.faktureringskomponenten.ikke-tidligere-perioder må være AV under opprettelsen —
+ * forrige-års-UI-et krever det, og faktureringskomponenten avviser tidligere-års-fakturaserier
+ * med togglen PÅ. Identisk med MELOSYS-8123 sin opprettVedtattIkkeSkattepliktigSak.
+ */
+async function opprettVedtattIkkeSkattepliktigSak(page: Page): Promise<void> {
+    const hovedside = new HovedsidePage(page);
+    const opprettSak = new OpprettNySakPage(page);
+    const medlemskap = new MedlemskapPage(page);
+    const arbeidsforhold = new ArbeidsforholdPage(page);
+    const lovvalg = new LovvalgPage(page);
+    const resultatPeriode = new ResultatPeriodePage(page);
+    const trygdeavgift = new TrygdeavgiftPage(page);
+    const vedtak = new VedtakPage(page);
+
+    const periode = TestPeriods.previousYearPeriod;
+
+    console.log('📝 Oppretter sak...');
+    await hovedside.gotoOgOpprettNySak();
+    await opprettSak.opprettStandardSak(USER_ID_VALID);
+    await opprettSak.assertions.verifiserBehandlingOpprettet();
+
+    await waitForProcessInstances(page.request, 30);
+    await hovedside.goto();
+    await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).click();
+
+    console.log(`📝 Medlemskap (${periode.start} - ${periode.end})...`);
+    await medlemskap.velgPeriode(periode.start, periode.end);
+    await medlemskap.velgLand('Afghanistan');
+    await medlemskap.velgTrygdedekning('FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON');
+    await medlemskap.klikkBekreftOgFortsett();
+
+    console.log('📝 Arbeidsforhold...');
+    await arbeidsforhold.fyllUtArbeidsforhold('Ståles Stål AS');
+
+    console.log('📝 Lovvalg...');
+    await lovvalg.velgBestemmelse('FTRL_KAP2_2_8_FØRSTE_LEDD_A');
+    await lovvalg.svarJaPaaFørsteSpørsmål();
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker vært medlem i minst');
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker nær tilknytning til');
+    await lovvalg.klikkBekreftOgFortsett();
+
+    console.log('📝 Resultat...');
+    await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
+
+    console.log('📝 Trygdeavgift (ikke-skattepliktig)...');
+    await trygdeavgift.ventPåSideLastet();
+    await trygdeavgift.velgSkattepliktig(false);
+    await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
+    await trygdeavgift.velgBetalesAga(false);
+    await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
+    await trygdeavgift.klikkBekreftOgFortsett();
+
+    console.log('📝 Fatter vedtak...');
+    await vedtak.klikkFattVedtak();
+    await waitForProcessInstances(page.request, 30);
+}
+
+/**
+ * Binder «Så»-linjene: poller PROSESSINSTANS til en fersk brev-prosessinstans for
+ * innhentingsbrevet finnes, og verifiserer at den er FERDIG og adressert til forventet mottaker.
+ *
+ * Brevet enqueues som SEND_BREV / OPPRETT_OG_DISTRIBUER_BREV med brevmal-identifikatoren i DATA
+ * (samme JS-includes-mønster som vedtaksbrev-verifiseringen i eu-eos-12.1).
+ *
+ * @param mottakerIdentifikatorer mulige mottaker-identifikatorer (fnr og/eller aktørId). Det er
+ *   uavklart om brevets DATA lagrer fnr eller aktørId for mottakeren (feature ikke implementert
+ *   ennå) — assertionen godtar derfor at minst én av dem står i DATA. Eksakt identifikator pinnes
+ *   når feature-branchen lander.
+ */
+async function verifiserInnhentingsbrevSendt(
+    mottakerIdentifikatorer: string[]
+): Promise<void> {
+    type BrevRad = {DATA: string; STATUS: string; PROSESS_TYPE: string};
+
+    const hentInnhentingsbrev = async (): Promise<BrevRad | undefined> =>
+        await withDatabase(async (db) => {
+            const rader = await db.query<BrevRad>(
+                `SELECT PI.DATA, PI.STATUS, PI.PROSESS_TYPE
+                 FROM PROSESSINSTANS PI
+                 WHERE PI.PROSESS_TYPE IN ('SEND_BREV', 'OPPRETT_OG_DISTRIBUER_BREV')
+                   AND PI.REGISTRERT_DATO > SYSDATE - INTERVAL '10' MINUTE`,
+                {}
+            );
+            return rader.find((r) => (r.DATA || '').includes(BREVMAL_INNHENTING));
+        });
+
+    // Opprettelsen er asynkron (Kafka-consume / jobb → prosessinstans).
+    await expect
+        .poll(async () => (await hentInnhentingsbrev()) !== undefined, {
+            message: `Venter på brev-prosessinstans for ${BREVMAL_INNHENTING}`,
+            timeout: 30_000,
+        })
+        .toBe(true);
+
+    const brev = (await hentInnhentingsbrev())!;
+    console.log(`🔍 Innhentingsbrev: prosess=${brev.PROSESS_TYPE}, status=${brev.STATUS}`);
+
+    // «Så skal Melosys ha sendt brevet "Innhenting av inntektsopplysninger"»
+    expect(brev.STATUS, 'Innhentingsbrevet skal være produsert og distribuert (FERDIG)').toBe(
+        'FERDIG'
+    );
+
+    // «... til bruker» (scenario 1/3) — mottakeren skal stå i brevets DATA. Godtar fnr ELLER
+    // aktørId siden eksakt identifikator-format er uavklart til feature lander.
+    const dataHarMottaker = mottakerIdentifikatorer.some((id) => (brev.DATA || '').includes(id));
+    expect(
+        dataHarMottaker,
+        `Brevet skal være adressert til bruker (en av ${mottakerIdentifikatorer.join(' / ')})`
+    ).toBe(true);
+}
+
+test.describe('Automatisk innhentingsbrev ved årsavregning (MELOSYS-8122)', () => {
+    test('skattehendelse uten fullmektig sender innhentingsbrev til bruker', async ({
+        page,
+        request,
+    }) => {
+        test.setTimeout(180_000);
+        const auth = new AuthHelper(page);
+        const unleash = new UnleashHelper(request);
+
+        // Toggle AV under vedtak: hindrer at saksbehandlingsflyt-grenen auto-oppretter
+        // årsavregningen før skattehendelsen får gjort det.
+        await unleash.disableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
+        await auth.login();
+
+        await opprettVedtattIkkeSkattepliktigSak(page);
+
+        await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
+
+        console.log(`📨 Sender skattehendelse for skatteår ${FORRIGE_AAR}...`);
+        publishSkattehendelse({
+            gjelderPeriode: String(FORRIGE_AAR),
+            identifikator: USER_ID_VALID,
+            hendelsetype: 'NY',
+        });
+
+        await verifiserInnhentingsbrevSendt([USER_ID_VALID, AKTOER_ID_VALID]);
+        await waitForProcessInstances(page.request, 30);
+    });
+
+    test('ikke-skattepliktig-jobben uten fullmektig sender innhentingsbrev til bruker', async ({
+        page,
+        request,
+    }) => {
+        test.setTimeout(180_000);
+        const auth = new AuthHelper(page);
+        const unleash = new UnleashHelper(request);
+        const adminApi = new AdminApiHelper();
+
+        // Toggle AV under vedtak: årsavregningen skal opprettes av jobben, ikke av vedtaket.
+        await unleash.disableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
+        await auth.login();
+
+        await opprettVedtattIkkeSkattepliktigSak(page);
+
+        await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
+
+        const periodeISO = TestPeriodsISO.previousYearPeriod;
+        console.log(`⚙️ Kjører ikke-skattepliktige-jobben for ${periodeISO.start} - ${periodeISO.end}...`);
+        await adminApi.finnIkkeSkattepliktigeSaker(request, periodeISO.start, periodeISO.end, true);
+        const jobbStatus = await adminApi.waitForIkkeSkattepliktigeSakerJob(request, 60, 1000);
+        expect(jobbStatus.antallProsessert, 'Jobben skal prosessere saken').toBe(1);
+
+        await verifiserInnhentingsbrevSendt([USER_ID_VALID, AKTOER_ID_VALID]);
+        await waitForProcessInstances(page.request, 30);
+    });
+
+    // Scenario 2 og 4 — mottaker = fullmektig (FULLMEKTIG_SØKNAD).
+    //
+    // Bundet som fixme: det finnes ingen e2e-fikstur for å registrere en FULLMEKTIG_SØKNAD-fullmakt
+    // på saken. Fullmakten ligger i melosys-api sin egen `fullmakt`-tabell (Fullmakt → aktoer_id,
+    // type) og krever en Aktoer med rolle FULLMEKTIG knyttet til fagsaken. Oppsett-sti for senere
+    // aktivering (DB-injeksjon via withDatabase): insert i AKTOER med FULLMEKTIG-rolle på fagsaken
+    // + insert i FULLMAKT(aktoer_id, type='FULLMEKTIG_SØKNAD'), deretter samme trigger og assert at
+    // brevets DATA inneholder fullmektigens fnr i stedet for brukerens. Å fake oppsettet ville gitt
+    // falsk dekning — derfor fixme til fiksturen finnes. Se speken.
+    test.fixme('skattehendelse med fullmektig sender innhentingsbrev til fullmektig', async () => {
+        // Krever FULLMEKTIG_SØKNAD-fikstur — se kommentar over og speken.
+    });
+
+    test.fixme('ikke-skattepliktig-jobben med fullmektig sender innhentingsbrev til fullmektig', async () => {
+        // Krever FULLMEKTIG_SØKNAD-fikstur — se kommentar over og speken.
+    });
+});
