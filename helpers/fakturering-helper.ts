@@ -106,6 +106,11 @@ export class FaktureringHelper {
       headers: {
         'Authorization': `Bearer ${token}`,
         'Content-Type': 'application/json',
+        // AuditorAwareFilter i faktureringskomponenten krever ident for sporing på
+        // POST/PUT (header Nav-User-Id ELLER NAVident/azp_name-claim i tokenet).
+        // CI-stackens mock-oauth2-token mangler claimene → uten header svarer
+        // filteret 400 "Ident må oppgis for sporing" (default Spring-error-body).
+        'Nav-User-Id': 'melosys-e2e-tests',
       },
       failOnStatusCode: false,
     };
@@ -184,6 +189,61 @@ export class FaktureringHelper {
    */
   avrundBelop(belop: number): number {
     return parseFloat(belop.toFixed(2));
+  }
+
+  // --- Admin-endepunkter (krever NAIS_CLUSTER_NAME=dev-gcp i faktureringskomponenten) ---
+
+  /**
+   * Sett status på en enkelt-faktura via admin-endepunktet.
+   *
+   * Brukes typisk til å flippe en faktura til BESTILT, som er en forutsetning for
+   * simulerManglendeInnbetaling. Endepunktet svarer 403 hvis faktureringskomponenten
+   * ikke kjører med env NAIS_CLUSTER_NAME=dev-gcp (satt i begge compose-filene).
+   *
+   * @param fakturaReferanse - Faktura-referanse (ULID, fra Fakturaserie.faktura[].fakturaReferanse)
+   * @param status - Ny status (default 'BESTILT')
+   */
+  async settFakturaStatus(fakturaReferanse: string, status: string = 'BESTILT'): Promise<void> {
+    const response = await this.callEndpoint(
+      'POST',
+      `/admin/faktura/${fakturaReferanse}/status?status=${status}`
+    );
+
+    if (!response.ok()) {
+      const text = await response.text();
+      throw new Error(
+        `Failed to set faktura ${fakturaReferanse} to status ${status}: ${response.status()} - ${text}`
+      );
+    }
+    console.log(`✅ Faktura ${fakturaReferanse} satt til status ${status}`);
+  }
+
+  /**
+   * Simuler at en faktura ikke er betalt innen forfall (manglende innbetaling).
+   *
+   * Faktureringskomponenten syntetiserer en EksternFakturaStatus MANGLENDE_INNBETALING
+   * og publiserer ManglendeFakturabetalingMelding på Kafka. For frivillig medlemskap
+   * oppretter melosys-api deretter en MANGLENDE_INNBETALING_TRYGDEAVGIFT-behandling.
+   *
+   * Forutsetning: fakturaen må ha status BESTILT (bruk settFakturaStatus først).
+   * Endepunktet svarer 403 uten NAIS_CLUSTER_NAME=dev-gcp.
+   *
+   * @param fakturaReferanse - Faktura-referanse (ULID)
+   * @param betaltBelop - Beløp som er betalt (default 0 = ingenting betalt)
+   */
+  async simulerManglendeInnbetaling(fakturaReferanse: string, betaltBelop: number = 0): Promise<void> {
+    const response = await this.callEndpoint(
+      'POST',
+      `/admin/faktura/${fakturaReferanse}/manglende-innbetaling?betaltBelop=${betaltBelop}`
+    );
+
+    if (!response.ok()) {
+      const text = await response.text();
+      throw new Error(
+        `Failed to simulate manglende innbetaling for faktura ${fakturaReferanse}: ${response.status()} - ${text}`
+      );
+    }
+    console.log(`✅ Manglende innbetaling simulert for faktura ${fakturaReferanse} (betalt: ${betaltBelop})`);
   }
 
   // --- Convenience methods ---
