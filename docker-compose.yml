@@ -309,10 +309,15 @@ services:
           - melosys-web.melosys.docker-internal
     ports:
       - "3000:3000"
+    # Nginx resolverer alle upstreams ved oppstart og dør permanent hvis én mangler i
+    # docker-DNS — derfor må ALLE tjenester nginx-configen refererer stå i depends_on,
+    # og restart-policy fange resterende oppstarts-racer (container-start ≠ DNS-registrert)
+    restart: on-failure
     depends_on:
       - melosys-api
       - mock-oauth2-server
       - faktureringskomponenten
+      - melosys-trygdeavtale
     environment:
       # Load the local environment configuration
       ENVIRONMENT_NAME: local
