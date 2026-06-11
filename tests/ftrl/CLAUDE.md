@@ -101,5 +101,6 @@ Minstebeløp for 2026: **99 650 kr** (se `V6.0__minstebeloep.sql` i melosys-tryg
 
 Test-spesifikasjoner finnes under `specs/`:
 - `specs/ftrl-trygdeavgift-25-prosent-regel.md` — 25%-regelen
+- `specs/ftrl-opphor-fritekst-autolagring.md` — autolagring av fritekst i opphørsvedtak (MELOSYS-8141, bundet til `ftrl-manglende-innbetaling-opphor.spec.ts`)
 - `specs/ftrl-yrkesaktiv-full-dekning.md` — Full dekning FTRL
 - `specs/ftrl-aarsavregning.md` — Årsavregning
