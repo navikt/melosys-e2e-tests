@@ -124,7 +124,12 @@ export class TrygdeavgiftPage extends BasePage {
     if (put) {
       console.log('✅ Autolagring PUT /trygdeavgift/beregning fullført');
       // Let React apply the PUT response (form-reset) before the next mutation.
-      await this.page.waitForLoadState('networkidle', { timeout: 2000 }).catch(() => {});
+      // Generous margin: on a loaded CI the reset can trail the response by a
+      // beat, and the next indexed mutation must not race a still-applying reset
+      // (it would silently wipe the field we are about to edit). networkidle
+      // resolves instantly when already quiet, so this only costs time on a
+      // genuinely busy network.
+      await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
     }
     // No PUT (e.g. an empty row was just added) → the 2.5s window already settled
     // and there is no form-reset to wait for, so skip the extra networkidle.
