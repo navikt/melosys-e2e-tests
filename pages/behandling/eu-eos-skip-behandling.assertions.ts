@@ -69,13 +69,6 @@ export class EuEosSkipBehandlingAssertions extends EuEosBehandlingAssertions {
   }
 
   /**
-   * Override: Verifiser at behandling med skip finnes i database
-   * Skip-specific implementation that verifies skip-related data
-   *
-   * @param fnr - Fødselsnummer for personen
-   * @returns Behandling ID
-   */
-  /**
    * Hard sluttilstands-verifisering i DB etter fattet/iverksatt EU/EØS-skip-vedtak:
    * behandlingen er AVSLUTTET, har et behandlingsresultat, og alle prosessinstanser
    * (inkl. iverksetting) er FERDIG. Beviser sluttilstand utover navigering tilbake
@@ -91,6 +84,13 @@ export class EuEosSkipBehandlingAssertions extends EuEosBehandlingAssertions {
     return await verifiserBehandlingSluttilstand(forventet);
   }
 
+  /**
+   * Override: Verifiser at behandling med skip finnes i database
+   * Skip-specific implementation that verifies skip-related data
+   *
+   * @param fnr - Fødselsnummer for personen
+   * @returns Behandling ID
+   */
   override async verifiserBehandlingIDatabase(_fnr: string): Promise<string> {
     return await withDatabase(async (db) => {
       // Nyeste behandling = testens (ren DB per cleanup-fixture). Skjemaet har ingen SAK-tabell/

@@ -10,9 +10,10 @@ import { withDatabase } from '../../helpers/db-helper';
  */
 export interface BehandlingSluttilstandForventning {
   /**
-   * Query på denne BEHANDLING.ID. Utelates → nyeste behandling brukes.
-   * (Cleanup-fixturen renser DB per test, så nyeste behandling ER testens —
-   * for nyvurderinger er det NV-behandlingen, som er det vi vil verifisere.)
+   * Query på denne BEHANDLING.ID. Utelates → nyeste behandling (høyest ID) brukes.
+   * (Cleanup-fixturen renser DB per test, så nyeste behandling ER testens.)
+   * For flerbehandlingsflyter (f.eks. nyvurdering) MÅ behandlingId settes eksplisitt
+   * for å treffe riktig behandling — ellers treffes bare den sist opprettede.
    */
   behandlingId?: string | null;
   /** Assert BEHANDLINGSRESULTAT.RESULTAT_TYPE = denne (f.eks. MEDLEM_I_FOLKETRYGDEN). */
@@ -51,7 +52,9 @@ export async function verifiserBehandlingSluttilstand(
           { id: forventet.behandlingId }
         )
       : await db.queryOne<{ ID: number; STATUS: string }>(
-          `SELECT ID, STATUS FROM BEHANDLING ORDER BY REGISTRERT_DATO DESC FETCH FIRST 1 ROWS ONLY`
+          // ID DESC (monotonisk PK) = deterministisk «nyeste», jf. konvensjonen ellers
+          // i POM-ene (REGISTRERT_DATO kan tie ved rask opprettelse i samme flyt).
+          `SELECT ID, STATUS FROM BEHANDLING ORDER BY ID DESC FETCH FIRST 1 ROWS ONLY`
         );
 
     expect(behandling, 'Forventet behandling i DB').not.toBeNull();
