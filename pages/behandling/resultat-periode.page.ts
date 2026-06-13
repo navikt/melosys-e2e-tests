@@ -28,6 +28,23 @@ export class ResultatPeriodePage extends BasePage {
   }
 
   /**
+   * Wait for the Perioder (Resultat) step to finish rendering after the
+   * previous step's transition.
+   *
+   * Replaces fixed `waitForTimeout(3000)` sleeps that callers used after
+   * `lovvalg.klikkBekreftOgFortsett()`. The real signal is that the first
+   * "Resultat periode" dropdown has rendered — wait for that instead of a
+   * guess. If the step never transitioned, this surfaces the real failure
+   * (a visible-timeout) instead of silently continuing.
+   */
+  async ventPåSideLastet(): Promise<void> {
+    await this.page
+      .getByLabel('Resultat periode 1')
+      .waitFor({ state: 'visible', timeout: 15000 });
+    console.log('✅ Resultat periode-steget lastet');
+  }
+
+  /**
    * Get all resultat dropdowns on the page
    * Some trygdedekning values (like FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON) create
    * multiple periods that each need a result selected

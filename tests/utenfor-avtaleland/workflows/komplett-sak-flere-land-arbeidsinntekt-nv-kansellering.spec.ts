@@ -82,7 +82,7 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og NV-kanselle
 
         // Step 6: Resultat Periode
         console.log('Step 6: Setting resultat periode...');
-        await page.waitForTimeout(3000);
+        await resultatPeriode.ventPåSideLastet();
         await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
 
         // Hent behandlingId fra URL
