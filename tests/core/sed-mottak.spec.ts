@@ -231,13 +231,9 @@ test.describe('SED Mottak', () => {
     // Wait for search results
     await sokPage.ventPåResultater();
 
-    // Check if we get any results
-    const hasResults = await sokPage.harResultater();
-    if (hasResults) {
-      console.log('   ✅ Person found in search results');
-    } else {
-      console.log('   ⚠️ No search results - fagsak may not be linked to person yet');
-    }
+    // Step 5: ASSERT the actual claim of this test — SED-mottaket gjør bruker/sak søkbar.
+    await sokPage.assertions.verifiserBrukerSøkbarMedBehandling(SED_SCENARIOS.A003_MED_PERSON.fnr!);
+    console.log(`   ✅ Sak søkbar for ${SED_SCENARIOS.A003_MED_PERSON.fnr}`);
 
     console.log('✅ SED intake flow completed');
   });
@@ -411,23 +407,12 @@ test.describe('SED Mottak via melosys-eessi @eessi', () => {
     };
   }
 
-  test('skal verifisere at melosys-eessi er tilgjengelig', async ({ request }) => {
-    console.log('📝 Checking if melosys-eessi is running...');
-
-    const eessiRunning = await isEessiRunning(request);
-
-    if (!eessiRunning) {
-      console.log('❌ melosys-eessi is not running!');
-      console.log('   Start it with: docker-compose --profile eessi up -d');
-      console.log('   Or run in IntelliJ with profile: local-mock');
-    }
-    expect(eessiRunning, 'melosys-eessi must be running for this test').toBe(true);
-
-    console.log('✅ melosys-eessi is running');
-  });
+  // Merk: melosys-eessi-tilgjengelighet sjekkes nå én gang i global-setup.ts (PÅKREVD
+  // tjeneste — hele kjøringen aborter om den er nede). Den tidligere frittstående
+  // «skal verifisere at melosys-eessi er tilgjengelig»-testen er fjernet (ren infra-ping
+  // uten forretningsmening). Per-test-sjekken under beholdes som defense-in-depth.
 
   test('skal trigge MOTTAK_SED via melosys-eessi flow', async ({ request }) => {
-    // Skip if melosys-eessi is not running
     const eessiRunning = await isEessiRunning(request);
     expect(eessiRunning, 'melosys-eessi must be running for this test').toBe(true);
 

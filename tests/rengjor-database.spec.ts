@@ -16,7 +16,9 @@ import {clearMockData} from '../helpers/mock-helper';
  * });
  */
 
-test.describe('Rengjør database', () => {
+// @manual: rene vedlikeholds-/debug-verktøy (rydd DB, vis alle tabeller) — ingen assertion,
+// skal ikke telle som regresjonsdekning. Kjør ved behov med MANUAL_TESTS=true.
+test.describe('Rengjør database @manual', () => {
     test('skal rengjøre database og mock data', async ({page}) => {
         // Rengjør database
         await withDatabase(async (db) => {
