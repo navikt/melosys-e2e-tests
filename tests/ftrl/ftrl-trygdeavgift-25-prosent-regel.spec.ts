@@ -94,7 +94,7 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker nær tilknytning til');
     await lovvalg.klikkBekreftOgFortsett();
 
-    await page.waitForTimeout(3000);
+    await resultatPeriode.ventPåSideLastet();
     await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
 
     const trygdeavgift = new TrygdeavgiftPage(page);
@@ -133,7 +133,7 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     await lovvalg.klikkBekreftOgFortsett();
 
     // Full dekning har én periode (ingen helse/pensjon-split)
-    await page.waitForTimeout(3000);
+    await resultatPeriode.ventPåSideLastet();
     await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
 
     const trygdeavgift = new TrygdeavgiftPage(page);
@@ -319,7 +319,7 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker nær tilknytning til');
     await lovvalg.klikkBekreftOgFortsett();
 
-    await page.waitForTimeout(3000);
+    await resultatPeriode.ventPåSideLastet();
     await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
 
     // --- Trygdeavgift ---
@@ -327,9 +327,11 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     await trygdeavgift.ventPåSideLastet();
 
     // Skatteforhold 1: mai-okt skattepliktig (endre tom-dato fra default)
-    // Use human-like delays between operations to let React process state changes
-    // and avoid race conditions with the debounced save
-    const pause = () => page.waitForTimeout(800);
+    // Mellom hver felt-mutasjon må vi vente på at den debouncede auto-lagringen
+    // (PUT /trygdeavgift/beregning) er fullført — responsen nullstiller skjemaet,
+    // så en u-persistert mutasjon kan ellers bli overskrevet. Venter på selve
+    // PUT-en i stedet for en fast pause (mer robust på en lastet CI).
+    const pause = () => trygdeavgift.ventPåAutolagring();
 
     await trygdeavgift.fyllInnSkatteforholdDatoer(0, periodeStart, `31.10.${year}`);
     await pause();
@@ -423,8 +425,7 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     expect(apiData.inntekter).toBe(3);
 
     // Wait for any re-render debounced PUTs to complete before leaving the step.
-    await page.waitForTimeout(1500);
-    await page.waitForLoadState('networkidle');
+    await trygdeavgift.ventPåAutolagring();
 
     await trygdeavgift.klikkBekreftOgFortsett();
 
@@ -509,8 +510,8 @@ test.describe('FTRL Pensjonist — 25%-regelen', () => {
 
     // Perioder — default-verdier (Innvilget/Avslått/Innvilget) er gyldige for
     // pensjonist + helse/pensjon-dekning. Bare bekreft og gå videre.
-    await page.waitForTimeout(3000);
     const resultatPeriode = new ResultatPeriodePage(page);
+    await resultatPeriode.ventPåSideLastet();
     await resultatPeriode.klikkBekreftOgFortsett();
 
     const trygdeavgift = new TrygdeavgiftPage(page);

@@ -97,6 +97,45 @@ export class TrygdeavgiftPage extends BasePage {
   }
 
   /**
+   * Wait for the form's debounced auto-save (PUT /trygdeavgift/beregning) to
+   * fire and complete after a field mutation in a multi-row scenario.
+   *
+   * Replaces fixed `waitForTimeout(800)` "pauses" between indexed field edits.
+   * The flake those sleeps masked: a debounced PUT's response resets the form
+   * (resetSkatteforholdsperioder/resetInntektskilder), wiping any field that
+   * was mutated but not yet persisted. Waiting for the PUT to COMPLETE before
+   * the next mutation guarantees we edit on top of settled state — on a loaded
+   * CI an 800ms sleep was not always enough for the PUT round-trip.
+   *
+   * MUST be called immediately after the synchronous mutation returns: the form
+   * has a ~500ms debounce, so registering the listener now reliably catches the
+   * upcoming PUT (it cannot have fired yet). If a particular mutation produces
+   * no PUT (e.g. adding an empty row), it falls back to a networkidle settle so
+   * the caller never hangs.
+   */
+  async ventPåAutolagring(): Promise<void> {
+    const put = await this.page.waitForResponse(
+      response =>
+        isTrygdeavgiftBeregningResponse(response) &&
+        response.request().method() === 'PUT',
+      { timeout: 2500 },
+    ).catch(() => null);
+
+    if (put) {
+      console.log('✅ Autolagring PUT /trygdeavgift/beregning fullført');
+      // Let React apply the PUT response (form-reset) before the next mutation.
+      // Generous margin: on a loaded CI the reset can trail the response by a
+      // beat, and the next indexed mutation must not race a still-applying reset
+      // (it would silently wipe the field we are about to edit). networkidle
+      // resolves instantly when already quiet, so this only costs time on a
+      // genuinely busy network.
+      await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+    }
+    // No PUT (e.g. an empty row was just added) → the 2.5s window already settled
+    // and there is no form-reset to wait for, so skip the extra networkidle.
+  }
+
+  /**
    * Select Skattepliktig (tax liable) status
    *
    * IMPORTANT: This method waits for the debounced PUT API call to complete.

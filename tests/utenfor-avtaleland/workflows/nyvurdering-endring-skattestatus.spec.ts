@@ -74,8 +74,8 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker nær tilknytning til');
         await lovvalg.klikkBekreftOgFortsett();
 
-        // Wait for Medlemskapsperioder page to load
-        await page.waitForTimeout(3000);
+        // Wait for Resultat periode-steget to render after the step transition
+        await resultatPeriode.ventPåSideLastet();
 
         // Log what the frontend API returns (for debugging)
         console.log('📊 Logging all frontend toggle states:');
@@ -208,8 +208,8 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker nær tilknytning til');
         await lovvalg.klikkBekreftOgFortsett();
 
-        // Wait for Medlemskapsperioder page to load
-        await page.waitForTimeout(3000);
+        // Wait for Resultat periode-steget to render after the step transition
+        await resultatPeriode.ventPåSideLastet();
 
         // Log what the frontend API returns (for debugging)
         console.log('📊 Logging all frontend toggle states:');

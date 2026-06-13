@@ -25,8 +25,13 @@ export default defineConfig({
   grep: process.env.MANUAL_TESTS ? /@manual/ : undefined,
   grepInvert: process.env.MANUAL_TESTS ? undefined : /@manual/,
   
-  /* Retry on CI only */
-  retries: process.env.CI ? 2 : 0,
+  /* Retry on CI only.
+   * P1 flak-reduksjon: senket fra 2 → 1 for å avdekke reelle flak tidligere.
+   * retries=2 maskerte flak; med de eksplisitte ventene på plass skal én
+   * grønn kjøring nå være til å stole på. Akseptansebar = 20+ påfølgende
+   * grønne kjøringer på main med retries=1 (krever løpende overvåking).
+   * Egen commit — kan reverteres uavhengig hvis flak fortsatt dukker opp. */
+  retries: process.env.CI ? 1 : 0,
 
   /* Always run tests sequentially - one worker only */
   workers: 1,
