@@ -2,6 +2,10 @@ import { APIRequestContext, Page, expect } from '@playwright/test';
 import { assertErrors } from '../../utils/assertions';
 import { withDatabase } from '../../helpers/db-helper';
 import { fetchMedlPeriode } from '../../helpers/mock-helper';
+import {
+  verifiserBehandlingSluttilstand,
+  BehandlingSluttilstandForventning,
+} from '../shared/behandling-sluttilstand.assertions';
 
 /**
  * Assertion methods for TrygdeavtaleBehandlingPage
@@ -142,6 +146,22 @@ export class TrygdeavtaleBehandlingAssertions {
     await this.verifiserArbeidslandIDatabase(fnr, landkode);
 
     console.log('✅ Trygdeavtale behandling verified completely');
+  }
+
+  /**
+   * Hard sluttilstands-verifisering i DB etter fattet/iverksatt trygdeavtale-vedtak:
+   * behandlingen er AVSLUTTET, har et behandlingsresultat, og alle prosessinstanser
+   * (inkl. IVERKSETT_VEDTAK_TRYGDEAVTALE) er FERDIG. Beviser sluttilstand utover at
+   * vi navigerte tilbake til hovedsiden.
+   *
+   * Kall `waitForProcessInstances(...)` (kaster på feilede instanser) FØR denne.
+   *
+   * @returns BEHANDLING.ID for behandlingen som ble verifisert
+   */
+  async verifiserBehandlingAvsluttet(
+    forventet: BehandlingSluttilstandForventning = {}
+  ): Promise<string> {
+    return await verifiserBehandlingSluttilstand(forventet);
   }
 
   /**
