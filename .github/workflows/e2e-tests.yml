@@ -78,6 +78,11 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      # Tillitsgate: fail-fast på grønn-men-meningsløs-mønstre FØR docker-stacken startes.
+      # Ren node, sekunder. Speiler test-quality.yml (som kun trigges på PR for tests/pages/scripts).
+      - name: Verifiser test-kvalitet (check:tests)
+        run: npm run check:tests
+
       - name: Get Playwright version
         id: playwright-version
         run: echo "version=$(npm list @playwright/test --depth=0 --json | jq -r '.dependencies["@playwright/test"].version')" >> $GITHUB_OUTPUT

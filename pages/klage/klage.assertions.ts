@@ -13,12 +13,17 @@ export class KlageAssertions {
     // Check URL contains behandling or saksbehandling
     await expect(this.page).toHaveURL(/saksbehandling|behandling/, { timeout: 10000 });
 
-    // Check for klage-related content
+    // Check for klage-related content (soft probe — text is not always explicit)
     const klageContent = this.page.getByText(/klage|appeal/i);
-    await expect(klageContent.first()).toBeVisible({ timeout: 5000 }).catch(() => {
+    const klageSynlig = await klageContent
+      .first()
+      .waitFor({ state: 'visible', timeout: 5000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!klageSynlig) {
       // May not always show "klage" text explicitly
       console.log('Note: Klage text not visible on page');
-    });
+    }
   }
 
   /**
@@ -38,14 +43,19 @@ export class KlageAssertions {
    * Verify klage vedtak was submitted successfully
    */
   async verifiserKlageVedtakFattet(): Promise<void> {
-    // After successful vedtak, we should see a success indicator or be redirected
-    await Promise.race([
-      expect(this.page.getByText(/Vedtak fattet|Lagret|Fullført/i)).toBeVisible({ timeout: 15000 }),
-      expect(this.page).toHaveURL(/avsluttet|ferdig|oversikt/, { timeout: 15000 }),
-    ]).catch(() => {
+    // After successful vedtak, we should see a success indicator or be redirected (soft probe)
+    const suksess = await Promise.race([
+      this.page
+        .getByText(/Vedtak fattet|Lagret|Fullført/i)
+        .first()
+        .waitFor({ state: 'visible', timeout: 15000 })
+        .then(() => true),
+      this.page.waitForURL(/avsluttet|ferdig|oversikt/, { timeout: 15000 }).then(() => true),
+    ]).catch(() => false);
+    if (!suksess) {
       // If neither, check we're not stuck on vedtak page with errors
       console.log('Note: Standard success indicators not found');
-    });
+    }
   }
 
   /**
@@ -78,9 +88,14 @@ export class KlageAssertions {
   async verifiserBehandlingstypeKlage(): Promise<void> {
     // The page should indicate this is a klage behandling
     const klageIndicator = this.page.getByText(/Klage|KLAGE|Behandling av klage/i);
-    await expect(klageIndicator.first()).toBeVisible({ timeout: 5000 }).catch(() => {
+    const indikatorSynlig = await klageIndicator
+      .first()
+      .waitFor({ state: 'visible', timeout: 5000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!indikatorSynlig) {
       console.log('Note: Klage type indicator not explicitly visible');
-    });
+    }
   }
 
   /**
