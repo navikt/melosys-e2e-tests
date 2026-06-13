@@ -60,4 +60,30 @@ export class SokAssertions {
   async verifiserPåSøkeside(): Promise<void> {
     await expect(this.page).toHaveURL(/\/sok/, { timeout: 5000 });
   }
+
+  /**
+   * Verify that a SED intake made the user's case searchable with an openable behandling.
+   * Proves «SED fører til oppgave/sak i systemet»: ingen «Fant ingen saker», en åpnbar
+   * behandling vises, og søkeoverskriften viser personens fnr (kun sifre sammenlignes så et
+   * evt. formatert fnr ikke gir falsk rødt).
+   */
+  async verifiserBrukerSøkbarMedBehandling(fnr: string): Promise<void> {
+    await expect(
+      this.page.getByText(/Fant ingen saker/i),
+      'SED-mottak skal gjøre bruker/sak søkbar i systemet (fikk «Fant ingen saker»)'
+    ).toHaveCount(0);
+
+    // Venter til behandlingen faktisk er rendret (gir også header tid til å vises).
+    await expect(
+      this.page.getByRole('button', { name: /Vis behandling/i }).first(),
+      'Forventet en åpnbar behandling for personen etter SED-mottak'
+    ).toBeVisible({ timeout: 10000 });
+
+    const header =
+      (await this.page.locator('h1, h2').filter({ hasText: /Resultater for/i }).first().textContent()) ?? '';
+    expect(
+      header.replace(/\D/g, ''),
+      'Søkeresultatets overskrift skal vise den mottatte personens fnr'
+    ).toContain(fnr);
+  }
 }

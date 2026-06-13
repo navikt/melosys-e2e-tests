@@ -232,26 +232,8 @@ test.describe('SED Mottak', () => {
     await sokPage.ventPåResultater();
 
     // Step 5: ASSERT the actual claim of this test — SED-mottaket gjør bruker/sak søkbar.
-    const hasResults = await sokPage.harResultater();
-    expect(
-      hasResults,
-      'SED-mottak skal gjøre bruker/sak søkbar i systemet (fikk «Fant ingen saker»)'
-    ).toBe(true);
-
-    // Bevis at en faktisk behandling/sak er opprettet og kan åpnes (venter til den rendres).
-    await expect(
-      page.getByRole('button', { name: /Vis behandling/i }).first(),
-      'Forventet en åpnbar behandling for personen etter SED-mottak'
-    ).toBeVisible();
-
-    // Bevis at det er DENNE personens sak (ikke bare fravær av tom-melding). Sammenlign kun
-    // sifrene, så et evt. formatert fnr i overskriften (mellomrom/punktum) ikke gir falsk rødt.
-    const headerTekst = (await sokPage.getResultatHeaderTekst()) ?? '';
-    expect(
-      headerTekst.replace(/\D/g, ''),
-      'Søkeresultatets overskrift skal vise den mottatte personens fnr'
-    ).toContain(SED_SCENARIOS.A003_MED_PERSON.fnr!);
-    console.log(`   ✅ Sak søkbar for ${SED_SCENARIOS.A003_MED_PERSON.fnr}: ${headerTekst.trim()}`);
+    await sokPage.assertions.verifiserBrukerSøkbarMedBehandling(SED_SCENARIOS.A003_MED_PERSON.fnr!);
+    console.log(`   ✅ Sak søkbar for ${SED_SCENARIOS.A003_MED_PERSON.fnr}`);
 
     console.log('✅ SED intake flow completed');
   });

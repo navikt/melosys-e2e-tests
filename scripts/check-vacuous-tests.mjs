@@ -65,7 +65,12 @@ function skeleton(code) {
     if (top.type === 'template') {
       if (c === '\\') { i += 2; continue; } // escape blankes
       if (c === '`') { i++; stack.pop(); prevSig = '`'; continue; } // slutt på template
-      if (c === '$' && c2 === '{') { i += 2; stack.push({ type: 'code', brace: 0, fromTemplate: true }); continue; }
+      if (c === '$' && c2 === '{') {
+        i += 2;
+        stack.push({ type: 'code', brace: 0, fromTemplate: true });
+        prevSig = ''; // ny uttrykkskontekst → et ledende / inni ${…} er regex, ikke divisjon
+        continue;
+      }
       i++; // vanlig template-tekst → forblir blank
       continue;
     }
@@ -110,7 +115,8 @@ function skeleton(code) {
         while (b >= 0 && /\s/.test(code[b])) b--;
         let e = b;
         while (b >= 0 && /[A-Za-z0-9_$]/.test(code[b])) b--;
-        kw = REGEX_PREFIX_KEYWORDS.has(code.slice(b + 1, e + 1));
+        // Et `.` rett foran ordet → property-aksess (a.of, x.in), ikke et nøkkelord.
+        kw = code[b] !== '.' && REGEX_PREFIX_KEYWORDS.has(code.slice(b + 1, e + 1));
       }
       if (punct || kw || prevSig === '') {
         let j = i + 1;
@@ -207,9 +213,11 @@ const LIT = /expect\(\s*(-?\d+(?:\.\d+)?|'[^']*'|"[^"]*"|`[^`]*`)\s*\)\s*\.toBe\
 
 // Probe-metoder: et .catch på en av disse er en synlighets-/lese-probe, ikke en svelget assertion.
 // Kun rene lese-/vente-metoder regnes som prober. Handlinger (click/press/fill/…) er IKKE
-// prober — en svelget handlingsfeil er reell gjeld. `[\s\S]*` (ikke `[^)]*`) så probe-argumenter
-// med nøstede parenteser (f.eks. waitFor({ timeout: f() })) fortsatt gjenkjennes.
-const PROBE_METHOD = /\.(isVisible|isHidden|isChecked|isEnabled|isEditable|isDisabled|textContent|innerText|inputValue|getAttribute|count|title|allTextContents|waitFor|waitForLoadState|waitForResponse|waitForSelector|waitForURL|waitForEvent)\s*\([\s\S]*\)\s*$/;
+// prober — en svelget handlingsfeil er reell gjeld. Probe-kallet må være SISTE ledd før .catch:
+// `([^()]|\([^()]*\))*` matcher argumenter med inntil ett nivå nøstede parenteser
+// (f.eks. waitFor({ timeout: f() })), men `\)\s*$` krever at probe-kallet avslutter kjeden — så
+// en etterfølgende handling (.then(e => e.click())) IKKE feilklassifiseres som probe.
+const PROBE_METHOD = /\.(isVisible|isHidden|isChecked|isEnabled|isEditable|isDisabled|textContent|innerText|inputValue|getAttribute|count|title|allTextContents|waitFor|waitForLoadState|waitForResponse|waitForSelector|waitForURL|waitForEvent)\s*\(([^()]|\([^()]*\))*\)\s*$/;
 
 // --- R1 + R2: tautologi og null-assert i kjørende tester (per .spec.ts) ---
 for (const file of specFiles) {
