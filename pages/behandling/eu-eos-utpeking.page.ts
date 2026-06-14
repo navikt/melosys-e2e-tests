@@ -183,9 +183,11 @@ export class EuEosUtpekingPage extends BasePage {
     await this.godkjennUtpekingHeading.waitFor({ state: 'visible', timeout: 30000 });
 
     if (opts?.varsleUtland) {
+      await this.sendA012Checkbox.waitFor({ state: 'visible', timeout: 15000 });
       await this.sendA012Checkbox.check();
     }
     if (opts?.fritekst) {
+      await this.ytterligereInfoField.waitFor({ state: 'visible', timeout: 15000 });
       await this.ytterligereInfoField.click();
       await this.ytterligereInfoField.fill(opts.fritekst);
       await this.ytterligereInfoField.press('Tab');
