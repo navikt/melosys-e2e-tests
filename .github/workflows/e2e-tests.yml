@@ -299,8 +299,20 @@ jobs:
           path: melosys-api
           token: ${{ secrets.READER_TOKEN }}
 
+      - name: Set up JDK 21 for melosys-api coverage build
+        if: inputs.collect_coverage
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+
       - name: Build melosys-api for coverage class files
         if: inputs.collect_coverage
+        # Don't fail the whole suite if the coverage build breaks (e.g. JDK bump in
+        # melosys-api): this step runs BEFORE "Start Docker Compose services", so a
+        # hard failure here would skip the entire test run. Degrade gracefully — the
+        # suite still runs; only the jacoco:report (which needs .class files) is lost.
+        continue-on-error: true
         run: |
           cd melosys-api
           echo "🔨 Building melosys-api to get compiled classes for coverage report..."
