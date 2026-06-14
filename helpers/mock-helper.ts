@@ -209,6 +209,101 @@ export async function findNewUtgaaendeJournalpost(
 }
 
 /**
+ * A single document on a journalpost (mirrors DokumentModell in melosys-mock).
+ *
+ * The `brevkode` carries the dokgen mal-name (e.g. 'innvilgelse_ftrl',
+ * 'trygdeavtale_au') — i.e. the actual brev-variant produced for the recipient.
+ * `tittel` is the journalføringstittel set by DokumentNavnService.
+ */
+export interface BrevDokumentInfo {
+  brevkode: string | null;
+  tittel: string | null;
+  dokumentTilknyttetJournalpost: string | null;
+}
+
+/**
+ * A vedtaksbrev as journalført to the SAF/Joark mock, reduced to the fields
+ * that carry brev-innhold per mottakertype: the recipient (avsenderMottaker)
+ * and the HOVEDDOKUMENT (brevkode/tittel).
+ */
+export interface VedtaksbrevJournalpost {
+  journalpostId: string;
+  journalposttype: string | null;
+  journalStatus: string | null;
+  avsenderMottaker: { id?: string; type?: string; navn?: string; land?: string };
+  hoveddokument: BrevDokumentInfo;
+}
+
+/**
+ * Poll the SAF mock for an UTGAAENDE vedtaksbrev-journalpost addressed to a
+ * specific recipient (fnr). Returns the journalpost reduced to its HOVEDDOKUMENT
+ * so a test can assert the brev-variant (brevkode) and tittel per mottakertype.
+ *
+ * Used to verify dokgen-brevinnhold end-to-end: a FTRL §2-8-vedtak must produce
+ * brevkode 'innvilgelse_ftrl', a trygdeavtale-vedtak 'trygdeavtale_<land>' osv.
+ * Filtering on the recipient fnr means each flow's brev is found unambiguously
+ * even when several saker (for ulike personer) coexist in the same test.
+ *
+ * @param request    - Playwright APIRequestContext
+ * @param mottakerFnr - The recipient's fnr (avsenderMottaker.id)
+ * @param timeoutMs  - Max polling time (default: 30s)
+ */
+export async function finnVedtaksbrevForMottaker(
+  request: APIRequestContext,
+  mottakerFnr: string,
+  timeoutMs = 30000
+): Promise<VedtaksbrevJournalpost | null> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const response = await request.get('http://localhost:8083/testdata/verification/journalpost');
+    if (!response.ok()) {
+      throw new Error(`Failed to fetch journalposter: ${response.status()}`);
+    }
+    const journalposter = (await response.json()) as Array<{
+      journalpostId: string;
+      journalposttype: string | null;
+      journalStatus: string | null;
+      avsenderMottaker?: { id?: string; type?: string; navn?: string; land?: string };
+      dokumentModellList?: Array<{
+        brevkode: string | null;
+        tittel: string | null;
+        dokumentTilknyttetJournalpost: string | null;
+      }>;
+    }>;
+
+    const match = journalposter.find((jp) => {
+      if (jp.journalposttype !== 'UTGAAENDE') return false;
+      if (jp.avsenderMottaker?.id !== mottakerFnr) return false;
+      const hoved = (jp.dokumentModellList ?? []).find(
+        (d) => d.dokumentTilknyttetJournalpost === 'HOVEDDOKUMENT' && d.brevkode
+      );
+      return hoved != null;
+    });
+
+    if (match) {
+      const hoved = (match.dokumentModellList ?? []).find(
+        (d) => d.dokumentTilknyttetJournalpost === 'HOVEDDOKUMENT' && d.brevkode
+      )!;
+      return {
+        journalpostId: match.journalpostId,
+        journalposttype: match.journalposttype,
+        journalStatus: match.journalStatus,
+        avsenderMottaker: match.avsenderMottaker ?? {},
+        hoveddokument: {
+          brevkode: hoved.brevkode,
+          tittel: hoved.tittel,
+          dokumentTilknyttetJournalpost: hoved.dokumentTilknyttetJournalpost,
+        },
+      };
+    }
+    console.log(`⏳ Venter på vedtaksbrev-journalpost for mottaker ${mottakerFnr}...`);
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  return null;
+}
+
+/**
  * A MEDL membership-exception period stored in the melosys-mock MEDL register.
  * Mirrors MedlemskapsunntakForGet in melosys-mock.
  *
