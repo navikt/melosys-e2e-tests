@@ -143,6 +143,12 @@ test.describe('Vedtaksbrev-innhold per mottakertype', () => {
     await opprettSak.assertions.verifiserBehandlingOpprettet();
     await hovedside.åpneBehandling(`${PERSON_NAME_KOSOVO} -`);
 
+    // Flerbehandlingsflyt: FTRL- og trygdeavtale-behandlingen sameksisterer i denne
+    // testen, så behandlingId MÅ pinnes eksplisitt (ellers velger sluttilstands-
+    // asserten nyeste behandling via ORDER BY ID DESC — jf. P2-guidens advarsel).
+    const trygdeavtaleBehandlingId = new URL(page.url()).searchParams.get('behandlingID');
+    expect(trygdeavtaleBehandlingId, 'behandlingID skal finnes i URL').not.toBeNull();
+
     await trygdeavtaleBehandling.fyllUtPeriodeOgLand('01.01.2024', '01.01.2026', ARBEIDSLAND.AUSTRALIA);
     await trygdeavtaleBehandling.velgArbeidsgiverOgFortsett('Ståles Stål AS');
     await trygdeavtaleBehandling.innvilgeOgVelgBestemmelse(BESTEMMELSER.AUS_ART9_3);
@@ -151,6 +157,7 @@ test.describe('Vedtaksbrev-innhold per mottakertype', () => {
     console.log('📝 Venter på iverksetting (trygdeavtale)...');
     await waitForProcessInstances(page.request, 60);
     await trygdeavtaleBehandling.assertions.verifiserBehandlingAvsluttet({
+      behandlingId: trygdeavtaleBehandlingId,
       forventetIverksettProsess: 'IVERKSETT_VEDTAK_TRYGDEAVTALE',
     });
 
