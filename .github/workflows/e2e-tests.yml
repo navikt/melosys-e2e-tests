@@ -63,7 +63,9 @@ permissions:
 jobs:
   e2e-tests:
     runs-on: ubuntu-latest-8-cores
-    timeout-minutes: 60
+    # Coverage runs additionally build melosys-api (~4 min cached, ~11 min cold) before
+    # the ~44 min suite, so they need extra headroom over the normal 60 min ceiling.
+    timeout-minutes: ${{ inputs.collect_coverage && 80 || 60 }}
 
     steps:
       - name: Checkout code
@@ -305,6 +307,7 @@ jobs:
         with:
           distribution: temurin
           java-version: '21'
+          cache: maven  # cache ~/.m2 so the melosys-api build doesn't re-download the world (~11 min → ~4 min)
 
       - name: Build melosys-api for coverage class files
         if: inputs.collect_coverage
