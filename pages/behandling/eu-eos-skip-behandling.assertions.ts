@@ -1,6 +1,10 @@
 import { Page, expect } from '@playwright/test';
 import { withDatabase } from '../../helpers/db-helper';
 import { EuEosBehandlingAssertions } from './eu-eos-behandling.assertions';
+import {
+  verifiserBehandlingSluttilstand,
+  BehandlingSluttilstandForventning,
+} from '../shared/behandling-sluttilstand.assertions';
 
 /**
  * Assertions for EU/EØS Skip behandling
@@ -62,6 +66,22 @@ export class EuEosSkipBehandlingAssertions extends EuEosBehandlingAssertions {
     });
     await expect(arbeidsstedButton).toBeVisible();
     console.log('✅ Arbeidssted(er) knapp synlig');
+  }
+
+  /**
+   * Hard sluttilstands-verifisering i DB etter fattet/iverksatt EU/EØS-skip-vedtak:
+   * behandlingen er AVSLUTTET, har et behandlingsresultat, og alle prosessinstanser
+   * (inkl. iverksetting) er FERDIG. Beviser sluttilstand utover navigering tilbake
+   * til hovedsiden (`verifiserVedtakFattet`).
+   *
+   * Kall `waitForProcessInstances(...)` (kaster på feilede instanser) FØR denne.
+   *
+   * @returns BEHANDLING.ID for behandlingen som ble verifisert
+   */
+  async verifiserBehandlingAvsluttet(
+    forventet: BehandlingSluttilstandForventning = {}
+  ): Promise<string> {
+    return await verifiserBehandlingSluttilstand(forventet);
   }
 
   /**

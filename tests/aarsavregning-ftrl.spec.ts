@@ -70,5 +70,12 @@ test.describe('Årsavregning FTRL - Komplett arbeidsflyt', () => {
 
     // --- Steg 5: Fatt vedtak ---
     await vedtak.klikkFattVedtak();
+
+    // --- Steg 6: Hard sluttilstand - vent på iverksetting + verifiser DB end-state ---
+    // Årsavregningsbehandlingen er nyeste behandling (ren DB per fixture): skal være
+    // AVSLUTTET med behandlingsresultat og alle prosessinstanser FERDIG.
+    console.log('📝 Steg 6: Venter på iverksetting + verifiserer DB-sluttilstand...');
+    await waitForProcessInstances(page.request, 60);
+    await vedtak.assertions.verifiserBehandlingAvsluttet();
   });
 });
