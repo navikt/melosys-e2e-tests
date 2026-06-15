@@ -41,6 +41,12 @@ export class EuEosUtpekingPage extends BasePage {
   private readonly vurderingHeading = this.page.getByRole('heading', { name: 'Vurder lovvalgsbeslutningen (A003)' });
   private readonly vedtakHeading = this.page.getByRole('heading', { name: 'Omfattet av norsk trygdelovgivning' });
 
+  // Annet-land-grenen (BESLUTNING_LOVVALG_ANNET_LAND): steg 2 «Godkjenn utpeking».
+  private readonly godkjennUtpekingHeading = this.page.getByRole('heading', { name: 'Godkjenn utpeking' });
+  private readonly sendA012Checkbox = this.page.getByRole('checkbox', { name: 'Send A012' });
+  private readonly ytterligereInfoField = this.page.getByRole('textbox', { name: 'Ytterligere informasjon til SED (valgfri)' });
+  private readonly bekreftButton = this.page.getByRole('button', { name: 'Bekreft', exact: true });
+
   constructor(page: Page) {
     super(page);
     this.assertions = new EuEosUtpekingAssertions(page);
@@ -133,5 +139,81 @@ export class EuEosUtpekingPage extends BasePage {
     await this.fyllBegrunnelseOgFattVedtak(
       opts?.begrunnelse ?? 'Norge godkjenner utpekingen. Personen har bostedsadresse i Norge i perioden.'
     );
+  }
+
+  // === Annet-land-grenen (BESLUTNING_LOVVALG_ANNET_LAND) ===
+  //
+  // Når en innkommende A003 peker ut et ANNET EU/EØS-land (lovvalgsland != NO),
+  // går saksbehandler gjennom bare 2 steg (ikke 4 som i Norge-grenen — det er
+  // verken Inngang- eller Virksomhet-steg her):
+  //   1. Vurdering        – «Vurder lovvalgsbeslutningen (A003)»: Godkjenn / Ikke godkjenn.
+  //                         Grunnlag og periode er forhåndsutfylt fra SED-en.
+  //   2. Godkjenn utpeking – «Send A012»-checkbox (= varsleUtland) + valgfri
+  //                         fritekst → «Bekreft». Registrerer unntaket
+  //                         (REGISTRERT_UNNTAK) og overfører lovvalg til MEDL.
+  // Live-verifisert 2026-06-14 (behandling 101, lovvalgsland SE).
+
+  /**
+   * Steg 1 (Vurdering) for annet-land-grenen: godkjenn lovvalgsbeslutningen og gå
+   * videre til «Godkjenn utpeking». Identisk vurderingssteg som Norge-grenen, men
+   * neste steg er «Godkjenn utpeking» (ikke vedtak), siden et annet land er kompetent.
+   */
+  async vurderUtpekingAnnetLandOgFortsett(): Promise<void> {
+    await this.godkjennRadio.waitFor({ state: 'visible', timeout: 30000 });
+    await this.godkjennRadio.check();
+    await expect(this.bekreftOgFortsettButton).toBeEnabled({ timeout: 15000 });
+    await this.clickStepButtonWithRetry(this.bekreftOgFortsettButton, {
+      verifyHeadingChange: true,
+      waitForContent: this.godkjennUtpekingHeading,
+    });
+    console.log('✅ Godkjente lovvalgsbeslutningen (annet land utpekt)');
+  }
+
+  /**
+   * Steg 2 (Godkjenn utpeking): registrer unntaket. Venter på det kritiske
+   * godkjennings-API-kallet (POST /saksflyt/unntaksperioder/{id}/godkjenn), som
+   * navigerer tilbake til forsiden ved suksess.
+   *
+   * @param opts.varsleUtland - Huk av «Send A012» for å sende en utgående A012 på
+   *   den eksisterende bucen (krever en åpen BUC i RINA, jf. sendSed({opprettBucIRina:true})).
+   *   Default false (primær happy-path: ren MEDL-registrering, ingen SED).
+   * @param opts.fritekst - Valgfri «Ytterligere informasjon til SED».
+   */
+  async bekreftGodkjenningUtpekingAnnetLand(opts?: { varsleUtland?: boolean; fritekst?: string }): Promise<void> {
+    await this.godkjennUtpekingHeading.waitFor({ state: 'visible', timeout: 30000 });
+
+    if (opts?.varsleUtland) {
+      await this.sendA012Checkbox.waitFor({ state: 'visible', timeout: 15000 });
+      await this.sendA012Checkbox.check();
+    }
+    if (opts?.fritekst) {
+      await this.ytterligereInfoField.waitFor({ state: 'visible', timeout: 15000 });
+      await this.ytterligereInfoField.click();
+      await this.ytterligereInfoField.fill(opts.fritekst);
+      await this.ytterligereInfoField.press('Tab');
+    }
+
+    await this.bekreftButton.waitFor({ state: 'visible', timeout: 10000 });
+    const responsePromise = this.page.waitForResponse(
+      response => response.url().includes('/saksflyt/unntaksperioder/') &&
+                  response.url().includes('/godkjenn') &&
+                  response.request().method() === 'POST' &&
+                  (response.status() === 200 || response.status() === 204),
+      { timeout: 60000 }
+    );
+    await this.bekreftButton.click();
+    const response = await responsePromise;
+    console.log(`✅ Godkjente utpeking (annet land), varsleUtland=${Boolean(opts?.varsleUtland)} → ${response.status()}`);
+  }
+
+  /**
+   * Kjør hele annet-land-grenen: godkjenn lovvalgsbeslutningen og registrer unntaket.
+   *
+   * @param opts.varsleUtland - Send utgående A012 (default false).
+   * @param opts.fritekst     - Valgfri fritekst til SED.
+   */
+  async godkjennUtpekingAnnetLand(opts?: { varsleUtland?: boolean; fritekst?: string }): Promise<void> {
+    await this.vurderUtpekingAnnetLandOgFortsett();
+    await this.bekreftGodkjenningUtpekingAnnetLand(opts);
   }
 }
