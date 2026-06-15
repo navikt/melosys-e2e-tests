@@ -115,6 +115,40 @@ export class EuEosUtpekingAssertions {
   }
 
   /**
+   * Verifiser at det er opprettet en NY_VURDERING-behandling på et annet-land-tema
+   * (BESLUTNING_LOVVALG_ANNET_LAND), bygget oppå et allerede registrert
+   * førstegangs-unntak.
+   *
+   * Beviser at vi faktisk traff NV-grenen — ikke kjørte førstegang på nytt — slik at
+   * den etterfølgende `verifiserRegistrertUnntakIverksatt` (som tar nyeste rad)
+   * verifiserer NV-behandlingens sluttilstand, ikke førstegangens.
+   *
+   * Live-verifisert 2026-06-15 (behandling 144 NY_VURDERING, oppå behandling 143 FØRSTEGANG).
+   */
+  async verifiserNyVurderingAnnetLandOpprettet(): Promise<void> {
+    await withDatabase(async (db) => {
+      // Nyeste behandling skal være nyvurderingen, med annet-land-temaet arvet fra førstegang.
+      const nyeste = await db.queryOne<{ BEH_TYPE: string; BEH_TEMA: string }>(
+        `SELECT beh_type, beh_tema FROM behandling ORDER BY id DESC FETCH FIRST 1 ROWS ONLY`, {});
+      expect(nyeste, 'Forventet en behandling').not.toBeNull();
+      expect(nyeste!.BEH_TYPE, 'Nyeste behandling skal være en nyvurdering (NY_VURDERING)').toBe('NY_VURDERING');
+      expect(nyeste!.BEH_TEMA, 'NV-behandlingen skal arve annet-land-temaet (BESLUTNING_LOVVALG_ANNET_LAND)')
+        .toBe('BESLUTNING_LOVVALG_ANNET_LAND');
+
+      // Forutsetning: NV bygger oppå en førstegangsbehandling som allerede står med REGISTRERT_UNNTAK.
+      const forstegang = await db.queryOne<{ RESULTAT_TYPE: string }>(
+        `SELECT br.resultat_type FROM behandlingsresultat br
+         JOIN behandling b ON b.id = br.behandling_id
+         WHERE b.beh_type = 'FØRSTEGANG'
+         ORDER BY b.id DESC FETCH FIRST 1 ROWS ONLY`, {});
+      expect(forstegang, 'Forventet en førstegangsbehandling som NV bygger på').not.toBeNull();
+      expect(forstegang!.RESULTAT_TYPE, 'Førstegangsbehandlingen skal stå med REGISTRERT_UNNTAK')
+        .toBe('REGISTRERT_UNNTAK');
+      console.log('✅ NY_VURDERING opprettet på BESLUTNING_LOVVALG_ANNET_LAND (oppå REGISTRERT_UNNTAK førstegang)');
+    });
+  }
+
+  /**
    * Verifiser at en godkjent «annet land utpekt»-utpeking (BESLUTNING_LOVVALG_ANNET_LAND)
    * ble iverksatt som et REGISTRERT_UNNTAK:
    *  - behandlingsresultat: RESULTAT_TYPE REGISTRERT_UNNTAK, utfall_registrering_unntak GODKJENT
