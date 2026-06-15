@@ -4,6 +4,11 @@ import { SedHelper, SED_SCENARIOS, EESSI_SED_SCENARIOS, SedHendelseConfig } from
 import { withDatabase } from '../../helpers/db-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { SokPage } from '../../pages/sok/sok.page';
+import {
+  verifiserSedRutetTilTema,
+  verifiserInngaaendeSedJournalfoert,
+} from '../../pages/shared/sed-mottak.assertions';
+import { fetchStoredJournalposter } from '../../helpers/mock-helper';
 
 /**
  * Test suite for SED (Structured Electronic Document) intake flow
@@ -90,7 +95,21 @@ test.describe('SED Mottak', () => {
     }
 
     expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
-    console.log('✅ MOTTAK_SED process completed successfully');
+
+    // P2: verifiser at A003 (annet land enn NO) faktisk RUTES til riktig utfall —
+    // en behandling med tema BESLUTNING_LOVVALG_ANNET_LAND + ARBEID_FLERE_LAND_NY_SAK FERDIG
+    console.log('📝 Step 3: Verifying SED routed to correct outcome...');
+    const ruting = await verifiserSedRutetTilTema({
+      forventetTema: 'BESLUTNING_LOVVALG_ANNET_LAND',
+      rutingProsess: 'ARBEID_FLERE_LAND_NY_SAK',
+    });
+
+    // P3: verifiser at mottaket faktisk journalførte SED-en (INNGAAENDE EESSI-journalpost)
+    await verifiserInngaaendeSedJournalfoert(request, {
+      saksnummer: ruting.saksnummer,
+      sedType: 'A003',
+    });
+    console.log('✅ MOTTAK_SED routed + journalført correctly');
   });
 
   test('skal opprette fagsak ved mottak av A003 fra Sverige', async ({ request }) => {
@@ -108,25 +127,21 @@ test.describe('SED Mottak', () => {
 
     expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
 
-    console.log('📝 Step 3: Verifying fagsak was created in database...');
-    await withDatabase(async (db) => {
-      // Check for recently created fagsak
-      const fagsaker = await db.query(
-        `SELECT f.SAKSNUMMER, f.GSAK_SAKSNUMMER, f.STATUS, f.REGISTRERT_DATO
-         FROM FAGSAK f
-         WHERE f.REGISTRERT_DATO > SYSDATE - INTERVAL '5' MINUTE
-         ORDER BY f.REGISTRERT_DATO DESC`
-      );
-
-      // Prosessen er fullført, så fagsak SKAL finnes — hard assert (ikke gated på if)
-      expect(fagsaker.length, 'Forventet minst én fagsak opprettet ved SED-mottak').toBeGreaterThan(0);
-      console.log(`   ✅ Fagsak found: SAKSNUMMER=${fagsaker[0].SAKSNUMMER}, GSAK=${fagsaker[0].GSAK_SAKSNUMMER}`);
-
-      // Verify process completed
-      expect(processResult.success).toBe(true);
+    // P2: A003 fra Sverige (lovvalgsland SE ≠ NO) skal rutes til BESLUTNING_LOVVALG_ANNET_LAND
+    // og ARBEID_FLERE_LAND_NY_SAK skal være FERDIG — ikke bare at «en fagsak finnes».
+    console.log('📝 Step 3: Verifying SED routed to BESLUTNING_LOVVALG_ANNET_LAND...');
+    const ruting = await verifiserSedRutetTilTema({
+      forventetTema: 'BESLUTNING_LOVVALG_ANNET_LAND',
+      rutingProsess: 'ARBEID_FLERE_LAND_NY_SAK',
     });
 
-    console.log('✅ A003 from Sweden processed successfully');
+    // P3: SED-en skal journalføres (INNGAAENDE EESSI-journalpost knyttet til saken)
+    await verifiserInngaaendeSedJournalfoert(request, {
+      saksnummer: ruting.saksnummer,
+      sedType: 'A003',
+    });
+
+    console.log('✅ A003 from Sweden routed + journalført');
   });
 
   test('skal håndtere A009 informasjonsforespørsel', async ({ request }) => {
@@ -145,7 +160,20 @@ test.describe('SED Mottak', () => {
     console.log(`   Status: ${processResult.status}, Message: ${processResult.message}`);
     expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
 
-    console.log('✅ A009 information request processed');
+    // P2: A009 (informasjonsforespørsel) rutes til registrering av unntak fra norsk trygd
+    console.log('📝 Step 3: Verifying A009 routed to REGISTRERING_UNNTAK...');
+    const ruting = await verifiserSedRutetTilTema({
+      forventetTema: 'REGISTRERING_UNNTAK_NORSK_TRYGD_UTSTASJONERING',
+      rutingProsess: 'REGISTRERING_UNNTAK_NY_SAK',
+    });
+
+    // P3: A009 skal journalføres som INNGAAENDE EESSI-journalpost
+    await verifiserInngaaendeSedJournalfoert(request, {
+      saksnummer: ruting.saksnummer,
+      sedType: 'A009',
+    });
+
+    console.log('✅ A009 information request routed + journalført');
   });
 
   test('skal håndtere A001 søknad fra Danmark', async ({ request }) => {
@@ -164,7 +192,20 @@ test.describe('SED Mottak', () => {
     console.log(`   Status: ${processResult.status}, Message: ${processResult.message}`);
     expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
 
-    console.log('✅ A001 application processed');
+    // P2: A001 (søknad om unntak / anmodning) rutes til ANMODNING_OM_UNNTAK_HOVEDREGEL
+    console.log('📝 Step 3: Verifying A001 routed to ANMODNING_OM_UNNTAK...');
+    const ruting = await verifiserSedRutetTilTema({
+      forventetTema: 'ANMODNING_OM_UNNTAK_HOVEDREGEL',
+      rutingProsess: 'ANMODNING_OM_UNNTAK_MOTTAK_NY_SAK',
+    });
+
+    // P3: A001 skal journalføres som INNGAAENDE EESSI-journalpost
+    await verifiserInngaaendeSedJournalfoert(request, {
+      saksnummer: ruting.saksnummer,
+      sedType: 'A001',
+    });
+
+    console.log('✅ A001 application routed + journalført');
   });
 
   test('skal håndtere tilpasset SED konfigurasjon', async ({ request }) => {
@@ -199,7 +240,21 @@ test.describe('SED Mottak', () => {
     });
 
     expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
-    console.log('✅ Custom SED configuration processed');
+
+    // P2: tilpasset A003 (lovvalgsland FI ≠ NO) rutes til BESLUTNING_LOVVALG_ANNET_LAND
+    console.log('📝 Step 3: Verifying custom A003 routed correctly...');
+    const ruting = await verifiserSedRutetTilTema({
+      forventetTema: 'BESLUTNING_LOVVALG_ANNET_LAND',
+      rutingProsess: 'ARBEID_FLERE_LAND_NY_SAK',
+    });
+
+    // P3: SED-en skal journalføres
+    await verifiserInngaaendeSedJournalfoert(request, {
+      saksnummer: ruting.saksnummer,
+      sedType: 'A003',
+    });
+
+    console.log('✅ Custom SED configuration routed + journalført');
   });
 
   test('skal verifisere at SED fører til oppgave i systemet', async ({ page, request }) => {
@@ -218,6 +273,16 @@ test.describe('SED Mottak', () => {
     });
 
     expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
+
+    // P2/P3: bekreft at SED-en ble rutet riktig OG journalført FØR vi sjekker UI-søkbarhet
+    const ruting = await verifiserSedRutetTilTema({
+      forventetTema: 'BESLUTNING_LOVVALG_ANNET_LAND',
+      rutingProsess: 'ARBEID_FLERE_LAND_NY_SAK',
+    });
+    await verifiserInngaaendeSedJournalfoert(request, {
+      saksnummer: ruting.saksnummer,
+      sedType: 'A003',
+    });
 
     // Step 3: Login and verify case is accessible
     console.log('📝 Step 3: Logging in to verify case...');
@@ -279,7 +344,35 @@ test.describe('SED Mottak', () => {
     }
 
     expect(processResult.success, `Processes failed: ${processResult.message}`).toBe(true);
-    console.log('✅ Multiple SED types handled successfully');
+
+    // P2: ingen av de 3 SED-ene skal ha gitt en FEILET prosessinstans
+    console.log('📝 Verifying no failed process instances...');
+    await withDatabase(async (db) => {
+      const feilede = await db.query(
+        `SELECT prosess_type FROM prosessinstans WHERE status = 'FEILET'`
+      );
+      expect(
+        feilede.length,
+        `Forventet ingen feilede prosessinstanser, fant: ${JSON.stringify(feilede)}`
+      ).toBe(0);
+    });
+
+    // P3: hver av de 3 SED-typene skal ha gitt en INNGAAENDE EESSI-journalpost
+    console.log('📝 Verifying each SED was journalført...');
+    const journalposter = await fetchStoredJournalposter(request);
+    const inngaaende = journalposter.filter(
+      (jp) => jp.journalposttype === 'INNGAAENDE' && jp.kanal === 'EESSI'
+    );
+    for (const { name } of sedConfigs) {
+      const found = inngaaende.find((jp) => (jp.tittel ?? '').includes(name));
+      expect(found, `Forventet INNGAAENDE EESSI-journalpost for ${name}`).toBeTruthy();
+    }
+    expect(
+      inngaaende.length,
+      'Forventet minst én INNGAAENDE EESSI-journalpost per SED'
+    ).toBeGreaterThanOrEqual(sedConfigs.length);
+
+    console.log('✅ Multiple SED types handled + journalført successfully');
   });
 
   test('skal verifisere prosessinstanser i databasen', async ({ request }) => {
@@ -297,43 +390,22 @@ test.describe('SED Mottak', () => {
 
     expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
 
-    console.log('📝 Step 3: Verifying process instance in database...');
-    await withDatabase(async (db) => {
-      // Query for recent MOTTAK_SED process instances
-      // Note: Table is PROSESSINSTANS (not PROSESS_INSTANS)
-      const prosessinstanser = await db.query(
-        `SELECT PI.UUID, PI.PROSESS_TYPE, PI.STATUS, PI.SIST_FULLFORT_STEG, PI.REGISTRERT_DATO
-         FROM PROSESSINSTANS PI
-         WHERE PI.PROSESS_TYPE = 'MOTTAK_SED'
-         AND PI.REGISTRERT_DATO > SYSDATE - INTERVAL '5' MINUTE
-         ORDER BY PI.REGISTRERT_DATO DESC`
-      );
-
-      console.log(`   Found ${prosessinstanser.length} recent MOTTAK_SED process instance(s)`);
-
-      // Hard assert: prosessen er fullført, så MOTTAK_SED-instansen SKAL finnes (ikke gated på if)
-      expect(prosessinstanser.length, 'Forventet minst én MOTTAK_SED prosessinstans').toBeGreaterThan(0);
-
-      if (prosessinstanser.length > 0) {
-        const latest = prosessinstanser[0];
-        console.log(`   Latest: UUID=${latest.UUID}, Status=${latest.STATUS}, LastStep=${latest.SIST_FULLFORT_STEG}`);
-        expect(latest.STATUS).toBe('FERDIG');
-      } else {
-        console.log('   ⚠️ No MOTTAK_SED process instances found');
-        // Check all recent process instances
-        const allRecent = await db.query(
-          `SELECT PI.UUID, PI.PROSESS_TYPE, PI.STATUS
-           FROM PROSESSINSTANS PI
-           WHERE PI.REGISTRERT_DATO > SYSDATE - INTERVAL '5' MINUTE`
-        );
-        console.log(`   All recent process instances: ${allRecent.length}`);
-        for (const pi of allRecent) {
-          console.log(`      - ${pi.PROSESS_TYPE}: ${pi.STATUS}`);
-        }
-      }
+    // P2: bekreft full ruting i databasen — MOTTAK_SED FERDIG + behandling med riktig tema
+    // + ARBEID_FLERE_LAND_NY_SAK FERDIG (ingen FEILET). Erstatter den tidligere
+    // MOTTAK_SED-status-sjekken med en hard ende-til-ende rutingsassert.
+    console.log('📝 Step 3: Verifying process instances + routing in database...');
+    const ruting = await verifiserSedRutetTilTema({
+      forventetTema: 'BESLUTNING_LOVVALG_ANNET_LAND',
+      rutingProsess: 'ARBEID_FLERE_LAND_NY_SAK',
     });
 
-    console.log('✅ Process instance verification complete');
+    // P3: journalføringen skal også finnes
+    await verifiserInngaaendeSedJournalfoert(request, {
+      saksnummer: ruting.saksnummer,
+      sedType: 'A003',
+    });
+
+    console.log('✅ Process instance + routing verification complete');
   });
 });
 
