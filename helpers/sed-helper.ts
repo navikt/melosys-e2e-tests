@@ -477,6 +477,21 @@ export const SED_SCENARIOS = {
   } as SedConfig,
 
   /**
+   * A010 provisional determination from Germany
+   * Triggers: MOTTAK_SED → REGISTRERING_UNNTAK_NY_SAK → REGISTRERING_UNNTAK_GODKJENN
+   * Søsken-temaet til A009: samme automatiske registreringsmaskineri
+   * (UnntaksperiodeSedRuter), men ruter til REGISTRERING_UNNTAK_NORSK_TRYGD_ØVRIGE
+   * (A009 → _UTSTASJONERING). Ender automatisk som REGISTRERT_UNNTAK i mottaket.
+   */
+  A010_FRA_TYSKLAND: {
+    bucType: 'LA_BUC_02',
+    sedType: 'A010',
+    landkode: 'DE',
+    avsenderId: 'DE:DRV',
+    lovvalgsland: 'DE',
+  } as SedConfig,
+
+  /**
    * A001 application from Denmark
    * Triggers: MOTTAK_SED → new application handling
    */

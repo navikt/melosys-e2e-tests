@@ -197,6 +197,60 @@ test.describe('SED Mottak', () => {
     console.log('✅ A009 routed + journalført + automatisk REGISTRERT_UNNTAK iverksatt');
   });
 
+  test('skal håndtere A010 og automatisk registrere unntak fra norsk trygd – øvrige (REGISTRERT_UNNTAK)', async ({ page, request }) => {
+    // P5b (REGISTRERING_UNNTAK_NORSK_TRYGD_ØVRIGE, ~9,8k/12mo): søsken-temaet til
+    // A009/P4. A010 (øvrige tilfeller) registrerer unntaket fra norsk trygd HELT
+    // AUTOMATISK i mottaket — nøyaktig samme maskineri som A009 (UnntaksperiodeSedRuter,
+    // gjelderSedTyper() = {A009, A010}), men ruter til behandlingstema
+    // REGISTRERING_UNNTAK_NORSK_TRYGD_ØVRIGE i stedet for _UTSTASJONERING. Fase A-repro
+    // 2026-06-15 (behandling 147, A010 fra DE) bekreftet identisk sluttilstand som A009:
+    // MOTTAK_SED + REGISTRERING_UNNTAK_NY_SAK + REGISTRERING_UNNTAK_GODKJENN alle FERDIG
+    // uten UI, behandlingsresultat REGISTRERT_UNNTAK / GODKJENT, lovvalg DE / UNNTATT.
+    // Denne testen vokter den distinkte A010-grenen (egen tema-mapping i
+    // hentBehandlingstema + eget regelsett i UnntaksperiodeKontrollsett) — en regresjon
+    // der fanges ikke av A009-testen. Ingen mock-endring: A010 går gjennom det generiske
+    // /lag-melosys-eessi-melding-endepunktet på lik linje med A009.
+    console.log('📝 Step 1: Sending A010 provisional determination from Germany...');
+    const result = await sedHelper.sendSed(SED_SCENARIOS.A010_FRA_TYSKLAND);
+
+    expect(result.success, `Send SED failed: ${result.message}`).toBe(true);
+    console.log(`   ✅ SED sent: sedId=${result.sedId}`);
+
+    console.log('📝 Step 2: Waiting for process to complete...');
+    const processResult = await awaitProcessInstances(request, {
+      timeoutSeconds: 60,
+      expectedInstances: 1,
+    });
+
+    console.log(`   Status: ${processResult.status}, Message: ${processResult.message}`);
+    expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
+
+    // P2: A010 rutes til registrering av unntak fra norsk trygd – øvrige (≠ A009 _UTSTASJONERING)
+    console.log('📝 Step 3: Verifying A010 routed to REGISTRERING_UNNTAK_NORSK_TRYGD_ØVRIGE...');
+    const ruting = await verifiserSedRutetTilTema({
+      forventetTema: 'REGISTRERING_UNNTAK_NORSK_TRYGD_ØVRIGE',
+      rutingProsess: 'REGISTRERING_UNNTAK_NY_SAK',
+    });
+
+    // P3: A010 skal journalføres som INNGAAENDE EESSI-journalpost
+    await verifiserInngaaendeSedJournalfoert(request, {
+      saksnummer: ruting.saksnummer,
+      sedType: 'A010',
+    });
+
+    // P5b: det automatiske utfallet skal være et REGISTRERT_UNNTAK. Gjenbruker samme
+    // page-uavhengige POM som A009/P4 — A010 kommer fra Tyskland, så lovvalget overføres
+    // til DE (MEDL-register: DEU).
+    console.log('📝 Step 4: Verifying automatic REGISTRERT_UNNTAK end-state...');
+    const unntakAssertions = new EuEosUtpekingAssertions(page);
+    await unntakAssertions.verifiserRegistrertUnntakIverksatt(request, {
+      lovvalgsland: 'DE',
+      medlLovvalgsland: 'DEU',
+    });
+
+    console.log('✅ A010 routed (ØVRIGE) + journalført + automatisk REGISTRERT_UNNTAK iverksatt');
+  });
+
   test('skal håndtere A001 søknad fra Danmark', async ({ request }) => {
     console.log('📝 Step 1: Sending A001 application from Denmark...');
     const result = await sedHelper.sendSed(SED_SCENARIOS.A001_FRA_DANMARK);
