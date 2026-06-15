@@ -8,6 +8,7 @@ import {
   verifiserSedRutetTilTema,
   verifiserInngaaendeSedJournalfoert,
 } from '../../pages/shared/sed-mottak.assertions';
+import { EuEosUtpekingAssertions } from '../../pages/behandling/eu-eos-utpeking.assertions';
 import { fetchStoredJournalposter } from '../../helpers/mock-helper';
 
 /**
@@ -144,7 +145,16 @@ test.describe('SED Mottak', () => {
     console.log('✅ A003 from Sweden routed + journalført');
   });
 
-  test('skal håndtere A009 informasjonsforespørsel', async ({ request }) => {
+  test('skal håndtere A009 og automatisk registrere unntak fra norsk trygd (REGISTRERT_UNNTAK)', async ({ page, request }) => {
+    // P4 (REGISTRERING_UNNTAK_NY_SAK, ~3 % av prosessarbeidet): en innkommende A009
+    // (utstasjonering — annet land bekrefter at deres trygd gjelder) registrerer
+    // unntaket fra norsk trygd HELT AUTOMATISK i mottaket. Fase A-repro 2026-06-15
+    // (behandling 136) bekreftet at det IKKE finnes et manuelt saksbehandler-
+    // godkjenningssteg her — REGISTRERING_UNNTAK_NY_SAK *og* REGISTRERING_UNNTAK_GODKJENN
+    // fullføres (FERDIG) uten UI-interaksjon, i motsetning til A003 annet-land-grenen
+    // (P1) der saksbehandler godkjenner manuelt. Denne testen beviser derfor at den
+    // automatiske kjeden faktisk produserer riktig UTFALL (REGISTRERT_UNNTAK), ikke
+    // bare at rutingsprosessen kjørte.
     console.log('📝 Step 1: Sending A009 information request from Germany...');
     const result = await sedHelper.sendSed(SED_SCENARIOS.A009_FRA_TYSKLAND);
 
@@ -173,7 +183,18 @@ test.describe('SED Mottak', () => {
       sedType: 'A009',
     });
 
-    console.log('✅ A009 information request routed + journalført');
+    // P4: det automatiske utfallet skal være et REGISTRERT_UNNTAK. Gjenbruker P1-POM-ens
+    // verifiserRegistrertUnntakIverksatt (BESLUTNING_LOVVALG_ANNET_LAND → REGISTRERT_UNNTAK)
+    // — samme sluttilstand, men her produsert automatisk i mottaket. A009 kommer fra
+    // Tyskland, så lovvalget overføres til DE (MEDL-register: DEU).
+    console.log('📝 Step 4: Verifying automatic REGISTRERT_UNNTAK end-state...');
+    const unntakAssertions = new EuEosUtpekingAssertions(page);
+    await unntakAssertions.verifiserRegistrertUnntakIverksatt(request, {
+      lovvalgsland: 'DE',
+      medlLovvalgsland: 'DEU',
+    });
+
+    console.log('✅ A009 routed + journalført + automatisk REGISTRERT_UNNTAK iverksatt');
   });
 
   test('skal håndtere A001 søknad fra Danmark', async ({ request }) => {
