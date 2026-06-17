@@ -148,11 +148,18 @@ fi
 **Performance Impact:**
 1. Download JaCoCo (~2.5 MB): +5s
 2. Checkout melosys-api: +3s
-3. Build melosys-api: +3-4 min
-4. Runtime overhead: ~5-10% slower execution
-5. Generate reports: +15-30s
+3. Set up JDK 21 (Temurin) + restore Maven cache: +5-15s
+4. Build melosys-api: ~4 min (warm Maven cache) / ~11 min (cold cache)
+5. Runtime overhead: ~5-10% slower execution
+6. Generate reports: +15-30s
 
-**Total overhead: ~4-5 minutes**
+**Total overhead: ~5 minutes warm, ~12 minutes cold.** Because of this, the job
+`timeout-minutes` is raised to **120 min** when `collect_coverage=true` (normal
+runs keep the tight 60-min ceiling). The melosys-api build uses **JDK 21** — the
+project moved to Java 21 / Spring Boot 4, and building on the runner default JDK
+17 fails maven-enforcer. The build step is `continue-on-error`, so if it ever
+breaks again the test suite still runs (only the `jacoco:report` is lost) rather
+than the whole run being skipped.
 
 For automatic runs triggered by every melosys-api/melosys-web push, this adds unnecessary CI time. Coverage is more useful for manual validation runs.
 
@@ -173,32 +180,39 @@ For automatic runs triggered by every melosys-api/melosys-web push, this adds un
 
 ### Example Output
 
+Real numbers from a full-suite run against `latest` (run 27495344776, 2026-06-14):
+
 ```markdown
 ## 📊 E2E Coverage per Module
 
 Module              | Lines   | Branches | Methods
 --------------------|---------|----------|--------
-app                 | 34.4%   | 19.0%    | 45.0%
-config              | 43.1%   | 22.1%    | 40.3%
-domain              | 47.8%   | 24.1%    | 43.6%
-feil                | 0.0%    | 0.0%     | 0.0%
-frontend-api        | 0.0%    | 0.0%     | 0.0%
-integrasjon         | 0.0%    | 0.0%     | 0.0%
-repository          | 0.0%    | 0.0%     | 0.0%
-saksflyt            | 0.0%    | 0.0%     | 0.0%
-saksflyt-api        | 0.0%    | 0.0%     | 0.0%
-service             | 0.0%    | 0.0%     | 0.0%
-sikkerhet           | 0.0%    | 0.0%     | 0.0%
+app                 | 33.3%   | 19.0%    | 45.0%
+config              | 53.6%   | 27.1%    | 53.3%
+domain              | 63.8%   | 35.4%    | 60.1%
+feil                | 30.4%   | N/A      | 36.0%
+frontend-api        | 61.6%   | 41.1%    | 63.6%
+integrasjon         | 69.8%   | 34.1%    | 65.2%
+repository          | 45.8%   | 32.1%    | 33.3%
+saksflyt            | 62.8%   | 41.3%    | 62.0%
+saksflyt-api        | 72.7%   | 55.5%    | 46.5%
+service             | 59.9%   | 38.0%    | 60.2%
+sikkerhet           | 76.6%   | 56.2%    | 75.7%
 soknad-altinn       | 0.0%    | 0.0%     | 0.0%
-statistikk          | 0.0%    | 0.0%     | 0.0%
-**TOTAL**           | **41.8%** | **21.7%** | **42.9%**
+statistikk          | 75.8%   | 54.8%    | 84.6%
+**TOTAL**           | **62.0%** | **38.0%** | **59.8%**
 ```
 
 **Interpretation:**
-- Only 3 modules have E2E coverage (app, config, domain)
-- ~42% line coverage overall
-- Most modules (service, saksflyt, frontend-api) have 0% E2E coverage
-- This suggests E2E tests primarily exercise domain/config layers, not service layer
+- ~62% line coverage overall (24 306 / 39 175 lines); 12 of 13 modules covered
+- The suite exercises the full stack: `frontend-api` → `service`/`saksflyt` → `domain`/`repository`
+- Only true gap: **`soknad-altinn` at 0%** — the digital Altinn form-intake path isn't driven by the UI E2E tests (separate ingress, expected)
+- `app` (33%) and `feil` (30%) are low — bootstrap/wiring and error-handling branches, also expected for UI-driven E2E
+
+> Historical note: an earlier version of this doc showed ~41.8% with most modules
+> at 0%. That reflected a period when the coverage report was effectively broken
+> (the melosys-api build failed, so most classes never made it into the report).
+> The numbers above are the healthy, working state.
 
 ## Configuration Options
 

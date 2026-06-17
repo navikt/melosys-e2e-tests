@@ -5,6 +5,7 @@ import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page
 import { TrygdeavtaleBehandlingPage } from '../../pages/behandling/trygdeavtale-behandling.page';
 import { TrygdeavtaleArbeidsstedPage } from '../../pages/behandling/trygdeavtale-arbeidssted.page';
 import { USER_ID_VALID } from '../../pages/shared/constants';
+import { waitForProcessInstances } from '../../helpers/api-helper';
 
 /**
  * Komplett Trygdeavtale arbeidsflyt test
@@ -55,6 +56,16 @@ test.describe('Trygdeavtale - Komplett arbeidsflyt', () => {
 
     // Fullfør arbeidssted og fatt vedtak
     await arbeidssted.fyllUtArbeidsstedOgFattVedtak('Test');
+
+    // Hard sluttilstand: vent på iverksetting + verifiser DB end-state.
+    // Trygdeavtale-behandlingen er nyeste behandling (ren DB per fixture): skal være
+    // AVSLUTTET med behandlingsresultat og alle prosessinstanser (inkl.
+    // IVERKSETT_VEDTAK_TRYGDEAVTALE) FERDIG.
+    console.log('📝 Venter på iverksetting + verifiserer DB-sluttilstand...');
+    await waitForProcessInstances(page.request, 60);
+    await behandling.assertions.verifiserBehandlingAvsluttet({
+      forventetIverksettProsess: 'IVERKSETT_VEDTAK_TRYGDEAVTALE',
+    });
 
     console.log('✅ Trygdeavtale-arbeidsflyt fullført med hjelpemetoder');
   });

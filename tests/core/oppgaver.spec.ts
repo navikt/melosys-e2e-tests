@@ -56,21 +56,13 @@ test.describe('Oppgaver', () => {
 
     // Step 3: Check if we have any tasks
     console.log('📝 Step 3: Checking for tasks...');
-    const harOppgaver = await oppgaver.harOppgaver();
     const behandlingCount = await oppgaver.getBehandlingOppgaveAntall();
 
     console.log(`   Total behandling oppgaver: ${behandlingCount}`);
 
-    // The case we created should appear as a task
-    // Note: This depends on the mock service and database state
-    if (behandlingCount > 0) {
-      console.log('✅ Found behandling oppgaver as expected');
-    } else {
-      console.log('ℹ️ No behandling oppgaver found (may depend on service configuration)');
-    }
-
-    // Test passes regardless - we're testing that the UI works
-    expect(true).toBe(true);
+    // Saken vi opprettet (lagt i «mine») SKAL gi minst én behandling-oppgave på forsiden.
+    expect(behandlingCount, 'Opprettet sak skal gi en behandling-oppgave').toBeGreaterThan(0);
+    console.log('✅ Found behandling oppgaver as expected');
   });
 
   test('skal kunne navigere til behandling fra oppgave', async ({ page }) => {
@@ -132,9 +124,8 @@ test.describe('Oppgaver', () => {
     console.log(`   Journalføring oppgaver: ${journalCount}`);
     console.log(`   Behandling oppgaver: ${behandlingCount}`);
 
-    // We just verify that we can get the counts - actual values depend on state
-    expect(typeof journalCount).toBe('number');
-    expect(typeof behandlingCount).toBe('number');
+    // Vi opprettet én sak, så det skal finnes minst én behandling-oppgave (journalCount logges over).
+    expect(behandlingCount, 'Opprettet sak skal gi en behandling-oppgave').toBeGreaterThanOrEqual(1);
 
     console.log('✅ Successfully retrieved task counts');
   });
@@ -156,15 +147,8 @@ test.describe('Oppgaver', () => {
     console.log(`   Ingen journalføring oppgaver melding: ${harIngenJournalføring}`);
     console.log(`   Ingen behandling oppgaver melding: ${harIngenBehandling}`);
 
-    // The page should handle empty state gracefully
-    // Either show "Ingen oppgaver" message or just show empty lists
-    if (!harOppgaver) {
-      console.log('✅ Empty state is handled (no tasks shown)');
-    } else {
-      console.log('ℹ️ Tasks exist (possibly from previous test data)');
-    }
-
-    // Test passes - we're testing that the UI handles empty state
-    expect(true).toBe(true);
+    // DB er deterministisk tom per cleanup-fixture, så forsiden SKAL vise tom oppgaveliste.
+    expect(harOppgaver, 'Ren DB skal gi tom oppgaveliste').toBe(false);
+    console.log('✅ Empty state is handled (no tasks shown)');
   });
 });

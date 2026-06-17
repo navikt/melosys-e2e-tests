@@ -44,16 +44,15 @@ function hentSaksnummerFraUrl(url: string): string {
   return decodeURIComponent(saksnummer);
 }
 
-export async function setupPensjonistMedAarsavregning(
-  page: Page
-): Promise<{ aarsavregning: AarsavregningPage; vedtak: VedtakPage }> {
-  const hovedside = new HovedsidePage(page);
-  const opprettSak = new OpprettNySakPage(page);
-  const pensjonistBehandling = new EuEosPensjonistBehandlingPage(page);
-  const trygdeavgift = new TrygdeavgiftPage(page);
-  const aarsavregning = new AarsavregningPage(page);
-  const vedtak = new VedtakPage(page);
-
+/**
+ * Opprett en EØS-pensjonist førstegangsbehandling, åpne den fra hovedsiden og
+ * returner saksnummeret. Felles startblokk for begge setup-variantene under.
+ */
+async function opprettOgÅpnePensjonistSak(
+  page: Page,
+  hovedside: HovedsidePage,
+  opprettSak: OpprettNySakPage
+): Promise<string> {
   await hovedside.goto();
   await hovedside.klikkOpprettNySak();
   await opprettSak.fyllInnBrukerID(USER_ID_VALID);
@@ -69,7 +68,20 @@ export async function setupPensjonistMedAarsavregning(
   await waitForProcessInstances(page.request, 30);
   await hovedside.goto();
   await hovedside.åpneSak(BRUKERNAVN_VALID);
-  const saksnummer = hentSaksnummerFraUrl(page.url());
+  return hentSaksnummerFraUrl(page.url());
+}
+
+export async function setupPensjonistMedAarsavregning(
+  page: Page
+): Promise<{ aarsavregning: AarsavregningPage; vedtak: VedtakPage }> {
+  const hovedside = new HovedsidePage(page);
+  const opprettSak = new OpprettNySakPage(page);
+  const pensjonistBehandling = new EuEosPensjonistBehandlingPage(page);
+  const trygdeavgift = new TrygdeavgiftPage(page);
+  const aarsavregning = new AarsavregningPage(page);
+  const vedtak = new VedtakPage(page);
+
+  const saksnummer = await opprettOgÅpnePensjonistSak(page, hovedside, opprettSak);
   await pensjonistBehandling.fyllUtPeriodeOgBostedsland(
     PENSJONIST_AARSAVREGNING_TEST_DATA.periodeFra,
     PENSJONIST_AARSAVREGNING_TEST_DATA.periodeTil,
@@ -106,4 +118,58 @@ export async function setupPensjonistMedAarsavregning(
   await hovedside.åpneAarsavregningForSaksnummer(saksnummer);
 
   return { aarsavregning, vedtak };
+}
+
+/**
+ * Setup for «uten grunnlag»-varianten (MELOSYS-7954/7271):
+ * EØS-pensjonist førstegangsbehandling der HELE perioden ligger i et tidligere
+ * år (01.04–05.04.2024) og DEFAULT toggle-state beholdes (dvs.
+ * `melosys.faktureringskomponenten.ikke-tidligere-perioder` PÅ — i motsetning
+ * til setupPensjonistMedAarsavregning-testene som skrur den av).
+ *
+ * Da viser førstegangens Trygdeavgift-steg kun varselet «Trygdeavgift for
+ * tidligere år skal fastsettes på årsavregning…» (ingen felter), og det lagres
+ * IKKE noe trygdeavgiftsgrunnlag. Etter «Bekreft og send» auto-opprettes
+ * årsavregningsbehandlingen (prosess OPPRETT_NY_BEHANDLING_AARSAVREGNING) —
+ * ingen manuell opprett-årsavregning-runde, og året (2024) er forhåndsvalgt.
+ *
+ * @returns POM-er + behandlingID for den auto-opprettede årsavregningen (fra URL)
+ */
+export async function setupPensjonistUtenGrunnlagMedAutoAarsavregning(
+  page: Page
+): Promise<{ aarsavregning: AarsavregningPage; vedtak: VedtakPage; behandlingId: string }> {
+  const hovedside = new HovedsidePage(page);
+  const opprettSak = new OpprettNySakPage(page);
+  const pensjonistBehandling = new EuEosPensjonistBehandlingPage(page);
+  const trygdeavgift = new TrygdeavgiftPage(page);
+  const aarsavregning = new AarsavregningPage(page);
+  const vedtak = new VedtakPage(page);
+
+  const saksnummer = await opprettOgÅpnePensjonistSak(page, hovedside, opprettSak);
+  await pensjonistBehandling.fyllUtPeriodeOgBostedsland(
+    PENSJONIST_AARSAVREGNING_TEST_DATA.periodeFra,
+    PENSJONIST_AARSAVREGNING_TEST_DATA.periodeTil,
+    PENSJONIST_AARSAVREGNING_TEST_DATA.bostedsland
+  );
+  await pensjonistBehandling.klikkBekreftOgFortsettTilTomtTrygdeavgiftSteg();
+
+  // Tomt Trygdeavgift-steg (kun årsavregning-varselet) — gå rett videre.
+  await trygdeavgift.klikkBekreftOgFortsett();
+
+  await pensjonistBehandling.assertions.verifiserBekreftOgSendSynlig();
+  await pensjonistBehandling.klikkBekreftOgSend();
+
+  console.log('📝 Venter på prosessinstanser (inkl. auto-opprettet årsavregning)...');
+  await waitForProcessInstances(page.request, 60);
+  await hovedside.goto();
+  await hovedside.åpneAarsavregningForSaksnummer(saksnummer);
+
+  await page.waitForURL(/behandlingID=\d+/, { timeout: 15000 });
+  const behandlingId = new URL(page.url()).searchParams.get('behandlingID');
+  if (!behandlingId) {
+    throw new Error(`Fant ikke behandlingID i årsavregnings-URL-en: ${page.url()}`);
+  }
+  console.log(`📌 Auto-opprettet årsavregning: behandlingID=${behandlingId} (sak ${saksnummer})`);
+
+  return { aarsavregning, vedtak, behandlingId };
 }

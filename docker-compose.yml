@@ -187,6 +187,8 @@ services:
       UNLEASH_TOKEN: "*:development.unleash-insecure-client-api-token"
       UNLEASH_APP_NAME: "faktureringskomponenten"
       UNLEASH_ENVIRONMENT: "development"
+      NAIS_CLUSTER_NAME: "dev-gcp"
+      KAFKA_TOPIC_NAME_MANGLENDE_FAKTURABETALING: "teammelosys.manglende-fakturabetaling-local"
     networks:
       melosys.docker-internal:
         aliases:
@@ -217,6 +219,10 @@ services:
       SPRING_DATASOURCE_PASSWORD: mysecretpassword
       SPRING_FLYWAY_ENABLED: "true"
       KAFKA_BROKERS: "kafka.melosys.docker-internal:9092"
+      AZURE_APP_WELL_KNOWN_URL: "http://mock-oauth2-server.melosys.docker-internal:8082/aad/.well-known/openid-configuration"
+      AZURE_APP_CLIENT_ID: "dummy"
+      UNLEASH_SERVER_API_TOKEN: "*:development.unleash-insecure-client-api-token"
+      UNLEASH_SERVER_API_URL: "http://unleash.melosys.docker-internal:4242"
       UNLEASH_URL: "http://unleash.melosys.docker-internal:4242/api"
       UNLEASH_TOKEN: "*:development.unleash-insecure-client-api-token"
     networks:
@@ -304,10 +310,15 @@ services:
           - melosys-web.melosys.docker-internal
     ports:
       - "3000:3000"
+    # Nginx resolverer alle upstreams ved oppstart og dør permanent hvis én mangler i
+    # docker-DNS — derfor må ALLE tjenester nginx-configen refererer stå i depends_on,
+    # og restart-policy fange resterende oppstarts-racer (container-start ≠ DNS-registrert)
+    restart: on-failure
     depends_on:
       - melosys-api
       - mock-oauth2-server
       - faktureringskomponenten
+      - melosys-trygdeavtale
     environment:
       # Load the local environment configuration
       ENVIRONMENT_NAME: local

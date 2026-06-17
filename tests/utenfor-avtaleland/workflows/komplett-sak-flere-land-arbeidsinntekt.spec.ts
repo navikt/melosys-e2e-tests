@@ -87,7 +87,7 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
 
         // Step 6: Resultat Periode
         console.log('Step 6: Setting resultat periode...');
-        await page.waitForTimeout(3000);
+        await resultatPeriode.ventPåSideLastet();
         await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
 
         // Step 7: Trygdeavgift - Ikke-skattepliktig med arbeidsinntekt fra Norge

@@ -3,6 +3,14 @@ import { BasePage } from '../shared/base.page';
 import { KlageAssertions } from './klage.assertions';
 
 /**
+ * ⚠️ SPEKULATIV STILLAS-POM — IKKE bruk som fasit. Klage er ikke i drift (se
+ * tests/ftrl/klage/ftrl-klage.spec.ts-headeren). Selektorene under er GJETTET og
+ * matcher IKKE faktisk melosys-web-markup: det finnes ingen `select[name*="klage"]`,
+ * ingen Medhold/Avvis-radios, intet begrunnelse-felt og ingen «Fatt vedtak»-klageskjerm.
+ * Den ekte flyten er behandlingsmeny (AvsluttSak) → bekreftValg-modal, og de reelle
+ * resultattypene er MEDHOLD / KLAGEINNSTILLING / AVVIST_KLAGE — IKKE KLAGE_MEDHOLD osv.
+ * Skriv om mot faktisk flyt når klage tas i drift.
+ *
  * Page Object for Klage (Appeal) handling
  *
  * Responsibilities:
@@ -10,10 +18,10 @@ import { KlageAssertions } from './klage.assertions';
  * - Select klage result (medhold, avvist, oversendt)
  * - Submit klage decision
  *
- * Klage results:
- * - KLAGE_MEDHOLD: Appeal granted
- * - KLAGE_AVVIST: Appeal dismissed
- * - KLAGE_OVERSENDT_TIL_KLAGEINSTANSER: Appeal forwarded to appeals authority
+ * Klage results (FAKTISKE Behandlingsresultattyper):
+ * - MEDHOLD: Appeal granted
+ * - AVVIST_KLAGE: Appeal dismissed
+ * - KLAGEINNSTILLING: Appeal forwarded to klageinstans (Kabal — ennå manuelt)
  *
  * @example
  * const klage = new KlagePage(page);

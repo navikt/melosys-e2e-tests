@@ -11,20 +11,33 @@ import { KlagePage } from '../../../pages/klage/klage.page';
 import { USER_ID_VALID, SAKSTYPER } from '../../../pages/shared/constants';
 
 /**
- * Test suite for FTRL Klage (Appeal) functionality
+ * SCAFFOLD / @manual — Klage (Appeal) er IKKE i drift i Melosys ennå.
  *
- * Tests cover:
- * - Creating klage behandling on existing case
- * - Processing klage with different outcomes (medhold, avvist, oversendt)
- * - Klage-specific deadline handling (70 days vs 90)
+ * Status (verifisert 2026-06-08): KLAGE finnes som behandlingstype i melosys-api
+ * (flytløs, `harIngenFlyt()`=true, kun unit-testet) og i melosys-web (skjult bak
+ * toggle `melosys.behandlingstype.klage`), men flyten mangler Kabal-overføring og
+ * er ikke tatt i bruk. Se kode-wiki:
+ *   archive/melosys-e2e-tests/2026-06-07-e2e-dekningsmatrise-og-gap-backlog.md (Klage-korreksjonen)
+ *   + huginn concepts/Klagebehandling.md.
  *
- * Prerequisites:
- * - A completed FTRL case with vedtak is needed before klage can be created
- * - These tests first create a complete case, then test the klage flow
+ * Hele suiten er tagget @manual (kjøres ikke i CI). Den ASSERTERER I DAG INGENTING
+ * om klage: hver test bygger en ekte §2-1-førstegangssak→vedtak, leter så etter
+ * klage-UI med gjettede selektorer bak `.catch(()=>false)`, og faller gjennom til
+ * `expect(true)`. Beholdt med vilje som utgangspunkt for når klage tas i drift.
  *
- * Note: Klage handling may use simplified workflow compared to regular FTRL
+ * NÅR KLAGE IMPLEMENTERES — skriv om mot FAKTISK flyt (ikke selektorene i denne fila):
+ *   1. Forutsetning: en fagsak med tidligere AVSLUTTET vedtak (annengangsbehandling),
+ *      og toggle `melosys.behandlingstype.klage` på (UnleashHelper.enableFeature).
+ *   2. Opprett: velg behandlingstype KLAGE i knytt-til-sak / opprett-behandling.
+ *   3. KLAGE er flytløs → lander på «ingen flyt»-skjermen; ingen steg/begrunnelse/«Fatt vedtak».
+ *   4. Resultat settes fra BEHANDLINGSMENYEN (AvsluttSak) via én av tre handlinger:
+ *        «Medhold på klage» / «Klageinnstilling er oversendt til klageinstansen» / «Klage er avvist»
+ *      → åpner en bekreftValg-modal (knapp «Bekreft») som POSTer behandlingsresultattype.
+ *   5. Reelle resultattyper: MEDHOLD / KLAGEINNSTILLING / AVVIST_KLAGE
+ *      (IKKE KLAGE_MEDHOLD/KLAGE_AVVIST/KLAGE_OVERSENDT… som pages/klage/klage.page.ts gjetter).
+ *   6. Hard-asserter resultattype via DB (BEHANDLING/behandlingsresultat), ikke UI-tekst.
  */
-test.describe('FTRL Klage', () => {
+test.describe('FTRL Klage @manual', () => {
   let auth: AuthHelper;
   let hovedside: HovedsidePage;
   let opprettSak: OpprettNySakPage;

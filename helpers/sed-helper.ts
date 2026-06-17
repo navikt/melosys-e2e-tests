@@ -58,6 +58,26 @@ export interface SedConfig {
   sedType?: string;
   /** SED version (default: 1) */
   sedVersjon?: string;
+  /**
+   * When true, the mock also registers an OPEN BUC (of bucType) in the RINA store for the
+   * generated rinaSaksnummer, with the foreign sender as participant. Required for inbound
+   * SEDs that melosys-api must answer on the EXISTING BUC — e.g. an inbound A003 where Norway
+   * is designated (Norge utpekt) and replies with an outbound A012. Without it the direct
+   * mottak path leaves no BUC in RINA, melosys-api falls back to the file-based default BUC
+   * (LA_BUC_03) which fails its "open LA_BUC_02" check, and the reply SED is never sent.
+   */
+  opprettBucIRina?: boolean;
+  /**
+   * Svar på anmodning om unntak (Article 16) — set on inbound A002/A011 replies.
+   * Routes via melosys-api's SvarAnmodningUnntakSedRuter to the
+   * ANMODNING_OM_UNNTAK_SVAR process on the existing anmodning-behandling.
+   *   beslutning: 'INNVILGELSE' (A002 godkjent) | 'AVSLAG' (A011) | 'DELVIS_INNVILGELSE'
+   */
+  svarAnmodningUnntak?: {
+    beslutning: 'INNVILGELSE' | 'DELVIS_INNVILGELSE' | 'AVSLAG';
+    begrunnelse?: string;
+    delvisInnvilgetPeriode?: { fom: string; tom: string };
+  };
 }
 
 /**
@@ -451,6 +471,21 @@ export const SED_SCENARIOS = {
   A009_FRA_TYSKLAND: {
     bucType: 'LA_BUC_02',
     sedType: 'A009',
+    landkode: 'DE',
+    avsenderId: 'DE:DRV',
+    lovvalgsland: 'DE',
+  } as SedConfig,
+
+  /**
+   * A010 provisional determination from Germany
+   * Triggers: MOTTAK_SED → REGISTRERING_UNNTAK_NY_SAK → REGISTRERING_UNNTAK_GODKJENN
+   * Søsken-temaet til A009: samme automatiske registreringsmaskineri
+   * (UnntaksperiodeSedRuter), men ruter til REGISTRERING_UNNTAK_NORSK_TRYGD_ØVRIGE
+   * (A009 → _UTSTASJONERING). Ender automatisk som REGISTRERT_UNNTAK i mottaket.
+   */
+  A010_FRA_TYSKLAND: {
+    bucType: 'LA_BUC_02',
+    sedType: 'A010',
     landkode: 'DE',
     avsenderId: 'DE:DRV',
     lovvalgsland: 'DE',

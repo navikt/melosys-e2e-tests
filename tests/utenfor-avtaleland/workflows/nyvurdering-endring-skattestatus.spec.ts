@@ -74,8 +74,8 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker nær tilknytning til');
         await lovvalg.klikkBekreftOgFortsett();
 
-        // Wait for Medlemskapsperioder page to load
-        await page.waitForTimeout(3000);
+        // Wait for Resultat periode-steget to render after the step transition
+        await resultatPeriode.ventPåSideLastet();
 
         // Log what the frontend API returns (for debugging)
         console.log('📊 Logging all frontend toggle states:');
@@ -141,9 +141,19 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         console.log('📝 Waiting for vedtak page to load and API calls to complete...');
         await page.waitForLoadState('networkidle');
 
+        // Capture NV-behandlingId from URL for DB end-state assertions (before vedtak navigates away)
+        const nvBehandlingId = new URL(page.url()).searchParams.get('behandlingID');
+        expect(nvBehandlingId, 'behandlingID skal finnes i URL').not.toBeNull();
+
         // Step 15: Submit vedtak for ny vurdering
         console.log('📝 Step 15: Submitting vedtak for ny vurdering...');
         await vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING');
+
+        // Step 16: Hard sluttilstand - vent på NV-iverksetting + verifiser DB end-state
+        // (NV-behandlingen skal være AVSLUTTET med alle prosessinstanser FERDIG)
+        console.log('📝 Step 16: Waiting for iverksetting + verifying DB end-state...');
+        await waitForProcessInstances(page.request, 60);
+        await vedtak.assertions.verifiserBehandlingAvsluttet({ behandlingId: nvBehandlingId });
 
         // Note: Toggle will be reset to default (enabled) before next test runs
 
@@ -208,8 +218,8 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker nær tilknytning til');
         await lovvalg.klikkBekreftOgFortsett();
 
-        // Wait for Medlemskapsperioder page to load
-        await page.waitForTimeout(3000);
+        // Wait for Resultat periode-steget to render after the step transition
+        await resultatPeriode.ventPåSideLastet();
 
         // Log what the frontend API returns (for debugging)
         console.log('📊 Logging all frontend toggle states:');
@@ -276,6 +286,10 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         console.log('📝 Waiting for vedtak page to load and API calls to complete...');
         await page.waitForLoadState('networkidle');
 
+        // Capture NV-behandlingId from URL for DB end-state assertions (before vedtak navigates away)
+        const nvBehandlingId = new URL(page.url()).searchParams.get('behandlingID');
+        expect(nvBehandlingId, 'behandlingID skal finnes i URL').not.toBeNull();
+
         // Step 15: Submit vedtak for ny vurdering
         console.log('📝 Step 15: Submitting vedtak for ny vurdering...');
         await vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING');
@@ -284,6 +298,9 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         // This ensures behandling.status = 'AVSLUTTET' is committed before the job queries
         console.log('📝 Step 16: Wait for vedtak process to complete...');
         await waitForProcessInstances(page.request, 30);
+
+        // Hard sluttilstand: NV-behandlingen skal være AVSLUTTET med alle prosessinstanser FERDIG
+        await vedtak.assertions.verifiserBehandlingAvsluttet({ behandlingId: nvBehandlingId });
 
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
 

@@ -63,7 +63,9 @@ permissions:
 jobs:
   e2e-tests:
     runs-on: ubuntu-latest-8-cores
-    timeout-minutes: 60
+    # Coverage runs additionally build melosys-api (~4 min cached, ~11 min cold) before
+    # the ~44 min suite, so they need generous headroom over the normal 60 min ceiling.
+    timeout-minutes: ${{ inputs.collect_coverage && 120 || 60 }}
 
     steps:
       - name: Checkout code
@@ -77,6 +79,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Tillitsgate: fail-fast på grønn-men-meningsløs-mønstre FØR docker-stacken startes.
+      # Ren node, sekunder. Speiler test-quality.yml (som kun trigges på PR for tests/pages/scripts).
+      - name: Verifiser test-kvalitet (check:tests)
+        run: npm run check:tests
 
       - name: Get Playwright version
         id: playwright-version
@@ -294,8 +301,21 @@ jobs:
           path: melosys-api
           token: ${{ secrets.READER_TOKEN }}
 
+      - name: Set up JDK 21 for melosys-api coverage build
+        if: inputs.collect_coverage
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven  # cache ~/.m2 so the melosys-api build doesn't re-download the world (~11 min → ~4 min)
+
       - name: Build melosys-api for coverage class files
         if: inputs.collect_coverage
+        # Don't fail the whole suite if the coverage build breaks (e.g. JDK bump in
+        # melosys-api): this step runs BEFORE "Start Docker Compose services", so a
+        # hard failure here would skip the entire test run. Degrade gracefully — the
+        # suite still runs; only the jacoco:report (which needs .class files) is lost.
+        continue-on-error: true
         run: |
           cd melosys-api
           echo "🔨 Building melosys-api to get compiled classes for coverage report..."

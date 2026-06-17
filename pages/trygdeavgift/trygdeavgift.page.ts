@@ -52,25 +52,87 @@ export class TrygdeavgiftPage extends BasePage {
     name: 'Legg til inntekt'
   });
 
+  // Locator for "Legg til skatteforhold" button
+  private readonly leggTilSkatteforholdButton = this.page.getByRole('button', {
+    name: 'Legg til skatteforhold'
+  });
+
   constructor(page: Page) {
     super(page);
     this.assertions = new TrygdeavgiftAssertions(page);
   }
 
   /**
-   * Wait for Trygdeavgift page to load
-   * Verifies the Skattepliktig field is visible
+   * Wait for Trygdeavgift page to load.
+   *
+   * The page fires a useEffect on mount that fetches saved trygdeavgift data
+   * (GET /trygdeavgift/beregning) and then resets the form fields with
+   * resetSkatteforholdsperioder/resetInntektskilder. We must wait for this
+   * initial fetch to complete before interacting, otherwise the useEffect
+   * response will overwrite any fields we've already filled.
    */
   async ventPåSideLastet(): Promise<void> {
     try {
       await this.skattepliktigGroup.waitFor({ state: 'visible', timeout: 10000 });
       console.log('✅ Trygdeavgift page loaded - Skattepliktig field visible');
+
+      // The useEffect on mount fires GET /trygdeavgift/beregning and then resets
+      // form fields with resetSkatteforholdsperioder/resetInntektskilder. We must
+      // not interact until that response has been applied. waitForLoadState
+      // covers both cases: response already done (returns instantly) or in flight
+      // (waits until network is idle).
+      await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {
+        console.log('⚠️  Network did not reach idle within 5s (continuing anyway)');
+      });
+
+      // Let React process the response and re-render the form
+      await this.page.waitForTimeout(500);
+      console.log('✅ Initial trygdeavgift data load complete');
     } catch (error) {
       console.error('❌ Failed to reach Trygdeavgift page');
       console.error(`Current URL: ${this.currentUrl()}`);
       await this.screenshot('trygdeavgift-not-loaded');
       throw error;
     }
+  }
+
+  /**
+   * Wait for the form's debounced auto-save (PUT /trygdeavgift/beregning) to
+   * fire and complete after a field mutation in a multi-row scenario.
+   *
+   * Replaces fixed `waitForTimeout(800)` "pauses" between indexed field edits.
+   * The flake those sleeps masked: a debounced PUT's response resets the form
+   * (resetSkatteforholdsperioder/resetInntektskilder), wiping any field that
+   * was mutated but not yet persisted. Waiting for the PUT to COMPLETE before
+   * the next mutation guarantees we edit on top of settled state — on a loaded
+   * CI an 800ms sleep was not always enough for the PUT round-trip.
+   *
+   * MUST be called immediately after the synchronous mutation returns: the form
+   * has a ~500ms debounce, so registering the listener now reliably catches the
+   * upcoming PUT (it cannot have fired yet). If a particular mutation produces
+   * no PUT (e.g. adding an empty row), it falls back to a networkidle settle so
+   * the caller never hangs.
+   */
+  async ventPåAutolagring(): Promise<void> {
+    const put = await this.page.waitForResponse(
+      response =>
+        isTrygdeavgiftBeregningResponse(response) &&
+        response.request().method() === 'PUT',
+      { timeout: 2500 },
+    ).catch(() => null);
+
+    if (put) {
+      console.log('✅ Autolagring PUT /trygdeavgift/beregning fullført');
+      // Let React apply the PUT response (form-reset) before the next mutation.
+      // Generous margin: on a loaded CI the reset can trail the response by a
+      // beat, and the next indexed mutation must not race a still-applying reset
+      // (it would silently wipe the field we are about to edit). networkidle
+      // resolves instantly when already quiet, so this only costs time on a
+      // genuinely busy network.
+      await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {});
+    }
+    // No PUT (e.g. an empty row was just added) → the 2.5s window already settled
+    // and there is no form-reset to wait for, so skip the extra networkidle.
   }
 
   /**
@@ -306,6 +368,94 @@ export class TrygdeavgiftPage extends BasePage {
   async klikkLeggTilInntekt(): Promise<void> {
     await this.leggTilInntektButton.click();
     console.log('✅ Added new income source field');
+  }
+
+  // ======== Skatteforhold (indexed) ========
+
+  /**
+   * Click "Legg til skatteforhold" to add another tax relation row
+   */
+  async leggTilSkatteforhold(): Promise<void> {
+    await this.leggTilSkatteforholdButton.click();
+    await this.page.waitForTimeout(300);
+    console.log('✅ Added new skatteforhold row');
+  }
+
+  /**
+   * Fill dates for a specific skatteforhold row.
+   *
+   * DatePicker.Input from @navikt/ds-react does NOT set name on the <input>.
+   * We anchor on the radio button (which has name) and navigate to the row
+   * to find the date inputs via .dato class.
+   */
+  async fyllInnSkatteforholdDatoer(indeks: number, fom: string, tom: string): Promise<void> {
+    const radio = this.page.locator(
+      `input[name="skatteforholdsperioder[${indeks}].skatteplikttype"]`
+    ).first();
+    await radio.waitFor({ state: 'attached', timeout: 10000 });
+    const row = radio.locator('xpath=ancestor::*[contains(@class,"periode__rad")]');
+    const dateInputs = row.locator('.dato input');
+
+    await dateInputs.first().fill(fom);
+    await dateInputs.nth(1).fill(tom);
+    await dateInputs.nth(1).press('Tab');
+    await this.page.waitForTimeout(300);
+    console.log(`✅ Skatteforhold [${indeks}] dates: ${fom} - ${tom}`);
+  }
+
+  /**
+   * Set skattepliktig for a specific skatteforhold row
+   * Field name: skatteforholdsperioder[N].skatteplikttype
+   * Values: SKATTEPLIKTIG (Ja) / IKKE_SKATTEPLIKTIG (Nei)
+   */
+  async velgSkattepliktigForIndeks(indeks: number, erSkattepliktig: boolean): Promise<void> {
+    const value = erSkattepliktig ? 'SKATTEPLIKTIG' : 'IKKE_SKATTEPLIKTIG';
+    const radio = this.page.locator(
+      `input[name="skatteforholdsperioder[${indeks}].skatteplikttype"][value="${value}"]`
+    );
+    await radio.waitFor({ state: 'attached', timeout: 5000 });
+    await radio.click({ force: true });
+    await expect(radio).toBeChecked({ timeout: 5000 });
+    console.log(`✅ Skatteforhold [${indeks}] = ${erSkattepliktig ? 'Ja' : 'Nei'}`);
+  }
+
+  // ======== Inntekt dates and fields (indexed) ========
+
+  /**
+   * Fill dates for a specific inntekt row.
+   *
+   * Anchors on the kildetype <select> (which has name attr) and navigates
+   * up to the row to find date inputs via .dato class.
+   */
+  async fyllInnInntektsperiodeDatoer(indeks: number, fom: string, tom: string): Promise<void> {
+    const select = this.page.locator(`select[name="inntektskilder[${indeks}].kildetype"]`);
+    await select.waitFor({ state: 'attached', timeout: 10000 });
+    const row = select.locator('xpath=ancestor::*[contains(@class,"periode__rad")]');
+    const dateInputs = row.locator('.dato input');
+
+    await dateInputs.first().fill(fom);
+    await dateInputs.nth(1).fill(tom);
+    await dateInputs.nth(1).press('Tab');
+    await this.page.waitForTimeout(300);
+    console.log(`✅ Inntektsperiode [${indeks}] dates: ${fom} - ${tom}`);
+  }
+
+  /**
+   * Set "Betales aga?" for a specific inntekt row
+   * Field name: inntektskilder[N].arbAvgBetales
+   * Values: TRUE (Ja) / FALSE (Nei)
+   *
+   * Note: For NÆRINGSINNTEKT_FRA_NORGE the radio is auto-set and disabled.
+   * Only call this for INNTEKT_FRA_UTLANDET or MISJONÆR.
+   */
+  async velgBetalesAgaForIndeks(indeks: number, betalesAga: boolean): Promise<void> {
+    const value = betalesAga ? 'TRUE' : 'FALSE';
+    const radio = this.page.locator(
+      `input[name="inntektskilder[${indeks}].arbAvgBetales"][value="${value}"]`
+    );
+    await radio.click({ force: true });
+    await expect(radio).toBeChecked({ timeout: 5000 });
+    console.log(`✅ Betales aga [${indeks}] = ${betalesAga ? 'Ja' : 'Nei'}`);
   }
 
   /**

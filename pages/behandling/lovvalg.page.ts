@@ -58,6 +58,36 @@ export class LovvalgPage extends BasePage {
   }
 
   /**
+   * Select brukers situasjon by visible option label (when the option value is unknown)
+   *
+   * @param label - Visible option text (e.g., 'Arbeid i Norge')
+   */
+  async velgBrukersSituasjonMedLabel(label: string): Promise<void> {
+    await this.brukersSituasjonDropdown.selectOption({ label });
+  }
+
+  /**
+   * Fill out Lovvalg for § 2-2 pliktig medlemskap (arbeidstaker i Norge)
+   *
+   * Selects bestemmelse FTRL_KAP2_2_2, situasjon "Arbeid i Norge" and answers
+   * the three § 2-2 questions with "Ja":
+   *  1. Ikke unntatt pliktig medlemskap (fremmed stat / mellomfolkelig organisasjon)
+   *  2. Er søker arbeidstaker?
+   *  3. Har søker lovlig adgang til å ta arbeid i Norge/på norsk kontinentalsokkel?
+   *
+   * Does NOT click "Bekreft og fortsett" — caller controls step transition.
+   */
+  async fyllUtLovvalgPliktig22(situasjonLabel: string = 'Arbeid i Norge'): Promise<void> {
+    await this.velgBestemmelse('FTRL_KAP2_2_2');
+    await this.velgBrukersSituasjonMedLabel(situasjonLabel);
+    await this.svarJaPaaSpørsmål([
+      'Har du kommet til at søker ikke er unntatt',
+      'Er søker arbeidstaker',
+      'Har søker lovlig adgang til å ta arbeid'
+    ]);
+  }
+
+  /**
    * Answer "Ja" to the first question on the page
    * Used when there's only one question or need to answer the first one
    */

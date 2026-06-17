@@ -65,6 +65,22 @@ export class AarsavregningPage extends BasePage {
     name: 'Innbetalt trygdeavgift'
   });
 
+  /**
+   * Radiogruppe «Beregn endelig trygdeavgift» / «Oppgi endelig beregnet
+   * trygdeavgift» (endeligAvgiftValgRadioGroup.tsx). Vises i uten/delt-grunnlag-
+   * flyten (toggle `melosys.arsavregning.eos_pensjonist`). «Beregn»
+   * (OPPLYSNINGER_ENDRET) er forhåndsvalgt.
+   */
+  private readonly endeligAvgiftValgGroup = this.page.locator('.endeligAvgiftValg_radio_group');
+
+  /**
+   * Manuelt avgiftsbeløp-felt (manuellAvgiftFormPart.tsx, name=manueltAvgiftBeloep).
+   * Vises kun når «Oppgi endelig beregnet trygdeavgift» er valgt.
+   */
+  private readonly endeligBeregnetTrygdeavgiftField = this.page.getByRole('textbox', {
+    name: 'Endelig beregnet trygdeavgift'
+  });
+
   private readonly bekreftButton = this.page.getByRole('button', { name: 'Bekreft og fortsett' });
 
   private readonly fattVedtakButton = this.page.getByRole('button', { name: 'Fatt vedtak' });
@@ -102,19 +118,31 @@ export class AarsavregningPage extends BasePage {
   }
 
   /**
-   * Besvar «Avviker innbetalt trygdeavgift …?» med «Nei» (gammel flyt).
+   * Radiogruppe for inngangsspørsmålet om innbetalt trygdeavgift.
+   * Etiketten varierer med toggle `melosys.arsavregning.eos_pensjonist`:
+   *   - toggle på  → «Avviker innbetalt trygdeavgift fra tidligere beregnet avgift?»
+   *   - toggle av  → «Skal du legge til trygdeavgift fra Avgiftssystemet …?»
+   * Vi matcher derfor begge etikettene.
+   */
+  private readonly trygdeavgiftAvvikGroup = this.page.getByRole('group', {
+    name: /Avviker innbetalt|Skal du legge til trygdeavgift/,
+  });
+
+  /**
+   * Besvar inngangsspørsmålet om innbetalt trygdeavgift med «Nei».
    *
-   * Gammel flyt viser en Ja/Nei-radio for innbetalt trygdeavgift som må
-   * besvares for å avdekke resten av årsavregningsskjemaet. Den nye
-   * eos_pensjonist-flyten (toggle `melosys.arsavregning.eos_pensjonist`)
-   * skjuler radioen når det ikke finnes tidligere trygdeavgiftsgrunnlag og
-   * setter `harInnbetaltTrygdeavgift = true` automatisk – da rendres skjemaet
-   * med en gang, og «Innbetalt trygdeavgift» blir et påkrevd felt i stedet
-   * (se fyllInnBruttoinntektMedApiVent). Metoden er derfor adaptiv: klikker
-   * «Nei» hvis radioen finnes, ellers hopper den over (ny flyt).
+   * Gammel flyt viser en Ja/Nei-radio (etikett varierer med feature toggle,
+   * se trygdeavgiftAvvikGroup) som må besvares for å avdekke resten av
+   * årsavregningsskjemaet. Den nye eos_pensjonist-flyten (toggle
+   * `melosys.arsavregning.eos_pensjonist`) skjuler radioen når det ikke finnes
+   * tidligere trygdeavgiftsgrunnlag og setter `harInnbetaltTrygdeavgift = true`
+   * automatisk – da rendres skjemaet med en gang, og «Innbetalt trygdeavgift»
+   * blir et påkrevd felt i stedet (se fyllInnBruttoinntektMedApiVent). Metoden
+   * er derfor adaptiv: klikker «Nei» hvis radioen finnes, ellers hopper den
+   * over (ny flyt).
    */
   async svarNei(): Promise<void> {
-    const avvikerNei = this.avvikerInnbetaltGroup.getByRole('radio', { name: 'Nei' });
+    const avvikerNei = this.trygdeavgiftAvvikGroup.getByRole('radio', { name: 'Nei' });
 
     // Etter årsvalg/innlasting dukker enten avvik-radioen (gammel flyt) eller
     // innbetalt-feltet (ny flyt) opp. Vent på det første som blir synlig.
@@ -127,22 +155,21 @@ export class AarsavregningPage extends BasePage {
 
     if (await avvikerNei.isVisible().catch(() => false)) {
       await avvikerNei.check();
-      console.log('✅ Svarte Nei på «Avviker innbetalt trygdeavgift» (gammel flyt)');
+      console.log('✅ Svarte Nei på inngangsspørsmålet om innbetalt trygdeavgift (gammel flyt)');
       return;
     }
 
     console.log(
-      'ℹ️ Ny eos_pensjonist-flyt: «Avviker innbetalt»-radio er skjult – hopper over svarNei'
+      'ℹ️ Ny eos_pensjonist-flyt: avvik-radioen er skjult – hopper over svarNei'
     );
   }
 
   /**
-   * Answer "Ja" to the first radio question on the page
+   * Answer "Ja" to the initial årsavregning question about innbetalt trygdeavgift.
    */
   async svarJa(): Promise<void> {
-    const jaRadio = this.page.getByRole('radio', { name: 'Ja' });
-    await jaRadio.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
-    await jaRadio.check();
+    await this.trygdeavgiftAvvikGroup.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
+    await this.trygdeavgiftAvvikGroup.getByRole('radio', { name: 'Ja' }).check();
     console.log('✅ Answered Ja');
   }
 
@@ -207,6 +234,77 @@ export class AarsavregningPage extends BasePage {
     }
 
     console.log(`✅ Fylte inn innbetalt trygdeavgift: ${beløp}`);
+  }
+
+  /**
+   * Velg «Oppgi endelig beregnet trygdeavgift» (MANUELL_ENDELIG_AVGIFT) i
+   * uten/delt-grunnlag-flyten.
+   *
+   * Byttet trigger DELETE av AVGIFT_SYSTEMET-perioder og en
+   * PUT …/aarsavregninger/{id}/endeligAvgift/MANUELL_ENDELIG_AVGIFT — vi venter
+   * på PUT-en før vi går videre, ellers kan påfølgende lagringer race. Etterpå
+   * forsvinner perioder/skatt/inntekt-seksjonene og det manuelle feltet
+   * «Endelig beregnet trygdeavgift» vises (eneste påkrevde felt).
+   */
+  async velgOppgiEndeligTrygdeavgift(): Promise<void> {
+    await this.endeligAvgiftValgGroup.waitFor({ state: 'visible', timeout: TIMEOUT_LONG });
+    const radioInput = this.endeligAvgiftValgGroup.locator(
+      'input[value="MANUELL_ENDELIG_AVGIFT"]'
+    );
+
+    const valgLagret = this.page.waitForResponse(
+      response =>
+        response.url().includes('/endeligAvgift/MANUELL_ENDELIG_AVGIFT') &&
+        response.request().method() === 'PUT' &&
+        response.status() === 200,
+      { timeout: TIMEOUT_API }
+    );
+
+    await radioInput.waitFor({ state: 'attached', timeout: TIMEOUT_MEDIUM });
+    await radioInput.click({ force: true });
+    await expect(radioInput).toBeChecked({ timeout: TIMEOUT_MEDIUM });
+    await valgLagret;
+    console.log('✅ Valgte «Oppgi endelig beregnet trygdeavgift» (MANUELL_ENDELIG_AVGIFT lagret)');
+
+    await this.endeligBeregnetTrygdeavgiftField.waitFor({
+      state: 'visible',
+      timeout: TIMEOUT_MEDIUM
+    });
+  }
+
+  /**
+   * Fyll det manuelle feltet «Endelig beregnet trygdeavgift»
+   * (Oppgi-varianten / MANUELL_ENDELIG_AVGIFT).
+   *
+   * Lagres via debounced PUT /api/behandlinger/{id}/aarsavregninger/{id} —
+   * vi venter på den slik at beløpet garantert er persistert før neste steg.
+   *
+   * @param beløp - Manuelt endelig avgiftsbeløp (f.eks. '250')
+   */
+  async fyllInnEndeligBeregnetTrygdeavgift(beløp: string): Promise<void> {
+    await this.endeligBeregnetTrygdeavgiftField.waitFor({
+      state: 'visible',
+      timeout: TIMEOUT_MEDIUM
+    });
+
+    const lagret = this.page.waitForResponse(
+      response =>
+        /\/api\/behandlinger\/\d+\/aarsavregninger\/\d+$/.test(
+          new URL(response.url()).pathname
+        ) &&
+        response.request().method() === 'PUT' &&
+        response.status() === 200,
+      { timeout: TIMEOUT_API }
+    );
+
+    await this.endeligBeregnetTrygdeavgiftField.fill(beløp);
+    await this.endeligBeregnetTrygdeavgiftField.press('Tab');
+    await expect(this.endeligBeregnetTrygdeavgiftField).toHaveValue(beløp, {
+      timeout: TIMEOUT_MEDIUM
+    });
+
+    await lagret;
+    console.log(`✅ Fylte inn endelig beregnet trygdeavgift (manuelt): ${beløp}`);
   }
 
   /**

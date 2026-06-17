@@ -10,6 +10,8 @@ import {TrygdeavgiftPage} from '../../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../../pages/shared/constants';
 import {TestPeriods} from '../../../helpers/date-helper';
+import {waitForProcessInstances} from '../../../helpers/api-helper';
+import {expect} from '@playwright/test';
 
 test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
     test('skal fullføre komplett saksflyt med § 2-8 første ledd bokstav a (arbeidstaker)', async ({page, request}) => {
@@ -82,9 +84,22 @@ test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
         await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
         await trygdeavgift.klikkBekreftOgFortsett();
 
+        // Capture behandlingId from URL for DB end-state assertions (before vedtak navigates away)
+        const behandlingId = new URL(page.url()).searchParams.get('behandlingID');
+        expect(behandlingId, 'behandlingID skal finnes i URL').not.toBeNull();
+
         // Step 8: Fatt vedtak (without filling text fields)
         console.log('📝 Step 8: Making decision...');
         await vedtak.klikkFattVedtak();
+
+        // Step 9: Hard sluttilstand - vent på iverksetting + verifiser DB end-state
+        console.log('📝 Step 9: Waiting for iverksetting + verifying DB end-state...');
+        await waitForProcessInstances(page.request, 60);
+        await vedtak.assertions.verifiserBehandlingAvsluttet({
+            behandlingId,
+            forventetResultatType: 'MEDLEM_I_FOLKETRYGDEN',
+            forventetIverksettProsess: 'IVERKSETT_VEDTAK_FTRL',
+        });
 
         console.log('✅ Workflow completed');
     });
@@ -152,9 +167,22 @@ test.describe('Komplett saksflyt - Utenfor avtaleland', () => {
         await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
         await trygdeavgift.klikkBekreftOgFortsett();
 
+        // Capture behandlingId from URL for DB end-state assertions (before vedtak navigates away)
+        const behandlingId = new URL(page.url()).searchParams.get('behandlingID');
+        expect(behandlingId, 'behandlingID skal finnes i URL').not.toBeNull();
+
         // Step 7: Make Decision (Fatt vedtak)
         console.log('📝 Step 7: Making decision...');
         await vedtak.fattVedtak('fritekst', 'begrunnelse', 'trygdeavgift');
+
+        // Step 8: Hard sluttilstand - vent på iverksetting + verifiser DB end-state
+        console.log('📝 Step 8: Waiting for iverksetting + verifying DB end-state...');
+        await waitForProcessInstances(page.request, 60);
+        await vedtak.assertions.verifiserBehandlingAvsluttet({
+            behandlingId,
+            forventetResultatType: 'MEDLEM_I_FOLKETRYGDEN',
+            forventetIverksettProsess: 'IVERKSETT_VEDTAK_FTRL',
+        });
 
         console.log('✅ Complete workflow finished successfully!');
     });

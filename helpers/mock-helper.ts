@@ -99,6 +99,39 @@ export async function findNewNavFormatSed(
 }
 
 /**
+ * Find the newest NAV-format SED document (full RinaDocumentInfo, incl. caseId)
+ * that was not present in a previous snapshot.
+ *
+ * Like {@link findNewNavFormatSed}, but returns the whole document — needed when
+ * the caller must know the RINA case id (`caseId` === rinaSaksnummer) of the
+ * outgoing SED, e.g. to reply on the SAME BUC by injecting an inbound SED with
+ * that rinaSaksnummer (the A001 → A002/A011 anmodning-om-unntak svar flow).
+ */
+export async function findNewRinaSedDocument(
+  request: APIRequestContext,
+  sedType: string,
+  before: RinaDocumentInfo[],
+  timeoutMs = 30000
+): Promise<RinaDocumentInfo> {
+  const beforeKeys = new Set(before.map(d => `${d.caseId}:${d.documentId}`));
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const after = await fetchStoredSedDocuments(request, sedType);
+    const navFormatDocs = after.filter(d => {
+      if (beforeKeys.has(`${d.caseId}:${d.documentId}`)) return false;
+      const c = d.content as Record<string, any>;
+      return c.sed !== undefined && c.sedVer !== undefined;
+    });
+    if (navFormatDocs.length > 0) {
+      return navFormatDocs[navFormatDocs.length - 1];
+    }
+    await new Promise(resolve => setTimeout(resolve, 2000));
+  }
+  throw new Error(`Timed out waiting for NAV-format ${sedType} document (${timeoutMs}ms)`);
+}
+
+/**
  * A journalpost stored in the SAF mock.
  * Mirrors JournalpostModell in melosys-mock.
  */
@@ -173,6 +206,201 @@ export async function findNewUtgaaendeJournalpost(
     await new Promise((r) => setTimeout(r, 2000));
   }
   return null;
+}
+
+/**
+ * A single document on a journalpost (mirrors DokumentModell in melosys-mock).
+ *
+ * The `brevkode` carries the dokgen mal-name (e.g. 'innvilgelse_ftrl',
+ * 'trygdeavtale_au') — i.e. the actual brev-variant produced for the recipient.
+ * `tittel` is the journalføringstittel set by DokumentNavnService.
+ */
+export interface BrevDokumentInfo {
+  brevkode: string | null;
+  tittel: string | null;
+  dokumentTilknyttetJournalpost: string | null;
+}
+
+/**
+ * A vedtaksbrev as journalført to the SAF/Joark mock, reduced to the fields
+ * that carry brev-innhold per mottakertype: the recipient (avsenderMottaker)
+ * and the HOVEDDOKUMENT (brevkode/tittel).
+ */
+export interface VedtaksbrevJournalpost {
+  journalpostId: string;
+  journalposttype: string | null;
+  journalStatus: string | null;
+  avsenderMottaker: { id?: string; type?: string; navn?: string; land?: string };
+  hoveddokument: BrevDokumentInfo;
+}
+
+/**
+ * Poll the SAF mock for an UTGAAENDE vedtaksbrev-journalpost addressed to a
+ * specific recipient (fnr). Returns the journalpost reduced to its HOVEDDOKUMENT
+ * so a test can assert the brev-variant (brevkode) and tittel per mottakertype.
+ *
+ * Used to verify dokgen-brevinnhold end-to-end: a FTRL §2-8-vedtak must produce
+ * brevkode 'innvilgelse_ftrl', a trygdeavtale-vedtak 'trygdeavtale_<land>' osv.
+ * Filtering on the recipient fnr means each flow's brev is found unambiguously
+ * even when several saker (for ulike personer) coexist in the same test.
+ *
+ * @param request    - Playwright APIRequestContext
+ * @param mottakerFnr - The recipient's fnr (avsenderMottaker.id)
+ * @param timeoutMs  - Max polling time (default: 30s)
+ */
+export async function finnVedtaksbrevForMottaker(
+  request: APIRequestContext,
+  mottakerFnr: string,
+  timeoutMs = 30000
+): Promise<VedtaksbrevJournalpost | null> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const response = await request.get('http://localhost:8083/testdata/verification/journalpost');
+    if (!response.ok()) {
+      throw new Error(`Failed to fetch journalposter: ${response.status()}`);
+    }
+    const journalposter = (await response.json()) as Array<{
+      journalpostId: string;
+      journalposttype: string | null;
+      journalStatus: string | null;
+      avsenderMottaker?: { id?: string; type?: string; navn?: string; land?: string };
+      dokumentModellList?: Array<{
+        brevkode: string | null;
+        tittel: string | null;
+        dokumentTilknyttetJournalpost: string | null;
+      }>;
+    }>;
+
+    const match = journalposter.find((jp) => {
+      if (jp.journalposttype !== 'UTGAAENDE') return false;
+      if (jp.avsenderMottaker?.id !== mottakerFnr) return false;
+      const hoved = (jp.dokumentModellList ?? []).find(
+        (d) => d.dokumentTilknyttetJournalpost === 'HOVEDDOKUMENT' && d.brevkode
+      );
+      return hoved != null;
+    });
+
+    if (match) {
+      const hoved = (match.dokumentModellList ?? []).find(
+        (d) => d.dokumentTilknyttetJournalpost === 'HOVEDDOKUMENT' && d.brevkode
+      )!;
+      return {
+        journalpostId: match.journalpostId,
+        journalposttype: match.journalposttype,
+        journalStatus: match.journalStatus,
+        avsenderMottaker: match.avsenderMottaker ?? {},
+        hoveddokument: {
+          brevkode: hoved.brevkode,
+          tittel: hoved.tittel,
+          dokumentTilknyttetJournalpost: hoved.dokumentTilknyttetJournalpost,
+        },
+      };
+    }
+    console.log(`⏳ Venter på vedtaksbrev-journalpost for mottaker ${mottakerFnr}...`);
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  return null;
+}
+
+/**
+ * A MEDL membership-exception period stored in the melosys-mock MEDL register.
+ * Mirrors MedlemskapsunntakForGet in melosys-mock.
+ *
+ * The `status` field is a PeriodestatusMedl code: 'GYLD' (gyldig/active),
+ * 'AVST' (avsluttet/withdrawn — set when melosys-api avviser a period) or 'UAVK'.
+ */
+export interface MedlPeriodeInfo {
+  unntakId: number;
+  status: string | null;
+  grunnlag: string | null;
+  lovvalg: string | null;
+  lovvalgsland: string | null;
+  fraOgMed: string | null;
+  tilOgMed: string | null;
+  medlem: boolean | null;
+}
+
+/**
+ * Fetch a single MEDL membership-exception period from the melosys-mock MEDL
+ * register by its periode id (the value stored in lovvalg_periode.medlperiode_id).
+ *
+ * Used to verify MEDL transitions end-to-end — e.g. that a period was avvist
+ * (status flips GYLD → AVST) when a sak is annullert.
+ *
+ * @param request   - Playwright APIRequestContext
+ * @param periodeId - The MEDL periode id (lovvalg_periode.medlperiode_id)
+ */
+export async function fetchMedlPeriode(
+  request: APIRequestContext,
+  periodeId: number
+): Promise<MedlPeriodeInfo> {
+  const response = await request.get(`http://localhost:8083/api/v1/medlemskapsunntak/${periodeId}`);
+  if (!response.ok()) {
+    throw new Error(`Failed to fetch MEDL periode ${periodeId}: ${response.status()}`);
+  }
+  return response.json();
+}
+
+/**
+ * An oppgave stored in the melosys-mock Oppgave register.
+ * Mirrors the relevant fields of Oppgave in melosys-mock's OppgaveApi.
+ */
+export interface OppgaveInfo {
+  id: number;
+  oppgavetype: string | null;
+  status: string | null;
+  saksreferanse: string | null;
+  aktoerId: string | null;
+  behandlingstema: string | null;
+  tema: string | null;
+  beskrivelse: string | null;
+}
+
+/**
+ * Fetch all oppgaver stored in the melosys-mock Oppgave register.
+ *
+ * Used to assert oppgave transitions end-to-end — e.g. that exactly ONE
+ * behandlingsoppgave (oppgavetype BEH_SAK_MK) exists for a sak, guarding
+ * against the MELOSYS-6836 "to oppgaver" bug on svar-anmodning-om-unntak.
+ */
+export async function fetchOppgaver(request: APIRequestContext): Promise<OppgaveInfo[]> {
+  const response = await request.get('http://localhost:8083/testdata/verification/oppgave');
+  if (!response.ok()) {
+    throw new Error(`Failed to fetch oppgaver: ${response.status()}`);
+  }
+  return response.json();
+}
+
+/**
+ * An oppgave as returned by the melosys-mock Oppgave API v2.
+ * Same oppgave-ids as v1; v2 additionally exposes the nokkelord list
+ * (MELOSYS-8128 — «Årsavregning <år>» settes via PATCH /api/v2/oppgaver/{id}).
+ */
+export interface OppgaveV2Info {
+  id: number;
+  versjon: number;
+  status: string | null;
+  beskrivelse: string | null;
+  nokkelord: string[];
+}
+
+/**
+ * Fetch a single oppgave from the melosys-mock Oppgave API v2.
+ *
+ * Used to assert nøkkelord set by melosys-api via PATCH /api/v2/oppgaver/{id}
+ * (MELOSYS-8128). Requires a mock image with the v2 endpoints
+ * (melosys-docker-compose branch 8128-oppgave-v2-nokkelord-mock or newer).
+ */
+export async function fetchOppgaveV2(
+  request: APIRequestContext,
+  oppgaveId: number
+): Promise<OppgaveV2Info> {
+  const response = await request.get(`http://localhost:8083/api/v2/oppgaver/${oppgaveId}`);
+  if (!response.ok()) {
+    throw new Error(`Failed to fetch oppgave ${oppgaveId} from Oppgave API v2: ${response.status()}`);
+  }
+  return response.json();
 }
 
 export interface MockClearResponse {

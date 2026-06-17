@@ -1,5 +1,6 @@
 import { Page, Locator } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+import { SokAssertions } from './sok.assertions';
 
 /**
  * Page Object for search results page (/sok)
@@ -15,6 +16,8 @@ import { BasePage } from '../shared/base.page';
  * await sokPage.klikkSak('2024000001');
  */
 export class SokPage extends BasePage {
+  readonly assertions: SokAssertions;
+
   // Locators
   private readonly resultatHeader = this.page.locator('h1, h2').filter({ hasText: /Resultater for/i });
   private readonly ingenResultaterMelding = this.page.getByText(/Fant ingen saker/i);
@@ -23,6 +26,7 @@ export class SokPage extends BasePage {
 
   constructor(page: Page) {
     super(page);
+    this.assertions = new SokAssertions(page);
   }
 
   /**
