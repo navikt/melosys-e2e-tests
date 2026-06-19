@@ -23,6 +23,7 @@ import {waitForProcessInstances} from '../../../helpers/api-helper';
 import {TestPeriods} from '../../../helpers/date-helper';
 import {withDatabase} from '../../../helpers/db-helper';
 import {withFaktureringDatabase} from '../../../helpers/pg-db-helper';
+import {setupPensjonistUtenGrunnlagMedAutoAarsavregning} from '../../eu-eos/pensjonist-aarsavregning-setup';
 
 /**
  * MELOSYS-8148: Automatisk sende innhentingsbrev ved opprettelse av årsavregning i flytene
@@ -278,6 +279,40 @@ test.describe('Automatisk innhentingsbrev ved årsavregning i saksbehandlingsfly
         // «Så skal Melosys ikke sende brevet "Innhenting av inntektsopplysninger"»
         console.log('🔍 Verifiserer at ingen innhentingsbrev ble sendt...');
         await verifiserIngenInnhentingsbrev();
+    });
+
+    // Scenario 4 (kjørbar negativ) — EØS-pensjonist-UNNTAK.
+    //
+    // AC: «bortsett fra EØS pensjonister» — de skal IKKE motta innhentingsbrev via denne
+    // funksjonaliteten per nå (krever særskilt brevtekst, egen oppgave, jf. Yvonne 2026-06-19).
+    // Dette er det samme flyt-SHAPE-et som scenario 1 (en saksbehandlingsflyt der Melosys
+    // auto-oppretter en årsavregning for et tidligere år), men for sakstypen EØS-pensjonist —
+    // der FTRL ville sendt brev (sc1), skal EØS-pensjonist IKKE få det. Isolerer dermed selve
+    // sakstype-unntaket (skalSendeInnhentingsbrev) på samme flyt.
+    //
+    // Trigger: EØS-pensjonist førstegangsbehandling med HELE perioden i et tidligere år (2024)
+    // og default toggle-state → trygdeavgift fastsettes ikke på førstegangen, og årsavregningen
+    // auto-opprettes ved «Bekreft og send» (prosess OPPRETT_NY_BEHANDLING_AARSAVREGNING). Gjenbruk
+    // av setupPensjonistUtenGrunnlagMedAutoAarsavregning (tests/eu-eos). Etter at setup returnerer
+    // er auto-opprettelsens prosessinstanser FERDIG (setup venter 60s) og årsavregningsvedtaket er
+    // ennå IKKE fattet — så et evt. innhentingsbrev ville vært synlig her, men resultatbrevet
+    // (annen brevmal) er det ikke. verifiserIngenInnhentingsbrev filtrerer eksakt på
+    // INNHENTING_AV_INNTEKTSOPPLYSNINGER, så den treffer kun innhentingsbrevet.
+    test('EØS-pensjonist auto-årsavregning i saksbehandlingsflyt sender ikke innhentingsbrev', async ({
+        page,
+    }) => {
+        test.setTimeout(240_000);
+        const auth = new AuthHelper(page);
+        await auth.login();
+
+        console.log('📝 EØS-pensjonist saksbehandlingsflyt → auto-opprettet årsavregning (2024)...');
+        await setupPensjonistUtenGrunnlagMedAutoAarsavregning(page);
+
+        // «Så skal Melosys ikke sende brevet "Innhenting av inntektsopplysninger"» (EØS-pensjonist-unntak)
+        console.log('🔍 Verifiserer at EØS-pensjonist IKKE fikk innhentingsbrev...');
+        await verifiserIngenInnhentingsbrev();
+
+        await waitForProcessInstances(page.request, 30);
     });
 
     // Scenario 2 — mottaker = fullmektig (FULLMEKTIG_SØKNAD).

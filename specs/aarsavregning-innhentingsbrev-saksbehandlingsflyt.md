@@ -60,17 +60,27 @@ Gitt at saksbehandler manuelt oppretter en årsavregningsbehandling på saken
  Så skal Melosys ikke sende brevet «Innhenting av inntektsopplysninger»
 ```
 
+## Scenario 4 — EØS-pensjonist er unntatt
+
+```gherkin
+Gitt at saksbehandler fatter vedtak i en saksbehandlingsflyt for en EØS-pensjonist
+  Og vedtaket medfører en endring for et tidligere inntektsår X
+  Og Melosys automatisk oppretter en årsavregningsbehandling for år X
+ Når årsavregningsbehandlingen opprettes
+ Så skal Melosys ikke sende brevet «Innhenting av inntektsopplysninger» (EØS-pensjonister er unntatt)
+```
+
 ## Akseptansekriterier (det fagperson signerer av på)
 
 - [ ] Når Melosys automatisk oppretter årsavregningsbehandling som følge av vedtak i saksbehandlingsflyten, og bruker ikke har fullmektig FULLMEKTIG_SØKNAD registrert, sendes brevet «Innhenting av inntektsopplysninger» automatisk til bruker
 - [ ] Når Melosys automatisk oppretter årsavregningsbehandling som følge av vedtak i saksbehandlingsflyten, og bruker **har** fullmektig FULLMEKTIG_SØKNAD registrert, sendes brevet automatisk til fullmektig
 - [ ] Når saksbehandler manuelt oppretter en årsavregningsbehandling, sendes det **ikke** noe innhentingsbrev automatisk
 - [ ] Brevutsending skjer for FTRL yrkesaktiv, FTRL pensjonist og EØS offentlig tjenesteperson (minst disse tre sakstype-flytene)
-- [ ] EØS-pensjonister er **ikke** inkludert i denne historien — de skal ikke motta brev via denne funksjonaliteten per nå
+- [x] EØS-pensjonister er **ikke** inkludert i denne historien — de skal ikke motta brev via denne funksjonaliteten per nå *(e2e-verifisert negativt, scenario 4)*
 
 ## Kjente avgrensninger (ikke dekket her)
 
-- **EØS-pensjonister** — krever særskilt brevtekst; dekkes i separat oppgave (jf. kommentar fra Yvonne 19. juni 2026).
+- **EØS-pensjonister, særskilt brevtekst** — at de skal motta et *annet* innhentingsbrev med egen tekst dekkes i separat oppgave (jf. Yvonne 19. juni 2026). Denne speken verifiserer kun *negativt* (scenario 4) at de **ikke** får standard-innhentingsbrevet via 8148-funksjonaliteten.
 - **FTRL pensjonist og EØS offentlig tjenesteperson som sakstype-flyter:** AC-et nevner disse i tillegg til FTRL yrkesaktiv. Denne speken binder **FTRL yrkesaktiv** som den kjørbare flyten (samme valg som søsteroppgaven 8122). De øvrige sakstype-flytene er regresjons-utvidelser når de respektive auto-opprettelses­flytene er prodsatt (EØS offentlig tjenesteperson = [MELOSYS-7828](https://nav.atlassian.net/browse/MELOSYS-7828), i akseptanse test).
 - **Skattemeldingslytting og «ikke skattepliktige»-jobben** som trigger — dekkes av [MELOSYS-8122](https://nav.atlassian.net/browse/MELOSYS-8122) (samme brev, annen trigger). Denne speken dekker **kun saksbehandlingsflyt-triggeren**.
 - **Fullmektig-mottaker (scenario 2):** bundet som `test.fixme` — det finnes ingen e2e-fikstur for å registrere en `FULLMEKTIG_SØKNAD`-fullmakt på saken (se binding). Å fake oppsettet ville gitt falsk dekning.
@@ -175,6 +185,25 @@ opprettelsen.
 - **Negativ assertion:** ingen `INNHENTING_AV_INNTEKTSOPPLYSNINGER`-brev-prosessinstans skal finnes
   etter at opprettelses-prosessinstansene er FERDIG (`verifiserIngenInnhentingsbrev`).
 
+### Scenario 4 (kjørbar negativ) — EØS-pensjonist-unntak
+
+Samme flyt-SHAPE som scenario 1 (saksbehandlingsflyt som auto-oppretter årsavregning for tidligere
+år), men for sakstypen **EØS-pensjonist** — der FTRL ville sendt brev, skal EØS-pensjonist ikke få
+det. Isolerer dermed selve sakstype-unntaket (`skalSendeInnhentingsbrev`).
+
+Gjenbruker den eksisterende EØS-pensjonist-fiksturen
+`setupPensjonistUtenGrunnlagMedAutoAarsavregning` (`tests/eu-eos/pensjonist-aarsavregning-setup.ts`):
+EØS-pensjonist førstegangsbehandling med HELE perioden i et tidligere år (01.04–05.04.2024) og
+default toggle-state → trygdeavgift fastsettes ikke på førstegangen, og årsavregningen auto-opprettes
+ved «Bekreft og send» (`OPPRETT_NY_BEHANDLING_AARSAVREGNING`). Etter at fiksturen returnerer er
+auto-opprettelsens prosessinstanser FERDIG (den venter 60 s) og årsavregningsvedtaket er ennå ikke
+fattet.
+
+- **Negativ assertion:** `verifiserIngenInnhentingsbrev()` — filtrerer eksakt på
+  `INNHENTING_AV_INNTEKTSOPPLYSNINGER`, så den treffer **kun** innhentingsbrevet og lures ikke av
+  EØS-pensjonistens førstegangs-resultatbrev (annen brevmal). Verifisert ikke-vakuøs lokalt: flyten
+  produserer 1 `OPPRETT_OG_DISTRIBUER_BREV` (resultatbrev), men 0 innhentingsbrev.
+
 ### Scenario 2 (test.fixme) — fullmektig-mottaker
 
 Bundet som `test.fixme` — identisk begrunnelse som 8122: det finnes ingen e2e-fikstur for å
@@ -227,7 +256,8 @@ treffer aktive prosessinstanser.
 `BEHANDLINGSTEMA`, `BEHANDLINGSTYPE`, `AARSAK`)
 **Hjelpere:** `helpers/api-helper.ts` (`waitForProcessInstances`),
 `helpers/db-helper.ts` (`withDatabase`), `helpers/pg-db-helper.ts` (`withFaktureringDatabase`),
-`helpers/date-helper.ts` (`TestPeriods`), `helpers/unleash-helper.ts` (`UnleashHelper`)
+`helpers/date-helper.ts` (`TestPeriods`), `helpers/unleash-helper.ts` (`UnleashHelper`),
+`tests/eu-eos/pensjonist-aarsavregning-setup.ts` (`setupPensjonistUtenGrunnlagMedAutoAarsavregning`, scenario 4)
 
 ### Endringslogg (teknisk binding)
 
@@ -239,5 +269,9 @@ treffer aktive prosessinstanser.
   `8148-auto-innhentingsbrev-flyt` (e27eb7287a), deretter CI grønn (run 27821184762, `2 passed`,
   `test_grep=MELOSYS-8148`) mot feature-image `melosys-api:8148-auto-innhentingsbrev-flyt-e27eb7287a`.
   Status → verified.
+- 2026-06-19 (tillegg): Lagt til scenario 4 (EØS-pensjonist-unntak, kjørbar negativ) etter spørsmål
+  fra Rune — AC «bortsett fra EØS pensjonister» var dokumentert som avgrensning men ikke e2e-dekket.
+  Gjenbruker `setupPensjonistUtenGrunnlagMedAutoAarsavregning`; ikke-vakuøs (1 resultatbrev, 0
+  innhentingsbrev). Grønn lokalt 19.4s mot samme e27eb7287a-build.
 </content>
 </invoke>
