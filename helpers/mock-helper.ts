@@ -559,6 +559,115 @@ export interface CreateJournalpostForSakOptions {
  * console.log('Created journalpost:', result.journalpostId);
  * console.log('Document IDs:', result.dokumentInfoIds);
  */
+/**
+ * Pensjonsopptjening (POPP) inntekt-rad for seeding.
+ *
+ * Mocken eksponerer `POST /popp/admin/inntekt/seed` som overstyrer den
+ * kanoniske default-responsen per fnr. Påkrevde felter for at API-en
+ * (`PensjonsopptjeningOppslag`, PGI-whitelist) skal se raden er `inntektAr`,
+ * `belop`, en PGI-`inntektType` (default `FL_PGI_LOENN`) og `kilde`.
+ *
+ * NB: POPP `/inntekt/hentgrunnlag` ekskluderer SUM_PI server-side (MELOSYS-8073,
+ * POPP-commit 9e82f205), og mocken speiler dette — seeder du `SUM_PI` blir den
+ * filtrert bort og dukker ikke opp i UI. Seed faktiske grunnlags-typer i stedet.
+ *
+ * Kilde-verdier sendes uendret videre til melosys-web, som rendrer SKATT/
+ * AVGIFTSSYSTEMET/MELOSYS som «Skatt»/«Avgiftssystemet»/«Melosys» — andre
+ * verdier vises som rå-tekst (default-branchen i `kildeLabel`).
+ */
+export interface PoppInntektSeed {
+  inntektAr: number;
+  belop: number;
+  kilde: string;
+  inntektType?: string;
+  inntektTypeDekode?: string;
+  /**
+   * Tidsstempel for POPP changeStamp. API mapper `createdDate` → `registrert`
+   * og `updatedDate` → `oppdatert` (LocalDate, Europe/Oslo). Sett eksplisitt
+   * for deterministisk testing av tidsstempel-rendering; default-data fra
+   * mocken bruker «1. mai året etter» som createdDate og «nå» som updatedDate.
+   */
+  changeStamp?: {
+    createdDate?: string; // ISO instant — sendes som JSON-string til mocken
+    updatedDate?: string;
+    createdBy?: string;
+    updatedBy?: string;
+  };
+}
+
+/**
+ * Seed POPP-inntekter for et fnr i melosys-mock.
+ *
+ * Overstyrer mockens default kanoniske data (SKD-kilde, PGI-grunnlag for
+ * siste 5 år, uten SUM_PI). Bruk i POPP-pensjonsopptjenings-tester for
+ * deterministisk styring av kilde-mix og år-vindu uten å gå via
+ * `page.route(...)`-stubbing.
+ *
+ * Default `inntektType="FL_PGI_LOENN"` er en gyldig grunnlags-type som
+ * slipper gjennom API-ets PGI-whitelist. Seed andre PGI-typer for å teste
+ * breakdown, eller en ikke-PGI/SUM_PI-type for å teste at den filtreres bort.
+ *
+ * @example
+ * await seedPoppInntekt(request, '30056928150', [
+ *   { inntektAr: 2025, belop: 540_000, kilde: 'SKATT' },
+ *   { inntektAr: 2025, belop: 120_000, kilde: 'AVGIFTSSYSTEMET' },
+ * ]);
+ */
+export async function seedPoppInntekt(
+  request: APIRequestContext,
+  fnr: string,
+  inntekter: PoppInntektSeed[],
+): Promise<void> {
+  const payload = {
+    fnr,
+    inntekter: inntekter.map((i) => ({
+      inntektAr: i.inntektAr,
+      belop: i.belop,
+      kilde: i.kilde,
+      inntektType: i.inntektType ?? 'FL_PGI_LOENN',
+      inntektTypeDekode: i.inntektTypeDekode,
+      changeStamp: i.changeStamp,
+      fnr,
+    })),
+  };
+
+  const response = await request.post('http://localhost:8083/popp/admin/inntekt/seed', {
+    data: payload,
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  if (!response.ok()) {
+    const errorText = await response.text();
+    throw new Error(
+      `Failed to seed POPP inntekt for fnr=${fnr}: ${response.status()} - ${errorText}`,
+    );
+  }
+}
+
+/**
+ * Fjern POPP-seed for et fnr (eller alle hvis `fnr` ikke oppgis).
+ *
+ * `clearMockData` rører ikke POPP-seeden — bruk denne eksplisitt før hver
+ * test for å sikre ren baseline, ellers vil seeden persisten på tvers av
+ * tester i samme mock-prosess.
+ */
+export async function clearPoppSeed(
+  request: APIRequestContext,
+  fnr?: string,
+): Promise<void> {
+  const url = fnr
+    ? `http://localhost:8083/popp/admin/inntekt/seed/${encodeURIComponent(fnr)}`
+    : 'http://localhost:8083/popp/admin/inntekt/seed';
+
+  const response = await request.delete(url);
+
+  if (!response.ok()) {
+    throw new Error(
+      `Failed to clear POPP seed${fnr ? ` for fnr=${fnr}` : ''}: ${response.status()}`,
+    );
+  }
+}
+
 export async function createJournalpostForSak(
   request: APIRequestContext,
   options: CreateJournalpostForSakOptions

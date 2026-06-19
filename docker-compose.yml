@@ -294,6 +294,7 @@ services:
       MICROSOFT_GRAPH_REST_URL: http://melosys-mock.melosys.docker-internal:8083/graph/v1.0
       TILGANGSMASKINEN_URL: http://melosys-mock.melosys.docker-internal:8083/tilgangsmaskinen
       UTBETALING_REST_URL: http://melosys-mock.melosys.docker-internal:8083/utbetaldata/api/v2/hent-utbetalingsinformasjon/intern
+      POPP_REST_URL: http://melosys-mock.melosys.docker-internal:8083/popp
       # Unleash feature toggle configuration
       UNLEASH_URL: "http://unleash.melosys.docker-internal:4242/api"
       UNLEASH_TOKEN: "*:development.unleash-insecure-client-api-token"
