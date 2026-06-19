@@ -147,22 +147,22 @@ Gitt at saksbehandler behandler en årsavregning for et inntektsår som er eldre
     "inntektsAr": 2024,
     "behandletAr": 2024,
     "perioder": [
-      { "aar": 2024, "pgi": 540000, "kilde": "SKATT", "inntektType": "SUM_PI", "inntektTypeDekode": "Sum pensjonsgivende inntekt", "registrert": "2025-05-01", "oppdatert": "2025-05-12" },
       { "aar": 2024, "pgi": 420000, "kilde": "SKATT", "inntektType": "FL_PGI_LOENN", "inntektTypeDekode": "Fastland pensjonsgivende inntekt av lønnsinntekt", "registrert": "2025-05-01", "oppdatert": "2025-05-12" },
-      { "aar": 2024, "pgi": 120000, "kilde": "AVGIFTSSYSTEMET", "inntektType": "SUM_PI", "inntektTypeDekode": "Sum pensjonsgivende inntekt", "registrert": "2025-05-01", "oppdatert": "2025-05-12" }
+      { "aar": 2024, "pgi": 120000, "kilde": "SKATT", "inntektType": "KSL_PGI_LOENN", "inntektTypeDekode": "Kildeskatt på lønn pensjonsgivende inntekt av lønnsinntekt", "registrert": "2025-05-01", "oppdatert": "2025-05-12" },
+      { "aar": 2024, "pgi": 120000, "kilde": "AVGIFTSSYSTEMET", "inntektType": "FL_PGI_LOENN", "inntektTypeDekode": "Fastland pensjonsgivende inntekt av lønnsinntekt", "registrert": "2025-05-01", "oppdatert": "2025-05-12" }
     ]
   }
   ```
 - Kilde-enum (verbatim): `SKATT`, `AVGIFTSSYSTEMET`, `MELOSYS`.
-- InntektType-enum (verbatim — fra `no.nav.popp.domain.codestable.InntektTypeCode`): API filtrerer
-  responsen til kun PGI-relevante typer + SUM_PI: `SUM_PI`, `FL_PGI_LOENN`,
-  `FL_PGI_LOENN_PD`, `FL_PGI_NAERING`, `FL_PGI_NAERING_FFF`, `KSL_PGI_LOENN`,
-  `KSL_PGI_LOENN_PD`, `KSL_PGI_NAERING`, `KSL_PGI_NAERING_FFF`, `SVA_PGI_LOENN`,
-  `SVA_PGI_LOENN_PD`, `SVA_PGI_NAERING`, `SVA_PGI_NAERING_FFF`. Andre koder
-  (INN_*, SJO_*, UTE_*, DIP_*, RED_INT, AI, PI66, PGI_NAV) filtreres bort.
-- Sortering: `aar desc, kildePrioritet asc (SKATT < MELOSYS < AVGIFTSSYSTEMET),
-  inntektTypePrioritet asc (SUM_PI = 0, andre = 1), inntektType asc`.
-  SUM_PI vises som hovedrad per kilde/år; resterende PGI-typer er breakdown.
+- InntektType (fra `no.nav.popp.domain.codestable.InntektTypeCode`): API gjør **ingen**
+  inntektType-whitelist — den slipper gjennom alle grunnlags-radene `POPP /inntekt/hentgrunnlag`
+  returnerer (null-guard på `aar`/`belop`/`inntektType` er eneste filter). Selve filtreringen
+  er POPP/hentgrunnlags ansvar: endepunktet returnerer PGI-grunnlagsradene og ekskluderer
+  `SUM_PI` (aggregatet) server-side (POPP-commit 9e82f205, speilet i mocken). Typiske
+  grunnlags-typer: `FL_PGI_LOENN`, `KSL_PGI_LOENN`, `SVA_PGI_LOENN`, `*_NAERING`, m.fl.
+- Sortering (i api): `aar desc, kildePrioritet asc (SKATT < MELOSYS < AVGIFTSSYSTEMET),
+  kilde asc, inntektType asc, pgi desc`. `SUM_PI` vises ikke (ekskludert server-side);
+  hver kilde/år kan ha flere grunnlags-rader (breakdown).
 - `inntektTypeDekode` er rå-dekoden fra POPP. UI har sin egen oversettelse fra
   kode → norsk beskrivelse (forward-kompatibel hvis dekoden mangler).
 - Tidsstempler (`registrert`, `oppdatert`): ISO LocalDate (`yyyy-MM-dd`) eller `null`. Mappet fra

@@ -283,11 +283,12 @@ test.describe('POPP — visning av pensjonsopptjening under årsavregning', () =
     // Seed flere grunnlags-typer for SAMME år og SAMME kilde, slik at
     // saksbehandler ser breakdown av pensjonsgivende inntekt per kilde.
     // Verifiserer at:
-    // (a) API-en slipper gjennom PGI-grunnlags-typene (FL_/KSL_/SVA_).
+    // (a) API-en slipper gjennom alle grunnlags-rader POPP/hentgrunnlag
+    //     returnerer — det finnes ingen inntektType-whitelist i api-laget.
+    //     Filtreringen er POPP/hentgrunnlags ansvar (kun SUM_PI strippes).
     // (b) SUM_PI ekskluderes (server-side i POPP/hentgrunnlag, speilet i mock)
     //     — den skal IKKE vises selv om vi seeder den.
-    // (c) Ikke-PGI-typer (INN_LON) filtreres bort i api-laget.
-    // (d) UI rendrer dekode-beskrivelsen direkte for hver type (mocken
+    // (c) UI rendrer dekode-beskrivelsen direkte for hver type (mocken
     //     auto-fyller `inntektTypeDekode` ut fra koden hvis kaller ikke
     //     oppgir egen).
     await seedPoppInntekt(request, USER_ID_VALID, [
@@ -309,13 +310,6 @@ test.describe('POPP — visning av pensjonsopptjening under årsavregning', () =
         belop: 540_000,
         kilde: POPP_KILDE.SKATT,
         inntektType: POPP_INNTEKT_TYPE.SUM_PI,
-      },
-      // Ikke-PGI-type — skal filtreres bort av API-en og ikke vises i UI.
-      {
-        inntektAr: FORRIGE_AAR,
-        belop: 999_999,
-        kilde: POPP_KILDE.SKATT,
-        inntektType: 'INN_LON',
       },
     ]);
 
@@ -356,8 +350,6 @@ test.describe('POPP — visning av pensjonsopptjening under årsavregning', () =
 
     // SUM_PI ekskluderes server-side av POPP/hentgrunnlag — skal IKKE vises.
     expect(rader.find(r => r.inntektstype === POPP_INNTEKT_TYPE_BESKRIVELSE.SUM_PI)).toBeUndefined();
-    // INN_LON-dekoden skal IKKE vises (api-whitelist filtrerer den bort).
-    expect(rader.find(r => r.inntektstype === POPP_INNTEKT_TYPE_BESKRIVELSE.INN_LON)).toBeUndefined();
   });
 
   test.fixme(
