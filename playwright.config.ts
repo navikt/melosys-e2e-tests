@@ -19,7 +19,7 @@ import { defineBddConfig } from 'playwright-bdd';
  */
 const bddTestDir = defineBddConfig({
   features: 'features/**/*.feature',
-  steps: ['dsl/steps/*.ts', 'dsl/fixtures.ts'],
+  steps: ['atdd/steps/*.ts', 'atdd/fixtures.ts'],
   language: 'no',
 });
 
