@@ -273,5 +273,12 @@ treffer aktive prosessinstanser.
   fra Rune — AC «bortsett fra EØS pensjonister» var dokumentert som avgrensning men ikke e2e-dekket.
   Gjenbruker `setupPensjonistUtenGrunnlagMedAutoAarsavregning`; ikke-vakuøs (1 resultatbrev, 0
   innhentingsbrev). Grønn lokalt 19.4s mot samme e27eb7287a-build.
+- 2026-06-19 (de-flak): Tagget KUN scenario 1 med `@expect-docker-errors`. NV-lovvalgssteget trigger
+  en pre-eksisterende, transient GUI-race urelatert til 8148: web kaller
+  `/api/medlemskapsperioder/trygdedekning/lovlige-kombinasjoner` med tom bestemmelse ved form-render →
+  api kaster `RuntimeException: Finner ingen bestemmelse for :` på ERROR (kilde bekreftet av api-peer:
+  `MedlemskapBestemmelsekonverter.kt:19`). Test-logikken (brev FERDIG) var grønn begge forsøk; uten
+  taggen feilet docker-log-fixturen sporadisk (CI run 27825161737 forsøk 1). sc3/sc4 forblir strenge.
+  Pre-eksisterende ERROR-logging flagget til api-peer som egen NOJIRA-opprydding.
 </content>
 </invoke>
