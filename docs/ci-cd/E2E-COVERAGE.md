@@ -137,6 +137,64 @@ fi
 - Total coverage across all modules
 - Appears after Docker Log Analysis section
 
+## Multi-Service Coverage (all backend services)
+
+The Playwright suite drives the whole stack, not just melosys-api — every UI step fans out
+to the other JVM services. When `collect_coverage=true`, coverage is now collected for **all**
+our backend services, each via a JaCoCo agent on its own host port:
+
+| Service | Host port | JDK | Build |
+|---------|-----------|-----|-------|
+| melosys-api | 6300 | 21 | Maven (built from source — see steps above) |
+| melosys-eessi | 6301 | 21 | (JAR-extraction) |
+| faktureringskomponenten | 6302 | 17 | Gradle (JAR-extraction) |
+| melosys-dokgen | 6303 | 17 | (JAR-extraction) |
+| melosys-trygdeavgift-beregning | 6304 | 17 | (JAR-extraction) |
+| melosys-trygdeavtale | 6305 | 17 | (JAR-extraction) |
+| melosys-inngangsvilkar | 6306 | 17 | (JAR-extraction) |
+
+**Why two methods?** melosys-api keeps its original *build-from-source* path (gives
+source-annotated HTML). The other six are a mix of Maven + Gradle on different JDKs, so
+replicating a source build 6× would be slow and fragile. Instead, for those services we
+**extract the compiled `.class` files directly from each running container's Spring Boot
+fat-jar** and report with the JaCoCo CLI:
+
+1. Every JVM container mounts `./jacoco:/jacoco:ro` and runs the agent on internal port `6300`
+   (shared `JACOCO_AGENT_OPTS`), mapped to a distinct host port (`docker-compose.yml`).
+2. After the suite, the workflow step *"Collect JaCoCo coverage from other backend services"*:
+   - `jacococli dump` from each host port → `service-coverage/<svc>.exec`
+   - `docker cp <svc>:/app/app.jar` → unzip `BOOT-INF/classes` (the service's own code)
+   - `jacococli report` → `service-coverage/<svc>.{csv,xml}` + HTML
+
+This is **build-tool agnostic** and the classes are guaranteed to match the exact image under
+test. Trade-off: the six services get accurate per-class/method/line **counters** (CSV/XML +
+counter-only HTML) but no source-line-annotated HTML (no source checkout). The
+*"📊 E2E Coverage per Service"* job-summary table and the `e2e-coverage-report` artifact
+(`service-coverage/`) carry the numbers.
+
+Each service step is best-effort: a failed dump/extract for one service logs a warning and is
+skipped, never aborting the others or the run.
+
+## Frontend Coverage (melosys-web) — deferred
+
+Frontend coverage is **not** collected yet. melosys-web is a Vite 7 / React 19 app served as a
+minified **production** bundle (Nginx image) with **no sourcemaps**, so Playwright's V8
+coverage would not map back to source — it would be vacuous. Getting meaningful numbers
+requires a build-time-instrumented variant, which lives in melosys-web's own repo/CI.
+
+**Minimal path when prioritized (Option B — `vite-plugin-istanbul`):**
+1. melosys-web `vite.config.ts`: add `vite-plugin-istanbul`, gated on `VITE_COVERAGE=true`.
+2. melosys-web CI: build `VITE_COVERAGE=true pnpm build` → push `melosys-web:coverage-<sha>`
+   (same Nginx Dockerfile).
+3. E2E coverage run: set `MELOSYS_WEB_TAG=coverage-<sha>` (override already exists,
+   `docker-compose.yml`).
+4. Playwright fixture (mirror `fixtures/`): after each test read
+   `await page.evaluate(() => window.__coverage__)` → `.nyc_output/<test>.json`.
+5. Aggregate with `monocart-coverage-reports` (or `nyc report`) → HTML/lcov artifact.
+
+Estimated ~1–1.5 days, cross-repo (most work in melosys-web). Skip the V8/`page.coverage`
+route unless melosys-web ships prod sourcemaps for other reasons.
+
 ## Current Configuration
 
 ### When Coverage Runs

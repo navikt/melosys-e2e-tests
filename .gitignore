@@ -74,6 +74,11 @@ coverage/
 .nyc_output/
 *.lcov
 
+# E2E JaCoCo coverage runtime artifacts (CI-only; agent jars, exec dumps, extracted classes)
+jacoco/
+service-coverage/
+*.exec
+
 # TypeScript
 *.tsbuildinfo
 .tscache/
