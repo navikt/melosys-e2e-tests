@@ -1,7 +1,7 @@
 ---
 jira: MELOSYS-8148
 epic: MELOSYS-7080 — Støtte til endringer i medlemskap og trygdeavgift for tidligere år
-status: implemented  # testen er skrevet; brev-assertions er røde til feature-branchen lander (se status-merknad i binding)
+status: verified  # CI grønn mot melosys-api:8148-auto-innhentingsbrev-flyt-e27eb7287a (run 27821184762, 2 passed)
 test: tests/utenfor-avtaleland/workflows/aarsavregning-innhentingsbrev-saksbehandlingsflyt.spec.ts
 toggles: {}          # default-state; per-trigger-koreografi av melosys.faktureringskomponenten.ikke-tidligere-perioder er testmekanikk (se binding)
 tags: [årsavregning, brev, innhenting, saksbehandlingsflyt, ny-vurdering, fullmektig, ftrl]
@@ -235,5 +235,9 @@ treffer aktive prosessinstanser.
   via ny vurdering) og 8122 brev-assertion. Scenario 1 kjørbar (mottaker=bruker), scenario 3 kjørbar
   (manuell → ingen brev), scenario 2 `test.fixme` (ingen fullmakt-fikstur). Brev-assertion korrekt
   rød til melosys-api-feature lander.
+- 2026-06-19: Verifisert grønn. Lokalt (sc1 57.5s, sc3 11.9s) mot melosys-api host-build av
+  `8148-auto-innhentingsbrev-flyt` (e27eb7287a), deretter CI grønn (run 27821184762, `2 passed`,
+  `test_grep=MELOSYS-8148`) mot feature-image `melosys-api:8148-auto-innhentingsbrev-flyt-e27eb7287a`.
+  Status → verified.
 </content>
 </invoke>
