@@ -324,7 +324,7 @@ test.describe('POPP — visning av pensjonsopptjening under årsavregning', () =
     await popp.assertions.verifiserSeksjonVises();
     const rader = await popp.lesRader();
 
-    // De to PGI-grunnlags-typene skal være med; SUM_PI og INN_LON filtrert bort.
+    // De to PGI-grunnlags-typene skal være med; SUM_PI ekskluderes server-side.
     const skattRader = rader.filter(
       r => r.aar === FORRIGE_AAR && r.kilde === POPP_KILDE_VISNING.SKATT,
     );
