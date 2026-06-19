@@ -184,7 +184,7 @@ test.describe('Automatisk innhentingsbrev ved årsavregning i saksbehandlingsfly
     // taggen feiler docker-log-fixturen sporadisk på denne ERROR-en (verifisert: CI run 27825161737
     // forsøk 1, behandling 2, requestURI .../lovlige-kombinasjoner). Kun sc1 tagges — sc3/sc4
     // forblir strenge.
-    test('saksbehandlingsflyt for tidligere år uten fullmektig sender innhentingsbrev til bruker @expect-docker-errors', async ({
+    test('saksbehandlingsflyt for tidligere år uten fullmektig sender innhentingsbrev til bruker', async ({
         page,
         request,
     }) => {
