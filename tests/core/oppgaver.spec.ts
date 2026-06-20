@@ -4,6 +4,32 @@ import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import { OppgaverPage } from '../../pages/oppgaver/oppgaver.page';
 import { USER_ID_VALID } from '../../pages/shared/constants';
+import { fetchOppgaver } from '../../helpers/mock-helper';
+import type { APIRequestContext } from '@playwright/test';
+
+/**
+ * Behandling-oppgaven som opprettes for en ny sak har oppgavetype BEH_SAK_MK
+ * (samme type som svar-anmodning-unntak-assertionen sjekker, MELOSYS-6836-vakten).
+ * Live-verifisert via fetchOppgaver under denne testkjøringen.
+ */
+const BEHANDLING_OPPGAVETYPE = 'BEH_SAK_MK';
+
+/**
+ * Hent behandling-oppgavene (oppgavetype BEH_SAK_MK) fra melosys-mock og assert
+ * at minst én finnes — altså at saken faktisk ga en behandling-oppgave av riktig TYPE,
+ * ikke bare at «en eller annen oppgave» finnes.
+ */
+async function verifiserBehandlingOppgaveAvRiktigType(request: APIRequestContext): Promise<void> {
+  const oppgaver = await fetchOppgaver(request);
+  // Engangslogging av faktiske oppgavetyper for live-verifisering av type-strengen.
+  console.log(`   Oppgavetyper i mock: ${JSON.stringify(oppgaver.map((o) => o.oppgavetype))}`);
+  const behandlingsoppgaver = oppgaver.filter((o) => o.oppgavetype === BEHANDLING_OPPGAVETYPE);
+  expect(
+    behandlingsoppgaver.length,
+    `Opprettet sak skal gi minst én behandling-oppgave av type ${BEHANDLING_OPPGAVETYPE}, fant: ${JSON.stringify(oppgaver.map((o) => o.oppgavetype))}`,
+  ).toBeGreaterThan(0);
+  console.log(`✅ Fant ${behandlingsoppgaver.length} behandling-oppgave(r) av riktig type (${BEHANDLING_OPPGAVETYPE})`);
+}
 
 /**
  * Test suite for task/oppgaver functionality on the main page
@@ -41,7 +67,7 @@ test.describe('Oppgaver', () => {
     console.log('✅ Oppgaver section is visible on forside');
   });
 
-  test('skal vise behandling-oppgave etter opprettelse av sak', async ({ page }) => {
+  test('skal vise behandling-oppgave etter opprettelse av sak', async ({ page, request }) => {
     // Step 1: Create a case (this should create a behandling oppgave)
     console.log('📝 Step 1: Creating a case...');
     await hovedside.gotoOgOpprettNySak();
@@ -54,18 +80,13 @@ test.describe('Oppgaver', () => {
     await hovedside.goto();
     await oppgaver.ventPåOppgaverLastet();
 
-    // Step 3: Check if we have any tasks
-    console.log('📝 Step 3: Checking for tasks...');
-    const behandlingCount = await oppgaver.getBehandlingOppgaveAntall();
-
-    console.log(`   Total behandling oppgaver: ${behandlingCount}`);
-
-    // Saken vi opprettet (lagt i «mine») SKAL gi minst én behandling-oppgave på forsiden.
-    expect(behandlingCount, 'Opprettet sak skal gi en behandling-oppgave').toBeGreaterThan(0);
-    console.log('✅ Found behandling oppgaver as expected');
+    // Step 3: Assert at det faktisk finnes en behandling-oppgave av RIKTIG TYPE (BEH_SAK_MK)
+    // i mock — ikke bare at «en eller annen oppgave» vises på forsiden.
+    console.log('📝 Step 3: Verifying behandling-oppgave of correct type exists...');
+    await verifiserBehandlingOppgaveAvRiktigType(request);
   });
 
-  test('skal kunne navigere til behandling fra oppgave', async ({ page }) => {
+  test('skal kunne navigere til behandling fra oppgave', async ({ page, request }) => {
     // Step 1: Create a case first
     console.log('📝 Step 1: Creating a case...');
     await hovedside.gotoOgOpprettNySak();
@@ -78,32 +99,21 @@ test.describe('Oppgaver', () => {
     await hovedside.goto();
     await oppgaver.ventPåOppgaverLastet();
 
-    // Step 3: Try to find and click on a behandling oppgave
-    console.log('📝 Step 3: Looking for behandling oppgave...');
-    const behandlingCount = await oppgaver.getBehandlingOppgaveAntall();
+    // Step 3: Behandling-oppgaven SKAL finnes (ingen stille søk-fallback). Verifiser at
+    // den faktisk ble opprettet i mock med riktig type før vi klikker på den på forsiden;
+    // testen skal FEILE hvis happy-path ikke kan kjøres.
+    console.log('📝 Step 3: Verifying behandling-oppgave exists before navigating...');
+    await verifiserBehandlingOppgaveAvRiktigType(request);
 
-    if (behandlingCount > 0) {
-      console.log('📝 Step 4: Clicking on behandling oppgave...');
-      await oppgaver.klikkBehandlingOppgaveIndex(0);
+    console.log('📝 Step 4: Clicking on behandling oppgave...');
+    await oppgaver.klikkBehandlingOppgaveIndex(0);
 
-      console.log('📝 Step 5: Verifying navigation...');
-      await oppgaver.assertions.verifiserNavigertTilBehandling();
-      console.log('✅ Successfully navigated to behandling from oppgave');
-    } else {
-      // Try alternative: use the search to find the case
-      console.log('📝 Alternative: No oppgaver visible, using search...');
-      await hovedside.søkEtterBruker(USER_ID_VALID);
-      await page.waitForURL(/\/sok/, { timeout: 5000 });
-
-      // Click on the case from search results
-      await page.getByRole('link', { name: /TRIVIELL KARAFFEL/i }).first().click();
-      await expect(page).toHaveURL(/saksbehandling|behandling/, { timeout: 10000 });
-
-      console.log('✅ Navigated to behandling via search (oppgave list was empty)');
-    }
+    console.log('📝 Step 5: Verifying navigation...');
+    await oppgaver.assertions.verifiserNavigertTilBehandling();
+    console.log('✅ Successfully navigated to behandling from oppgave');
   });
 
-  test('skal vise oppgave-antall', async ({ page }) => {
+  test('skal vise oppgave-antall', async ({ page, request }) => {
     // Step 1: Create a case to ensure we have at least one item
     console.log('📝 Step 1: Creating a case...');
     await hovedside.gotoOgOpprettNySak();
@@ -116,7 +126,7 @@ test.describe('Oppgaver', () => {
     await hovedside.goto();
     await oppgaver.ventPåOppgaverLastet();
 
-    // Step 3: Get task counts
+    // Step 3: Get task counts (UI-tellere logges for kontekst)
     console.log('📝 Step 3: Getting task counts...');
     const journalCount = await oppgaver.getJournalforingOppgaveAntall();
     const behandlingCount = await oppgaver.getBehandlingOppgaveAntall();
@@ -124,8 +134,9 @@ test.describe('Oppgaver', () => {
     console.log(`   Journalføring oppgaver: ${journalCount}`);
     console.log(`   Behandling oppgaver: ${behandlingCount}`);
 
-    // Vi opprettet én sak, så det skal finnes minst én behandling-oppgave (journalCount logges over).
-    expect(behandlingCount, 'Opprettet sak skal gi en behandling-oppgave').toBeGreaterThanOrEqual(1);
+    // Vi opprettet én sak, så det skal finnes en behandling-oppgave av riktig TYPE (BEH_SAK_MK)
+    // i mock — ikke bare et tall > 0 i UI-telleren.
+    await verifiserBehandlingOppgaveAvRiktigType(request);
 
     console.log('✅ Successfully retrieved task counts');
   });
