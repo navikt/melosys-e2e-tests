@@ -187,15 +187,18 @@ mot api-koden, ikke `SEND_BREV` — sistnevnte er doksys-forhåndsproduserte bre
 `DISTRIBUER_JOURNALPOST`) før den blir `FERDIG` → **poll til FERDIG** (timeout 60 s):
 
 - brev-prosess: `PROSESS_TYPE = 'OPPRETT_OG_DISTRIBUER_BREV'` med
-  `REGISTRERT_DATO > SYSDATE - INTERVAL '10' MINUTE` og `DATA` (serialisert DokgenBrevbestilling-
-  JSON, felt `"produserbartdokument":"INNHENTING_AV_INNTEKTSOPPLYSNINGER"`) som inneholder
+  `REGISTRERT_DATO >= :siden` (DB-tidspunktet fanget rett før triggeren via `hentDbTidspunkt`, så
+  søket kun matcher brev *denne* triggeren laget — ikke et brev fra en tidligere test) og `DATA`
+  (serialisert DokgenBrevbestilling-JSON, felt
+  `"produserbartdokument":"INNHENTING_AV_INNTEKTSOPPLYSNINGER"`) som inneholder
   `INNHENTING_AV_INNTEKTSOPPLYSNINGER` ← **selve akseptansekriteriet** («brevet er sendt»)
 - `STATUS === 'FERDIG'` (brevet er produsert, journalført og distribuert)
 - **mottaker (scenario 1/3):** samme `DATA` inneholder mottakerens ident — fullmektig-substitusjon
   skjer i `hentMottakere` FØR prosessinstansen lages, så identen er fullmektigens når
   `FULLMEKTIG_SØKNAD` finnes, ellers brukers. Assertionen godtar **minst én** av `USER_ID_VALID`
   (`30056928150`) og aktørId `1111111111111` (fnr/aktørId-format pinnes ved første grønne).
-  Helper-signatur: `verifiserInnhentingsbrevSendt(mottakerIdentifikatorer: string[])`. Det lages
+  Helper-signatur: `verifiserInnhentingsbrevSendt(mottakerIdentifikatorer: string[], siden: Date)`,
+  der `siden` er DB-tidspunktet fra `hentDbTidspunkt()` fanget rett før triggeren. Det lages
   nøyaktig ÉN slik prosessinstans (brevet går kun til én mottaker).
 
 > **Robusthet:** Helperen `verifiserInnhentingsbrevSendt` matcher brevmal-strengen og mottaker som

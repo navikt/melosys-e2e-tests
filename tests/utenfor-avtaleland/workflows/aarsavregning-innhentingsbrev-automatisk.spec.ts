@@ -194,7 +194,7 @@ async function verifiserInnhentingsbrevSendt(
     const dataHarMottaker = mottakerIdentifikatorer.some((id) => (brev!.DATA || '').includes(id));
     expect(
         dataHarMottaker,
-        `Brevet skal være adressert til bruker (en av ${mottakerIdentifikatorer.join(' / ')})`
+        `Brevet skal være adressert til mottaker (en av ${mottakerIdentifikatorer.join(' / ')})`
     ).toBe(true);
 }
 
