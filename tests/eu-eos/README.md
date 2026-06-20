@@ -8,7 +8,7 @@ EU/EØS-saker håndterer tilfeller hvor arbeidstakere sendes ut til EU/EØS-land
 
 ## Testfiler
 
-### `eu-eos-12.1-utsent-arbeidstager-fullfort-vedtak.spec.ts`
+### `eu-eos-art12-utsendt-arbeidstaker-fullfort-vedtak.spec.ts`
 
 **Komplett arbeidsflyt test** som dekker:
 1. Opprett ny EU/EØS-sak (UTSENDT_ARBEIDSTAKER)
@@ -22,7 +22,7 @@ EU/EØS-saker håndterer tilfeller hvor arbeidstakere sendes ut til EU/EØS-land
 
 **Testresultater:** ✅ Test passerer
 
-### `eu-eos-13.1-arbeid-flere-land-fullfort-vedtak.spec.ts`
+### `eu-eos-art13-arbeid-flere-land-fullfort-vedtak.spec.ts`
 
 **Komplett arbeidsflyt test for "Arbeid i flere land"** som dekker:
 1. Opprett ny EU/EØS-sak (ARBEID_FLERE_LAND)
@@ -41,7 +41,7 @@ EU/EØS-saker håndterer tilfeller hvor arbeidstakere sendes ut til EU/EØS-land
 
 **Testresultater:** 🔄 Ny test - under testing
 
-### `eu-eos-13.1-arbeid-flere-land-selvstendig-fullfort-vedtak.spec.ts`
+### `eu-eos-art13-arbeid-flere-land-selvstendig-fullfort-vedtak.spec.ts`
 
 **Variant av "Arbeid i flere land" med selvstendig næringsvirksomhet** som dekker:
 1. Opprett ny EU/EØS-sak (ARBEID_FLERE_LAND)
@@ -107,7 +107,7 @@ Verifiseringsmetoder for database og UI:
 > før hver test, så assertion-metodene leser nyeste rad (høyest `id`) = testens behandling.
 > `land` = `LOVVALGSLAND` (landet hvis lovgivning gjelder), ikke destinasjonslandet — for en
 > norsk utsendt arbeidstaker er dette `'NO'`. Trenger du å assertere periode-datoer, gjør det
-> inline (se `eu-eos-12.1-iverksetting-mottaker-kjede.spec.ts`).
+> inline (se `eu-eos-art12-iverksetting-mottaker-kjede.spec.ts`).
 
 ### `ArbeidFlereLandBehandlingPage`
 **Lokasjon:** `pages/behandling/arbeid-flere-land-behandling.page.ts`

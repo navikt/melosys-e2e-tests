@@ -1,9 +1,9 @@
-import { test } from '../fixtures';
-import { AuthHelper } from '../helpers/auth-helper';
-import { HovedsidePage } from '../pages/hovedside.page';
-import { OpprettNySakPage } from '../pages/opprett-ny-sak/opprett-ny-sak.page';
-import { AarsavregningPage } from '../pages/behandling/aarsavregning.page';
-import { VedtakPage } from '../pages/vedtak/vedtak.page';
+import { test } from '../../fixtures';
+import { AuthHelper } from '../../helpers/auth-helper';
+import { HovedsidePage } from '../../pages/hovedside.page';
+import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
+import { AarsavregningPage } from '../../pages/behandling/aarsavregning.page';
+import { VedtakPage } from '../../pages/vedtak/vedtak.page';
 import {
   USER_ID_VALID,
   SAKSTYPER,
@@ -11,8 +11,8 @@ import {
   BEHANDLINGSTEMA,
   AARSAK,
   BEHANDLINGSTYPE,
-} from '../pages/shared/constants';
-import {waitForProcessInstances} from '../helpers/api-helper';
+} from '../../pages/shared/constants';
+import {waitForProcessInstances} from '../../helpers/api-helper';
 
 test.describe('Årsavregning FTRL - Komplett arbeidsflyt', () => {
   test('skal opprette og fullføre årsavregning behandling', async ({ page }) => {

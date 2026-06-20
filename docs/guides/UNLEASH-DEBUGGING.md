@@ -133,7 +133,7 @@ Look for Unleash confirmation messages:
 
 ```bash
 # In CI logs, look for test execution order
-✓ Test 1: arsavregning-ikke-skattepliktig
+✓ Test 1: aarsavregning-ikke-skattepliktig
 ✓ Test 2: komplett-sak-2-8a
 ```
 

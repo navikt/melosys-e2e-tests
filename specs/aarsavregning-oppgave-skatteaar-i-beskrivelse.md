@@ -2,7 +2,7 @@
 jira: MELOSYS-8123
 epic: MELOSYS-6579 — Automatisk opprette årsavregningsbehandlinger på ikke skattepliktige
 status: verified
-test: tests/utenfor-avtaleland/workflows/arsavregning-oppgave-aar-i-beskrivelse.spec.ts
+test: tests/aarsavregning/aarsavregning-oppgave-skatteaar-i-beskrivelse-og-nokkelord.spec.ts
 toggles: {}        # default-state; per-trigger-koreografi av melosys.faktureringskomponenten.ikke-tidligere-perioder er testmekanikk (se binding)
 tags: [årsavregning, oppgave, gosys, skattehendelse, ikke-skattepliktig, ftrl]
 ---
@@ -75,7 +75,7 @@ Beskrivelse-assertion er format-robust inntil avklaringen fra fagperson: assert 
 ### Felles forutsetning (alle tre triggere)
 
 Vedtatt FTRL-sak med trygdeavgift som betales til NAV (ikke-skattepliktig), avgiftsperiode i
-forrige år — samme oppskrift som `tests/utenfor-avtaleland/workflows/arsavregning-ikke-skattepliktig.spec.ts`:
+forrige år — samme oppskrift som `tests/aarsavregning/aarsavregning-ikke-skattepliktig.spec.ts`:
 
 - bruker: `USER_ID_VALID` (`30056928150`, "TRIVIELL KARAFFEL"; aktørId i mock: `1111111111111`)
 - `OpprettNySakPage.opprettStandardSak(USER_ID_VALID)` (FTRL / MEDLEMSKAP_LOVVALG / YRKESAKTIV / SØKNAD)
@@ -97,7 +97,7 @@ forrige år — samme oppskrift som `tests/utenfor-avtaleland/workflows/arsavreg
   faktura-rader settes `BESTILT` (`withFaktureringDatabase`) → toggle **PÅ** → **ny vurdering**
   som endrer perioden til kun forrige år → `fattVedtakForNyVurdering('FEIL_I_BEHANDLING')` →
   `OppretteÅrsavregningVedEndring` (NV-grenen, `årMedEndringer = {forrige år}`) auto-oppretter
-  årsavregningen. Samme oppskrift som `komplett-sak-nv-periode-endres-til-kun-tidligere-ar.spec.ts`.
+  årsavregningen. Samme oppskrift som `komplett-sak-nyvurdering-periode-endres-til-kun-tidligere-aar.spec.ts`.
   NV-spesifikke verdier: lovvalg `FTRL_KAP2_2_1` **(verbatim)** · situasjon
   `MIDLERTIDIG_ARBEID_2_1_FJERDE_LEDD` **(verbatim)** · Ja på "Er søkers arbeidsoppdrag i",
   "Plikter arbeidsgiver å betale", "Har søker lovlig opphold i" · resultat/trygdeavgift beholdes

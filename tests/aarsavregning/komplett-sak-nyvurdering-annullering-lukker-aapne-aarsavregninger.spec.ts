@@ -1,20 +1,20 @@
-import {expect, test} from '../../../fixtures';
-import {AuthHelper} from '../../../helpers/auth-helper';
-import {HovedsidePage} from '../../../pages/hovedside.page';
-import {OpprettNySakPage} from '../../../pages/opprett-ny-sak/opprett-ny-sak.page';
-import {MedlemskapPage} from '../../../pages/behandling/medlemskap.page';
-import {ArbeidsforholdPage} from '../../../pages/behandling/arbeidsforhold.page';
-import {LovvalgPage} from '../../../pages/behandling/lovvalg.page';
-import {ResultatPeriodePage} from '../../../pages/behandling/resultat-periode.page';
-import {TrygdeavgiftPage} from '../../../pages/trygdeavgift/trygdeavgift.page';
-import {VedtakPage} from '../../../pages/vedtak/vedtak.page';
-import {USER_ID_VALID} from '../../../pages/shared/constants';
-import {getYearFromDate, TestPeriods} from '../../../helpers/date-helper';
-import {waitForProcessInstances} from '../../../helpers/api-helper';
-import {withFaktureringDatabase} from '../../../helpers/pg-db-helper';
-import {getFakturaserieReferanse, withDatabase} from '../../../helpers/db-helper';
-import {FaktureringHelper} from '../../../helpers/fakturering-helper';
-import {AnnulleringPage} from "../../../pages/behandling/annullering.page";
+import {expect, test} from '../../fixtures';
+import {AuthHelper} from '../../helpers/auth-helper';
+import {HovedsidePage} from '../../pages/hovedside.page';
+import {OpprettNySakPage} from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
+import {MedlemskapPage} from '../../pages/behandling/medlemskap.page';
+import {ArbeidsforholdPage} from '../../pages/behandling/arbeidsforhold.page';
+import {LovvalgPage} from '../../pages/behandling/lovvalg.page';
+import {ResultatPeriodePage} from '../../pages/behandling/resultat-periode.page';
+import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
+import {VedtakPage} from '../../pages/vedtak/vedtak.page';
+import {USER_ID_VALID} from '../../pages/shared/constants';
+import {getYearFromDate, TestPeriods} from '../../helpers/date-helper';
+import {waitForProcessInstances} from '../../helpers/api-helper';
+import {withFaktureringDatabase} from '../../helpers/pg-db-helper';
+import {getFakturaserieReferanse, withDatabase} from '../../helpers/db-helper';
+import {FaktureringHelper} from '../../helpers/fakturering-helper';
+import {AnnulleringPage} from "../../pages/behandling/annullering.page";
 
 /**
  * Komplett saksflyt for FTRL-sak med automatisk opprettet årsavregning og NV-annullering
@@ -30,7 +30,7 @@ import {AnnulleringPage} from "../../../pages/behandling/annullering.page";
  * - Verifiser: Årsavregningsbehandlingen lukkes med BehandlingsresultatType = FERDIGBEHANDLET
  * - Verifiser: Sum av fakturaserier for avregningsåret er 0
  */
-test.describe('Komplett saksflyt - NV annulering lukker åpne årsavregninger', () => {
+test.describe('Komplett saksflyt - Nyvurdering annullering lukker åpne årsavregninger', () => {
     test('komplett førstegangsbehandling, automatisk opprettet årsavregning, nv annulerer også åpen årsavregning', async ({
                                                                                                                               page,
                                                                                                                               request

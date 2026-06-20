@@ -1,21 +1,21 @@
-import {expect, test} from '../../../fixtures';
+import {expect, test} from '../../fixtures';
 import type {APIRequestContext, Page} from '@playwright/test';
-import {AuthHelper} from '../../../helpers/auth-helper';
-import {HovedsidePage} from '../../../pages/hovedside.page';
-import {OpprettNySakPage} from '../../../pages/opprett-ny-sak/opprett-ny-sak.page';
-import {MedlemskapPage} from '../../../pages/behandling/medlemskap.page';
-import {ArbeidsforholdPage} from '../../../pages/behandling/arbeidsforhold.page';
-import {LovvalgPage} from '../../../pages/behandling/lovvalg.page';
-import {ResultatPeriodePage} from '../../../pages/behandling/resultat-periode.page';
-import {TrygdeavgiftPage} from '../../../pages/trygdeavgift/trygdeavgift.page';
-import {VedtakPage} from '../../../pages/vedtak/vedtak.page';
-import {FORRIGE_AAR, USER_ID_VALID} from '../../../pages/shared/constants';
-import {UnleashHelper} from '../../../helpers/unleash-helper';
-import {AdminApiHelper, waitForProcessInstances} from '../../../helpers/api-helper';
-import {fetchOppgaver, fetchOppgaveV2} from '../../../helpers/mock-helper';
-import {publishSkattehendelse} from '../../../helpers/skattehendelse-helper';
-import {TestPeriods, TestPeriodsISO} from '../../../helpers/date-helper';
-import {withFaktureringDatabase} from '../../../helpers/pg-db-helper';
+import {AuthHelper} from '../../helpers/auth-helper';
+import {HovedsidePage} from '../../pages/hovedside.page';
+import {OpprettNySakPage} from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
+import {MedlemskapPage} from '../../pages/behandling/medlemskap.page';
+import {ArbeidsforholdPage} from '../../pages/behandling/arbeidsforhold.page';
+import {LovvalgPage} from '../../pages/behandling/lovvalg.page';
+import {ResultatPeriodePage} from '../../pages/behandling/resultat-periode.page';
+import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
+import {VedtakPage} from '../../pages/vedtak/vedtak.page';
+import {FORRIGE_AAR, USER_ID_VALID} from '../../pages/shared/constants';
+import {UnleashHelper} from '../../helpers/unleash-helper';
+import {AdminApiHelper, waitForProcessInstances} from '../../helpers/api-helper';
+import {fetchOppgaver, fetchOppgaveV2} from '../../helpers/mock-helper';
+import {publishSkattehendelse} from '../../helpers/skattehendelse-helper';
+import {TestPeriods, TestPeriodsISO} from '../../helpers/date-helper';
+import {withFaktureringDatabase} from '../../helpers/pg-db-helper';
 
 /**
  * MELOSYS-8123: Angi år i beskrivelse ved opprettelse av årsavregningsoppgave
