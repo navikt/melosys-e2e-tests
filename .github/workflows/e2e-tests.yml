@@ -646,6 +646,11 @@ jobs:
             else
               echo "⚠️ [$svc] report generation failed"
             fi
+
+            # Reports are written; drop the large extraction artifacts (fat-jar +
+            # unpacked classes) so they don't sit on the runner. Only the
+            # *.exec/*.csv/*.xml/*-html outputs are kept and uploaded.
+            rm -rf "service-coverage/$svc.jar" "service-coverage/$svc-classes"
           done
 
           echo ""
@@ -985,7 +990,9 @@ jobs:
                 method_pct="0.0"
               fi
 
-              echo "| $module | ${line_pct}% | ${branch_pct}% | ${method_pct}% |" >> $GITHUB_STEP_SUMMARY
+              # branch_pct may be "N/A" (no branches) — don't append "%" to it
+              if [ "$branch_pct" = "N/A" ]; then branch_cell="N/A"; else branch_cell="${branch_pct}%"; fi
+              echo "| $module | ${line_pct}% | ${branch_cell} | ${method_pct}% |" >> $GITHUB_STEP_SUMMARY
             done
 
             if [ $((total_line_covered + total_line_missed)) -gt 0 ]; then
@@ -1032,7 +1039,9 @@ jobs:
                   method_pct="0.0"
                 fi
 
-                echo "| $svc | ${line_pct}% | ${branch_pct}% | ${method_pct}% |" >> $GITHUB_STEP_SUMMARY
+                # branch_pct may be "N/A" (no branches) — don't append "%" to it
+                if [ "$branch_pct" = "N/A" ]; then branch_cell="N/A"; else branch_cell="${branch_pct}%"; fi
+                echo "| $svc | ${line_pct}% | ${branch_cell} | ${method_pct}% |" >> $GITHUB_STEP_SUMMARY
               done
             fi
           fi
