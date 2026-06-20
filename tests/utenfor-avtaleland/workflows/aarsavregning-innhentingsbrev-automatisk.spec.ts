@@ -73,7 +73,9 @@ async function opprettVedtattIkkeSkattepliktigSak(page: Page): Promise<void> {
 
     await waitForProcessInstances(page.request, 30);
     await hovedside.goto();
-    await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).click();
+    // åpneBehandling laster saksoversikten på nytt med retry (finnBehandlingslenke) — robust mot
+    // async-lasting-racen der lenken ikke er synlig enda. Foretrekkes framfor direkte getByRole-klikk.
+    await hovedside.åpneBehandling('TRIVIELL KARAFFEL -');
 
     console.log(`📝 Medlemskap (${periode.start} - ${periode.end})...`);
     await medlemskap.velgPeriode(periode.start, periode.end);
@@ -108,6 +110,19 @@ async function opprettVedtattIkkeSkattepliktigSak(page: Page): Promise<void> {
 }
 
 /**
+ * DB-klokka rett nå (SYSDATE). Fanges rett FØR en trigger fyres og sendes til
+ * verifiserInnhentingsbrevSendt som «tidligst registrert»-grense, slik at brev-søket kun matcher
+ * prosessinstanser denne triggeren faktisk laget. Bruker DB-tid (ikke testverts-tid) for å unngå
+ * klokkeskew mot Oracle.
+ */
+async function hentDbTidspunkt(): Promise<Date> {
+    return await withDatabase(async (db) => {
+        const rad = await db.queryOne<{NAA: Date}>('SELECT SYSDATE AS NAA FROM DUAL');
+        return rad!.NAA;
+    });
+}
+
+/**
  * Binder «Så»-linjene: poller PROSESSINSTANS til en fersk brev-prosessinstans for
  * innhentingsbrevet finnes, og verifiserer at den er FERDIG og adressert til forventet mottaker.
  *
@@ -118,9 +133,14 @@ async function opprettVedtattIkkeSkattepliktigSak(page: Page): Promise<void> {
  *   uavklart om brevets DATA lagrer fnr eller aktørId for mottakeren (feature ikke implementert
  *   ennå) — assertionen godtar derfor at minst én av dem står i DATA. Eksakt identifikator pinnes
  *   når feature-branchen lander.
+ * @param siden DB-tidspunkt fanget rett før triggeren (hentDbTidspunkt). Brev-søket avgrenses til
+ *   prosessinstanser registrert >= dette, så testen aldri kan bli falsk-grønn på et brev fra en
+ *   tidligere test/trigger (begge tester lager samme brevmal for samme bruker → ellers umulig å
+ *   skille på innhold). Hardere enn det gamle «siste 10 minutter»-vinduet.
  */
 async function verifiserInnhentingsbrevSendt(
-    mottakerIdentifikatorer: string[]
+    mottakerIdentifikatorer: string[],
+    siden: Date
 ): Promise<void> {
     type BrevRad = {DATA: string; STATUS: string; PROSESS_TYPE: string};
 
@@ -130,16 +150,17 @@ async function verifiserInnhentingsbrevSendt(
     // "INNHENTING_AV_INNTEKTSOPPLYSNINGER" + den oppløste mottakerens ident.
     const hentInnhentingsbrev = async (): Promise<BrevRad | undefined> =>
         await withDatabase(async (db) => {
-            // ORDER BY DESC → .find() treffer den NYESTE matchende brev-prosessinstansen, ikke en
-            // vilkårlig rad. Gjør matchingen deterministisk og foretrekker dette testens ferske brev
-            // framfor en evt. sen innkommende rad fra forrige test (cleanup kjører før, ikke etter).
+            // Avgrens til prosessinstanser registrert >= triggertidspunktet (siden) → ekskluderer en
+            // evt. sen innkommende rad fra forrige test (cleanup kjører før, ikke etter, og begge
+            // tester lager samme brevmal for samme bruker). ORDER BY DESC + .find() treffer den
+            // NYESTE matchende brev-prosessinstansen, så matchingen er deterministisk.
             const rader = await db.query<BrevRad>(
                 `SELECT PI.DATA, PI.STATUS, PI.PROSESS_TYPE
                  FROM PROSESSINSTANS PI
                  WHERE PI.PROSESS_TYPE = 'OPPRETT_OG_DISTRIBUER_BREV'
-                   AND PI.REGISTRERT_DATO > SYSDATE - INTERVAL '10' MINUTE
+                   AND PI.REGISTRERT_DATO >= :siden
                  ORDER BY PI.REGISTRERT_DATO DESC`,
-                {}
+                {siden}
             );
             return rader.find((r) => (r.DATA || '').includes(BREVMAL_INNHENTING));
         });
@@ -195,6 +216,8 @@ test.describe('Automatisk innhentingsbrev ved årsavregning (MELOSYS-8122)', () 
 
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
 
+        // Fang DB-tid FØR triggeren → brev-søket matcher kun brev denne skattehendelsen laget.
+        const triggerTidspunkt = await hentDbTidspunkt();
         console.log(`📨 Sender skattehendelse for skatteår ${FORRIGE_AAR}...`);
         publishSkattehendelse({
             gjelderPeriode: String(FORRIGE_AAR),
@@ -202,7 +225,7 @@ test.describe('Automatisk innhentingsbrev ved årsavregning (MELOSYS-8122)', () 
             hendelsetype: 'NY',
         });
 
-        await verifiserInnhentingsbrevSendt([USER_ID_VALID, AKTOER_ID_VALID]);
+        await verifiserInnhentingsbrevSendt([USER_ID_VALID, AKTOER_ID_VALID], triggerTidspunkt);
         await waitForProcessInstances(page.request, 30);
     });
 
@@ -224,12 +247,14 @@ test.describe('Automatisk innhentingsbrev ved årsavregning (MELOSYS-8122)', () 
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
 
         const periodeISO = TestPeriodsISO.previousYearPeriod;
+        // Fang DB-tid FØR jobben kjøres → brev-søket matcher kun brev denne jobben laget.
+        const triggerTidspunkt = await hentDbTidspunkt();
         console.log(`⚙️ Kjører ikke-skattepliktige-jobben for ${periodeISO.start} - ${periodeISO.end}...`);
         await adminApi.finnIkkeSkattepliktigeSaker(request, periodeISO.start, periodeISO.end, true);
         const jobbStatus = await adminApi.waitForIkkeSkattepliktigeSakerJob(request, 60, 1000);
         expect(jobbStatus.antallProsessert, 'Jobben skal prosessere saken').toBe(1);
 
-        await verifiserInnhentingsbrevSendt([USER_ID_VALID, AKTOER_ID_VALID]);
+        await verifiserInnhentingsbrevSendt([USER_ID_VALID, AKTOER_ID_VALID], triggerTidspunkt);
         await waitForProcessInstances(page.request, 30);
     });
 
