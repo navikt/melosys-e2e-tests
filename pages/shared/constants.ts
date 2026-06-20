@@ -107,3 +107,88 @@ export const EU_EOS_LOVVALG = {
   // Offentlig tjenesteperson, jf. rfo. 883/2004 art.11(3)(b) (FO_883_2004_ART11_3B)
   ART_11_3_B: 'Rfo. 883/2004 art.11(3)(b)',
 } as const;
+
+// POPP-kilde-enum (verbatim — slik POPP-API leverer dem, jf. MELOSYS-8073).
+export const POPP_KILDE = {
+  SKATT: 'SKATT',
+  AVGIFTSSYSTEMET: 'AVGIFTSSYSTEMET',
+  MELOSYS: 'MELOSYS',
+} as const;
+
+// POPP-kilde slik den vises i UI (verbatim — bygg bekrefter visningsnavn).
+export const POPP_KILDE_VISNING = {
+  SKATT: 'Skatt',
+  AVGIFTSSYSTEMET: 'Avgiftssystemet',
+  MELOSYS: 'Melosys',
+} as const;
+
+/**
+ * InntektTypeCode (verbatim — fra
+ * no.nav.popp.domain.codestable.InntektTypeCode).
+ *
+ * Kun PGI-grunnlags-typene (FL/KSL/SVA) slipper gjennom whitelist-filteret i
+ * `PensjonsopptjeningOppslag`. SUM_PI ekskluderes nå server-side av POPP
+ * `/inntekt/hentgrunnlag` (MELOSYS-8073) og er kun listet her for å verifisere
+ * at den filtreres bort. Andre koder (INN_*, SJO_*, UTE_*, DIP_*, RED_INT, AI,
+ * PI66, PGI_NAV) er bevisst utelatt og filtreres bort i api-laget.
+ */
+export const POPP_INNTEKT_TYPE = {
+  SUM_PI: 'SUM_PI',
+  FL_PGI_LOENN: 'FL_PGI_LOENN',
+  FL_PGI_LOENN_PD: 'FL_PGI_LOENN_PD',
+  FL_PGI_NAERING: 'FL_PGI_NAERING',
+  FL_PGI_NAERING_FFF: 'FL_PGI_NAERING_FFF',
+  KSL_PGI_LOENN: 'KSL_PGI_LOENN',
+  KSL_PGI_LOENN_PD: 'KSL_PGI_LOENN_PD',
+  KSL_PGI_NAERING: 'KSL_PGI_NAERING',
+  KSL_PGI_NAERING_FFF: 'KSL_PGI_NAERING_FFF',
+  SVA_PGI_LOENN: 'SVA_PGI_LOENN',
+  SVA_PGI_LOENN_PD: 'SVA_PGI_LOENN_PD',
+  SVA_PGI_NAERING: 'SVA_PGI_NAERING',
+  SVA_PGI_NAERING_FFF: 'SVA_PGI_NAERING_FFF',
+} as const;
+
+/**
+ * Forventede dekode-strenger for inntektType-kodene — verbatim fra mockens
+ * `INNTEKT_TYPE_DEKODE`-map (`PoppInntektApi.kt`), som speiler Javadoc-en i
+ * `no.nav.popp.domain.codestable.InntektTypeCode`.
+ *
+ * Web rendrer `periode.inntektTypeDekode || periode.inntektType` direkte i
+ * «Pensjonsgivende inntektstype»-kolonnen. Mocken auto-fyller dekode både i
+ * default-radene og i seed-endepunktet hvis kaller ikke oppgir egen verdi,
+ * så testen kan stole på at disse strengene faktisk havner i UI-cellen.
+ */
+export const POPP_INNTEKT_TYPE_BESKRIVELSE: Record<string, string> = {
+  SUM_PI: 'Sum pensjonsgivende inntekt',
+  AI: 'Antatt inntekt',
+  PI66: 'Pensjonsgivende inntekt 1966 - Konv',
+  PGI_NAV: 'PGI innland fastsatt av NAV',
+  RED_INT: 'Reduksjonsinntekt',
+  INN_LON: 'Innenlandsinntekt - Lønn',
+  INN_SEL: 'Innenlandsinntekt - Selvstendig',
+  INN_JSF: 'Innenlandsinntekt - Jord/Skog/Fisk',
+  SJO_LON: 'Sjøinntekt - Lønn',
+  SJO_SEL: 'Sjøinntekt - Selvstendig',
+  SJO_JSF: 'Sjøinntekt - Jord/Skog/Fisk',
+  UTE_LON: 'Utenlandsinntekt - Lønn',
+  UTE_SEL: 'Utenlandsinntekt - Selvstendig',
+  UTE_JSF: 'Utenlandsinntekt - Jord/Skog/Fisk',
+  SVA_LON: 'Svalbardinntekt - Lønn',
+  SVA_SEL: 'Svalbardinntekt - Selvstendig',
+  SVA_JSF: 'Svalbardinntekt - Jord/Skog/Fisk',
+  DIP_LON: 'Diplomatinntekt - Lønn',
+  DIP_SEL: 'Diplomatinntekt - Selvstendig',
+  DIP_JSF: 'Diplomatinntekt - Jord/Skog/Fisk',
+  FL_PGI_LOENN: 'Fastland pensjonsgivende inntekt av lønnsinntekt',
+  FL_PGI_LOENN_PD: 'Fastland pensjonsgivende inntekt av lønnsinntekt bare pensjonsdel',
+  FL_PGI_NAERING: 'Fastland pensjonsgivende inntekt av næringsinntekt',
+  FL_PGI_NAERING_FFF: 'Fastland pensjonsgivende inntekt av næringsinntekt fra fiske, fangst eller familiebarnehage',
+  KSL_PGI_LOENN: 'Kildeskatt på lønn pensjonsgivende inntekt av lønnsinntekt',
+  KSL_PGI_LOENN_PD: 'Kildeskatt på lønn pensjonsgivende inntekt av lønnsinntekt bare pensjonsdel',
+  KSL_PGI_NAERING: 'Kildeskatt på lønn pensjonsgivende inntekt av næringsinntekt',
+  KSL_PGI_NAERING_FFF: 'Kildeskatt på lønn pensjonsgivende inntekt av næringsinntekt fra fiske, fangst eller familiebarnehage',
+  SVA_PGI_LOENN: 'Svalbard pensjonsgivende inntekt av lønnsinntekt',
+  SVA_PGI_LOENN_PD: 'Svalbard pensjonsgivende inntekt av lønnsinntekt bare pensjonsdel',
+  SVA_PGI_NAERING: 'Svalbard pensjonsgivende inntekt av næringsinntekt',
+  SVA_PGI_NAERING_FFF: 'Svalbard pensjonsgivende inntekt av næringsinntekt fra fiske, fangst eller familiebarnehage',
+};

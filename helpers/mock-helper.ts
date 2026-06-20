@@ -209,6 +209,101 @@ export async function findNewUtgaaendeJournalpost(
 }
 
 /**
+ * A single document on a journalpost (mirrors DokumentModell in melosys-mock).
+ *
+ * The `brevkode` carries the dokgen mal-name (e.g. 'innvilgelse_ftrl',
+ * 'trygdeavtale_au') — i.e. the actual brev-variant produced for the recipient.
+ * `tittel` is the journalføringstittel set by DokumentNavnService.
+ */
+export interface BrevDokumentInfo {
+  brevkode: string | null;
+  tittel: string | null;
+  dokumentTilknyttetJournalpost: string | null;
+}
+
+/**
+ * A vedtaksbrev as journalført to the SAF/Joark mock, reduced to the fields
+ * that carry brev-innhold per mottakertype: the recipient (avsenderMottaker)
+ * and the HOVEDDOKUMENT (brevkode/tittel).
+ */
+export interface VedtaksbrevJournalpost {
+  journalpostId: string;
+  journalposttype: string | null;
+  journalStatus: string | null;
+  avsenderMottaker: { id?: string; type?: string; navn?: string; land?: string };
+  hoveddokument: BrevDokumentInfo;
+}
+
+/**
+ * Poll the SAF mock for an UTGAAENDE vedtaksbrev-journalpost addressed to a
+ * specific recipient (fnr). Returns the journalpost reduced to its HOVEDDOKUMENT
+ * so a test can assert the brev-variant (brevkode) and tittel per mottakertype.
+ *
+ * Used to verify dokgen-brevinnhold end-to-end: a FTRL §2-8-vedtak must produce
+ * brevkode 'innvilgelse_ftrl', a trygdeavtale-vedtak 'trygdeavtale_<land>' osv.
+ * Filtering on the recipient fnr means each flow's brev is found unambiguously
+ * even when several saker (for ulike personer) coexist in the same test.
+ *
+ * @param request    - Playwright APIRequestContext
+ * @param mottakerFnr - The recipient's fnr (avsenderMottaker.id)
+ * @param timeoutMs  - Max polling time (default: 30s)
+ */
+export async function finnVedtaksbrevForMottaker(
+  request: APIRequestContext,
+  mottakerFnr: string,
+  timeoutMs = 30000
+): Promise<VedtaksbrevJournalpost | null> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const response = await request.get('http://localhost:8083/testdata/verification/journalpost');
+    if (!response.ok()) {
+      throw new Error(`Failed to fetch journalposter: ${response.status()}`);
+    }
+    const journalposter = (await response.json()) as Array<{
+      journalpostId: string;
+      journalposttype: string | null;
+      journalStatus: string | null;
+      avsenderMottaker?: { id?: string; type?: string; navn?: string; land?: string };
+      dokumentModellList?: Array<{
+        brevkode: string | null;
+        tittel: string | null;
+        dokumentTilknyttetJournalpost: string | null;
+      }>;
+    }>;
+
+    const match = journalposter.find((jp) => {
+      if (jp.journalposttype !== 'UTGAAENDE') return false;
+      if (jp.avsenderMottaker?.id !== mottakerFnr) return false;
+      const hoved = (jp.dokumentModellList ?? []).find(
+        (d) => d.dokumentTilknyttetJournalpost === 'HOVEDDOKUMENT' && d.brevkode
+      );
+      return hoved != null;
+    });
+
+    if (match) {
+      const hoved = (match.dokumentModellList ?? []).find(
+        (d) => d.dokumentTilknyttetJournalpost === 'HOVEDDOKUMENT' && d.brevkode
+      )!;
+      return {
+        journalpostId: match.journalpostId,
+        journalposttype: match.journalposttype,
+        journalStatus: match.journalStatus,
+        avsenderMottaker: match.avsenderMottaker ?? {},
+        hoveddokument: {
+          brevkode: hoved.brevkode,
+          tittel: hoved.tittel,
+          dokumentTilknyttetJournalpost: hoved.dokumentTilknyttetJournalpost,
+        },
+      };
+    }
+    console.log(`⏳ Venter på vedtaksbrev-journalpost for mottaker ${mottakerFnr}...`);
+    await new Promise((r) => setTimeout(r, 2000));
+  }
+  return null;
+}
+
+/**
  * A MEDL membership-exception period stored in the melosys-mock MEDL register.
  * Mirrors MedlemskapsunntakForGet in melosys-mock.
  *
@@ -464,6 +559,115 @@ export interface CreateJournalpostForSakOptions {
  * console.log('Created journalpost:', result.journalpostId);
  * console.log('Document IDs:', result.dokumentInfoIds);
  */
+/**
+ * Pensjonsopptjening (POPP) inntekt-rad for seeding.
+ *
+ * Mocken eksponerer `POST /popp/admin/inntekt/seed` som overstyrer den
+ * kanoniske default-responsen per fnr. Påkrevde felter for at API-en
+ * (`PensjonsopptjeningOppslag`, PGI-whitelist) skal se raden er `inntektAr`,
+ * `belop`, en PGI-`inntektType` (default `FL_PGI_LOENN`) og `kilde`.
+ *
+ * NB: POPP `/inntekt/hentgrunnlag` ekskluderer SUM_PI server-side (MELOSYS-8073,
+ * POPP-commit 9e82f205), og mocken speiler dette — seeder du `SUM_PI` blir den
+ * filtrert bort og dukker ikke opp i UI. Seed faktiske grunnlags-typer i stedet.
+ *
+ * Kilde-verdier sendes uendret videre til melosys-web, som rendrer SKATT/
+ * AVGIFTSSYSTEMET/MELOSYS som «Skatt»/«Avgiftssystemet»/«Melosys» — andre
+ * verdier vises som rå-tekst (default-branchen i `kildeLabel`).
+ */
+export interface PoppInntektSeed {
+  inntektAr: number;
+  belop: number;
+  kilde: string;
+  inntektType?: string;
+  inntektTypeDekode?: string;
+  /**
+   * Tidsstempel for POPP changeStamp. API mapper `createdDate` → `registrert`
+   * og `updatedDate` → `oppdatert` (LocalDate, Europe/Oslo). Sett eksplisitt
+   * for deterministisk testing av tidsstempel-rendering; default-data fra
+   * mocken bruker «1. mai året etter» som createdDate og «nå» som updatedDate.
+   */
+  changeStamp?: {
+    createdDate?: string; // ISO instant — sendes som JSON-string til mocken
+    updatedDate?: string;
+    createdBy?: string;
+    updatedBy?: string;
+  };
+}
+
+/**
+ * Seed POPP-inntekter for et fnr i melosys-mock.
+ *
+ * Overstyrer mockens default kanoniske data (SKD-kilde, PGI-grunnlag for
+ * siste 5 år, uten SUM_PI). Bruk i POPP-pensjonsopptjenings-tester for
+ * deterministisk styring av kilde-mix og år-vindu uten å gå via
+ * `page.route(...)`-stubbing.
+ *
+ * Default `inntektType="FL_PGI_LOENN"` er en gyldig grunnlags-type som
+ * slipper gjennom API-ets PGI-whitelist. Seed andre PGI-typer for å teste
+ * breakdown, eller en ikke-PGI/SUM_PI-type for å teste at den filtreres bort.
+ *
+ * @example
+ * await seedPoppInntekt(request, '30056928150', [
+ *   { inntektAr: 2025, belop: 540_000, kilde: 'SKATT' },
+ *   { inntektAr: 2025, belop: 120_000, kilde: 'AVGIFTSSYSTEMET' },
+ * ]);
+ */
+export async function seedPoppInntekt(
+  request: APIRequestContext,
+  fnr: string,
+  inntekter: PoppInntektSeed[],
+): Promise<void> {
+  const payload = {
+    fnr,
+    inntekter: inntekter.map((i) => ({
+      inntektAr: i.inntektAr,
+      belop: i.belop,
+      kilde: i.kilde,
+      inntektType: i.inntektType ?? 'FL_PGI_LOENN',
+      inntektTypeDekode: i.inntektTypeDekode,
+      changeStamp: i.changeStamp,
+      fnr,
+    })),
+  };
+
+  const response = await request.post('http://localhost:8083/popp/admin/inntekt/seed', {
+    data: payload,
+    headers: { 'Content-Type': 'application/json' },
+  });
+
+  if (!response.ok()) {
+    const errorText = await response.text();
+    throw new Error(
+      `Failed to seed POPP inntekt for fnr=${fnr}: ${response.status()} - ${errorText}`,
+    );
+  }
+}
+
+/**
+ * Fjern POPP-seed for et fnr (eller alle hvis `fnr` ikke oppgis).
+ *
+ * `clearMockData` rører ikke POPP-seeden — bruk denne eksplisitt før hver
+ * test for å sikre ren baseline, ellers vil seeden persisten på tvers av
+ * tester i samme mock-prosess.
+ */
+export async function clearPoppSeed(
+  request: APIRequestContext,
+  fnr?: string,
+): Promise<void> {
+  const url = fnr
+    ? `http://localhost:8083/popp/admin/inntekt/seed/${encodeURIComponent(fnr)}`
+    : 'http://localhost:8083/popp/admin/inntekt/seed';
+
+  const response = await request.delete(url);
+
+  if (!response.ok()) {
+    throw new Error(
+      `Failed to clear POPP seed${fnr ? ` for fnr=${fnr}` : ''}: ${response.status()}`,
+    );
+  }
+}
+
 export async function createJournalpostForSak(
   request: APIRequestContext,
   options: CreateJournalpostForSakOptions

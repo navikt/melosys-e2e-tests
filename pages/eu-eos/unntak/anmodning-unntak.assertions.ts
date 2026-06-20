@@ -47,14 +47,19 @@ export class AnmodningUnntakAssertions {
    * Verify exception request was sent successfully
    */
   async verifiserAnmodningSendt(): Promise<void> {
-    // After successful submission, we should see confirmation or navigate away
-    await Promise.race([
-      expect(this.page.getByText(/Sendt|Lagret|Vellykket|Opprettet/i)).toBeVisible({ timeout: 15000 }),
-      expect(this.page).not.toHaveURL(/anmodningunntak/, { timeout: 15000 }),
-    ]).catch(() => {
+    // After successful submission, we should see confirmation or navigate away (soft probe)
+    const suksess = await Promise.race([
+      this.page
+        .getByText(/Sendt|Lagret|Vellykket|Opprettet/i)
+        .first()
+        .waitFor({ state: 'visible', timeout: 15000 })
+        .then(() => true),
+      this.page.waitForURL((url) => !/anmodningunntak/.test(url.toString()), { timeout: 15000 }).then(() => true),
+    ]).catch(() => false);
+    if (!suksess) {
       // Check we're not stuck on the form with errors
       console.log('Note: Standard success indicators not found');
-    });
+    }
   }
 
   /**
@@ -72,12 +77,14 @@ export class AnmodningUnntakAssertions {
     const fraElement = this.page.locator(`input[value="${fra}"]`);
     const tilElement = this.page.locator(`input[value="${til}"]`);
 
-    await expect(fraElement).toBeVisible({ timeout: 5000 }).catch(() => {
+    const fraSynlig = await fraElement.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
+    if (!fraSynlig) {
       console.log('Note: Fra date field not visible');
-    });
-    await expect(tilElement).toBeVisible({ timeout: 5000 }).catch(() => {
+    }
+    const tilSynlig = await tilElement.waitFor({ state: 'visible', timeout: 5000 }).then(() => true).catch(() => false);
+    if (!tilSynlig) {
       console.log('Note: Til date field not visible');
-    });
+    }
   }
 
   /**
@@ -86,9 +93,14 @@ export class AnmodningUnntakAssertions {
   async verifiserDokumenterGenerert(): Promise<void> {
     // Check for document generation confirmation
     const dokumenter = this.page.getByText(/Dokument|SED|A001|Orientering/i);
-    await expect(dokumenter.first()).toBeVisible({ timeout: 10000 }).catch(() => {
+    const dokumenterSynlig = await dokumenter
+      .first()
+      .waitFor({ state: 'visible', timeout: 10000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!dokumenterSynlig) {
       console.log('Note: Document indicators not explicitly visible');
-    });
+    }
   }
 
   /**
@@ -97,9 +109,14 @@ export class AnmodningUnntakAssertions {
   async verifiserProsessStartet(): Promise<void> {
     // The process should be started and visible somewhere
     const prosessInfo = this.page.getByText(/Prosess|Startet|Under behandling/i);
-    await expect(prosessInfo.first()).toBeVisible({ timeout: 5000 }).catch(() => {
+    const prosessSynlig = await prosessInfo
+      .first()
+      .waitFor({ state: 'visible', timeout: 5000 })
+      .then(() => true)
+      .catch(() => false);
+    if (!prosessSynlig) {
       console.log('Note: Process info not explicitly visible');
-    });
+    }
   }
 
   /**

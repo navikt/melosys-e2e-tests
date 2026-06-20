@@ -63,7 +63,9 @@ permissions:
 jobs:
   e2e-tests:
     runs-on: ubuntu-latest-8-cores
-    timeout-minutes: 60
+    # Coverage runs additionally build melosys-api (~4 min cached, ~11 min cold) before
+    # the ~44 min suite, so they need generous headroom over the normal 60 min ceiling.
+    timeout-minutes: ${{ inputs.collect_coverage && 120 || 60 }}
 
     steps:
       - name: Checkout code
@@ -77,6 +79,11 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
+
+      # Tillitsgate: fail-fast på grønn-men-meningsløs-mønstre FØR docker-stacken startes.
+      # Ren node, sekunder. Speiler test-quality.yml (som kun trigges på PR for tests/pages/scripts).
+      - name: Verifiser test-kvalitet (check:tests)
+        run: npm run check:tests
 
       - name: Get Playwright version
         id: playwright-version
@@ -294,8 +301,21 @@ jobs:
           path: melosys-api
           token: ${{ secrets.READER_TOKEN }}
 
+      - name: Set up JDK 21 for melosys-api coverage build
+        if: inputs.collect_coverage
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven  # cache ~/.m2 so the melosys-api build doesn't re-download the world (~11 min → ~4 min)
+
       - name: Build melosys-api for coverage class files
         if: inputs.collect_coverage
+        # Don't fail the whole suite if the coverage build breaks (e.g. JDK bump in
+        # melosys-api): this step runs BEFORE "Start Docker Compose services", so a
+        # hard failure here would skip the entire test run. Degrade gracefully — the
+        # suite still runs; only the jacoco:report (which needs .class files) is lost.
+        continue-on-error: true
         run: |
           cd melosys-api
           echo "🔨 Building melosys-api to get compiled classes for coverage report..."
@@ -578,6 +598,65 @@ jobs:
           echo "📊 CSV files found:"
           find . -path "*/target/site/jacoco/jacoco.csv" -type f
 
+      - name: Collect JaCoCo coverage from other backend services
+        if: always() && inputs.collect_coverage
+        # Unlike melosys-api (built from source above), the other JVM services get their
+        # .class files extracted straight from each running container's Spring Boot fat-jar
+        # (/app/app.jar → BOOT-INF/classes). This is build-tool agnostic (Maven + Gradle),
+        # needs no per-repo checkout/build, and the classes match the exact image under test.
+        # Each service runs the agent on internal port 6300, mapped to a distinct host port.
+        run: |
+          echo "📊 Collecting E2E coverage from backend services (JAR-extraction method)..."
+          mkdir -p service-coverage
+
+          # service:host-port (container name == service name); see docker-compose.yml
+          SERVICES="melosys-eessi:6301 faktureringskomponenten:6302 melosys-dokgen:6303 melosys-trygdeavgift-beregning:6304 melosys-trygdeavtale:6305 melosys-inngangsvilkar:6306"
+
+          for entry in $SERVICES; do
+            svc="${entry%%:*}"
+            port="${entry##*:}"
+            echo ""
+            echo "──────── $svc (port $port) ────────"
+
+            # 1. Dump runtime coverage from the agent's TCP server
+            if ! java -jar jacoco/jacococli.jar dump \
+                  --address localhost --port "$port" \
+                  --destfile "service-coverage/$svc.exec"; then
+              echo "⚠️ [$svc] dump failed (agent not attached / service down) — skipping"
+              continue
+            fi
+
+            # 2. Extract compiled app classes from the running container's fat-jar
+            if ! docker cp "$svc:/app/app.jar" "service-coverage/$svc.jar"; then
+              echo "⚠️ [$svc] docker cp of /app/app.jar failed — skipping report"
+              continue
+            fi
+            mkdir -p "service-coverage/$svc-classes"
+            ( cd "service-coverage/$svc-classes" && unzip -qo "../$svc.jar" 'BOOT-INF/classes/*' ) \
+              || { echo "⚠️ [$svc] unzip of BOOT-INF/classes failed — skipping report"; continue; }
+
+            # 3. Generate CSV/XML/HTML report from the .exec + extracted classes
+            if java -jar jacoco/jacococli.jar report "service-coverage/$svc.exec" \
+                  --classfiles "service-coverage/$svc-classes/BOOT-INF/classes" \
+                  --csv "service-coverage/$svc.csv" \
+                  --xml "service-coverage/$svc.xml" \
+                  --html "service-coverage/$svc-html" \
+                  --name "$svc"; then
+              echo "✅ [$svc] report generated"
+            else
+              echo "⚠️ [$svc] report generation failed"
+            fi
+
+            # Reports are written; drop the large extraction artifacts (fat-jar +
+            # unpacked classes) so they don't sit on the runner. Only the
+            # *.exec/*.csv/*.xml/*-html outputs are kept and uploaded.
+            rm -rf "service-coverage/$svc.jar" "service-coverage/$svc-classes"
+          done
+
+          echo ""
+          echo "📋 Service coverage CSVs generated:"
+          ls -1 service-coverage/*.csv 2>/dev/null || echo "  (none — check agent attachment in service logs)"
+
       - name: E2E Coverage Report
         uses: madrapps/jacoco-report@50d3aff4548aa991e6753342d9ba291084e63848 # v1.7.2
         if: github.event_name == 'pull_request'
@@ -597,6 +676,10 @@ jobs:
           path: |
             e2e-coverage.exec
             melosys-api/**/target/site/jacoco/
+            service-coverage/*.exec
+            service-coverage/*.csv
+            service-coverage/*.xml
+            service-coverage/*-html/
           retention-days: 30
 
       - name: Generate test summary
@@ -907,7 +990,9 @@ jobs:
                 method_pct="0.0"
               fi
 
-              echo "| $module | ${line_pct}% | ${branch_pct}% | ${method_pct}% |" >> $GITHUB_STEP_SUMMARY
+              # branch_pct may be "N/A" (no branches) — don't append "%" to it
+              if [ "$branch_pct" = "N/A" ]; then branch_cell="N/A"; else branch_cell="${branch_pct}%"; fi
+              echo "| $module | ${line_pct}% | ${branch_cell} | ${method_pct}% |" >> $GITHUB_STEP_SUMMARY
             done
 
             if [ $((total_line_covered + total_line_missed)) -gt 0 ]; then
@@ -918,6 +1003,47 @@ jobs:
             fi
 
             cd ..
+
+            # --- Per-service coverage (the other backend services the suite drives) ---
+            if ls service-coverage/*.csv >/dev/null 2>&1; then
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "## 📊 E2E Coverage per Service" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "_Coverage of the other backend services exercised by the E2E suite (classes extracted from each running image)_" >> $GITHUB_STEP_SUMMARY
+              echo "" >> $GITHUB_STEP_SUMMARY
+              echo "| Service | Lines | Branches | Methods |" >> $GITHUB_STEP_SUMMARY
+              echo "|---------|-------|----------|---------|" >> $GITHUB_STEP_SUMMARY
+
+              for csv_file in service-coverage/*.csv; do
+                svc=$(basename "$csv_file" .csv)
+                line_covered=$(awk -F',' 'NR>1 {sum+=$9} END {print sum+0}' "$csv_file")
+                line_missed=$(awk -F',' 'NR>1 {sum+=$8} END {print sum+0}' "$csv_file")
+                branch_covered=$(awk -F',' 'NR>1 {sum+=$7} END {print sum+0}' "$csv_file")
+                branch_missed=$(awk -F',' 'NR>1 {sum+=$6} END {print sum+0}' "$csv_file")
+                method_covered=$(awk -F',' 'NR>1 {sum+=$13} END {print sum+0}' "$csv_file")
+                method_missed=$(awk -F',' 'NR>1 {sum+=$12} END {print sum+0}' "$csv_file")
+
+                if [ $((line_covered + line_missed)) -gt 0 ]; then
+                  line_pct=$(awk "BEGIN {printf \"%.1f\", ($line_covered / ($line_covered + $line_missed)) * 100}")
+                else
+                  line_pct="0.0"
+                fi
+                if [ $((branch_covered + branch_missed)) -gt 0 ]; then
+                  branch_pct=$(awk "BEGIN {printf \"%.1f\", ($branch_covered / ($branch_covered + $branch_missed)) * 100}")
+                else
+                  branch_pct="N/A"
+                fi
+                if [ $((method_covered + method_missed)) -gt 0 ]; then
+                  method_pct=$(awk "BEGIN {printf \"%.1f\", ($method_covered / ($method_covered + $method_missed)) * 100}")
+                else
+                  method_pct="0.0"
+                fi
+
+                # branch_pct may be "N/A" (no branches) — don't append "%" to it
+                if [ "$branch_pct" = "N/A" ]; then branch_cell="N/A"; else branch_cell="${branch_pct}%"; fi
+                echo "| $svc | ${line_pct}% | ${branch_cell} | ${method_pct}% |" >> $GITHUB_STEP_SUMMARY
+              done
+            fi
           fi
 
       - name: Capture complete docker logs

@@ -18,11 +18,11 @@ import {
  * "vedtak fattet" uten DB/SED/brev-assert. Denne verifiserer hele iverksettingskjeden
  * for en utsendt arbeidstaker (PD-A1 / lovvalgsvedtak):
  *  - IVERKSETT_VEDTAK_EOS fullfører (FERDIG, ingen feilede prosessinstanser)
- *  - A009 lovvalgsvedtak-SED (LA_BUC_01) sendes til mottakerinstitusjon (Danmark)
+ *  - A009 lovvalgsvedtak-SED (LA_BUC_04) sendes til mottakerinstitusjon (Danmark)
  *  - utgående EESSI-journalpost opprettes og ferdigstilles (hele Kafka-sløyfen)
  *  - lovvalgsperioden overføres til MEDL (medlperiode_id satt)
  *
- * NB: Utsendt arbeidstaker (LA_BUC_01) sender A009, ikke A003 (som "arbeid i flere land"/LA_BUC_02).
+ * NB: Utsendt arbeidstaker (LA_BUC_04) sender A009, ikke A003 (som "arbeid i flere land"/LA_BUC_02).
  */
 const FRA = '01.01.2024';
 const TIL = '31.12.2025';
@@ -77,7 +77,7 @@ test.describe('EU/EØS 12.1 - Iverksetting mottaker-kjede (UTSENDT_ARBEIDSTAKER)
         console.log('📝 Venter på iverksetting (kaster ved feilede prosessinstanser)...');
         await waitForProcessInstances(page.request, 60);
 
-        // === 1. A009 lovvalgsvedtak-SED (LA_BUC_01) sendt til EESSI-mottaker ===
+        // === 1. A009 lovvalgsvedtak-SED (LA_BUC_04) sendt til EESSI-mottaker ===
         const sed = await findNewNavFormatSed(request, 'A009', docsBefore);
         expect(sed.sed).toBe('A009');
         expect(sed.sedVer).toBe('4');

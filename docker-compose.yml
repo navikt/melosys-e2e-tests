@@ -178,6 +178,8 @@ services:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: local
+      # JaCoCo coverage agent (optional - only set in CI for E2E coverage)
+      JAVA_TOOL_OPTIONS: ${JACOCO_AGENT_OPTS:-}
       SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/postgres?currentSchema=faktureringskomponenten"
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: mysecretpassword
@@ -195,16 +197,25 @@ services:
           - faktureringskomponenten.melosys.docker-internal
     ports:
       - "8084:8084"
+      - "6302:6300"  # JaCoCo coverage port
+    volumes:
+      - ./jacoco:/jacoco:ro  # Mount JaCoCo agent (optional, for E2E coverage)
 
   melosys-dokgen:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-dokgen:${MELOSYS_DOKGEN_TAG:-latest}
     container_name: melosys-dokgen
+    environment:
+      # JaCoCo coverage agent (optional - only set in CI for E2E coverage)
+      JAVA_TOOL_OPTIONS: ${JACOCO_AGENT_OPTS:-}
     networks:
       melosys.docker-internal:
         aliases:
           - melosys-dokgen.melosys.docker-internal
     ports:
       - "8888:8080"
+      - "6303:6300"  # JaCoCo coverage port
+    volumes:
+      - ./jacoco:/jacoco:ro  # Mount JaCoCo agent (optional, for E2E coverage)
 
   melosys-trygdeavgift-beregning:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:${MELOSYS_TRYGDEAVGIFT_TAG:-latest}
@@ -214,6 +225,8 @@ services:
         condition: service_healthy
     environment:
       SPRING_PROFILES_ACTIVE: local
+      # JaCoCo coverage agent (optional - only set in CI for E2E coverage)
+      JAVA_TOOL_OPTIONS: ${JACOCO_AGENT_OPTS:-}
       SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/postgres?currentSchema=trygdeavgift-beregning"
       SPRING_DATASOURCE_USERNAME: postgres
       SPRING_DATASOURCE_PASSWORD: mysecretpassword
@@ -231,6 +244,9 @@ services:
           - melosys-trygdeavgift-beregning.melosys.docker-internal
     ports:
       - "8095:8095"
+      - "6304:6300"  # JaCoCo coverage port
+    volumes:
+      - ./jacoco:/jacoco:ro  # Mount JaCoCo agent (optional, for E2E coverage)
 
   melosys-api:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:${MELOSYS_API_TAG:-latest}
@@ -294,6 +310,7 @@ services:
       MICROSOFT_GRAPH_REST_URL: http://melosys-mock.melosys.docker-internal:8083/graph/v1.0
       TILGANGSMASKINEN_URL: http://melosys-mock.melosys.docker-internal:8083/tilgangsmaskinen
       UTBETALING_REST_URL: http://melosys-mock.melosys.docker-internal:8083/utbetaldata/api/v2/hent-utbetalingsinformasjon/intern
+      POPP_REST_URL: http://melosys-mock.melosys.docker-internal:8083/popp
       # Unleash feature toggle configuration
       UNLEASH_URL: "http://unleash.melosys.docker-internal:4242/api"
       UNLEASH_TOKEN: "*:development.unleash-insecure-client-api-token"
@@ -441,6 +458,8 @@ services:
           - melosys-trygdeavtale.melosys.docker-internal
     environment:
       SPRING_PROFILES_ACTIVE: local-docker
+      # JaCoCo coverage agent (optional - only set in CI for E2E coverage)
+      JAVA_TOOL_OPTIONS: ${JACOCO_AGENT_OPTS:-}
       JDBC_URL: jdbc:postgresql://postgres:5432/postgres
       SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/postgres?currentSchema=melosys-trygdeavtale"
       SPRING_DATASOURCE_USERNAME: postgres
@@ -449,6 +468,9 @@ services:
       ABAC_PDP_ENDPOINT_URL: http://melosys-mock:8083/asm-pdp/authorize
     ports:
       - "8088:8088"
+      - "6305:6300"  # JaCoCo coverage port
+    volumes:
+      - ./jacoco:/jacoco:ro  # Mount JaCoCo agent (optional, for E2E coverage)
 
   melosys-inngangsvilkar:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-inngangsvilkar:${MELOSYS_INNGANGSVILKAR_TAG:-latest}
@@ -463,6 +485,8 @@ services:
           - melosys-inngangsvilkar.melosys.docker-internal
     environment:
       SPRING_PROFILES_ACTIVE: local-docker
+      # JaCoCo coverage agent (optional - only set in CI for E2E coverage)
+      JAVA_TOOL_OPTIONS: ${JACOCO_AGENT_OPTS:-}
       JDBC_URL: jdbc:postgresql://postgres:5432/postgres
       SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres:5432/postgres?currentSchema=melosys-inngangsvilkar"
       SPRING_DATASOURCE_USERNAME: postgres
@@ -471,6 +495,9 @@ services:
       ABAC_PDP_ENDPOINT_URL: http://melosys-mock:8083/asm-pdp/authorize
     ports:
       - "8089:8080"
+      - "6306:6300"  # JaCoCo coverage port
+    volumes:
+      - ./jacoco:/jacoco:ro  # Mount JaCoCo agent (optional, for E2E coverage)
 
   # ============================================================================
   # EESSI Integration
@@ -488,8 +515,13 @@ services:
       - unleash
     ports:
       - "8081:8081"
+      - "6301:6300"  # JaCoCo coverage port
+    volumes:
+      - ./jacoco:/jacoco:ro  # Mount JaCoCo agent (optional, for E2E coverage)
     environment:
       SPRING_PROFILES_ACTIVE: local-mock
+      # JaCoCo coverage agent (optional - only set in CI for E2E coverage)
+      JAVA_TOOL_OPTIONS: ${JACOCO_AGENT_OPTS:-}
       # Server port (matches local-mock profile)
       SERVER_PORT: 8081
       # Database configuration

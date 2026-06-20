@@ -71,6 +71,13 @@ test.describe('EU/EØS Skip - Komplett arbeidsflyt', () => {
     // Verifiser
     await skipBehandling.assertions.verifiserVedtakFattet();
 
+    // Hard sluttilstand: vent på iverksetting + verifiser DB end-state.
+    // Skip-behandlingen er nyeste behandling (ren DB per fixture): skal være AVSLUTTET
+    // med behandlingsresultat og alle prosessinstanser FERDIG.
+    console.log('📝 Venter på iverksetting + verifiserer DB-sluttilstand...');
+    await waitForProcessInstances(page.request, 60);
+    await skipBehandling.assertions.verifiserBehandlingAvsluttet();
+
       console.log('✅ EU/EØS-skip-arbeidsflyt fullført');
   });
 });
