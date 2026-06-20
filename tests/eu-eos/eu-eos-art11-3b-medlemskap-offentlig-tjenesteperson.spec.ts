@@ -1,4 +1,4 @@
-import { test } from '../../fixtures';
+import { test, expect } from '../../fixtures';
 import { AuthHelper } from '../../helpers/auth-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
@@ -15,6 +15,8 @@ import {
   FORRIGE_AAR,
 } from '../../pages/shared/constants';
 import { waitForProcessInstances } from '../../helpers/api-helper';
+import { verifiserBehandlingSluttilstand } from '../../pages/shared/behandling-sluttilstand.assertions';
+import { withDatabase } from '../../helpers/db-helper';
 
 /**
  * Komplett saksflyt for EØS Medlemskap Lovvalg - Offentlig tjenesteperson art.11(3)(b)
@@ -107,7 +109,29 @@ test.describe('EØS Medlemskap Lovvalg - Offentlig tjenesteperson 11.3b', () => 
     await hovedside.goto();
 
     await hovedside.åpneBehandling(behandlingLenke);
+
+    // Interim-oppførsel (gated på MELOSYS-7828): årsavregning kan ikke opprettes enda.
     await behandling.assertions.verifiserKanIkkeÅrsavregneEnda();
     console.log('✅ Bekreftet: Årsavregning kan ikke opprettes for denne sakstypen (enda)');
+
+    // Uavhengig av 7828: selve LOVVALGSVEDTAKET (FØRSTEGANG-behandlingen) SKAL ha nådd
+    // sin DB-sluttilstand. NB: URL-paramet behandlingID peker på den auto-opprettede
+    // ÅRSAVREGNING-behandlingen (UNDER_BEHANDLING) etter re-åpning, så vi slår opp
+    // FØRSTEGANG-behandlingen direkte i DB (cleanup-fixturen gir nøyaktig én per test).
+    const lovvalgBehandlingId = await withDatabase(async (db) => {
+      const rad = await db.queryOne<{ ID: number }>(
+        "SELECT ID FROM BEHANDLING WHERE BEH_TYPE = 'FØRSTEGANG' ORDER BY ID DESC FETCH FIRST 1 ROWS ONLY",
+        {}
+      );
+      expect(rad, 'Forventet en FØRSTEGANG-lovvalgsbehandling i DB').not.toBeNull();
+      return String(rad!.ID);
+    });
+
+    await verifiserBehandlingSluttilstand({
+      behandlingId: lovvalgBehandlingId,
+      forventetResultatType: 'FASTSATT_LOVVALGSLAND',
+      forventetIverksettProsess: 'IVERKSETT_VEDTAK_EOS',
+    });
+    console.log('✅ Lovvalgsvedtaket er AVSLUTTET og iverksatt i DB');
   });
 });

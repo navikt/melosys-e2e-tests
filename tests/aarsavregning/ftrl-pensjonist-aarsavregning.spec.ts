@@ -7,6 +7,7 @@ import { LovvalgPage } from '../../pages/behandling/lovvalg.page';
 import { VedtakPage } from '../../pages/vedtak/vedtak.page';
 import { USER_ID_VALID, SAKSTYPER, SAKSTEMA, BEHANDLINGSTEMA, AARSAK, FORRIGE_AAR } from '../../pages/shared/constants';
 import { waitForProcessInstances } from '../../helpers/api-helper';
+import { verifiserAarsavregningBehandling } from '../../pages/behandling/aarsavregning.assertions';
 
 /**
  * Komplett saksflyt for FTRL Pensjonist - Automatisk årsavregning
@@ -91,6 +92,33 @@ test.describe('FTRL Pensjonist - Automatisk årsavregning', () => {
       new RegExp(`${USER_ID_VALID}.*Pensjonist.*Årsavregning`)
     );
     await expect(aarsavregningLink).toBeVisible({ timeout: 15000 });
-    console.log('✅ Årsavregning-behandling er automatisk opprettet');
+
+    // Åpne årsavregningen for å lese ut behandlingID fra URL-en, og verifiser at
+    // den auto-opprettede behandlingen faktisk eksisterer i riktig DB-tilstand
+    // — ikke bare at en lenke ble synlig.
+    //
+    // NB: denne flyten FATTER ikke årsavregningsvedtak; behandlingen auto-opprettes
+    // og venter på saksbehandler. Sluttilstanden er derfor UNDER_BEHANDLING /
+    // IKKE_FASTSATT (verifisert live), men auto-opprett- og brev-prosessene er FERDIG
+    // og det finnes en AARSAVREGNING-rad for foregående år.
+    await aarsavregningLink.click();
+    await page.waitForURL(/behandlingID=\d+/, { timeout: 15000 });
+    const behandlingId = new URL(page.url()).searchParams.get('behandlingID');
+    if (!behandlingId) {
+      throw new Error(`Fant ikke behandlingID i årsavregnings-URL-en: ${page.url()}`);
+    }
+
+    // Lukk evt. etterslepende auto-prosesser (brev) på den nyopprettede
+    // årsavregningen før DB-asserten, slik at «alle prosesser FERDIG» ikke blir
+    // CI-flaky om brev-prosessen henger litt etter at lenken dukket opp.
+    await waitForProcessInstances(page.request, 60);
+
+    await verifiserAarsavregningBehandling(behandlingId, {
+      forventetStatus: 'UNDER_BEHANDLING',
+      forventetResultatType: 'IKKE_FASTSATT',
+      forventetAar: Number(FORRIGE_AAR),
+      forventedeProsesser: ['OPPRETT_NY_BEHANDLING_AARSAVREGNING'],
+    });
+    console.log('✅ Årsavregning-behandling er automatisk opprettet (UNDER_BEHANDLING)');
   });
 });

@@ -1,5 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { assertErrors } from '../../utils/assertions';
+import { withDatabase } from '../../helpers/db-helper';
 
 /**
  * Assertion methods for AarsavregningPage
@@ -132,4 +133,128 @@ export class AarsavregningAssertions {
       `✅ Sum-tabell: endelig ${forventet.endeligBeregnet} / innbetalt ${forventet.innbetalt} / differanse ${forventet.differanse}`
     );
   }
+}
+
+/**
+ * Forventninger til en auto-opprettet årsavregnings-behandlings DB-sluttilstand.
+ *
+ * Kjernen som ALLTID asserteres (og som biter) er at det finnes en
+ * ÅRSAVREGNING-behandling som er AVSLUTTET, har et behandlingsresultat, en
+ * AARSAVREGNING-rad, og at alle dens prosessinstanser er FERDIG. Alt annet er
+ * valgfri innstramming.
+ */
+export interface AarsavregningBehandlingForventning {
+  /** Forventet BEHANDLING.BEH_TYPE. Default 'ÅRSAVREGNING'. */
+  behType?: string;
+  /**
+   * Forventet BEHANDLING.STATUS. Default 'AVSLUTTET' (for en iverksatt
+   * årsavregning). For en AUTO-opprettet, men ennå ikke saksbehandlet
+   * årsavregning (FTRL-pensjonist-flyten) er den 'UNDER_BEHANDLING'.
+   */
+  forventetStatus?: string;
+  /**
+   * Assert BEHANDLINGSRESULTAT.RESULTAT_TYPE = denne (f.eks. FASTSATT_TRYGDEAVGIFT,
+   * eller IKKE_FASTSATT for en auto-opprettet men ikke iverksatt årsavregning).
+   * Utelates → kun at et behandlingsresultat finnes.
+   */
+  forventetResultatType?: string;
+  /** Assert AARSAVREGNING.AAR = dette året (f.eks. 2024). Utelates → AAR ikke sjekket. */
+  forventetAar?: number;
+  /**
+   * Prosess_typer som MÅ finnes (og være FERDIG) på årsavregningen.
+   * Default: ingen krav om spesifikke typer (kun at alle som finnes er FERDIG).
+   */
+  forventedeProsesser?: string[];
+}
+
+/**
+ * Hard DB-sluttilstands-verifisering for en auto-opprettet årsavregning.
+ *
+ * Beviser at årsavregningen ikke bare dukket opp som en UI-lenke / et job-count,
+ * men faktisk ble iverksatt: behandlingen er ÅRSAVREGNING + AVSLUTTET, har et
+ * behandlingsresultat, det finnes en AARSAVREGNING-rad, og alle prosessinstanser
+ * er FERDIG (ingen feilede/hengende). Modellert på den sterke lokale helperen i
+ * eos-pensjonist-aarsavregning-uten-grunnlag.spec.ts og på
+ * pages/shared/behandling-sluttilstand.assertions.ts.
+ *
+ * Forutsetter at prosessinstansene er ferdige; kall `waitForProcessInstances(...)`
+ * (som kaster på feilede instanser) FØR denne i testen.
+ *
+ * Kolonnenavn er live-verifisert (jf. discovery 2026-06-11):
+ *  - BEHANDLING(ID, STATUS, BEH_TYPE)
+ *  - BEHANDLINGSRESULTAT(RESULTAT_TYPE, BEHANDLING_ID)
+ *  - AARSAVREGNING(AAR, BEHANDLINGSRESULTAT_ID)
+ *  - PROSESSINSTANS(PROSESS_TYPE, STATUS, BEHANDLING_ID)
+ *
+ * @param behandlingId BEHANDLING.ID for årsavregningen (typisk lest ut av
+ *   `behandlingID`-URL-paramet etter at årsavregnings-lenken er åpnet).
+ * @returns BEHANDLING.ID som string
+ */
+export async function verifiserAarsavregningBehandling(
+  behandlingId: string,
+  forventet: AarsavregningBehandlingForventning = {}
+): Promise<string> {
+  const behType = forventet.behType ?? 'ÅRSAVREGNING';
+  const forventetStatus = forventet.forventetStatus ?? 'AVSLUTTET';
+
+  return await withDatabase(async (db) => {
+    const behandling = await db.queryOne<{ ID: number; STATUS: string; BEH_TYPE: string }>(
+      'SELECT ID, STATUS, BEH_TYPE FROM BEHANDLING WHERE ID = :id',
+      { id: behandlingId }
+    );
+    expect(behandling, 'Forventet årsavregningsbehandling i DB').not.toBeNull();
+    expect(behandling!.BEH_TYPE, `Behandlingen skal være ${behType}`).toBe(behType);
+    expect(behandling!.STATUS, `Behandlingen skal være ${forventetStatus}`).toBe(forventetStatus);
+    const id = behandling!.ID;
+    console.log(`✅ Årsavregningsbehandling ${id}: ${behType} / ${forventetStatus}`);
+
+    const resultat = await db.queryOne<{ RESULTAT_TYPE: string }>(
+      'SELECT RESULTAT_TYPE FROM BEHANDLINGSRESULTAT WHERE BEHANDLING_ID = :id',
+      { id }
+    );
+    expect(resultat, 'Forventet behandlingsresultat i DB').not.toBeNull();
+    if (forventet.forventetResultatType) {
+      expect(
+        resultat!.RESULTAT_TYPE,
+        `Resultat skal være ${forventet.forventetResultatType}`
+      ).toBe(forventet.forventetResultatType);
+    }
+    console.log(`✅ Behandlingsresultat: ${resultat!.RESULTAT_TYPE}`);
+
+    // BEHANDLINGSRESULTAT har behandling_id som PK (pk_resultat), så
+    // AARSAVREGNING.BEHANDLINGSRESULTAT_ID er behandlingens ID direkte.
+    const aarsavregning = await db.queryOne<{ AAR: number }>(
+      'SELECT AAR FROM AARSAVREGNING WHERE BEHANDLINGSRESULTAT_ID = :id',
+      { id }
+    );
+    expect(aarsavregning, 'Forventet AARSAVREGNING-rad i DB').not.toBeNull();
+    if (forventet.forventetAar !== undefined) {
+      expect(
+        Number(aarsavregning!.AAR),
+        `Årsavregningen skal gjelde ${forventet.forventetAar}`
+      ).toBe(forventet.forventetAar);
+    }
+    console.log(`✅ AARSAVREGNING-rad funnet (år ${aarsavregning!.AAR})`);
+
+    const prosesser = await db.query<{ PROSESS_TYPE: string; STATUS: string }>(
+      'SELECT PROSESS_TYPE, STATUS FROM PROSESSINSTANS WHERE BEHANDLING_ID = :id',
+      { id }
+    );
+    expect(
+      prosesser.length,
+      'Forventet minst én prosessinstans for årsavregningen'
+    ).toBeGreaterThan(0);
+    for (const p of prosesser) {
+      expect(p.STATUS, `Prosess ${p.PROSESS_TYPE} skal være FERDIG`).toBe('FERDIG');
+    }
+    for (const type of forventet.forventedeProsesser ?? []) {
+      expect(
+        prosesser.some((p) => p.PROSESS_TYPE === type),
+        `Forventet prosessinstans ${type} på årsavregningsbehandlingen`
+      ).toBe(true);
+    }
+    console.log(`✅ ${prosesser.length} prosessinstanser FERDIG på årsavregningen`);
+
+    return String(id);
+  });
 }
