@@ -3,6 +3,7 @@ import { AuthHelper } from '../../helpers/auth-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import { USER_ID_VALID } from '../../pages/shared/constants';
+import { withDatabase } from '../../helpers/db-helper';
 
 /**
  * Test suite for search and navigation functionality
@@ -100,60 +101,46 @@ test.describe('Søk og navigasjon', () => {
     console.log('✅ Successfully navigated to case from search');
   });
 
-  // @manual: happy-path er i praksis unåbar — etter opprettStandardSak + verifiserBehandlingOpprettet
-  // står vi på forsiden (/melosys/$), så saksnummer-regexen mot page.url() blir alltid null og
-  // søke-blokken hoppes over (testen passerte via expect(true)). Hardning krever en pålitelig
-  // saksnummer-kilde (f.eks. DB) + sok.assertions.verifiserSakIResultat(...). Krever lokal kjøring
-  // for å verifisere. Se e2e-audit 2026-06-08.
-  test('skal søke etter sak med saksnummer @manual', async ({ page }) => {
-    // Step 1: Create a case and capture saksnummer
+  // Tidligere @manual: happy-path var unåbar fordi saksnummer ble forsøkt lest fra forside-URL-en
+  // (/melosys/$), som alltid ga null. Nå hentes saksnummer pålitelig fra DB (cleanup-fixture ⇒
+  // nyeste FAGSAK-rad er denne testens sak), så søket faktisk kjøres og verifiseres. Tag fjernet.
+  test('skal søke etter sak med saksnummer', async ({ page }) => {
+    // Step 1: Create a case
     console.log('📝 Step 1: Creating a case...');
     await hovedside.gotoOgOpprettNySak();
     await opprettSak.opprettStandardSak(USER_ID_VALID);
     await opprettSak.assertions.verifiserBehandlingOpprettet();
 
-    // Get saksnummer from URL (format: /FTRL/saksbehandling/2024000001 or /saksbehandling/MEL-XX)
-    const url = page.url();
-    console.log(`   Current URL: ${url}`);
+    // Step 2: Hent saksnummer fra DB (cleanup-fixture ⇒ nyeste rad er denne testens sak)
+    console.log('📝 Step 2: Fetching saksnummer from DB...');
+    const saksnummer = await withDatabase(async (db) => {
+      const rad = await db.queryOne<{ SAKSNUMMER: string }>(
+        `SELECT saksnummer FROM FAGSAK ORDER BY registrert_dato DESC FETCH FIRST 1 ROWS ONLY`,
+        {},
+      );
+      return rad?.SAKSNUMMER ?? null;
+    });
+    expect(saksnummer, 'Forventet et saksnummer i FAGSAK etter opprettet sak').not.toBeNull();
+    console.log(`   Saksnummer: ${saksnummer}`);
 
-    // Try different saksnummer patterns
-    let saksnummer: string | null = null;
-    let match = url.match(/saksbehandling\/(\d{10,})/); // 10+ digit number
-    if (!match) {
-      match = url.match(/saksbehandling\/(MEL-\d+)/); // MEL-XX format
-    }
+    // Step 3: Søk på saksnummer fra forsiden
+    console.log('📝 Step 3: Searching by saksnummer...');
+    await hovedside.goto();
+    await hovedside.søkEtterBruker(saksnummer!);
+    await page.waitForLoadState('networkidle');
 
-    if (match) {
-      saksnummer = match[1];
-      console.log(`   Found saksnummer: ${saksnummer}`);
-    }
+    // Step 4: Søk på saksnummer SKAL gi treff på saken — "Vis behandling"-knappen vises.
+    console.log('📝 Step 4: Verifying saksnummer search found the case...');
+    const visBehandlingButton = page.getByRole('button', { name: 'Vis behandling' });
+    await expect(
+      visBehandlingButton,
+      'Søk på saksnummer skal gi treff på saken',
+    ).toBeVisible({ timeout: 10000 });
 
-    // If we found a saksnummer, search for it
-    if (saksnummer) {
-      // Step 2: Go back and search by saksnummer
-      console.log('📝 Step 2: Searching by saksnummer...');
-      await hovedside.goto();
-      await hovedside.søkEtterBruker(saksnummer);
-      await page.waitForLoadState('networkidle');
-
-      // Step 3: Verify we can navigate to the case
-      console.log('📝 Step 3: Verifying search results...');
-      const visBehandlingButton = page.getByRole('button', { name: 'Vis behandling' });
-      const foundResults = await visBehandlingButton.isVisible({ timeout: 5000 }).catch(() => false);
-
-      if (foundResults) {
-        console.log('✅ Successfully found case by saksnummer search');
-      } else {
-        console.log('ℹ️ Vis behandling not shown (may be navigated directly)');
-      }
-    } else {
-      console.log('⚠️ Could not extract saksnummer from URL');
-    }
-
-    // @manual TODO: happy-path unåbar (saksnummer=null fra forside-URL). Hent saksnummer fra DB
-    // og bruk sok.assertions.verifiserSakIResultat(saksnummer). Inntil da feiler testen tydelig
-    // ved manuell kjøring i stedet for å passere tomt.
-    expect(saksnummer, 'Kunne ikke hente saksnummer (se @manual-merknad over)').not.toBeNull();
+    // ... og knappen SKAL navigere til behandlingen.
+    await hovedside.klikkVisBehandling();
+    await expect(page).toHaveURL(/saksbehandling|behandling/, { timeout: 10000 });
+    console.log('✅ Successfully found and navigated to case by saksnummer search');
   });
 
   test('skal kunne navigere tilbake til forsiden fra søkeresultater', async ({ page }) => {
