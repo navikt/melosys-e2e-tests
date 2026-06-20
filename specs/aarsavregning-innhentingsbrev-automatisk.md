@@ -2,7 +2,7 @@
 jira: MELOSYS-8122
 epic: MELOSYS-6579 — Automatisk opprette årsavregningsbehandlinger på ikke skattepliktige
 status: verified     # scenario 1+3 grønne i CI mot api-feature-image (run 27353951522); scenario 2+4 fixme (fullmektig-fikstur mangler)
-test: tests/utenfor-avtaleland/workflows/aarsavregning-innhentingsbrev-automatisk.spec.ts
+test: tests/aarsavregning/aarsavregning-innhentingsbrev-automatisk.spec.ts
 toggles: {}          # default-state; per-trigger-koreografi av melosys.faktureringskomponenten.ikke-tidligere-perioder er testmekanikk (se binding)
 tags: [årsavregning, brev, innhenting, skattehendelse, fullmektig, ftrl]
 analysis_trace_id: 7107e6b3-8a4f-4b02-a5a5-87ad4ff15199
@@ -106,7 +106,7 @@ opprettelses-triggere (Kafka-skattehendelse + ikke-skattepliktig-jobb) og samme 
 forutsetning (vedtatt FTRL-sak med trygdeavgift, avgiftsperiode i forrige år). Forskjellen er
 **kun** «Så»-linjen: 8123 asserterer skatteår i oppgavebeskrivelsen, 8122 asserterer at
 innhentingsbrevet ble sendt (og til hvem). Felles-oppsettet under er identisk med
-`tests/utenfor-avtaleland/workflows/arsavregning-oppgave-aar-i-beskrivelse.spec.ts`.
+`tests/aarsavregning/aarsavregning-oppgave-skatteaar-i-beskrivelse-og-nokkelord.spec.ts`.
 
 ### Skatteår X i testene
 
@@ -179,7 +179,7 @@ finnes — å fake fullmektig-oppsettet ville gitt falsk dekning.
 ### Assertions (binder «Så»-linjene)
 
 Brevet verifiseres via `PROSESSINSTANS` i Oracle (`withDatabase`), samme mønster som vedtaksbrev-
-verifiseringen i `tests/eu-eos/eu-eos-12.1-iverksetting-mottaker-kjede.spec.ts`. Brev-steget
+verifiseringen i `tests/eu-eos/eu-eos-art12-iverksetting-mottaker-kjede.spec.ts`. Brev-steget
 `SEND_INNHENTINGSBREV_AARSAVREGNING` (inne i `OPPRETT_NY_BEHANDLING_AARSAVREGNING`) kaller dokgen-
 mal-produksjon som enqueuer en **egen barn-prosessinstans** `OPPRETT_OG_DISTRIBUER_BREV` (verifisert
 mot api-koden, ikke `SEND_BREV` — sistnevnte er doksys-forhåndsproduserte brev). Den opprettes med
@@ -202,7 +202,7 @@ mot api-koden, ikke `SEND_BREV` — sistnevnte er doksys-forhåndsproduserte bre
   nøyaktig ÉN slik prosessinstans (brevet går kun til én mottaker).
 
 > **Robusthet:** Helperen `verifiserInnhentingsbrevSendt` matcher brevmal-strengen og mottaker som
-> delstrenger i `DATA` (samme JS-`includes`-mønster som eu-eos-12.1 bruker på `INNVILGELSE_YRKESAKTIV`).
+> delstrenger i `DATA` (samme JS-`includes`-mønster som eu-eos-art12 bruker på `INNVILGELSE_YRKESAKTIV`).
 > Når feature-branchen lander kan eksakt prosesstype/`DATA`-felt for innhentingsbrevet måtte
 > finjusteres — assertionen er format-robust nok til at brevmal-treffet er det bærende.
 

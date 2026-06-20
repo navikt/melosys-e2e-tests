@@ -1,6 +1,6 @@
 import {test, expect} from '@playwright/test';
-import {withDatabase} from '../helpers/db-helper';
-import {clearMockData} from '../helpers/mock-helper';
+import {withDatabase} from '../../helpers/db-helper';
+import {clearMockData} from '../../helpers/mock-helper';
 
 /**
  * Database og mock data administrasjon tester

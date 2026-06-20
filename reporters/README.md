@@ -32,10 +32,10 @@ Files are sorted globally, not by folder:
 
 Example order:
 ```
-workflows/komplett-sak-2-8a.spec.ts (2/2 failed)    ← Has failures
-workflows/nyvurdering-endring-skattestatus.spec.ts (1/2 failed)  ← Has failures
+utenfor-avtaleland/komplett-sak-2-8a.spec.ts (2/2 failed)    ← Has failures
+utenfor-avtaleland/nyvurdering-endring-skattestatus.spec.ts (1/2 failed)  ← Has failures
 eu-eos/eu-eos-fullfort-vedtak.spec.ts              ← No failures
-tests/rengjor-database.spec.ts                     ← No failures
+tests/tools/rengjoer-database.spec.ts                     ← No failures
 ```
 
 #### 2. Test Sorting Within Files

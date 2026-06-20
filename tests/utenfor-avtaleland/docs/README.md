@@ -27,7 +27,7 @@ Full user journeys from case creation to vedtak.
 
 **Run workflows:**
 ```bash
-npm test tests/utenfor-avtaleland/workflows/
+npm test tests/utenfor-avtaleland/
 ```
 
 ## ⚖️ Lovvalg (Law Selection) Tests
@@ -129,7 +129,7 @@ npm test tests/utenfor-avtaleland/
 ### Run by category
 ```bash
 # Workflows
-npm test tests/utenfor-avtaleland/workflows/
+npm test tests/utenfor-avtaleland/
 
 # Lovvalg
 npm test tests/utenfor-avtaleland/lovvalg/

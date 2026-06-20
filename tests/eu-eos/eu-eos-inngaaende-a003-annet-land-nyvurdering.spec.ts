@@ -13,7 +13,7 @@ import { BRUKERNAVN_VALID, USER_ID_VALID } from '../../pages/shared/constants';
  * Gap (P5a): heatmap-cellen `BESLUTNING_LOVVALG_ANNET_LAND × NY_VURDERING` (~10,2k/12mo).
  * P1 (#278) dekker FØRSTEGANG-grenen (inngående A003 annet land → REGISTRERT_UNNTAK);
  * NY_VURDERING-grenen var udekket. Cellen var dessuten en FALSK ✅ funnet ved
- * verifiseringen 2026-06-14: den eksisterende `eu-eos-12.1-nyvurdering-medl-overforing`
+ * verifiseringen 2026-06-14: den eksisterende `eu-eos-art12-nyvurdering-medlemskap-overforing`
  * er UTSENDT_ARBEIDSTAKER (art. 12(1)), IKKE inngående annet land. Denne testen lukker
  * NV-grenen og retter den feiletiketten.
  *
