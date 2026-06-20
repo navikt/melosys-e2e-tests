@@ -13,6 +13,8 @@ import {USER_ID_VALID} from '../../pages/shared/constants';
 import {UnleashHelper} from "../../helpers/unleash-helper";
 import {AdminApiHelper, waitForProcessInstances} from '../../helpers/api-helper';
 import {expect} from "@playwright/test";
+import {withDatabase} from '../../helpers/db-helper';
+import {verifiserAarsavregningBehandling} from '../../pages/behandling/aarsavregning.assertions';
 
 
 test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
@@ -21,10 +23,6 @@ test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);
         await unleash.disableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
-
-        // Log what the frontend API returns (for debugging)
-        console.log('📊 Logging frontend toggle states after disabling toggle:');
-        await unleash.logFrontendToggleStates();
 
         await auth.login();
 
@@ -109,6 +107,34 @@ test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
         );
 
         expect(response.antallProsessert).toBe(1);
+
+        // Lukk etterslepende auto-prosesser (opprett-behandling + brev) før DB-asserten,
+        // så «alle prosesser FERDIG» ikke blir CI-flaky.
+        await waitForProcessInstances(page.request, 60);
+
+        // Jobben OPPRETTER (men iverksetter ikke) en ÅRSAVREGNING-behandling.
+        // Cleanup-fixturen renser DB per test, så det finnes nøyaktig én slik
+        // behandling — verifiser at den faktisk nådde forventet DB-tilstand
+        // (OPPRETTET + behandlingsresultat + AARSAVREGNING-rad + alle prosesser
+        // FERDIG), ikke bare at job-count ble 1.
+        const aarsavregningBehandlingId = await withDatabase(async (db) => {
+            const rad = await db.queryOne<{ ID: number }>(
+                "SELECT ID FROM BEHANDLING WHERE BEH_TYPE = 'ÅRSAVREGNING' ORDER BY ID DESC FETCH FIRST 1 ROWS ONLY",
+                {}
+            );
+            expect(rad, 'Forventet en auto-opprettet ÅRSAVREGNING-behandling i DB').not.toBeNull();
+            return String(rad!.ID);
+        });
+
+        // Jobben oppretter (ikke iverksetter) årsavregningen, så sluttilstanden er
+        // OPPRETTET / IKKE_FASTSATT (verifisert live) med auto-opprett- og
+        // brev-prosessene FERDIG og en AARSAVREGNING-rad for 2024.
+        await verifiserAarsavregningBehandling(aarsavregningBehandlingId, {
+            forventetStatus: 'OPPRETTET',
+            forventetResultatType: 'IKKE_FASTSATT',
+            forventetAar: 2024,
+            forventedeProsesser: ['OPPRETT_NY_BEHANDLING_AARSAVREGNING'],
+        });
 
         console.log('✅ Workflow completed successfully!');
     });

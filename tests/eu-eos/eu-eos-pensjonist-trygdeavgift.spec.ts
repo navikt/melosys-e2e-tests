@@ -20,6 +20,12 @@ import { hentMinstebeløp } from '../../helpers/trygdeavgift-beregning-helper';
 
 // Låst til 2026 for å unngå G-avhengig flakiness ved kalenderårsskifte.
 const TESTÅR = 2026;
+
+// Kalibrert mot ekte beregningsrespons: ordinær avgiftssats er ~5.1 %. 25%-regelen
+// oppgir ingen sats (avgiftssats=null) og gir et tak vesentlig under ordinær sats ×
+// inntekt — derfor trenger 25%-asserten en kjent ordinær sats som sammenligningsanker.
+// (verifiserBeregnetAvgift utleder selv prosent-vs-brøk fra responsverdien.)
+const ORDINÆR_SATS_PROSENT = 5.1;
 const helÅrFra = `01.01.${TESTÅR}`;
 const helÅrTil = `31.12.${TESTÅR}`;
 
@@ -116,6 +122,14 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
     await trygdeavgift.assertions.verifiserTrygdeavgiftsTabellSynlig();
     await trygdeavgift.assertions.verifiser25ProsentRegelMarkering();
     await trygdeavgift.assertions.verifiserInfomeldingMinstebeløpIkkeSynlig();
+
+    // Verifiser TALLET bak 25%-regel-markeringen: regelen er aktiv i responsen,
+    // avgiften er positiv, og taket begrenser den vesentlig under ordinær sats.
+    trygdeavgift.assertions.verifiser25ProsentRegelAvgift(
+      trygdeavgift.hentTrygdeavgiftsperioder(),
+      Number(månedsinntektFor25ProsentRegel),
+      ORDINÆR_SATS_PROSENT,
+    );
   });
 
   // Sammenslåtte inntektskilder → *** i inntektskilde-kolonnen og fotnote
@@ -168,9 +182,18 @@ test.describe('EU/EØS Pensjonist - Trygdeavgift beregningsresultat', () => {
     await trygdeavgift.ventPåSideLastet();
     await trygdeavgift.velgIkkeSkattepliktig();
     await trygdeavgift.velgInntektskilde(INNTEKTSKILDE.PENSJON);
-    await trygdeavgift.fyllInnBruttoinntektMedApiVent('200000');
+    const ordinærBruttoPerMd = 200000;
+    await trygdeavgift.fyllInnBruttoinntektMedApiVent(String(ordinærBruttoPerMd));
 
     await trygdeavgift.assertions.verifiserTrygdeavgiftsTabellSynlig();
     await trygdeavgift.assertions.verifiserInfomeldingMinstebeløpIkkeSynlig();
+
+    // Sannheten testen handler om er TALLET, ikke markeringen: verifiser at det
+    // faktisk ble beregnet en positiv ordinær avgift, konsistent med sats × inntekt.
+    trygdeavgift.assertions.verifiserBeregnetAvgift(
+      trygdeavgift.hentTrygdeavgiftsperioder(),
+      'ORDINÆR',
+      ordinærBruttoPerMd,
+    );
   });
 });

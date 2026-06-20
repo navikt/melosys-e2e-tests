@@ -3,6 +3,24 @@ import { BasePage } from '../shared/base.page';
 import { EuEosPensjonistTrygdeavgiftAssertions } from './eu-eos-pensjonist-trygdeavgift.assertions';
 
 /**
+ * En trygdeavgiftsperiode fra `BeregnetTrygdeavgift`-responsen
+ * (PUT …/trygdeavgift/eos-pensjonist/beregning). Speiler
+ * melosys-web src/services/modules/trygdeavgift.ts.
+ */
+export interface Trygdeavgiftsperiode {
+  avgiftssats: number | null;
+  avgiftPerMd: number;
+  beregningsregel?: 'ORDINÆR' | 'TJUEFEM_PROSENT_REGEL' | 'MINSTEBELØP';
+  harSammenslåtteInntektskilder?: boolean;
+  [key: string]: unknown;
+}
+
+export interface BeregnetTrygdeavgift {
+  trygdeavgiftsperioder: Trygdeavgiftsperiode[];
+  [key: string]: unknown;
+}
+
+/**
  * Page Object for Trygdeavgift-steget for EU/EØS Pensjonist
  * (helseutgiftDekkesPeriode/vurderingTrygdeavgift)
  *
@@ -20,6 +38,12 @@ import { EuEosPensjonistTrygdeavgiftAssertions } from './eu-eos-pensjonist-trygd
  */
 export class EuEosPensjonistTrygdeavgiftPage extends BasePage {
   readonly assertions: EuEosPensjonistTrygdeavgiftAssertions;
+
+  /**
+   * Siste fangede beregningsrespons (PUT …/eos-pensjonist/beregning → 200).
+   * Settes av {@link ventPåBeregning}; les den via {@link hentSisteBeregning}.
+   */
+  private sisteBeregning: BeregnetTrygdeavgift | null = null;
 
   private readonly skattepliktigGroup = this.page.getByRole('group', { name: 'Skattepliktig' });
 
@@ -107,7 +131,11 @@ export class EuEosPensjonistTrygdeavgiftPage extends BasePage {
     });
   }
 
-  async ventPåBeregning(action: () => Promise<void>): Promise<void> {
+  /**
+   * Kjører `action`, venter på beregnings-PUT-en (200) den trigger, fanger
+   * responsbody-en (`BeregnetTrygdeavgift`) i {@link sisteBeregning} og returnerer den.
+   */
+  async ventPåBeregning(action: () => Promise<void>): Promise<BeregnetTrygdeavgift> {
     const beregningResponsePromise = this.page.waitForResponse(
       (resp) =>
         resp.url().includes('eos-pensjonist/beregning') &&
@@ -116,7 +144,30 @@ export class EuEosPensjonistTrygdeavgiftPage extends BasePage {
       { timeout: 15000 },
     );
     await action();
-    await beregningResponsePromise;
+    const resp = await beregningResponsePromise;
+    const body = (await resp.json()) as BeregnetTrygdeavgift;
+    this.sisteBeregning = body;
+    return body;
+  }
+
+  /**
+   * Returnerer den sist fangede beregningsresponsen. Kaster hvis ingen beregning
+   * er fanget enda (kall {@link fyllInnBruttoinntektMedApiVent} e.l. først).
+   */
+  hentSisteBeregning(): BeregnetTrygdeavgift {
+    if (!this.sisteBeregning) {
+      throw new Error(
+        'Ingen beregningsrespons er fanget enda — kall fyllInnBruttoinntektMedApiVent/ventPåBeregning først.',
+      );
+    }
+    return this.sisteBeregning;
+  }
+
+  /**
+   * Bekvemmelighet: trygdeavgiftsperiodene fra siste beregning.
+   */
+  hentTrygdeavgiftsperioder(): Trygdeavgiftsperiode[] {
+    return this.hentSisteBeregning().trygdeavgiftsperioder ?? [];
   }
 
   async klikkLeggTilInntekt(): Promise<void> {
