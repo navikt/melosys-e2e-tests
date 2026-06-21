@@ -76,6 +76,11 @@ export default defineConfig({
         // Slow down actions slightly for more stable tests
         launchOptions: {
           slowMo: 100,
+          // Skjema-innlogging: wonderwall redirecter nettleseren til host.docker.internal:8082
+          // (mock-oauth2). Chromium leser ikke pålitelig /etc/hosts, så vi tvinger mappingen på
+          // browser-nivå. Uskadelig for øvrige tester (ingen annen nettlesertrafikk går dit), og
+          // fungerer både lokalt og på CI (mock-oauth2 er publisert på localhost:8082 begge steder).
+          args: ['--host-resolver-rules=MAP host.docker.internal 127.0.0.1'],
         }
       },
     },
