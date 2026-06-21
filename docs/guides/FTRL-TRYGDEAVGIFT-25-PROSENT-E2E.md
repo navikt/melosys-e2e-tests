@@ -77,7 +77,7 @@ async verifiserIngenForklaringstekster(): Promise<void> {
 ### Filplassering
 
 ```
-tests/ftrl/ftrl-trygdeavgift-25-prosent-regel.spec.ts
+tests/utenfor-avtaleland/ftrl-trygdeavgift-25-prosent-regel.spec.ts
 ```
 
 ### Skjelett
@@ -276,7 +276,7 @@ grep -r "trygdeavgift/beregning" mock/
 ## Sjekkliste
 
 - [ ] Utvid `TrygdeavgiftAssertions` med `verifiserBeregningstype()`, `verifiserForklaringstekst()`, `verifiserIngenForklaringstekster()`
-- [ ] Opprett testfil `tests/ftrl/ftrl-trygdeavgift-25-prosent-regel.spec.ts`
+- [ ] Opprett testfil `tests/utenfor-avtaleland/ftrl-trygdeavgift-25-prosent-regel.spec.ts`
 - [ ] Verifiser at mock returnerer korrekt `beregningstype` for de 3 scenarioene
-- [ ] Kjør testene lokalt med `pnpm test:e2e tests/ftrl/ftrl-trygdeavgift-25-prosent-regel.spec.ts`
+- [ ] Kjør testene lokalt med `pnpm test:e2e tests/utenfor-avtaleland/ftrl-trygdeavgift-25-prosent-regel.spec.ts`
 - [ ] Verifiser at testene passerer i CI

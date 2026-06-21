@@ -1,11 +1,18 @@
-# FTRL-tester (Folketrygdloven)
+# Utenfor avtaleland-tester (Folketrygdloven)
 
-Tester for saker opprettet under Folketrygdloven (FTRL), altså "utenfor avtaleland"-saker
-der Norge ensidig vurderer medlemskap.
+Tester for saker der Norge ensidig vurderer medlemskap etter **folketrygdloven** —
+sakstema **«Utenfor avtaleland (ftrl)»** i Melosys (Confluence 371924130). Dette er
+søsken-domenet til `eu-eos` og `trygdeavtale`; her finnes ingen EØS-forordning eller
+bilateral trygdeavtale som styrer lovvalget.
+
+> **Navn vs. teknisk kode:** Mappa heter `utenfor-avtaleland` (det faglige sakstema-navnet),
+> men den tekniske **sakstype**-enumen i UI/kode er fortsatt `FTRL`. Derfor beholder de
+> folketrygdlov-spesifikke testene `ftrl-`-prefikset i filnavnet — det signaliserer lovhjemmel,
+> ikke domenemappe.
 
 ## Sakstype og oppsett
 
-Alle FTRL-tester bruker:
+Alle disse testene bruker:
 - **Sakstype:** `FTRL`
 - **Sakstema:** `MEDLEMSKAP_LOVVALG`
 - **Behandlingstema:** `YRKESAKTIV`
@@ -15,7 +22,7 @@ Opprett sak via `OpprettNySakPage.opprettStandardSak(USER_ID_VALID)`.
 
 ## Stegflyt
 
-FTRL-behandlingen går gjennom disse stegene i rekkefølge:
+Behandlingen går gjennom disse stegene i rekkefølge:
 
 ```
 Inngang (Medlemskap) → Virksomhet (Arbeidsforhold) → Bestemmelse (Lovvalg)
@@ -37,7 +44,7 @@ Trygdedekning og bestemmelse MÅ være kompatible:
 
 - Perioder MÅ inkludere **inneværende år** — ellers viser Trygdeavgift-steget
   kun "skal fastsettes på årsavregning"-melding uten inputfelt.
-- Bruk `TestPeriods.currentYearPeriod` fra `helpers/date-helper.ts`.
+- Bruk `TestPeriods.currentYearPeriod` / `TestPeriods.standardPeriod` fra `helpers/date-helper.ts`.
 
 ### Lovvalg § 2-8 første ledd a
 
@@ -93,9 +100,18 @@ Minstebeløp for 2026: **99 650 kr** (se `V6.0__minstebeloep.sql` i melosys-tryg
 
 | Fil | Dekker |
 |---|---|
+| `komplett-sak-2-8a.spec.ts` | § 2-8 første ledd a (arbeidstaker) + full trygdedekning/arbeidsinntekt |
+| `komplett-sak-2-8b-student.spec.ts` | § 2-8 første ledd b (student) |
+| `komplett-sak-flere-land-arbeidsinntekt.spec.ts` | Flere land, arbeidsinntekt |
+| `komplett-sak-flere-land-arbeidsinntekt-nyvurdering-annullering.spec.ts` | Flere land → nyvurdering → annullering |
+| `komplett-sak-flere-land-flereinntektskilder.spec.ts` | Flere inntektskilder |
+| `nyvurdering-endring-skattestatus.spec.ts` | Nyvurdering ved endret skattestatus |
+| `ftrl-yrkesaktiv-2-2-forstegang.spec.ts` | § 2-2 yrkesaktiv, ren førstegangsbehandling (OPPRETT_FAKTURASERIE) |
+| `ftrl-manglende-innbetaling-opphor.spec.ts` | Manglende innbetaling → opphør av frivillig medlemskap |
 | `ftrl-trygdeavgift-25-prosent-regel.spec.ts` | 25%-regelen: sats-symboler og forklaringstekster |
-| `ftrl-yrkesaktiv-full-dekning-medlemskap.spec.ts` | Medlemskap-steg med FULL_DEKNING_FTRL |
 | `klage/ftrl-klage.spec.ts` | Klagebehandling på FTRL-sak |
+
+Discovery-/valideringsnotater for lovvalg og trygdeavgift ligger under `docs/`.
 
 ## Specs
 

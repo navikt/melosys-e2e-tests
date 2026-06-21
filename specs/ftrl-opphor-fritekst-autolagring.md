@@ -60,7 +60,7 @@ Gitt at en saksbehandler behandler opphør av frivillig medlemskap pga. manglend
 
 ### Testfil
 
-`tests/ftrl/ftrl-manglende-innbetaling-opphor.spec.ts` — spec-en er bundet til den
+`tests/utenfor-avtaleland/ftrl-manglende-innbetaling-opphor.spec.ts` — spec-en er bundet til den
 eksisterende fulle § 2-15-flyttesten (faktura → manglende innbetaling → opphørsvedtak),
 ikke en ny testfil. Opphørsvedtak-steget kan bare nås gjennom hele kjeden (auto-opprettet
 `MANGLENDE_INNBETALING_TRYGDEAVGIFT`-behandling), så en egen test ville dublert ~4 min

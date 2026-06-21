@@ -4,7 +4,7 @@ import { KlageAssertions } from './klage.assertions';
 
 /**
  * ⚠️ SPEKULATIV STILLAS-POM — IKKE bruk som fasit. Klage er ikke i drift (se
- * tests/ftrl/klage/ftrl-klage.spec.ts-headeren). Selektorene under er GJETTET og
+ * tests/utenfor-avtaleland/klage/ftrl-klage.spec.ts-headeren). Selektorene under er GJETTET og
  * matcher IKKE faktisk melosys-web-markup: det finnes ingen `select[name*="klage"]`,
  * ingen Medhold/Avvis-radios, intet begrunnelse-felt og ingen «Fatt vedtak»-klageskjerm.
  * Den ekte flyten er behandlingsmeny (AvsluttSak) → bekreftValg-modal, og de reelle
