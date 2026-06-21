@@ -679,6 +679,12 @@ services:
       LOCAL_TOKEN_AUDIENCE: melosys-skjema-api
       API_URL: http://melosys-skjema-api.melosys.docker-internal:8090/api
       DEKORATOREN_API_URL: https://www.ekstern.dev.nav.no/person/nav-dekoratoren-api
+    # SSR-dekoratøren hentes server-side fra den interne URL-en nav-dekoratoren.personbruker,
+    # som ikke nås på CI og HENGER på connect (~60s med retries → treg første render, som ga
+    # cold-start-flak på første test). Pek den på 127.0.0.1 så fetchen feiler RASKT (som lokalt,
+    # der navnet er NXDOMAIN) → rask CSR-fallback. Påvirker ikke klient-dekoratøren (ekstern URL).
+    extra_hosts:
+      - "nav-dekoratoren.personbruker:127.0.0.1"
     networks:
       melosys.docker-internal:
         aliases:
