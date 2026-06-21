@@ -233,7 +233,7 @@ Gitt at saksbehandler behandler en årsavregning for et inntektsår som er eldre
 
 **Forutsetning: eksisterende årsavregning-behandling**
 - Hvert testscenario forutsetter at en årsavregning-behandling finnes for `USER_ID_VALID`.
-  Gjenbruk mønsteret fra `tests/ftrl/ftrl-pensjonist-aarsavregning.spec.ts` (pensjonist-flyt
+  Gjenbruk mønsteret fra `tests/aarsavregning/ftrl-pensjonist-aarsavregning.spec.ts` (pensjonist-flyt
   → vedtak → auto-opprettet årsavregning) ELLER seed direkte via en mock-/admin-rute hvis
   bygg leverer det. Etter `ventPåBehandlingslenke(...)` må testen **klikke** lenken og vente
   på `networkidle` for å åpne årsavregningsbehandlingen — referansetesten verifiserer kun

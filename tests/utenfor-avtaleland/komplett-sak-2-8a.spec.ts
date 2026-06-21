@@ -104,7 +104,7 @@ test.describe('Komplett saksflyt - Utenfor avtaleland (§2-8a)', () => {
         console.log('✅ Workflow completed');
     });
 
-    test('FULL_DEKNING_FTRL', async ({page, request}) => {
+    test('skal fullføre komplett saksflyt med full trygdedekning etter folketrygdloven og arbeidsinntekt', async ({page, request}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);
         await auth.login();
