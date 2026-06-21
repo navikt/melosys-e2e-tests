@@ -22,7 +22,7 @@ test.describe('skjema-web innsending', () => {
     await auth.login('12928056706');
 
     const soknad = new SoknadUtsendtArbeidstakerPage(page);
-    const referanse = await soknad.fyllUtOgSendInnKomplettSoknad('999999999', 'Frankrike');
+    const { referanse } = await soknad.fyllUtOgSendInnKomplettSoknad('999999999', 'Frankrike');
 
     // Kvitteringen viser et referansenummer (alfanumerisk kode) — beviser at innsendingen
     // ble persistert i skjema-api.

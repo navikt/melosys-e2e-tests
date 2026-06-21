@@ -95,16 +95,23 @@ export class SoknadUtsendtArbeidstakerPage {
     return kvitteringstekst.match(/referanse\s+([A-Z0-9]+)/)?.[1] ?? '';
   }
 
-  /** Fyll ut hele DEG SELV-flyten og send inn. Returnerer referansenummeret. */
-  async fyllUtOgSendInnKomplettSoknad(arbeidsgiverOrgnr = '999999999', land = 'Frankrike'): Promise<string> {
-    await this.startSoknadSomDegSelv(arbeidsgiverOrgnr);
+  /**
+   * Fyll ut hele DEG SELV-flyten og send inn.
+   * @returns søknads-id (UUID, korrelerer mot SKJEMA_SAK_MAPPING i melosys-api) og referansenummeret.
+   */
+  async fyllUtOgSendInnKomplettSoknad(
+    arbeidsgiverOrgnr = '999999999',
+    land = 'Frankrike'
+  ): Promise<{ skjemaId: string; referanse: string }> {
+    const skjemaId = await this.startSoknadSomDegSelv(arbeidsgiverOrgnr);
     await this.fyllUtsendingsperiodeOgLand(land);
     await this.fyllArbeidssituasjon();
     await this.fyllSkatteforholdOgInntekt();
     await this.fyllFamiliemedlemmer();
     await this.fyllTilleggsopplysninger();
     await this.fyllVedlegg();
-    return this.sendInnOgHentReferanse();
+    const referanse = await this.sendInnOgHentReferanse();
+    return { skjemaId, referanse };
   }
 
   private async svarRadio(gruppe: RegExp, svar: 'Ja' | 'Nei'): Promise<void> {
