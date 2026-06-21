@@ -113,14 +113,6 @@ jobs:
         run: |
           docker network create melosys.docker-internal || true
 
-      - name: Map host.docker.internal for browser OIDC redirect (skjema)
-        run: |
-          # Skjema-testene logger inn via wonderwall, som redirecter NETTLESEREN til
-          # http://host.docker.internal:8082 (ID-porten/mock-oauth2). På runneren må det
-          # navnet peke på den publiserte mock-oauth2-porten. (Tjenester i docker-nettet
-          # resolver host.docker.internal via nettverks-aliaset på mock-oauth2-server.)
-          echo "127.0.0.1 host.docker.internal" | sudo tee -a /etc/hosts
-
       - name: Determine image tags from trigger source
         id: image-tags
         run: |
