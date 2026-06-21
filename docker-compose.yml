@@ -115,6 +115,26 @@ services:
                 }
               }
             ]
+          },
+          {
+            "issuerId": "tokenx",
+            "tokenExpiry": 3600,
+            "requestMappings": [
+              {
+                "requestParam": "audience",
+                "match": "melosys-skjema-api",
+                "claims": {
+                  "pid": "$${pid}",
+                  "aud": "melosys-skjema-api",
+                  "sub": "$${pid}",
+                  "azp": "$${clientId}",
+                  "iss": "http://host.docker.internal:8082/tokenx",
+                  "tid": "tokenx",
+                  "acr": "Level4",
+                  "idp": "https://idporten.no"
+                }
+              }
+            ]
           }
         ]
       }'
@@ -307,6 +327,8 @@ services:
       MELOSYSDOKGEN_V1_URL: http://melosys-dokgen.melosys.docker-internal:8080/api/v1
       MELOSYSTRYGDEAVGIFT_URL: http://melosys-trygdeavgift-beregning.melosys.docker-internal:8095/api
       INNGANGSVILKAAR_URL: http://melosys-inngangsvilkar.melosys.docker-internal:8080/api
+      # M2M-callback til skjema-api for mottak av digital «Utsendt arbeidstaker»-søknad (skjema-tester)
+      MELOSYS_SKJEMA_API_URL: http://melosys-skjema-api.melosys.docker-internal:8090
       MICROSOFT_GRAPH_REST_URL: http://melosys-mock.melosys.docker-internal:8083/graph/v1.0
       TILGANGSMASKINEN_URL: http://melosys-mock.melosys.docker-internal:8083/tilgangsmaskinen
       UTBETALING_REST_URL: http://melosys-mock.melosys.docker-internal:8083/utbetaldata/api/v2/hent-utbetalingsinformasjon/intern
@@ -589,6 +611,105 @@ services:
       melosys.docker-internal:
         aliases:
           - melosys-eessi.melosys.docker-internal
+
+  # ============================================================================
+  # Digital «Utsendt arbeidstaker»-søknad (skjema-stack) — speiler skjema-profilen
+  # i melosys-docker-compose. Innbygger-login er ID-porten-stil, så web-en står bak
+  # en wonderwall-sidecar (auto-login mot mock-oauth2). BFF-en veksler den innloggede
+  # brukeren til et TokenX-token for skjema-api (USE_LOCAL_TOKEN).
+  #
+  # NB: nettleseren redirectes til host.docker.internal:8082 under login — workflowen
+  # mapper derfor host.docker.internal -> 127.0.0.1 i runnerens /etc/hosts.
+  #
+  # Frontend (via wonderwall): http://localhost:3001/medlemskap-lovvalg/soknad/
+  # API:                       http://localhost:8091
+  # ============================================================================
+  melosys-skjema-api:
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-skjema-api:${MELOSYS_SKJEMA_API_TAG:-latest}
+    container_name: melosys-skjema-api
+    depends_on:
+      postgres:
+        condition: service_healthy
+      kafka:
+        condition: service_started
+      mock-oauth2-server:
+        condition: service_started
+      melosys-mock:
+        condition: service_started
+    environment:
+      SPRING_PROFILES_ACTIVE: local
+      SERVER_PORT: "8090"
+      # Schemaet "melosys-skjema" lages av Flyway (FLYWAY_ENABLED=true), som for de andre PG-appene.
+      DB_JDBC_URL: "jdbc:postgresql://postgres:5432/postgres?currentSchema=melosys-skjema&user=postgres&password=mysecretpassword"
+      FLYWAY_ENABLED: "true"
+      KAFKA_BROKERS: "kafka.melosys.docker-internal:9092"
+      # Eksterne integrasjoner -> mockes i melosys-mock
+      PDL_URL: "http://melosys-mock.melosys.docker-internal:8083/graphql"
+      EREG_URL: "http://melosys-mock.melosys.docker-internal:8083/ereg"
+      REPR_URL: "http://melosys-mock.melosys.docker-internal:8083/repr"
+      ARBEIDSGIVER_ALTINN_TILGANGER_URL: "http://melosys-mock.melosys.docker-internal:8083"
+      ARBEIDSGIVER_NOTIFIKASJON_URL: "http://melosys-mock.melosys.docker-internal:8083/arbeidsgiver-notifikasjon"
+      VEDLEGG_MOCK_STORAGE_URL: "http://melosys-mock.melosys.docker-internal:8083/vedlegg-storage"
+      CLAMAV_URL: "http://melosys-mock.melosys.docker-internal:8083/clamav"
+      VARSLING_ARBEIDSTAKER_SKJEMA_LENKE: "http://localhost:3001/medlemskap-lovvalg/soknad/"
+    ports:
+      - "8091:8090"
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - melosys-skjema-api.melosys.docker-internal
+
+  melosys-skjema-web:
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-skjema-web:${MELOSYS_SKJEMA_WEB_TAG:-latest}
+    container_name: melosys-skjema-web
+    depends_on:
+      melosys-skjema-api:
+        condition: service_started
+      mock-oauth2-server:
+        condition: service_started
+    environment:
+      NAIS_CLUSTER_NAME: dev-gcp
+      EXPRESS_PORT: "8080"
+      EXPRESS_HOST: "::"
+      # Må matche BASE_PATH imaget ble bygget med (Vite baker pathen inn i SPA-assets).
+      BASE_PATH: /medlemskap-lovvalg/soknad/
+      # BFF -> skjema-api: veksle innlogget bruker til TokenX-token via mock-oauth2.
+      USE_LOCAL_TOKEN: "true"
+      LOCAL_TOKEN_ENDPOINT: http://host.docker.internal:8082/tokenx/token
+      LOCAL_TOKEN_AUDIENCE: melosys-skjema-api
+      API_URL: http://melosys-skjema-api.melosys.docker-internal:8090/api
+      DEKORATOREN_API_URL: https://www.ekstern.dev.nav.no/person/nav-dekoratoren-api
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - melosys-skjema-web.melosys.docker-internal
+
+  # ID-porten-stil login-proxy foran melosys-skjema-web (wonderwall auto-login).
+  melosys-skjema-web-auth:
+    image: ghcr.io/nais/wonderwall:latest
+    container_name: melosys-skjema-web-auth
+    depends_on:
+      - melosys-skjema-web
+      - mock-oauth2-server
+    ports:
+      - "3001:4000"
+    environment:
+      WONDERWALL_ENCRYPTION_KEY: "YWJjZGVmZ2hpajEyMzQ1Njc4OTBhYmNkZWZnaGlqMTI="
+    command: >
+      --auto-login=true
+      --openid.well-known-url=http://host.docker.internal:8082/isso/.well-known/openid-configuration
+      --openid.client-secret=not-so-secret
+      --openid.client-id=client-id
+      --ingress=http://localhost:3001
+      --bind-address=0.0.0.0:4000
+      --upstream-host=melosys-skjema-web.melosys.docker-internal:8080
+      --cookie.secure=false
+      --log-level=info
+      --log-format=text
+    networks:
+      melosys.docker-internal:
+        aliases:
+          - melosys-skjema-web-auth.melosys.docker-internal
 
 networks:
   melosys.docker-internal:
