@@ -8,6 +8,7 @@ import * as path from 'path';
 import { chromium } from '@playwright/test';
 import { MetricsHelper } from './helpers/metrics-helper';
 import { SkjemaAuthHelper } from './helpers/skjema-auth-helper';
+import { SoknadUtsendtArbeidstakerPage } from './pages/skjema/soknad-utsendt-arbeidstaker.page';
 
 const EESSI_BASE_URL = process.env.EESSI_BASE_URL || 'http://localhost:8081';
 
@@ -91,10 +92,13 @@ async function warmUpSkjema(): Promise<void> {
     const page = await browser.newPage();
     const auth = new SkjemaAuthHelper(page);
     await auth.login(); // browser → wonderwall → mock-oauth2 → skjema-web → /representasjon
-    // Videre til oversikt for å også varme skjema-api (tokenx-veksling + utkast-spørring).
-    await page.getByRole('button', { name: 'DEG SELV' }).click();
-    await page.waitForURL(/\/oversikt/, { timeout: 30000 });
-    console.log('✅ Skjema-stacken er varmet opp');
+    // Kjør én KOMPLETT innsending, slik at alle skjema-api-endepunktene (opprett utkast, lagre
+    // hvert steg, send inn) og step-renderne er JVM-varme før første ekte test. En login-only
+    // oppvarming holdt ikke: første test stallet på "Start søknad" (kald create-draft-POST).
+    // Bonus: varmer også melosys-api sin Kafka-consumer for mottaket.
+    const soknad = new SoknadUtsendtArbeidstakerPage(page);
+    const { referanse } = await soknad.fyllUtOgSendInnKomplettSoknad();
+    console.log(`✅ Skjema-stacken er varmet opp (komplett innsending, ref ${referanse})`);
   } catch (e) {
     console.warn('⚠️  Skjema-oppvarming feilet (ikke-fatalt):', (e as Error).message);
   } finally {
