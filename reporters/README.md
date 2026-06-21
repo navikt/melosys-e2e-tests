@@ -248,124 +248,81 @@ const failureInfo = failedCount > 0 ? ` (${failedCount}/${totalCount} failed)` :
 3. Check `playwright-report/test-summary.md`
 4. Verify format in GitHub Actions
 
-## Example Output
+## Report Layout (current: "domain groups")
+
+> **Source of truth:** all summary markdown is produced by `lib/summary-generator.ts`
+> (shared by this reporter and `scripts/generate-summary-from-json.ts`). The
+> line numbers in older sections of this README are historical — edit the named
+> functions in that module instead.
+>
+> Prototype alternative layouts in `docs/report-ideas/index.html` (renders a real
+> run in several candidate layouts using only the HTML GitHub job summaries allow).
+
+The `## 📊 Test Results` section renders **one collapsible `<details>` per
+top-level domain folder** (e.g. `eu-eos`, `aarsavregning`), not one flat table:
+
+- **Failures on top, twice over** — a compact `## ❗ Needs Attention` panel lists
+  every failed/flaky test above the table; failing domains then sort first and
+  render **expanded** (`<details open>`), while all-green domains stay collapsed.
+- **Duration rollup** — each domain (and each file sub-header) shows its summed
+  duration in its summary line.
+- **No folder/file duplication** — file labels strip the redundant `<domain>-`
+  prefix and `.spec.ts` (so `eu-eos/eu-eos-art13-….spec.ts` → `📄 art13-…`).
+
+### Example Output
 
 ```html
+## ❗ Needs Attention (1)
 <table>
-<thead>
-<tr>
-<th>Test</th>
-<th>Status</th>
-<th>Attempts</th>
-<th>Playwright</th>
-<th>Docker Logs</th>
-<th>Duration</th>
-</tr>
-</thead>
+<thead><tr><th>Test</th><th>Where</th><th>Why</th><th>Duration</th></tr></thead>
 <tbody>
-<!-- File with failures appears FIRST -->
-<tr>
-<td colspan="6"><strong>📁 workflows / <code>komplett-sak-2-8a.spec.ts</code> (2/2 failed)</strong></td>
-</tr>
-<!-- Failed test 1 -->
-<tr>
-<td>skal fullføre komplett saksflyt...</td>
-<td>❌</td>
-<td>3 (3 failed)</td>
-<td>✅</td>
-<td>❌ melosys-api (1)</td>
-<td>24s</td>
-</tr>
-<!-- Failed test 2 -->
-<tr>
-<td>FULL_DEKNING_FTRL</td>
-<td>❌</td>
-<td>3 (3 failed)</td>
-<td>✅</td>
-<td>❌ melosys-api (1)</td>
-<td>27s</td>
-</tr>
-
-<!-- File with no failures appears AFTER -->
-<tr>
-<td colspan="6"><strong>📁 eu-eos / <code>eu-eos-fullfort-vedtak.spec.ts</code></strong></td>
-</tr>
-<tr>
-<td>skal fullføre EU/EØS-arbeidsflyt med vedtak</td>
-<td>✅</td>
-<td>1</td>
-<td>✅</td>
-<td>✅</td>
-<td>21s</td>
-</tr>
+<tr><td>❌ skal fullføre "Arbeid i flere land"…</td><td><code>eu-eos/art13-arbeid-flere-land-fullfort-vedtak</code></td><td><code>expect(received).toBe(expected)</code></td><td>26s</td></tr>
 </tbody>
 </table>
+
+## 📊 Test Results
+
+<details open>
+<summary>❌ <strong>eu-eos</strong> — 28 ✅ · 1 ❌ · ⏱️ 11m 02s</summary>
+<table>
+<thead><tr><th>Test</th><th>Status</th><th>Attempts</th><th>Duration</th></tr></thead>
+<tbody>
+<tr><td colspan="4"><sub>📄 art13-arbeid-flere-land-fullfort-vedtak · 26s</sub></td></tr>
+<tr><td>skal fullføre "Arbeid i flere land"…</td><td>❌</td><td>3 (3 failed)</td><td>26s</td></tr>
+</tbody>
+</table>
+</details>
+
+<details>
+<summary>✅ <strong>ftrl</strong> — 8 ✅ · ⏱️ 5m 40s</summary>
+…collapsed…
+</details>
 ```
 
-## Benefits of Current Format
+### Key functions in `lib/summary-generator.ts`
 
-✅ **Immediate failure visibility** - Failed files at the very top
-✅ **Failure counts** - Quick assessment of severity
-✅ **Error source identification** - Know if it's Playwright, business logic, or Docker
-✅ **Service-level diagnostics** - See which Docker services failed
-✅ **Clean scanning** - Emoji-only format reduces noise
-✅ **Double prioritization** - Failed files first, then failed tests first
+| Function | Responsibility |
+|----------|----------------|
+| `generateNeedsAttentionPanel` | The top failures/flaky panel |
+| `generateTestResultsTable` / `generateDomainGroup` | Collapsible per-domain sections |
+| `groupTestsByDomain` / `groupTestsByFile` | Grouping + failing-first sort |
+| `parseTestPath` | Domain extraction + file-label de-duplication |
+| `formatDuration` | `8s` / `4m 12s` formatting (used by all rollups) |
 
-## Common Modifications
+Docker errors are shown as an inline `🐳 service (n)` badge under the test
+title, plus the full `## 🐳 Docker Log Errors by Service` section lower down.
 
-### Add a new column
+## Testing Changes
 
-```typescript
-// 1. Update header (around line 187)
-md += '<th>New Column</th>\n';
+Iterate against the unit suite (millisecond feedback, no E2E run):
 
-// 2. Update colspan (line 230)
-md += `<td colspan="7">...`;  // Changed from 6 to 7
-
-// 3. Add cell value (around line 270)
-const newValue = 'some value';
-md += `<td>${newValue}</td>\n`;
+```bash
+npm run test:unit   # lib/summary-generator.test.ts — 55+ scenarios
 ```
-
-### Change failure criteria
-
-```typescript
-// Modify this section (lines 206-212)
-const sortedAllFiles = allFiles.sort((a, b) => {
-  // Example: Sort by failure count instead of just has/no failures
-  const aFailCount = a.tests.filter(t => t.finalStatus === 'failed').length;
-  const bFailCount = b.tests.filter(t => t.finalStatus === 'failed').length;
-
-  if (aFailCount !== bFailCount) return bFailCount - aFailCount; // Most failures first
-  return `${a.folderName}/${a.fileName}`.localeCompare(`${b.folderName}/${b.fileName}`);
-});
-```
-
-### Add color coding
-
-```typescript
-// Add style to row based on status
-md += '<tr';
-if (testInfo.finalStatus === 'failed') {
-  md += ' style="background-color: #fee;"';
-}
-md += '>\n';
-```
-
-## Future Improvement Ideas
-
-- [ ] Add filtering by folder/status
-- [ ] Add expandable/collapsible sections for passed tests
-- [ ] Add links to trace files
-- [ ] Add execution time chart
-- [ ] Group by test suite instead of file
-- [ ] Add retry success rate
-- [ ] Add historical comparison
-- [ ] Add severity levels for failures
-- [ ] Add search/filter functionality (if rendered in HTML report)
 
 ## Related Files
 
-- `fixtures/docker-logs.ts` - Captures Docker errors that appear in "Docker Logs" column
+- `fixtures/docker-logs.ts` - Captures the Docker errors shown as badges/section
 - `playwright.config.ts` - Configures this reporter
 - `.github/workflows/e2e-tests.yml` - Uses the generated summary in PR comments
+- `docs/report-ideas/index.html` - Layout prototyping sandbox

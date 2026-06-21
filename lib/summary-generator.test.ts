@@ -360,7 +360,7 @@ describe('Summary Generator', () => {
       const result = generateMarkdownSummary(data);
 
       assert(result.includes('**Docker Log Errors:**'));
-      assert(result.includes('🐳 **melosys-api** (2 error(s))'));
+      assert(result.includes('🐳 <strong>melosys-api</strong> (2 error(s))'));
       assert(result.includes('SQL Error: ORA-00001'));
     });
 
@@ -389,9 +389,9 @@ describe('Summary Generator', () => {
       const result = generateMarkdownSummary(data);
 
       assert(result.includes('## 🐳 Docker Log Errors by Service'));
-      // New format: shows errors as header with actual error messages
-      assert(result.includes('### melosys-api: 2 error(s)'));
-      assert(result.includes('### melosys-web: 1 error(s)'));
+      // Rendered as collapsible <details> per service with the error messages inside
+      assert(result.includes('<strong>melosys-api</strong>: 2 error(s)'));
+      assert(result.includes('<strong>melosys-web</strong>: 1 error(s)'));
       // Should show actual error messages
       assert(result.includes('error1'));
       assert(result.includes('error2'));
@@ -426,9 +426,9 @@ describe('Summary Generator', () => {
 
   });
 
-  describe('Folder Grouping', () => {
+  describe('Domain Grouping', () => {
 
-    test('should group tests by folder and file', () => {
+    test('should group tests into collapsible domain sections with file sub-headers', () => {
       const data: TestSummaryData = {
         status: 'passed',
         duration: 10000,
@@ -450,11 +450,34 @@ describe('Summary Generator', () => {
 
       const result = generateMarkdownSummary(data);
 
-      assert(result.includes('📁 eu-eos / <code>scenario1.spec.ts</code>'));
-      assert(result.includes('📁 trygdeavgift / <code>calculation.spec.ts</code>'));
+      // Collapsible domain sections (all-pass domains are collapsed)
+      assert(result.includes('<summary>✅ <strong>eu-eos</strong>'));
+      assert(result.includes('<summary>✅ <strong>trygdeavgift</strong>'));
+      // File sub-header rows inside the domain table
+      assert(result.includes('📄 scenario1'));
+      assert(result.includes('📄 calculation'));
     });
 
-    test('should sort files with failures first', () => {
+    test('should strip the redundant domain prefix from file labels', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [
+          createTest({
+            title: 'test1',
+            file: 'tests/eu-eos/eu-eos-art13-arbeid-flere-land.spec.ts'
+          }),
+        ]
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      // The "eu-eos-" prefix and ".spec.ts" are stripped so the domain isn't repeated
+      assert(result.includes('📄 art13-arbeid-flere-land'));
+      assert(!result.includes('eu-eos-art13'));
+    });
+
+    test('should sort failing domains first and expand them', () => {
       const data: TestSummaryData = {
         status: 'failed',
         duration: 10000,
@@ -474,12 +497,57 @@ describe('Summary Generator', () => {
 
       const result = generateMarkdownSummary(data);
 
-      // zzz/fail.spec.ts should appear before aaa/pass.spec.ts
-      // even though 'aaa' comes before 'zzz' alphabetically
-      const zzzIndex = result.indexOf('zzz / <code>fail.spec.ts</code>');
-      const aaaIndex = result.indexOf('aaa / <code>pass.spec.ts</code>');
+      // Failing domain 'zzz' should appear before passing 'aaa', despite alpha order
+      const zzzIndex = result.indexOf('<strong>zzz</strong>');
+      const aaaIndex = result.indexOf('<strong>aaa</strong>');
 
+      assert(zzzIndex !== -1 && aaaIndex !== -1);
       assert(zzzIndex < aaaIndex);
+      // Failing domain is expanded, passing domain stays collapsed
+      assert(result.includes('<details open>\n<summary>❌ <strong>zzz</strong>'));
+      assert(result.includes('<details>\n<summary>✅ <strong>aaa</strong>'));
+    });
+
+    test('should hoist failures into a Needs Attention panel above the table', () => {
+      const data: TestSummaryData = {
+        status: 'failed',
+        duration: 10000,
+        tests: [
+          createTest({
+            title: 'broken scenario',
+            file: 'tests/eu-eos/eu-eos-foo.spec.ts',
+            status: 'failed',
+            error: "expect(received).toBe(expected)\nExpected: 'AVSLUTTET'"
+          }),
+        ]
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      assert(result.includes('## ❗ Needs Attention (1)'));
+      assert(result.includes('<code>eu-eos/foo</code>')); // de-duplicated location
+      // Panel appears before the per-domain table
+      assert(result.indexOf('## ❗ Needs Attention') < result.indexOf('## 📊 Test Results'));
+    });
+
+  });
+
+  describe('Duration Rollup', () => {
+
+    test('should sum and format duration per domain group', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 250000,
+        tests: [
+          createTest({ title: 't1', file: 'tests/eu-eos/a.spec.ts', duration: 90000 }),
+          createTest({ title: 't2', file: 'tests/eu-eos/b.spec.ts', duration: 160000 }),
+        ]
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      // 90s + 160s = 250s = 4m 10s rolled up onto the domain summary line
+      assert(result.includes('⏱️ 4m 10s</summary>'));
     });
 
   });

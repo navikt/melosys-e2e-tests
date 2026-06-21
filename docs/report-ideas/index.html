@@ -1,0 +1,85 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>E2E report — layout ideas</title>
+<style>
+  :root { color-scheme: light dark; }
+  body {
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif;
+    margin: 0; background: #f6f8fa; color: #1f2328;
+  }
+  .wrap { max-width: 1000px; margin: 0 auto; padding: 24px 16px 80px; }
+  h1 { font-size: 22px; margin: 0 0 4px; }
+  .sub { color: #636c76; margin: 0 0 20px; font-size: 14px; }
+  .bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 8px; }
+  .bar .lbl { font-size: 12px; text-transform: uppercase; letter-spacing: .04em; color: #636c76; margin-right: 4px; }
+  button {
+    font: inherit; font-size: 13px; padding: 6px 12px; border: 1px solid #d0d7de;
+    background: #fff; border-radius: 6px; cursor: pointer; color: #1f2328;
+  }
+  button:hover { background: #f3f4f6; }
+  button.active { background: #0969da; border-color: #0969da; color: #fff; }
+  .note {
+    background: #fff8c5; border: 1px solid #d4a72c66; border-radius: 6px;
+    padding: 8px 12px; font-size: 13px; margin: 12px 0; line-height: 1.5;
+  }
+  .note code { background: #eef1f4; padding: 1px 4px; border-radius: 4px; }
+  .gh-label { font-size: 12px; color: #636c76; margin: 18px 0 6px; }
+  /* The frame mimics GitHub's job-summary rendering. Its CSS styles only the
+     container — the inner HTML uses GitHub's allowed tag subset, so layout is faithful. */
+  .gh {
+    background: #fff; border: 1px solid #d0d7de; border-radius: 6px;
+    padding: 16px 24px; font-size: 14px; line-height: 1.6;
+  }
+  .gh h2 { font-size: 20px; border-bottom: 1px solid #d8dee4; padding-bottom: 6px; margin: 18px 0 12px; }
+  .gh h3 { font-size: 16px; margin: 22px 0 10px; }
+  .gh table { border-collapse: collapse; width: 100%; margin: 6px 0 14px; display: block; overflow-x: auto; }
+  .gh th, .gh td { border: 1px solid #d0d7de; padding: 5px 11px; text-align: left; font-size: 13px; }
+  .gh th { background: #f6f8fa; }
+  .gh tr:nth-child(2n) td { background: #f6f8fa44; }
+  .gh code { background: #eff1f3; padding: 1px 5px; border-radius: 5px; font-size: 12px; }
+  .gh sub { color: #636c76; font-size: 11px; vertical-align: baseline; }
+  .gh details { border: 1px solid #d0d7de; border-radius: 6px; padding: 0 12px; margin: 8px 0; background: #fff; }
+  .gh details[open] { padding-bottom: 8px; }
+  .gh summary { cursor: pointer; padding: 8px 0; font-size: 14px; }
+  .gh details table { margin-bottom: 8px; }
+  .gh ul { margin: 4px 0; }
+  footer { margin-top: 28px; font-size: 12px; color: #636c76; line-height: 1.6; }
+  footer code { background: #eaeef2; padding: 1px 5px; border-radius: 4px; }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>E2E report — layout ideas</h1>
+  <p class="sub">Rendered from the real run <strong>CI 27886483545</strong> (95 tests, 48.9&nbsp;min). The frame below uses only the HTML GitHub job summaries allow — what you see is what the PR summary would show.</p>
+
+  <div class="bar">
+    <span class="lbl">Layout</span>
+    <button data-variant="current">Current</button>
+    <button data-variant="A">A · Domain groups</button>
+    <button data-variant="B">B · Scoreboard</button>
+    <button data-variant="C">C · Flat per-domain</button>
+  </div>
+  <div class="bar">
+    <span class="lbl">Data</span>
+    <button data-dataset="green">All green (real)</button>
+    <button data-dataset="fail">With failures (simulated)</button>
+  </div>
+
+  <div class="note" id="note"></div>
+
+  <div class="gh-label">▼ Preview — GitHub job summary</div>
+  <div class="gh" id="frame"></div>
+
+  <footer>
+    Iterate: edit <code>docs/report-ideas/render.js</code> and refresh — no test run needed.<br>
+    Regenerate data from another run: <code>gh run download &lt;id&gt; -n test-summary</code> then re-run the data step.<br>
+    Once you pick a layout, it ports into <code>lib/summary-generator.ts</code> (covered by <code>npm run test:unit</code>).
+  </footer>
+</div>
+<script src="data.js"></script>
+<script src="render.js"></script>
+</body>
+</html>
