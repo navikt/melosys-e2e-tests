@@ -26,20 +26,28 @@ const EMOJI = {
 };
 const emoji = (s) => EMOJI[s] || '❓';
 
+// Domain consolidation preview (no files are moved — this only re-groups for
+// the report). Verified faglig: "ftrl" == sakstema "Utenfor avtaleland (ftrl)".
+// Set by render() from the "Domain mapping" toggle.
+let DOMAIN_ALIAS = {};
+const CONSOLIDATE = { ftrl: 'utenfor-avtaleland' };
+
 // tests/eu-eos/unntak/eu-eos-foo.spec.ts -> {domain, sub, base, label}
 function parsePath(file) {
   const parts = file.split('/');         // ['tests','eu-eos','unntak','eu-eos-foo.spec.ts']
   const i = parts.indexOf('tests');
   const after = parts.slice(i + 1);
   const base = after[after.length - 1];
-  const domain = after[0];
+  const rawDomain = after[0];
+  const domain = DOMAIN_ALIAS[rawDomain] || rawDomain; // consolidation preview
   const sub = after.slice(1, -1).join('/'); // 'unntak' or ''
   // strip ".spec.ts" and a redundant leading "<domain>-" so the file label
-  // does not repeat the domain folder name.
+  // does not repeat the domain folder name. Uses the (consolidated) domain, so
+  // a moved "ftrl-…" file keeps its prefix under utenfor-avtaleland.
   let label = base.replace(/\.spec\.ts$/, '');
   if (label.startsWith(domain + '-')) label = label.slice(domain.length + 1);
   if (sub) label = sub + '/' + label;
-  return { domain, sub, base, label };
+  return { domain, rawDomain, sub, base, label };
 }
 
 function enrich(tests) {
@@ -262,24 +270,32 @@ const VARIANTS = {
   C: { fn: renderC, name: 'C · Flat per-domain', note: 'Drops the file grouping entirely — test titles already describe the case; the file is a dim suffix. Zero folder/file duplication.' },
 };
 
-let state = { variant: 'A', dataset: 'green' };
+let state = { variant: 'A', dataset: 'green', mapping: 'asis' };
 
 function render() {
+  DOMAIN_ALIAS = state.mapping === 'consolidated' ? CONSOLIDATE : {};
   const data = window.DATASETS[state.dataset];
   const v = VARIANTS[state.variant];
-  document.getElementById('note').innerHTML = v.note;
+  const consolidatedNote = state.mapping === 'consolidated'
+    ? ' <strong>· Consolidation ON:</strong> <code>ftrl</code> folded into <code>utenfor-avtaleland</code> (sakstema «Utenfor avtaleland (ftrl)»). No files moved — grouping preview only.'
+    : '';
+  document.getElementById('note').innerHTML = v.note + consolidatedNote;
   document.getElementById('frame').innerHTML = v.fn(data);
   document.querySelectorAll('[data-variant]').forEach((b) =>
     b.classList.toggle('active', b.dataset.variant === state.variant));
   document.querySelectorAll('[data-dataset]').forEach((b) =>
     b.classList.toggle('active', b.dataset.dataset === state.dataset));
+  document.querySelectorAll('[data-mapping]').forEach((b) =>
+    b.classList.toggle('active', b.dataset.mapping === state.mapping));
 }
 
 document.addEventListener('click', (e) => {
   const vb = e.target.closest('[data-variant]');
   const db = e.target.closest('[data-dataset]');
+  const mb = e.target.closest('[data-mapping]');
   if (vb) { state.variant = vb.dataset.variant; render(); }
   if (db) { state.dataset = db.dataset.dataset; render(); }
+  if (mb) { state.mapping = mb.dataset.mapping; render(); }
 });
 
 document.addEventListener('DOMContentLoaded', render);
