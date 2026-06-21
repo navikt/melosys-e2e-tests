@@ -134,7 +134,7 @@ export function generateMarkdownSummary(
     md += `- **Total Attempts:** ${totalAttempts} (including ${extraAttempts} retries)\n`;
   }
 
-  md += `- **Duration:** ${Math.round(data.duration / 1000)}s\n`;
+  md += `- **Duration:** ${formatDuration(data.duration)}\n`;
   md += `- **Status:** ${ciStatus}\n\n`;
 
   if (knownErrorFailed + knownErrorPassed > 0) {
@@ -145,7 +145,10 @@ export function generateMarkdownSummary(
     md += `> ⚠️ **Retries disabled:** ${flaky} flaky test(s) are treated as failures.\n\n`;
   }
 
-  // Test results table
+  // Needs-attention panel: hoist failures + flaky to the very top
+  md += generateNeedsAttentionPanel(tests);
+
+  // Test results table (grouped by domain, collapsible, with duration rollup)
   if (totalTests > 0) {
     md += generateTestResultsTable(tests);
   }
@@ -196,85 +199,201 @@ export function generateMarkdownSummary(
 }
 
 /**
- * Generate the test results table
+ * Format a millisecond duration as a compact human string ("8s", "4m 12s").
  */
-function generateTestResultsTable(tests: TestData[]): string {
-  let md = `## 📊 Test Results\n\n`;
+function formatDuration(ms: number): string {
+  const s = Math.round(ms / 1000);
+  if (s < 60) return `${s}s`;
+  const m = Math.floor(s / 60);
+  const r = s % 60;
+  return r ? `${m}m ${r}s` : `${m}m`;
+}
 
-  // Group by folder and file
-  const byFolder = groupTestsByFolder(tests);
+/** First non-blank line of a (possibly multi-line) string. */
+function firstLine(text: string): string {
+  return (text || '').split('\n').map(l => l.trim()).find(Boolean) || '';
+}
 
-  // HTML table with proper colspan
-  md += '<table>\n';
-  md += '<thead>\n';
-  md += '<tr>\n';
-  md += '<th>Test</th>\n';
-  md += '<th>Status</th>\n';
-  md += '<th>Attempts</th>\n';
-  md += '<th>Playwright</th>\n';
-  md += '<th>Docker Logs</th>\n';
-  md += '<th>Duration</th>\n';
-  md += '</tr>\n';
-  md += '</thead>\n';
-  md += '<tbody>\n';
+/** Light escape so error snippets can't break the surrounding HTML table. */
+function escapeHtml(text: string): string {
+  return text.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
+}
 
-  // Flatten all files with their folder info
-  interface FileWithFolder {
-    folderName: string;
-    fileName: string;
-    tests: TestData[];
+interface ParsedTestPath {
+  domain: string;  // top-level folder under tests/ (e.g. "eu-eos")
+  sub: string;     // any nested folders (e.g. "unntak")
+  base: string;    // raw filename (e.g. "eu-eos-art13-...spec.ts")
+  label: string;   // de-duplicated label (domain prefix + .spec.ts stripped)
+}
+
+/**
+ * Parse a test file path into domain / file label, stripping the redundant
+ * leading "<domain>-" so file labels don't repeat the folder name.
+ */
+function parseTestPath(file: string): ParsedTestPath {
+  const parts = file.split('/');
+  const i = parts.indexOf('tests');
+  const after = i !== -1 ? parts.slice(i + 1) : parts.slice(-1);
+  const base = after[after.length - 1];
+  const domain = after.length > 1 ? after[0] : 'root';
+  const sub = after.length > 2 ? after.slice(1, -1).join('/') : '';
+
+  let label = base.replace(/\.spec\.ts$/, '');
+  if (domain !== 'root' && label.startsWith(`${domain}-`)) {
+    label = label.slice(domain.length + 1);
+  }
+  if (sub) label = `${sub}/${label}`;
+  return { domain, sub, base, label };
+}
+
+interface DomainGroup {
+  name: string;
+  tests: TestData[];
+  passed: number;
+  failed: number;
+  flaky: number;
+  skipped: number;
+  knownErrorFailed: number;
+  knownErrorPassed: number;
+  duration: number;
+  hasFail: boolean;
+}
+
+/** Group tests by top-level domain folder; failing domains sort first. */
+function groupTestsByDomain(tests: TestData[]): DomainGroup[] {
+  const map = new Map<string, TestData[]>();
+  for (const t of tests) {
+    const { domain } = parseTestPath(t.file);
+    if (!map.has(domain)) map.set(domain, []);
+    map.get(domain)!.push(t);
   }
 
-  const allFiles: FileWithFolder[] = [];
-  byFolder.forEach((files, folderName) => {
-    files.forEach((tests, fileName) => {
-      allFiles.push({ folderName, fileName, tests });
-    });
+  const groups: DomainGroup[] = Array.from(map.entries()).map(([name, ts]) => {
+    const count = (s: TestData['status']) => ts.filter(t => t.status === s).length;
+    const failed = count('failed');
+    const flaky = count('flaky');
+    return {
+      name,
+      tests: ts,
+      passed: count('passed'),
+      failed,
+      flaky,
+      skipped: count('skipped'),
+      knownErrorFailed: count('known-error-failed'),
+      knownErrorPassed: count('known-error-passed'),
+      duration: ts.reduce((sum, t) => sum + t.duration, 0),
+      hasFail: failed > 0 || flaky > 0,
+    };
   });
 
-  // Sort ALL files: files with failures first, then alphabetically
-  const sortedAllFiles = allFiles.sort((a, b) => {
-    const aHasFailures = a.tests.some(test => test.status === 'failed');
-    const bHasFailures = b.tests.some(test => test.status === 'failed');
+  groups.sort((a, b) =>
+    (Number(b.hasFail) - Number(a.hasFail)) || a.name.localeCompare(b.name));
+  return groups;
+}
 
-    if (aHasFailures && !bHasFailures) return -1;
-    if (!aHasFailures && bHasFailures) return 1;
-    return `${a.folderName}/${a.fileName}`.localeCompare(`${b.folderName}/${b.fileName}`);
-  });
+interface FileGroup {
+  label: string;
+  tests: TestData[];
+  duration: number;
+  hasFail: boolean;
+}
 
-  for (const { folderName, fileName, tests: fileTests } of sortedAllFiles) {
-    // Sort tests: failed first, then passed
-    const sortedTests = fileTests.sort((a, b) => {
-      if (a.status === 'failed' && b.status !== 'failed') return -1;
-      if (a.status !== 'failed' && b.status === 'failed') return 1;
-      return 0;
-    });
+/** Group a domain's tests by file label; failing files (and tests) sort first. */
+function groupTestsByFile(tests: TestData[]): FileGroup[] {
+  const map = new Map<string, TestData[]>();
+  for (const t of tests) {
+    const { label } = parseTestPath(t.file);
+    if (!map.has(label)) map.set(label, []);
+    map.get(label)!.push(t);
+  }
 
-    // Count failures
-    const failedCount = fileTests.filter(t => t.status === 'failed').length;
-    const totalCount = fileTests.length;
-    const failureInfo = failedCount > 0 ? ` (${failedCount}/${totalCount} failed)` : '';
+  const files: FileGroup[] = Array.from(map.entries()).map(([label, ts]) => ({
+    label,
+    tests: ts,
+    duration: ts.reduce((sum, t) => sum + t.duration, 0),
+    hasFail: ts.some(t => t.status === 'failed' || t.status === 'flaky'),
+  }));
 
-    // Folder/File header row (TRUE colspan spanning all 6 columns)
-    md += '<tr>\n';
-    md += `<td colspan="6"><strong>📁 ${folderName} / <code>${fileName}</code>${failureInfo}</strong></td>\n`;
-    md += '</tr>\n';
+  const isBad = (t: TestData) => t.status === 'failed' || t.status === 'flaky';
+  for (const f of files) {
+    f.tests.sort((a, b) => Number(isBad(b)) - Number(isBad(a)));
+  }
+  files.sort((a, b) =>
+    (Number(b.hasFail) - Number(a.hasFail)) || a.label.localeCompare(b.label));
+  return files;
+}
 
-    // Test rows
-    for (const testInfo of sortedTests) {
-      md += generateTestRow(testInfo);
+/**
+ * Needs-attention panel: a compact list of failed/flaky tests hoisted above
+ * the per-domain table, so problems are the first thing you read.
+ */
+function generateNeedsAttentionPanel(tests: TestData[]): string {
+  const bad = tests.filter(t => t.status === 'failed' || t.status === 'flaky');
+  if (bad.length === 0) return '';
+
+  let md = `## ❗ Needs Attention (${bad.length})\n\n`;
+  md += '<table>\n<thead>\n<tr><th>Test</th><th>Where</th><th>Why</th><th>Duration</th></tr>\n</thead>\n<tbody>\n';
+  for (const t of bad) {
+    const { domain, label } = parseTestPath(t.file);
+    let why: string;
+    if (t.status === 'flaky') {
+      why = `🔄 flaky (${t.failedAttempts}/${t.totalAttempts} failed)`;
+    } else if (t.error) {
+      why = `<code>${escapeHtml(firstLine(cleanAnsiCodes(t.error)).slice(0, 140))}</code>`;
+    } else {
+      why = 'failed';
     }
+    md += `<tr><td>${getStatusEmoji(t.status)} ${t.title}</td><td><code>${domain}/${label}</code></td><td>${why}</td><td>${formatDuration(t.duration)}</td></tr>\n`;
   }
-
-  md += '</tbody>\n';
-  md += '</table>\n\n';
-  md += '\n';
-
+  md += '</tbody>\n</table>\n\n';
   return md;
 }
 
 /**
- * Generate a single test row for the table
+ * Generate the test results table: one collapsible <details> per domain,
+ * failing domains expanded and first, each summary carrying counts and a
+ * summed duration.
+ */
+function generateTestResultsTable(tests: TestData[]): string {
+  let md = `## 📊 Test Results\n\n`;
+  for (const group of groupTestsByDomain(tests)) {
+    md += generateDomainGroup(group);
+  }
+  return md;
+}
+
+/** Render one domain as a collapsible section with a per-file/per-test table. */
+function generateDomainGroup(group: DomainGroup): string {
+  const open = group.hasFail ? ' open' : '';
+  const icon = group.hasFail ? '❌' : '✅';
+
+  const counts = [
+    group.passed ? `${group.passed} ✅` : null,
+    group.failed ? `${group.failed} ❌` : null,
+    group.flaky ? `${group.flaky} 🔄` : null,
+    group.knownErrorFailed ? `${group.knownErrorFailed} ⚠️` : null,
+    group.knownErrorPassed ? `${group.knownErrorPassed} ✨` : null,
+    group.skipped ? `${group.skipped} ⏭️` : null,
+  ].filter(Boolean).join(' · ');
+
+  let md = `<details${open}>\n`;
+  md += `<summary>${icon} <strong>${group.name}</strong> — ${counts} · ⏱️ ${formatDuration(group.duration)}</summary>\n\n`;
+  md += '<table>\n<thead>\n<tr><th>Test</th><th>Status</th><th>Attempts</th><th>Duration</th></tr>\n</thead>\n<tbody>\n';
+
+  for (const file of groupTestsByFile(group.tests)) {
+    md += `<tr><td colspan="4"><sub>📄 ${file.label} · ${formatDuration(file.duration)}</sub></td></tr>\n`;
+    for (const testInfo of file.tests) {
+      md += generateTestRow(testInfo);
+    }
+  }
+
+  md += '</tbody>\n</table>\n</details>\n\n';
+  return md;
+}
+
+/**
+ * Generate a single test row. Docker log issues are shown as an inline badge
+ * under the title rather than a dedicated column.
  */
 function generateTestRow(testInfo: TestData): string {
   const statusEmoji = getStatusEmoji(testInfo.status);
@@ -283,30 +402,19 @@ function generateTestRow(testInfo: TestData): string {
     ? `${testInfo.totalAttempts} (${testInfo.failedAttempts} failed)`
     : '1';
 
-  const duration = Math.round(testInfo.duration / 1000) + 's';
+  const duration = formatDuration(testInfo.duration);
 
-  // Playwright status (check if error is playwright-related vs process/docker)
-  let playwrightStatus = '✅';
-  if (testInfo.status === 'failed' || testInfo.status === 'known-error-failed') {
-    const hasPlaywrightError = testInfo.error &&
-      !testInfo.error.includes('Docker error') &&
-      !testInfo.error.includes('process instance');
-    playwrightStatus = hasPlaywrightError ? '❌' : '✅';
-  }
-
-  // Docker logs status - show errors regardless of test status (flaky tests can have errors too)
-  let dockerStatus = '✅';
+  let dockerBadge = '';
   if (testInfo.dockerErrors && testInfo.dockerErrors.length > 0) {
-    const services = testInfo.dockerErrors.map(de => `${de.service} (${de.errors.length})`).join(', ');
-    dockerStatus = `⚠️ ${services}`;
+    const n = testInfo.dockerErrors.reduce((sum, de) => sum + de.errors.length, 0);
+    const services = testInfo.dockerErrors.map(de => de.service).join(', ');
+    dockerBadge = ` <sub>🐳 ${services} (${n})</sub>`;
   }
 
   let row = '<tr>\n';
-  row += `<td>${testInfo.title}</td>\n`;
+  row += `<td>${testInfo.title}${dockerBadge}</td>\n`;
   row += `<td>${statusEmoji}</td>\n`;
   row += `<td>${attempts}</td>\n`;
-  row += `<td>${playwrightStatus}</td>\n`;
-  row += `<td>${dockerStatus}</td>\n`;
   row += `<td>${duration}</td>\n`;
   row += '</tr>\n';
 
@@ -326,42 +434,6 @@ function getStatusEmoji(status: TestData['status']): string {
     case 'skipped': return '⏭️';
     default: return '❓';
   }
-}
-
-/**
- * Group tests by folder and file
- */
-function groupTestsByFolder(tests: TestData[]): Map<string, Map<string, TestData[]>> {
-  const byFolder = new Map<string, Map<string, TestData[]>>();
-
-  for (const test of tests) {
-    const filePath = test.file;
-    const parts = filePath.split('/');
-    const fileName = parts[parts.length - 1];
-
-    // Find "tests" directory index and extract complete path after it
-    const testsIndex = parts.indexOf('tests');
-    let folderPath = 'root';
-
-    if (testsIndex !== -1 && testsIndex < parts.length - 1) {
-      // Get all folders between 'tests' and the filename
-      const foldersAfterTests = parts.slice(testsIndex + 1, parts.length - 1);
-      folderPath = foldersAfterTests.length > 0 ? foldersAfterTests.join('/') : 'root';
-    }
-
-    if (!byFolder.has(folderPath)) {
-      byFolder.set(folderPath, new Map());
-    }
-
-    const folder = byFolder.get(folderPath)!;
-    if (!folder.has(fileName)) {
-      folder.set(fileName, []);
-    }
-
-    folder.get(fileName)!.push(test);
-  }
-
-  return byFolder;
 }
 
 /**
