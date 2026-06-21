@@ -2,7 +2,7 @@ import { expect } from '@playwright/test';
 import { withDatabase } from '../../helpers/db-helper';
 
 /**
- * Assertions for at en digital A1-søknad sendt fra skjema-web blir mottatt av melosys-api
+ * Assertions for at en digital «Utsendt arbeidstaker»-søknad sendt fra skjema-web blir mottatt av melosys-api
  * (via Kafka `teammelosys.skjema.innsendt.v1-local`) og ender som sak + behandling i Oracle.
  *
  * Korrelasjon: melosys-api lagrer søknads-id-en (UUID) i SKJEMA_SAK_MAPPING.SKJEMA_ID (Oracle RAW(16))

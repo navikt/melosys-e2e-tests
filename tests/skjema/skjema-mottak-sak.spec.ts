@@ -4,7 +4,7 @@ import { SoknadUtsendtArbeidstakerPage } from '../../pages/skjema/soknad-utsendt
 import { SkjemaMottakAssertions } from '../../pages/skjema/skjema-mottak.assertions';
 
 /**
- * T2 — den tverdifulle vertikale skiva: en digital A1-søknad sendt fra skjema-web skal mottas av
+ * T2 — den verdifulle vertikale skiva: en digital «Utsendt arbeidstaker»-søknad sendt fra skjema-web skal mottas av
  * melosys-api og bli en sak + behandling.
  *
  * Flyt som verifiseres: skjema-web innsending → skjema-api publiserer `teammelosys.skjema.innsendt.v1-local`
@@ -19,7 +19,7 @@ import { SkjemaMottakAssertions } from '../../pages/skjema/skjema-mottak.asserti
  * Korrelasjon mot riktig sak skjer via søknads-id-en (UUID) i SKJEMA_SAK_MAPPING.
  */
 test.describe('skjema-web → melosys-api mottak', () => {
-  test('innsendt A1-søknad blir sak og behandling i melosys-api', async ({ page }) => {
+  test('innsendt «Utsendt arbeidstaker»-søknad blir sak og behandling i melosys-api', async ({ page }) => {
     test.setTimeout(120000); // async Kafka-mottak + DB-polling
 
     const auth = new SkjemaAuthHelper(page);

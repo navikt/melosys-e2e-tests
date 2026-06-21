@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 import { SkjemaAuthHelper } from '../../helpers/skjema-auth-helper';
 
 /**
- * Røyktest for melosys-skjema-web (digital A1-søknad, utsendt arbeidstaker).
+ * Røyktest for melosys-skjema-web (digital «Utsendt arbeidstaker»-søknad).
  *
  * Dette er den FØRSTE e2e-testen mot skjema-stacken (melosys-skjema-web +
  * melosys-skjema-api), lagt til docker-compose under "skjema"-profilen.

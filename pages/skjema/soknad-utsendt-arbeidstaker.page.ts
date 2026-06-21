@@ -1,7 +1,7 @@
 import { Page, expect } from '@playwright/test';
 
 /**
- * Page Object for den digitale A1-søknaden "utsendt arbeidstaker" i melosys-skjema-web,
+ * Page Object for den digitale «Utsendt arbeidstaker»-søknaden i melosys-skjema-web,
  * variant DEG SELV (arbeidstaker fyller ut sin egen del).
  *
  * Selvstendig POM (utvider IKKE pages/shared/base.page.ts) fordi BasePage er koblet til

@@ -1,7 +1,7 @@
 import { Page, expect } from '@playwright/test';
 
 /**
- * Innloggingshjelper for melosys-skjema-web (digital A1-søknad).
+ * Innloggingshjelper for melosys-skjema-web (digital «Utsendt arbeidstaker»-søknad).
  *
  * I MOTSETNING til AuthHelper (saksbehandler i melosys-web, Azure AD) logger denne
  * inn som INNBYGGER via ID-porten-flyten: wonderwall-sidecar foran skjema-web gjør
