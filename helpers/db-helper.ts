@@ -78,6 +78,16 @@ export class DatabaseHelper {
       throw new Error('Database not connected. Call connect() first.');
     }
 
+    // La DDL (TRUNCATE / ALTER TABLE) VENTE på radlåser i opptil 30s i stedet for å feile
+    // umiddelbart med ORA-00054. melosys-api kan holde DML-lås mens den prosesserer en nylig
+    // mottatt digital søknad (skjema-mottak) akkurat når cleanup kjører før neste test.
+    // Best-effort — retry/backoff i cleanup-fixturen dekker tilfeller der låsen holdes lenger.
+    try {
+      await this.connection.execute('ALTER SESSION SET DDL_LOCK_TIMEOUT = 30');
+    } catch {
+      // Ikke støttet på denne DB-en — ignorer; retry-loopen i fixturen håndterer lås-konflikt.
+    }
+
     if (!silent) {
       console.log('\n🧹 Starting database cleanup...\n');
     }

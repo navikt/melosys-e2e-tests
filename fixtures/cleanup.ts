@@ -35,14 +35,31 @@ async function cleanupTestData(page: any, waitForProcesses: boolean = false): Pr
         }
     }
 
-    // Clean Oracle database
+    // Clean Oracle database. Retry/backoff på ORA-00054 ("resource busy"): melosys-api kan holde
+    // DML-lås mens den prosesserer en nylig mottatt digital søknad (skjema-mottak) akkurat når
+    // cleanup kjører. db-helper setter også DDL_LOCK_TIMEOUT, så låsen rekker som regel å slippe;
+    // denne loopen dekker tilfeller der den holdes litt lenger.
     const db = new DatabaseHelper();
     try {
         await db.connect();
-        const result = await db.cleanDatabase(true); // silent = true
-
-        if (result.cleanedCount > 0 || result.totalRowsDeleted > 0) {
-            console.log(`   ✅ Oracle: ${result.cleanedCount} tables cleaned (${result.totalRowsDeleted} rows)`);
+        const maxAttempts = 3;
+        for (let attempt = 1; ; attempt++) {
+            try {
+                const result = await db.cleanDatabase(true); // silent = true
+                if (result.cleanedCount > 0 || result.totalRowsDeleted > 0) {
+                    console.log(`   ✅ Oracle: ${result.cleanedCount} tables cleaned (${result.totalRowsDeleted} rows)`);
+                }
+                break;
+            } catch (error: any) {
+                const msg = error?.message || String(error);
+                if (msg.includes('ORA-00054') && attempt < maxAttempts) {
+                    const waitMs = 2000 * attempt;
+                    console.log(`   ⏳ Oracle opptatt (ORA-00054) — venter ${waitMs}ms og prøver cleanup igjen (forsøk ${attempt}/${maxAttempts})`);
+                    await new Promise((r) => setTimeout(r, waitMs));
+                    continue;
+                }
+                throw error;
+            }
         }
     } catch (error: any) {
         console.log(`   ⚠️  Oracle cleanup failed: ${error.message || error}`);
