@@ -29,7 +29,12 @@ export class SoknadUtsendtArbeidstakerPage {
     await page.getByRole('button', { name: 'Start søknad' }).click();
 
     await page.waitForURL(/\/skjema\/[^/]+\/utsendingsperiode-og-land/);
-    return page.url().match(/\/skjema\/([^/]+)\//)?.[1] ?? '';
+    // Hent søknads-id-en (UUID) ut av URL-en. Feil HER med en presis melding hvis URL-formen
+    // har endret seg — ellers bæres en tom id videre til SKJEMA_SAK_MAPPING-oppslaget i T2 og
+    // gir en misvisende "Kafka-mottak feilet"-timeout 45s senere.
+    const skjemaId = page.url().match(/\/skjema\/([0-9a-f-]{36})\//i)?.[1];
+    expect(skjemaId, `Fant ikke søknads-id (UUID) i URL-en: ${page.url()}`).toBeTruthy();
+    return skjemaId!;
   }
 
   async fyllUtsendingsperiodeOgLand(land = 'Frankrike'): Promise<void> {
@@ -92,7 +97,11 @@ export class SoknadUtsendtArbeidstakerPage {
     const kvitteringstekst = await page
       .getByText(/Vi har mottatt din søknad med referanse/)
       .innerText();
-    return kvitteringstekst.match(/referanse\s+([A-Z0-9]+)/)?.[1] ?? '';
+    // Feil HER hvis kvitteringsteksten ikke inneholder en referanse — tom streng ville ellers
+    // smyge forbi T1-assertionen som en forvirrende regex-mismatch på '' i stedet for her.
+    const referanse = kvitteringstekst.match(/referanse\s+([A-Z0-9]+)/)?.[1];
+    expect(referanse, `Fant ikke referansenummer i kvitteringen: "${kvitteringstekst}"`).toBeTruthy();
+    return referanse!;
   }
 
   /**
