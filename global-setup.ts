@@ -5,7 +5,10 @@
  */
 import * as fs from 'fs';
 import * as path from 'path';
+import { chromium } from '@playwright/test';
 import { MetricsHelper } from './helpers/metrics-helper';
+import { SkjemaAuthHelper } from './helpers/skjema-auth-helper';
+import { SoknadUtsendtArbeidstakerPage } from './pages/skjema/soknad-utsendt-arbeidstaker.page';
 
 const EESSI_BASE_URL = process.env.EESSI_BASE_URL || 'http://localhost:8081';
 
@@ -50,6 +53,59 @@ async function assertEessiAvailable(): Promise<void> {
   );
 }
 
+/**
+ * Varm opp skjema-stacken med én innlogging FØR de tidsbegrensede testene kjører.
+ *
+ * Kald oppstart (skjema-api JVM, wonderwall sin første OIDC-veksling, skjema-web sin første
+ * render) gjorde at den FØRSTE skjema-testen kunne time ut på 60s og passere på retry. Ved å
+ * betale kald-start-kostnaden her — utenfor test-timeouten — blir første ekte test rask.
+ *
+ * Best-effort: hopper raskt over hvis skjema-web ikke svarer (ikke-skjema-kjøringer eller stack
+ * uten skjema-profil), og svelger alle feil — oppvarming skal ALDRI velte testkjøringen.
+ * Skru av lokalt med SKIP_SKJEMA_WARMUP=true.
+ */
+async function warmUpSkjema(): Promise<void> {
+  if (process.env.SKIP_SKJEMA_WARMUP === 'true') {
+    console.log('⏭️  SKIP_SKJEMA_WARMUP=true → hopper over skjema-oppvarming');
+    return;
+  }
+
+  // Rask tilgjengelighetssjekk — hopp ut umiddelbart hvis skjema-stacken ikke kjører.
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), 3000);
+  try {
+    await fetch(SkjemaAuthHelper.BASE_URL, { redirect: 'manual', signal: controller.signal });
+  } catch {
+    console.log('⏭️  Skjema-web svarer ikke — hopper over oppvarming (ikke-skjema-kjøring?)');
+    return;
+  } finally {
+    clearTimeout(timer);
+  }
+
+  console.log('🔥 Varmer opp skjema-stacken (én innlogging)...');
+  let browser;
+  try {
+    // Samme host-resolver-regel som testene: nettleseren må nå host.docker.internal:8082.
+    browser = await chromium.launch({
+      args: ['--host-resolver-rules=MAP host.docker.internal 127.0.0.1'],
+    });
+    const page = await browser.newPage();
+    const auth = new SkjemaAuthHelper(page);
+    await auth.login(); // browser → wonderwall → mock-oauth2 → skjema-web → /representasjon
+    // Kjør én KOMPLETT innsending, slik at alle skjema-api-endepunktene (opprett utkast, lagre
+    // hvert steg, send inn) og step-renderne er JVM-varme før første ekte test. En login-only
+    // oppvarming holdt ikke: første test stallet på "Start søknad" (kald create-draft-POST).
+    // Bonus: varmer også melosys-api sin Kafka-consumer for mottaket.
+    const soknad = new SoknadUtsendtArbeidstakerPage(page);
+    const { referanse } = await soknad.fyllUtOgSendInnKomplettSoknad();
+    console.log(`✅ Skjema-stacken er varmet opp (komplett innsending, ref ${referanse})`);
+  } catch (e) {
+    console.warn('⚠️  Skjema-oppvarming feilet (ikke-fatalt):', (e as Error).message);
+  } finally {
+    await browser?.close();
+  }
+}
+
 export default async function globalSetup() {
   console.log('🚀 Global setup: Docker log monitoring enabled for each test');
   console.log(
@@ -76,4 +132,7 @@ export default async function globalSetup() {
   } catch (error) {
     console.warn('⚠️  Could not capture metrics (API not running?):', (error as Error).message);
   }
+
+  // Varm opp skjema-stacken til slutt, slik at første skjema-test slipper kald-start-flaket.
+  await warmUpSkjema();
 }

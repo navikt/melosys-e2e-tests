@@ -78,6 +78,16 @@ export class DatabaseHelper {
       throw new Error('Database not connected. Call connect() first.');
     }
 
+    // La DDL (TRUNCATE / ALTER TABLE) VENTE på radlåser i opptil 30s i stedet for å feile
+    // umiddelbart med ORA-00054. melosys-api kan holde DML-lås mens den prosesserer en nylig
+    // mottatt digital søknad (skjema-mottak) akkurat når cleanup kjører før neste test.
+    // Best-effort — retry/backoff i cleanup-fixturen dekker tilfeller der låsen holdes lenger.
+    try {
+      await this.connection.execute('ALTER SESSION SET DDL_LOCK_TIMEOUT = 30');
+    } catch {
+      // Ikke støttet på denne DB-en — ignorer; retry-loopen i fixturen håndterer lås-konflikt.
+    }
+
     if (!silent) {
       console.log('\n🧹 Starting database cleanup...\n');
     }
@@ -129,7 +139,12 @@ export class DatabaseHelper {
         console.log(`⏭️  Tables to skip: ${skippedTables.length} (lookup/reference tables)\n`);
       }
 
-      // Disable foreign key constraints temporarily
+      // Disable FK constraints, truncate, og ALLTID re-enable i en finally — slik at en feil under
+      // truncate (f.eks. ORA-00054 fra en lås melosys-api holder under skjema-mottak) ikke etterlater
+      // FK-constraints permanent disablet for resten av testkjøringen.
+      let cleanedCount = 0;
+      let totalRowsDeleted = 0;
+
       await this.connection.execute('BEGIN\n' +
         '  FOR c IN (SELECT constraint_name, table_name FROM user_constraints WHERE constraint_type = \'R\') LOOP\n' +
         '    EXECUTE IMMEDIATE \'ALTER TABLE \' || c.table_name || \' DISABLE CONSTRAINT \' || c.constraint_name;\n' +
@@ -140,38 +155,42 @@ export class DatabaseHelper {
         console.log('🔓 Disabled foreign key constraints\n');
       }
 
-      let cleanedCount = 0;
-      let totalRowsDeleted = 0;
+      try {
+        // Truncate data from each table (faster than DELETE and resets sequences)
+        for (const tableName of tablesToClean) {
+          try {
+            // Count rows before truncation
+            const countResult = await this.query(`SELECT COUNT(*) as cnt FROM ${tableName}`, {}, true);
+            const rowCount = countResult[0]?.CNT || 0;
 
-      // Truncate data from each table (faster than DELETE and resets sequences)
-      for (const tableName of tablesToClean) {
-        try {
-          // Count rows before truncation
-          const countResult = await this.query(`SELECT COUNT(*) as cnt FROM ${tableName}`, {}, true);
-          const rowCount = countResult[0]?.CNT || 0;
-
-          if (rowCount > 0) {
-            // TRUNCATE is faster than DELETE and resets auto-increment sequences
-            await this.connection.execute(`TRUNCATE TABLE ${tableName}`);
-            if (!silent) {
-              console.log(`✅ Cleaned ${tableName.padEnd(40)} (${rowCount} rows truncated)`);
+            if (rowCount > 0) {
+              // TRUNCATE is faster than DELETE and resets auto-increment sequences
+              await this.connection.execute(`TRUNCATE TABLE ${tableName}`);
+              if (!silent) {
+                console.log(`✅ Cleaned ${tableName.padEnd(40)} (${rowCount} rows truncated)`);
+              }
+              cleanedCount++;
+              totalRowsDeleted += rowCount;
             }
-            cleanedCount++;
-            totalRowsDeleted += rowCount;
-          }
-        } catch (error) {
-          if (!silent) {
-            console.log(`⚠️  Could not clean ${tableName}: ${(error as Error).message || error}`);
+          } catch (error) {
+            // Lås-konflikt (ORA-00054) løftes til cleanup-fixturens retry/backoff så låsen får tid til
+            // å slippe; andre per-tabell-feil hoppes over (som før) så én tabell ikke stopper alt.
+            if (((error as Error).message || '').includes('ORA-00054')) {
+              throw error;
+            }
+            if (!silent) {
+              console.log(`⚠️  Could not clean ${tableName}: ${(error as Error).message || error}`);
+            }
           }
         }
+      } finally {
+        // Re-enable foreign key constraints — kjører ALLTID, også når truncate kastet over.
+        await this.connection.execute('BEGIN\n' +
+          '  FOR c IN (SELECT constraint_name, table_name FROM user_constraints WHERE constraint_type = \'R\') LOOP\n' +
+          '    EXECUTE IMMEDIATE \'ALTER TABLE \' || c.table_name || \' ENABLE CONSTRAINT \' || c.constraint_name;\n' +
+          '  END LOOP;\n' +
+          'END;');
       }
-
-      // Re-enable foreign key constraints
-      await this.connection.execute('BEGIN\n' +
-        '  FOR c IN (SELECT constraint_name, table_name FROM user_constraints WHERE constraint_type = \'R\') LOOP\n' +
-        '    EXECUTE IMMEDIATE \'ALTER TABLE \' || c.table_name || \' ENABLE CONSTRAINT \' || c.constraint_name;\n' +
-        '  END LOOP;\n' +
-        'END;');
 
       if (!silent) {
         console.log('\n🔒 Re-enabled foreign key constraints');

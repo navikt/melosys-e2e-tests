@@ -345,6 +345,10 @@ jobs:
           docker pull --platform linux/amd64 ghcr.io/navikt/mock-oauth2-server:2.3.0 &
           docker pull --platform linux/amd64 ghcr.io/navikt/mock-oauth2-server:0.4.8 &
           docker pull --platform linux/amd64 unleashorg/unleash-server:latest &
+          # Skjema-stack (digital «Utsendt arbeidstaker»-søknad)
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-skjema-api:latest &
+          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-skjema-web:latest &
+          docker pull --platform linux/amd64 ghcr.io/nais/wonderwall:latest &
           wait
           echo "✅ All images pre-pulled successfully"
 
@@ -437,6 +441,23 @@ jobs:
           sleep 10
           echo "✅ Ready to run tests!"
           echo "ℹ️  Note: Feature toggles are automatically created by melosys-api on startup"
+
+      - name: Wait for skjema stack (best-effort)
+        run: |
+          # Skjema-tjenestene er ikke i hoved-helsegaten over (for å ikke regge den
+          # eksisterende suiten). Gi wonderwall/web tid til å svare før testene starter.
+          # Ikke-fatalt: skjema-testene har egne ventere (SkjemaAuthHelper).
+          echo "⏳ Waiting for skjema web (wonderwall :3001)..."
+          for i in $(seq 1 24); do
+            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/medlemskap-lovvalg/soknad/ || echo 000)
+            if [ "$code" != "000" ]; then
+              echo "✅ skjema web svarer (HTTP $code) etter $i forsøk"
+              break
+            fi
+            echo "  forsøk $i/24: ikke klar ennå"
+            sleep 5
+          done
+          docker compose ps melosys-skjema-api melosys-skjema-web melosys-skjema-web-auth || true
 
       - name: Run Playwright tests
         id: playwright
