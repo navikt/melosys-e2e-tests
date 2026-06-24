@@ -16,8 +16,9 @@ import { TrygdeavgiftPage } from '../../pages/trygdeavgift/trygdeavgift.page';
 import { VedtakPage } from '../../pages/vedtak/vedtak.page';
 
 export const PENSJONIST_AARSAVREGNING_TEST_DATA = {
-  periodeFra: '01.04.2024',
-  periodeTil: '05.04.2024',
+  // Minst 4 måneder slik at totalinntekten overstiger minstebeløpet (69 650 kr for 2024).
+  periodeFra: '01.01.2024',
+  periodeTil: '30.04.2024',
   bostedsland: 'BE',
   år: '2024',
   trygdeavgiftBruttoinntekt: '32313',
