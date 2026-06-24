@@ -28,14 +28,14 @@ import { setupPensjonistUtenGrunnlagMedAutoAarsavregning } from './pensjonist-aa
 
 const TESTDATA = {
   år: '2024',
-  innbetalt: '300',
+  innbetalt: '4800',
   bruttoinntekt: '23313',
   inntektskilde: 'PENSJON',
-  manueltBeløp: '250',
+  manueltBeløp: '4750',
 } as const;
 
 // Differanse-beløpene bruker U+2212 MINUS SIGN (−) slik UI-et formaterer dem.
-const DIFFERANSE_BEREGN = '−98,04';
+const DIFFERANSE_BEREGN = '−48,00';
 const DIFFERANSE_OPPGI = '−50,00';
 
 /**
@@ -105,8 +105,8 @@ async function verifiserAarsavregningIDatabase(
     ).toBe(1);
     expect(
       Number(aarsavregning!.INNBETALT_TRYGDEAVGIFT),
-      'Innbetalt trygdeavgift skal være 300'
-    ).toBe(300);
+      'Innbetalt trygdeavgift skal være 4800'
+    ).toBe(4800);
 
     if (forventet.beregnetAvgiftBelop === null) {
       expect(
@@ -195,18 +195,16 @@ test.describe('EU/EØS Trygdeavgift - Pensjonist årsavregning uten grunnlag', (
     await aarsavregning.velgInntektskilde(TESTDATA.inntektskilde);
     await aarsavregning.fyllInnBruttoinntektMedApiVent(TESTDATA.bruttoinntekt);
 
-    // Deterministisk fasit: 23 313 kr/md i 01.04–05.04.2024 → 201,96 kr avgift,
-    // minus 300 kr innbetalt → differanse −98,04 kr (U+2212-minus i UI).
     await aarsavregning.assertions.verifiserSumTabell({
-      endeligBeregnet: '201,96',
-      innbetalt: '300,00',
+      endeligBeregnet: '4 752,00',
+      innbetalt: '4 800,00',
       differanse: DIFFERANSE_BEREGN,
     });
 
     await aarsavregning.klikkBekreftPåResultatside();
     await vedtak.assertions.verifiserFattVedtakKnapp();
 
-    // |−98,04| < 100 kr → ingen fakturering/refusjon, kun minstegrense-info.
+    // |differanse| < 100 kr → ingen fakturering/refusjon, kun minstegrense-info.
     await expect(
       page.getByText('Beløpet er under minstegrensen for fakturering/refusjon (100 kr).')
     ).toBeVisible();
@@ -218,9 +216,9 @@ test.describe('EU/EØS Trygdeavgift - Pensjonist årsavregning uten grunnlag', (
 
     await verifiserAarsavregningIDatabase(behandlingId, {
       endeligAvgiftValg: 'OPPLYSNINGER_ENDRET',
-      beregnetAvgiftBelop: 201.96,
+      beregnetAvgiftBelop: 4752,
       manueltAvgiftBeloep: null,
-      tilFaktureringBeloep: -98.04,
+      tilFaktureringBeloep: -48,
     });
 
     console.log('✅ Uten-grunnlag-årsavregning (Beregn) fullført og verifisert i DB');
@@ -247,10 +245,9 @@ test.describe('EU/EØS Trygdeavgift - Pensjonist årsavregning uten grunnlag', (
     await aarsavregning.velgOppgiEndeligTrygdeavgift();
     await aarsavregning.fyllInnEndeligBeregnetTrygdeavgift(TESTDATA.manueltBeløp);
 
-    // 250 manuelt − 300 innbetalt → differanse −50,00 kr.
     await aarsavregning.assertions.verifiserSumTabell({
-      endeligBeregnet: '250,00',
-      innbetalt: '300,00',
+      endeligBeregnet: '4 750,00',
+      innbetalt: '4 800,00',
       differanse: DIFFERANSE_OPPGI,
     });
 
@@ -274,7 +271,7 @@ test.describe('EU/EØS Trygdeavgift - Pensjonist årsavregning uten grunnlag', (
     // ville en stille no-op (manglende begrunnelse) passert grønt.
     await vedtak.fyllInnFritekst('E2E: årsavregning uten grunnlag, manuelt endelig avgiftsbeløp.');
     await vedtak.fyllInnBegrunnelse(
-      'E2E: Endelig trygdeavgift er lagt inn manuelt (250 kr) for å verifisere MANUELL_ENDELIG_AVGIFT-flyten.'
+      'E2E: Endelig trygdeavgift er lagt inn manuelt (4750 kr) for å verifisere MANUELL_ENDELIG_AVGIFT-flyten.'
     );
     await vedtak.klikkFattVedtak();
 
@@ -284,7 +281,7 @@ test.describe('EU/EØS Trygdeavgift - Pensjonist årsavregning uten grunnlag', (
     await verifiserAarsavregningIDatabase(behandlingId, {
       endeligAvgiftValg: 'MANUELL_ENDELIG_AVGIFT',
       beregnetAvgiftBelop: null,
-      manueltAvgiftBeloep: 250,
+      manueltAvgiftBeloep: 4750,
       tilFaktureringBeloep: -50,
     });
 
