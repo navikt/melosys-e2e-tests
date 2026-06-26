@@ -30,7 +30,6 @@ import { withDatabase } from '../../helpers/db-helper';
  *     → Medlemskap (bekreft)
  *     → Arbeidsforhold (velg arbeidsgiver)
  *     → Lovvalg (Rfo. 883/2004 art.11(3)(b))
- *     → Resultat (bekreft)
  *     → Trygdeavgift (ikke skattepliktig, arbeidsinntekt, bruttoinntekt)
  *     → Vedtak (fatt vedtak)
  *     → Verifisering (DB sluttilstand)
