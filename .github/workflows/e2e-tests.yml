@@ -476,31 +476,34 @@ jobs:
             echo "🎚️  Unleash overrides: none (defaults apply)"
           fi
 
-          # Build Playwright command with optional filters
-          PLAYWRIGHT_CMD="npx playwright test --project=chromium"
+          # Build Playwright command arguments as an array.
+          # Using an array instead of string + eval ensures arguments with
+          # spaces or special characters (e.g. "EØS Medlemskap Lovvalg")
+          # are passed correctly to Playwright as a single --grep value.
+          PLAYWRIGHT_ARGS=(test --project=chromium)
 
           # Add test filter if specified
-          if [ -n "${{ inputs.test_grep }}" ]; then
-            echo "🔍 Filtering tests with pattern: ${{ inputs.test_grep }}"
-            PLAYWRIGHT_CMD="$PLAYWRIGHT_CMD --grep '${{ inputs.test_grep }}'"
+          if [ -n "$TEST_GREP" ]; then
+            echo "🔍 Filtering tests with pattern: $TEST_GREP"
+            PLAYWRIGHT_ARGS+=(--grep "$TEST_GREP")
           fi
 
           # Add repeat count if specified (for race condition testing)
           if [ "${{ inputs.repeat_each }}" -gt 1 ]; then
             echo "🔄 Running each test ${{ inputs.repeat_each }} times"
-            PLAYWRIGHT_CMD="$PLAYWRIGHT_CMD --repeat-each ${{ inputs.repeat_each }}"
+            PLAYWRIGHT_ARGS+=(--repeat-each "${{ inputs.repeat_each }}")
           fi
 
           # Disable retries if specified (for accurate race condition detection)
           if [ "${{ inputs.disable_retries }}" = "true" ]; then
             echo "🚫 Retries disabled"
-            PLAYWRIGHT_CMD="$PLAYWRIGHT_CMD --retries 0"
+            PLAYWRIGHT_ARGS+=(--retries 0)
           fi
 
-          echo "🎭 Running: $PLAYWRIGHT_CMD"
+          echo "🎭 Running: npx playwright ${PLAYWRIGHT_ARGS[*]}"
 
           # Run tests and capture exit code (don't fail immediately)
-          eval $PLAYWRIGHT_CMD || PLAYWRIGHT_EXIT_CODE=$?
+          npx playwright "${PLAYWRIGHT_ARGS[@]}" || PLAYWRIGHT_EXIT_CODE=$?
 
           # Check if test-summary.json was created by reporter
           if [ -f "playwright-report/test-summary.json" ]; then
@@ -540,6 +543,7 @@ jobs:
           fi
         env:
           CI: true
+          TEST_GREP: ${{ inputs.test_grep }}
           RETRIES_DISABLED: ${{ inputs.disable_retries == true }}
           RECORD_API: ${{ inputs.record_api == true && 'true' || '' }}
           UNLEASH_FORCE_DISABLE: ${{ inputs.unleash_force_disable }}
