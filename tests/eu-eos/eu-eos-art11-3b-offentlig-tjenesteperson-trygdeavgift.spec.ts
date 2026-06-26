@@ -134,21 +134,9 @@ test.describe('EØS Medlemskap Lovvalg - Offentlig tjenesteperson 11.3b med tryg
     await verifiserBehandlingSluttilstand({
       behandlingId: lovvalgBehandlingId,
       forventetResultatType: 'FASTSATT_LOVVALGSLAND',
+      forventetTrygdeavgiftType: 'FORELØPIG',
       forventetIverksettProsess: 'IVERKSETT_VEDTAK_EOS',
     });
-    console.log('✅ Lovvalgsvedtaket er AVSLUTTET og iverksatt i DB');
-
-    // Verifiser at trygdeavgift ble lagret (FORELØPIG)
-    await withDatabase(async (db) => {
-      const resultat = await db.queryOne<{ TRYGDEAVGIFT_TYPE: string }>(
-        `SELECT TRYGDEAVGIFT_TYPE
-         FROM BEHANDLINGSRESULTAT
-         WHERE BEHANDLING_ID = :id`,
-        { id: lovvalgBehandlingId }
-      );
-      expect(resultat, 'Forventet behandlingsresultat med trygdeavgift i DB').not.toBeNull();
-      expect(resultat!.TRYGDEAVGIFT_TYPE, 'Trygdeavgift skal være FORELØPIG (forskudd)').toBe('FORELØPIG');
-      console.log(`✅ Trygdeavgift: ${resultat!.TRYGDEAVGIFT_TYPE}`);
-    });
+    console.log('✅ Lovvalgsvedtaket er AVSLUTTET, iverksatt og har trygdeavgift FORELØPIG i DB');
   });
 });
