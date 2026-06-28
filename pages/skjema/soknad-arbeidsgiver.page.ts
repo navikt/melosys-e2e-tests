@@ -47,10 +47,51 @@ export class SoknadArbeidsgiverPage {
     medFullmakt: boolean;
     arbeidstakerEtternavn?: string;
   }): Promise<string> {
-    const page = this.page;
-    await page.getByRole('button', { name: /^ARBEIDSGIVER/ }).click();
-    await page.waitForURL(/\/oversikt/);
+    await this.page.getByRole('button', { name: /^ARBEIDSGIVER/ }).click();
+    await this.page.waitForURL(/\/oversikt/);
+    return this.velgVirksomhetArbeidstakerOgStart(opts);
+  }
 
+  /**
+   * Som {@link velgArbeidsgiverOgStart}, men via rollevalg RÅDGIVER: et ekstra steg velger
+   * rådgivingsfirmaet (fritt org.nr-/EREG-oppslag — ikke Altinn-begrenset, så en hvilken som
+   * helst innlogget bruker kan opptre som rådgiver). Arbeidsgiver + arbeidstaker velges deretter
+   * på samme oversikt som arbeidsgiver-flyten (arbeidsgiver fra Altinn-tilganger, arbeidstaker
+   * fra fullmakt). medFullmakt=true gir RADGIVER_MED_FULLMAKT (begge deler).
+   *
+   * @param opts.radgiverfirmaOrgnr  org.nr til rådgivingsfirmaet (EREG-oppslag).
+   * @param opts.radgiverfirmaNavn   forventet firmanavn (ventes på før «Ok», bekrefter EREG-treff).
+   */
+  async velgRadgiverOgStart(opts: {
+    radgiverfirmaOrgnr: string;
+    radgiverfirmaNavn: string;
+    arbeidsgiverOrgnr: string;
+    arbeidstakerFnr: string;
+    medFullmakt: boolean;
+    arbeidstakerEtternavn?: string;
+  }): Promise<string> {
+    const page = this.page;
+    await page.getByRole('button', { name: /^RÅDGIVER/ }).click();
+    await page.waitForURL(/\/velg-radgiverfirma/);
+    await page.getByRole('textbox', { name: /Søk på virksomhet/ }).fill(opts.radgiverfirmaOrgnr);
+    // Vent på at EREG-oppslaget rendrer firmanavnet før vi bekrefter.
+    await expect(page.getByText(opts.radgiverfirmaNavn)).toBeVisible({ timeout: 10000 });
+    await page.getByRole('button', { name: 'Ok', exact: true }).click();
+    await page.waitForURL(/\/oversikt/);
+    return this.velgVirksomhetArbeidstakerOgStart(opts);
+  }
+
+  /**
+   * Felles oversikt-logikk (delt av arbeidsgiver- og rådgiver-rollevalget): velg virksomhet,
+   * velg/oppgi arbeidstaker, bekreft og start. Forutsetter at vi står på /oversikt.
+   */
+  private async velgVirksomhetArbeidstakerOgStart(opts: {
+    arbeidsgiverOrgnr: string;
+    arbeidstakerFnr: string;
+    medFullmakt: boolean;
+    arbeidstakerEtternavn?: string;
+  }): Promise<string> {
+    const page = this.page;
     // Velg arbeidsgiver i Aksel-comboboxen (Altinn-tilganger). Filtrer på orgnr og velg treffet.
     const arbeidsgiverCombo = page.getByRole('combobox', { name: /Velg arbeidsgiver/ });
     await arbeidsgiverCombo.click();
@@ -164,7 +205,37 @@ export class SoknadArbeidsgiverPage {
       arbeidstakerFnr: opts.arbeidstakerFnr,
       medFullmakt: true,
     });
-    await this.fyllUtsendingsperiodeOgLand(opts.land);
+    const referanse = await this.fyllAlleStegBeggeDeler(opts.land, opts.vedleggFilsti);
+    return { skjemaId, referanse };
+  }
+
+  /**
+   * Full innsending som RÅDGIVER med fullmakt — fyller ut BEGGE deler (11 steg) på vegne av et
+   * rådgivingsfirma. Som begge-deler-flyten, men med et innledende rådgiverfirma-valg.
+   * @returns søknads-id (UUID) og referansenummer fra kvitteringen.
+   */
+  async fyllUtOgSendInnRadgiverBeggeDeler(opts: {
+    radgiverfirmaOrgnr: string;
+    radgiverfirmaNavn: string;
+    arbeidsgiverOrgnr: string;
+    arbeidstakerFnr: string;
+    land?: string;
+    vedleggFilsti?: string;
+  }): Promise<{ skjemaId: string; referanse: string }> {
+    const skjemaId = await this.velgRadgiverOgStart({
+      radgiverfirmaOrgnr: opts.radgiverfirmaOrgnr,
+      radgiverfirmaNavn: opts.radgiverfirmaNavn,
+      arbeidsgiverOrgnr: opts.arbeidsgiverOrgnr,
+      arbeidstakerFnr: opts.arbeidstakerFnr,
+      medFullmakt: true,
+    });
+    const referanse = await this.fyllAlleStegBeggeDeler(opts.land, opts.vedleggFilsti);
+    return { skjemaId, referanse };
+  }
+
+  /** Fyll ut alle steg for begge-deler-varianten (steg 1-5 AG + AT-steg + hale) og send inn. */
+  private async fyllAlleStegBeggeDeler(land?: string, vedleggFilsti?: string): Promise<string> {
+    await this.fyllUtsendingsperiodeOgLand(land);
     await this.fyllArbeidsgiverensVirksomhet();
     await this.fyllUtenlandsoppdraget();
     await this.fyllArbeidssted();
@@ -174,9 +245,8 @@ export class SoknadArbeidsgiverPage {
     await this.felles.fyllSkatteforholdOgInntekt();
     await this.felles.fyllFamiliemedlemmer();
     await this.felles.fyllTilleggsopplysninger();
-    await this.felles.fyllVedlegg(opts.vedleggFilsti);
-    const referanse = await this.felles.sendInnOgHentReferanse();
-    return { skjemaId, referanse };
+    await this.felles.fyllVedlegg(vedleggFilsti);
+    return this.felles.sendInnOgHentReferanse();
   }
 
   /**

@@ -223,4 +223,26 @@ export class SkjemaMottakAssertions {
         `innen ${timeoutMs} ms (siste funn: ${sisteFunn}).`
     );
   }
+
+  /**
+   * Verifiser at melosys-api mottok forventede metadata-verdier. ORIGINAL_DATA i SKJEMA_SAK_MAPPING
+   * er hele M2M-DTO-en (CLOB JSON, inkl. skjema.metadata), så vi kan bekrefte at f.eks.
+   * rådgiverfirma-orgnr, fullmektig-fnr og representasjonstype fulgte med fra skjema-web til melosys-api.
+   */
+  async verifiserOriginalDataInneholder(skjemaId: string, forventetInnhold: string[]): Promise<void> {
+    const hex = skjemaId.replace(/-/g, '').toUpperCase();
+    const original = await withDatabase((db) =>
+      db
+        .queryOne<{ ORIGINAL_DATA: string }>(
+          `SELECT ORIGINAL_DATA FROM SKJEMA_SAK_MAPPING WHERE SKJEMA_ID = HEXTORAW(:hex)`,
+          { hex }
+        )
+        .then((r) => r?.ORIGINAL_DATA ?? null)
+    );
+    expect(original, `ORIGINAL_DATA skal finnes for skjema ${skjemaId}`).not.toBeNull();
+    for (const innhold of forventetInnhold) {
+      expect(original!, `ORIGINAL_DATA skal inneholde «${innhold}»`).toContain(innhold);
+    }
+    console.log(`✅ ORIGINAL_DATA for ${skjemaId} inneholder: ${forventetInnhold.join(', ')}`);
+  }
 }
