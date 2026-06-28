@@ -72,11 +72,13 @@ export class SoknadArbeidsgiverPage {
       ).toBeTruthy();
       await svarRadio(page, /Skal du fylle ut søknaden for arbeidstaker/, 'Nei');
       await page.getByRole('textbox', { name: 'Fødsels-/d-nummer' }).fill(opts.arbeidstakerFnr);
-      await page.getByRole('textbox', { name: 'Etternavn' }).fill(opts.arbeidstakerEtternavn!);
-      // To knapper heter «Søk» (denne + tabellsøket lenger ned); verifiseringsknappen er først i DOM.
-      await page.getByRole('button', { name: 'Søk', exact: true }).first().click();
-      // Vent på at personen er verifisert (vises som «NAVN - fnr») før vi kan starte.
-      await expect(page.getByText(new RegExp(opts.arbeidstakerFnr))).toBeVisible();
+      const etternavnFelt = page.getByRole('textbox', { name: 'Etternavn' });
+      await etternavnFelt.fill(opts.arbeidstakerEtternavn!);
+      // Flere knapper heter «Søk» (toppmeny-søk + evt. tabellsøk i «Tidligere innsendte»);
+      // verifiseringsknappen er den første «Søk» etter etternavn-feltet i DOM.
+      await etternavnFelt.locator('xpath=following::button[normalize-space()="Søk"][1]').click();
+      // Vent på at personen er verifisert (vises som «NAVN - fnr») før vi kan starte (PDL-oppslag).
+      await expect(page.getByText(new RegExp(opts.arbeidstakerFnr))).toBeVisible({ timeout: 15000 });
     }
 
     await page.getByRole('checkbox', { name: /Jeg bekrefter/ }).check();
