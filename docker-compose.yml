@@ -627,6 +627,9 @@ services:
   melosys-skjema-api:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-skjema-api:${MELOSYS_SKJEMA_API_TAG:-latest}
     container_name: melosys-skjema-api
+    # Skjema-stacken startes kun når skjema-tester er i scope (workflowen setter
+    # COMPOSE_PROFILES=skjema). Saksbehandler-fokuserte kjøringer slipper kostnaden.
+    profiles: ["skjema"]
     depends_on:
       postgres:
         condition: service_healthy
@@ -662,6 +665,7 @@ services:
   melosys-skjema-web:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-skjema-web:${MELOSYS_SKJEMA_WEB_TAG:-latest}
     container_name: melosys-skjema-web
+    profiles: ["skjema"]
     depends_on:
       melosys-skjema-api:
         condition: service_started
@@ -694,6 +698,7 @@ services:
   melosys-skjema-web-auth:
     image: ghcr.io/nais/wonderwall:latest
     container_name: melosys-skjema-web-auth
+    profiles: ["skjema"]
     depends_on:
       - melosys-skjema-web
       - mock-oauth2-server
