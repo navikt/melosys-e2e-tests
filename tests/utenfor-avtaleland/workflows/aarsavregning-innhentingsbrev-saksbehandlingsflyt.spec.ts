@@ -23,7 +23,7 @@ import {waitForProcessInstances} from '../../../helpers/api-helper';
 import {TestPeriods} from '../../../helpers/date-helper';
 import {withDatabase} from '../../../helpers/db-helper';
 import {withFaktureringDatabase} from '../../../helpers/pg-db-helper';
-import {setupPensjonistUtenGrunnlagMedAutoAarsavregning} from '../../eu-eos/pensjonist-aarsavregning-setup';
+import {setupPensjonistUtenGrunnlagMedAutoAarsavregning} from '../../aarsavregning/pensjonist-aarsavregning-setup';
 
 /**
  * MELOSYS-8148: Automatisk sende innhentingsbrev ved opprettelse av årsavregning i flytene
