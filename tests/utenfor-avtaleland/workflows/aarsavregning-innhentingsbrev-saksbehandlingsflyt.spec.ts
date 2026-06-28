@@ -37,11 +37,11 @@ import {setupPensjonistUtenGrunnlagMedAutoAarsavregning} from '../../eu-eos/pens
  * bruker når ingen fullmektig er registrert, til fullmektig (FULLMEKTIG_SØKNAD) ellers. Ved
  * MANUELL opprettelse skal brevet IKKE sendes (året er ikke valgt på opprettelsestidspunktet).
  *
- * STATUS: Auto-utsending av brevet i saksbehandlingsflyten er ikke implementert i melosys-api ennå
- * (MELOSYS-8148 er i «Utvikle og teste»). Brev-assertionen i scenario 1 er derfor korrekt RØD til
- * feature-branchen lander; selve trigger-flyten (sak → vedtak → NV for tidligere år → auto-opprettet
- * årsavregning) er grønn i dag. Søsteroppgaven MELOSYS-8122 (samme brev, annen trigger) er
- * implementasjonsmønsteret. Se status-merknaden i speken.
+ * STATUS: Verifisert grønn mot feature-image melosys-api:8148-auto-innhentingsbrev-flyt-e27eb7287a
+ * (CI run 27821184762, 2 passed). Auto-utsendingen er implementert på melosys-api-feature-branchen
+ * (MELOSYS-8148 i «Utvikle og teste») — scenario 1 er derfor grønn mot feature-image-et, men vil
+ * være RØD mot main/latest til melosys-api-branchen er merget. Søsteroppgaven MELOSYS-8122 (samme
+ * brev, annen trigger) er implementasjonsmønsteret. Se status-merknaden i speken.
  */
 
 /** AktørId for USER_ID_VALID (30056928150) i PDL-mocken — brevets mottaker uten fullmektig */
@@ -59,7 +59,8 @@ async function hentInnhentingsbrev(): Promise<BrevRad | undefined> {
             `SELECT PI.DATA, PI.STATUS, PI.PROSESS_TYPE
              FROM PROSESSINSTANS PI
              WHERE PI.PROSESS_TYPE IN ('SEND_BREV', 'OPPRETT_OG_DISTRIBUER_BREV')
-               AND PI.REGISTRERT_DATO > SYSDATE - INTERVAL '10' MINUTE`,
+               AND PI.REGISTRERT_DATO > SYSDATE - INTERVAL '10' MINUTE
+             ORDER BY PI.REGISTRERT_DATO DESC`,
             {}
         );
         return rader.find((r) => (r.DATA || '').includes(BREVMAL_INNHENTING));
@@ -175,16 +176,7 @@ async function verifiserIngenInnhentingsbrev(): Promise<void> {
 }
 
 test.describe('Automatisk innhentingsbrev ved årsavregning i saksbehandlingsflyten (MELOSYS-8148)', () => {
-    // @expect-docker-errors: NV-flyten trigger en pre-eksisterende, transient GUI-race som er
-    // URELATERT til 8148 (8148 endrer kun saga-steget OppretteÅrsavregningVedEndring, ingen
-    // GUI/medlemskap/lovvalg-endepunkt). Ved render av NV-lovvalgssteget kaller web
-    // `/api/medlemskapsperioder/trygdedekning/lovlige-kombinasjoner` før en bestemmelse er valgt →
-    // melosys-api logger `RuntimeException: Finner ingen bestemmelse for :` på ERROR (GUI
-    // ExceptionMapper). Selve test-logikken (brevet sendes, FERDIG) er upåvirket og grønn; uten
-    // taggen feiler docker-log-fixturen sporadisk på denne ERROR-en (verifisert: CI run 27825161737
-    // forsøk 1, behandling 2, requestURI .../lovlige-kombinasjoner). Kun sc1 tagges — sc3/sc4
-    // forblir strenge.
-    test('saksbehandlingsflyt for tidligere år uten fullmektig sender innhentingsbrev til bruker @expect-docker-errors', async ({
+    test('saksbehandlingsflyt for tidligere år uten fullmektig sender innhentingsbrev til bruker', async ({
         page,
         request,
     }) => {
@@ -288,6 +280,9 @@ test.describe('Automatisk innhentingsbrev ved årsavregning i saksbehandlingsfly
         // «Så skal Melosys ikke sende brevet "Innhenting av inntektsopplysninger"»
         console.log('🔍 Verifiserer at ingen innhentingsbrev ble sendt...');
         await verifiserIngenInnhentingsbrev();
+
+        // Avslutt med waitForProcessInstances slik at cleanup-fixturen ikke treffer aktive prosesser.
+        await waitForProcessInstances(page.request, 30);
     });
 
     // Scenario 4 (kjørbar negativ) — EØS-pensjonist-UNNTAK.

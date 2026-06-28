@@ -25,7 +25,7 @@ oppgave). Brevet skal **ikke** sendes når saksbehandler **manuelt** oppretter e
 
 *Hjemmel: skatteforvaltningsforskriften § 2-13-2 og folketrygdloven § 23-3.*
 *Søsteroppgave: [MELOSYS-8122](https://nav.atlassian.net/browse/MELOSYS-8122) (samme brev, men trigget av skattemeldingslytting / ikke-skattepliktig-jobben) — brukes som implementasjonsmønster.*
-*Kilde: [Årsavregning — nav-wiki](file:///Users/rune/source/private/huginn/huginn-nav/wiki/concepts/Årsavregning.md), [Årsavregning - manuell støtte i flyt — Confluence](https://confluence.adeo.no/spaces/TEESSI/pages/704517663), [Mottakere av brev — Confluence](https://confluence.adeo.no/spaces/TEESSI/pages/395304999)*
+*Kilde: [Årsavregning - manuell støtte i flyt — Confluence](https://confluence.adeo.no/spaces/TEESSI/pages/704517663), [Mottakere av brev — Confluence](https://confluence.adeo.no/spaces/TEESSI/pages/395304999)*
 
 ## Scenario 1 — Automatisk opprettet årsavregning, bruker uten fullmektig
 
@@ -95,18 +95,18 @@ Gitt at saksbehandler fatter vedtak i en saksbehandlingsflyt for en EØS-pensjon
 > og skal brukes **ordrett**. Ikke "korriger" dem mot eksempelverdier i POM-ens JSDoc — samme
 > dropdown bruker ulike koder i ulike flyter.
 
-> **Status-merknad:** Auto-utsending av innhentingsbrevet ved *automatisk* opprettelse av
-> årsavregning i saksbehandlingsflyten er **ikke implementert i melosys-api ennå** (MELOSYS-8148 er
-> i «Utvikle og teste»). Søsteroppgaven [MELOSYS-8122](https://nav.atlassian.net/browse/MELOSYS-8122)
-> (samme brev, annen trigger) er i akseptanse test og er implementasjonsmønsteret. Brev-assertionen
-> i scenario 1 forventes derfor **rød** til feature-branchen lander; selve trigger-flyten (sak →
-> vedtak → ny vurdering for tidligere år → auto-opprettet årsavregning) er grønn i dag. Dette er en
-> akseptanse-test skrevet *foran* implementasjonen, etter samme mønster som
+> **Status-merknad:** Auto-utsendingen av innhentingsbrevet ved *automatisk* opprettelse av
+> årsavregning i saksbehandlingsflyten er implementert på melosys-api-feature-branchen
+> `8148-auto-innhentingsbrev-flyt` (MELOSYS-8148 i «Utvikle og teste»). Scenario 1 er **verifisert
+> grønn** mot feature-image-et `melosys-api:8148-auto-innhentingsbrev-flyt-e27eb7287a` (CI run
+> 27821184762, 2 passed), men vil være **rød mot main/`latest`** til melosys-api-branchen er merget.
+> Søsteroppgaven [MELOSYS-8122](https://nav.atlassian.net/browse/MELOSYS-8122) (samme brev, annen
+> trigger) er implementasjonsmønsteret. Dette er en akseptanse-test skrevet *foran* prodsetting,
+> etter samme mønster som
 > [`aarsavregning-innhentingsbrev-automatisk.md`](aarsavregning-innhentingsbrev-automatisk.md) (8122)
 > og [`aarsavregning-oppgave-skatteaar-i-beskrivelse.md`](aarsavregning-oppgave-skatteaar-i-beskrivelse.md) (8123).
-> Testen er **ikke** `@known-error`-tagget (det er for kjente bugs som ikke fikses): den kjøres
-> grønn mot feature-image-et når melosys-api-branchen lander, akkurat som 8122/8123 ble verifisert
-> mot sine feature-images. Scenario 3 (manuell → ingen brev) er grønn allerede i dag.
+> Testen er **ikke** `@known-error`-tagget (det er for kjente bugs som ikke fikses). Scenario 3
+> (manuell → ingen brev) og scenario 4 (EØS-pensjonist-unntak) er grønne også mot main.
 
 ### Forhold til MELOSYS-8123 og MELOSYS-8122
 
@@ -280,5 +280,9 @@ treffer aktive prosessinstanser.
   `MedlemskapBestemmelsekonverter.kt:19`). Test-logikken (brev FERDIG) var grønn begge forsøk; uten
   taggen feilet docker-log-fixturen sporadisk (CI run 27825161737 forsøk 1). sc3/sc4 forblir strenge.
   Pre-eksisterende ERROR-logging flagget til api-peer som egen NOJIRA-opprydding.
-</content>
-</invoke>
+- 2026-06-28: Fjernet `@expect-docker-errors` fra scenario 1 — den pre-eksisterende GUI-race-ERROR-en
+  (`Finner ingen bestemmelse for :` ved NV-lovvalgssteget) er ryddet opp på melosys-api-siden, så
+  docker-log-fixturen kan igjen være streng på alle fire scenariene. Samtidig adressert Copilot-review
+  på PR #284: `ORDER BY REGISTRERT_DATO DESC` i brev-spørringen (deterministisk «fersk» rad),
+  avsluttende `waitForProcessInstances` i scenario 3, oppdatert status-merknad (verifisert grønn mot
+  feature-image), og fjernet lokal `file://`-kildelenke.
