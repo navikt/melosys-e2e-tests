@@ -325,6 +325,23 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PASSWORD: ${{ secrets.READER_TOKEN }}
 
+      - name: Determine skjema scope
+        # Skjema-stacken (digital «Utsendt arbeidstaker»-søknad: skjema-api/-web/-web-auth +
+        # full-flow-oppvarmingen) er kostbar og trengs bare når skjema-tester faktisk kjører.
+        # Den er i scope når det IKKE er filtrert (full suite kjører skjema) ELLER test_grep
+        # nevner «skjema». Da settes COMPOSE_PROFILES=skjema (aktiverer profiled-tjenestene) for
+        # alle påfølgende `docker compose`-kall. Ellers hoppes pull/start/vent/oppvarming over.
+        run: |
+          if [ -z "${{ inputs.test_grep }}" ] || echo "${{ inputs.test_grep }}" | grep -qi skjema; then
+            echo "🧩 Skjema-tester i scope → starter skjema-stack + oppvarming"
+            echo "SKJEMA_IN_SCOPE=true" >> "$GITHUB_ENV"
+            echo "COMPOSE_PROFILES=skjema" >> "$GITHUB_ENV"
+          else
+            echo "🧩 Skjema-tester IKKE i scope → hopper over skjema-stack + oppvarming"
+            echo "SKJEMA_IN_SCOPE=false" >> "$GITHUB_ENV"
+            echo "SKIP_SKJEMA_WARMUP=true" >> "$GITHUB_ENV"
+          fi
+
       - name: Pre-pull Docker images in parallel
         run: |
           echo "🐳 Pre-pulling Docker images to avoid timeout during compose up..."
@@ -345,10 +362,12 @@ jobs:
           docker pull --platform linux/amd64 ghcr.io/navikt/mock-oauth2-server:2.3.0 &
           docker pull --platform linux/amd64 ghcr.io/navikt/mock-oauth2-server:0.4.8 &
           docker pull --platform linux/amd64 unleashorg/unleash-server:latest &
-          # Skjema-stack (digital «Utsendt arbeidstaker»-søknad)
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-skjema-api:latest &
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-skjema-web:latest &
-          docker pull --platform linux/amd64 ghcr.io/nais/wonderwall:latest &
+          # Skjema-stack (digital «Utsendt arbeidstaker»-søknad) — kun når skjema er i scope.
+          if [ "$SKJEMA_IN_SCOPE" = "true" ]; then
+            docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-skjema-api:latest &
+            docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-skjema-web:latest &
+            docker pull --platform linux/amd64 ghcr.io/nais/wonderwall:latest &
+          fi
           wait
           echo "✅ All images pre-pulled successfully"
 
@@ -443,6 +462,7 @@ jobs:
           echo "ℹ️  Note: Feature toggles are automatically created by melosys-api on startup"
 
       - name: Wait for skjema stack (best-effort)
+        if: env.SKJEMA_IN_SCOPE == 'true'
         run: |
           # Skjema-tjenestene er ikke i hoved-helsegaten over (for å ikke regge den
           # eksisterende suiten). Gi wonderwall/web tid til å svare før testene starter.
@@ -528,6 +548,14 @@ jobs:
             echo "  ✨ Known Error (Passed): $KNOWN_ERROR_PASSED"
             echo "  📊 Total: $TOTAL"
             echo ""
+
+            # Vakt mot falsk grønn: en collection-/import-feil (f.eks. en stale import-sti) gjør at
+            # Playwright laster INGEN tester, men reporteren rapporterer da «passed» med 0 tester.
+            # En reell E2E-kjøring samler alltid >0 tester (også test_grep skal matche noe), så 0 = feil.
+            if [ "${TOTAL:-0}" -eq 0 ]; then
+              echo "❌ CI Status: FAILED — 0 tester ble samlet/kjørt (sannsynlig collection-/import-feil, eller test_grep matchet ingenting). Feiler for å unngå falsk grønn."
+              exit 1
+            fi
 
             if [ "$CI_STATUS" = "passed" ]; then
               echo "✅ CI Status: PASSED (known-error tests don't fail the build)"
