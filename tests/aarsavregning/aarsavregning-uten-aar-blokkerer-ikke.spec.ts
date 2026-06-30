@@ -125,10 +125,16 @@ async function lesEnesteSaksnummer(): Promise<string> {
  */
 async function gittÅpenÅrsavregningUtenÅr(saksnummer: string): Promise<number> {
     return withDatabase(async (db) => {
+        // REGISTRERT_AV/ENDRET_AV settes (saksbehandler-ident, som alle ekte behandlinger) slik at
+        // stubben kan åpnes i GUI-en. Uten ident gir GET /api/behandlinger/{id} HTTP 500
+        // (AzureAdService.hentSaksbehandlerNavn(ident: String) er non-null), GUI-en faller tilbake til
+        // ingen-flyt-ruten med behandlingID=-1. Påvirker ikke assertene (kun DB-tilstand verifiseres).
         await db.execute(
             `INSERT INTO BEHANDLING
-                 (SAKSNUMMER, STATUS, BEH_TYPE, REGISTRERT_DATO, ENDRET_DATO, BEH_TEMA, BEHANDLINGSFRIST)
-             VALUES (:s, 'OPPRETTET', 'ÅRSAVREGNING', SYSTIMESTAMP, SYSTIMESTAMP, 'YRKESAKTIV', SYSDATE)`,
+                 (SAKSNUMMER, STATUS, BEH_TYPE, REGISTRERT_DATO, ENDRET_DATO,
+                  REGISTRERT_AV, ENDRET_AV, BEH_TEMA, BEHANDLINGSFRIST)
+             VALUES (:s, 'OPPRETTET', 'ÅRSAVREGNING', SYSTIMESTAMP, SYSTIMESTAMP,
+                     'Z123456', 'Z123456', 'YRKESAKTIV', SYSDATE)`,
             {s: saksnummer}
         );
 
@@ -195,8 +201,10 @@ async function gittÅpenÅrsavregningMedÅr(saksnummer: string, aar: number): Pr
     return withDatabase(async (db) => {
         await db.execute(
             `INSERT INTO BEHANDLING
-                 (SAKSNUMMER, STATUS, BEH_TYPE, REGISTRERT_DATO, ENDRET_DATO, BEH_TEMA, BEHANDLINGSFRIST)
-             VALUES (:s, 'OPPRETTET', 'ÅRSAVREGNING', SYSTIMESTAMP, SYSTIMESTAMP, 'YRKESAKTIV', SYSDATE)`,
+                 (SAKSNUMMER, STATUS, BEH_TYPE, REGISTRERT_DATO, ENDRET_DATO,
+                  REGISTRERT_AV, ENDRET_AV, BEH_TEMA, BEHANDLINGSFRIST)
+             VALUES (:s, 'OPPRETTET', 'ÅRSAVREGNING', SYSTIMESTAMP, SYSTIMESTAMP,
+                     'Z123456', 'Z123456', 'YRKESAKTIV', SYSDATE)`,
             {s: saksnummer}
         );
 
