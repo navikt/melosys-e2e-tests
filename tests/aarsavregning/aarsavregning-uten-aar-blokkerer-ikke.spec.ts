@@ -1,5 +1,5 @@
 import {expect, test} from '../../fixtures';
-import type {Page} from '@playwright/test';
+import type {APIRequestContext, Page} from '@playwright/test';
 import {AuthHelper} from '../../helpers/auth-helper';
 import {HovedsidePage} from '../../pages/hovedside.page';
 import {OpprettNySakPage} from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
@@ -182,6 +182,124 @@ async function finnNyÅrsavregningMedÅr(aar: number, ekskluderBehandlingId: num
     });
 }
 
+/**
+ * Gitt: en ÅPEN ÅRSAVREGNING-behandling MED år (aar) på saken, men med behandlingsresultattype
+ * != IKKE_FASTSATT. Dette er nettopp feilstien fiksen lukker: den gamle gaten filtrerte på
+ * IKKE_FASTSATT og BOMMET på denne, mens den nedstrøms SQL-guarden (kun status != AVSLUTTET) talte
+ * den → «opprett-så-kast» med den misvisende feilmeldingen. Enum-verdier FK-verifisert mot live
+ * Oracle (AARSAVREGNING-PK = (BEHANDLINGSRESULTAT_ID, AAR), begge NOT NULL).
+ *
+ * @returns BEHANDLING.ID for den injiserte med-år-behandlingen.
+ */
+async function gittÅpenÅrsavregningMedÅr(saksnummer: string, aar: number): Promise<number> {
+    return withDatabase(async (db) => {
+        await db.execute(
+            `INSERT INTO BEHANDLING
+                 (SAKSNUMMER, STATUS, BEH_TYPE, REGISTRERT_DATO, ENDRET_DATO, BEH_TEMA, BEHANDLINGSFRIST)
+             VALUES (:s, 'OPPRETTET', 'ÅRSAVREGNING', SYSTIMESTAMP, SYSTIMESTAMP, 'YRKESAKTIV', SYSDATE)`,
+            {s: saksnummer}
+        );
+
+        // På injeksjonstidspunktet (før NV-vedtaket) er dette den ENESTE ÅRSAVREGNING-behandlingen.
+        const rad = await db.queryOne<IdRad>(
+            `SELECT ID FROM BEHANDLING WHERE SAKSNUMMER = :s AND BEH_TYPE = 'ÅRSAVREGNING'`,
+            {s: saksnummer}
+        );
+        expect(rad, 'Injeksjon feilet: fant ikke den injiserte ÅRSAVREGNING-behandlingen').not.toBeNull();
+        const id = Number(rad!.ID);
+
+        await db.execute(
+            `INSERT INTO BEHANDLINGSRESULTAT
+                 (BEHANDLING_ID, BEHANDLINGSMAATE, RESULTAT_TYPE, REGISTRERT_DATO, ENDRET_DATO)
+             VALUES (:id, 'MANUELT', 'MEDLEM_I_FOLKETRYGDEN', SYSTIMESTAMP, SYSTIMESTAMP)`,
+            {id}
+        );
+        await db.execute(
+            `INSERT INTO AARSAVREGNING (BEHANDLINGSRESULTAT_ID, AAR) VALUES (:id, :aar)`,
+            {id, aar}
+        );
+
+        const medÅr = await db.queryOne<{N: number}>(
+            'SELECT COUNT(*) AS N FROM AARSAVREGNING WHERE BEHANDLINGSRESULTAT_ID = :id AND AAR = :aar',
+            {id, aar}
+        );
+        expect(
+            Number(medÅr!.N),
+            'Precondition: injisert årsavregning skal HA år (AARSAVREGNING-rad for året)'
+        ).toBe(1);
+
+        console.log(`📌 Injisert åpen ÅRSAVREGNING-behandling MED år=${aar}: behandlingId=${id} (sak ${saksnummer})`);
+        return id;
+    });
+}
+
+/**
+ * Felles flyt for scenariene: vedtatt FTRL-sak (inneværende år) + ny vurdering som flytter perioden
+ * til kun forrige år, helt fram til (men ikke medregnet) vedtaksfattingen. Returnerer saksnummeret
+ * og VedtakPage slik at hver test kan injisere sin precondition rett før vedtaket fattes.
+ */
+async function settOppSakOgNyVurderingTilbakeITid(
+    page: Page,
+    request: APIRequestContext
+): Promise<{saksnummer: string; vedtak: VedtakPage}> {
+    const auth = new AuthHelper(page);
+    const unleash = new UnleashHelper(request);
+
+    await unleash.disableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
+    await auth.login();
+
+    await opprettVedtattSakInneværendeÅr(page);
+
+    // Fakturaene må være BESTILT for at NV-avregningen skal gå gjennom.
+    await withFaktureringDatabase(async (db) => {
+        const updated = await db.execute("UPDATE faktura SET status = 'BESTILT'");
+        console.log(`📝 Satte ${updated} faktura-rader til BESTILT`);
+    });
+
+    await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
+
+    const saksnummer = await lesEnesteSaksnummer();
+
+    const hovedside = new HovedsidePage(page);
+    const opprettSak = new OpprettNySakPage(page);
+    const medlemskap = new MedlemskapPage(page);
+    const arbeidsforhold = new ArbeidsforholdPage(page);
+    const lovvalg = new LovvalgPage(page);
+    const resultatPeriode = new ResultatPeriodePage(page);
+    const trygdeavgift = new TrygdeavgiftPage(page);
+    const vedtak = new VedtakPage(page);
+
+    console.log('📝 Oppretter ny vurdering...');
+    await hovedside.klikkOpprettNySak();
+    await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
+    await waitForProcessInstances(page.request, 30);
+
+    await hovedside.goto();
+    await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).first().click();
+
+    const periodeNV = TestPeriods.previousYearPeriod;
+    console.log(`📝 NV medlemskap (${periodeNV.start} - ${periodeNV.end})...`);
+    await medlemskap.velgPeriode(periodeNV.start, periodeNV.end);
+    await medlemskap.klikkBekreftOgFortsett();
+
+    await arbeidsforhold.fyllUtArbeidsforhold('Ståles Stål AS');
+
+    console.log('📝 NV lovvalg (FTRL 2-1 fjerde ledd)...');
+    await lovvalg.velgBestemmelse('FTRL_KAP2_2_1');
+    await lovvalg.velgBrukersSituasjon('MIDLERTIDIG_ARBEID_2_1_FJERDE_LEDD');
+    await lovvalg.svarJaPaaFørsteSpørsmål();
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Er søkers arbeidsoppdrag i');
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Plikter arbeidsgiver å betale');
+    await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker lovlig opphold i');
+    await lovvalg.klikkBekreftOgFortsett();
+
+    // Resultat og trygdeavgift beholdes fra forrige behandling.
+    await resultatPeriode.klikkBekreftOgFortsett();
+    await trygdeavgift.klikkBekreftOgFortsett();
+
+    return {saksnummer, vedtak};
+}
+
 test.describe('Årsavregning uten år blokkerer ikke automatisk opprettelse (MELOSYS-8161)', () => {
     test('åpen årsavregning uten år hindrer ikke auto-opprettelse for tidligere år', async ({
         page,
@@ -361,21 +479,62 @@ test.describe('Årsavregning uten år blokkerer ikke automatisk opprettelse (MEL
         console.log('✅ Uten-år-behandlingen blokkerte ikke auto-opprettelsen.');
     });
 
-    // Scenario 2 — normal blokkering MED år (regresjon).
+    // Scenario 2 — eksisterende åpen årsavregning MED år (feilstien) blokkerer fortsatt.
     //
-    // Bundet som fixme. Domenelagets AC for scenario 2 er eksplisitt markert «utledet — bekreft med
-    // fagperson at denne regelen er uendret», og beskriver PRE-EKSISTERENDE atferd (ikke det 8161
-    // endrer). Konstruksjons-sti for senere aktivering (se speken): injiser en åpen ÅRSAVREGNING-
-    // behandling MED AARSAVREGNING-rad AAR=FORRIGE_AAR og RESULTAT_TYPE='IKKE_FASTSATT' (da gir
-    // finnÅrsavregningerPåFagsak(..., IKKE_FASTSATT) treff → harAktivÅrsavregningforÅr=true → ingen ny
-    // opprettes), kjør samme NV-trigger, og assert at det fremdeles finnes NØYAKTIG ÉN ÅRSAVREGNING for
-    // FORRIGE_AAR. «Tilbakestilles» (resetEksisterendeÅrsavregning, MELOSYS-7826) krever egen
-    // verifisering av at saksbehandler-input nullstilles — bekreft med fagperson før binding.
-    test.fixme(
-        'åpen årsavregning MED år for samme år blokkerer fortsatt ny opprettelse',
-        async () => {
-            // Krever konstruksjon av «åpen årsavregning MED år» + verifisering av tilbakestilling.
-            // Se speken (specs/aarsavregning-uten-aar-blokkerer-ikke.md), scenario 2.
-        }
-    );
+    // Precondition strammet til den FAKTISKE feilstien (jf. spec-ens status-merknad): åpen ÅRSAVREGNING
+    // MED AARSAVREGNING-rad AAR=FORRIGE_AAR, men RESULTAT_TYPE != IKKE_FASTSATT. Mot master bommer den
+    // gamle IKKE_FASTSATT-filtrerte gaten på den → auto-opprettelsen går videre → SQL-guarden kaster
+    // den misvisende feilen (OPPRETT_NY_BEHANDLING_AARSAVREGNING feiler → waitForProcessInstances kaster
+    // = RØD). Med fiksen er gaten enig med SQL-guarden og blokkerer rent (GRØNN). «Tilbakestilles»
+    // (resetEksisterendeÅrsavregning, MELOSYS-7826) er pre-eksisterende atferd og ikke bundet her.
+    test('åpen årsavregning MED år (annen resultattype) blokkerer fortsatt — uten misvisende feil', async ({
+        page,
+        request,
+    }) => {
+        test.setTimeout(240_000);
+
+        const {saksnummer, vedtak} = await settOppSakOgNyVurderingTilbakeITid(page, request);
+
+        // GITT: en åpen ÅRSAVREGNING MED år (FORRIGE_AAR), behandlingsresultattype != IKKE_FASTSATT.
+        const medÅrBehandlingId = await gittÅpenÅrsavregningMedÅr(saksnummer, FORRIGE_AAR);
+
+        console.log('📝 Fatter vedtak for ny vurdering (med endring i forrige års periode)...');
+        await vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING');
+        // Med fiksen starter ingen opprett-prosess (gaten blokkerer) → ingen feilende prosess.
+        // Mot master ville OPPRETT_NY_BEHANDLING_AARSAVREGNING feilet → dette kallet kastet.
+        await waitForProcessInstances(page.request, 60);
+
+        // SÅ: ingen NY årsavregning opprettes for FORRIGE_AAR — fortsatt nøyaktig ÉN ÅRSAVREGNING med
+        // AARSAVREGNING-rad for året (den injiserte).
+        const nyId = await finnNyÅrsavregningMedÅr(FORRIGE_AAR, medÅrBehandlingId);
+        expect(
+            nyId,
+            'Ingen NY årsavregning skal opprettes når det finnes en åpen for samme år'
+        ).toBeUndefined();
+
+        const antallMedÅr = await withDatabase(async (db) =>
+            db.queryOne<{N: number}>(
+                `SELECT COUNT(*) AS N
+                 FROM BEHANDLING b
+                 JOIN AARSAVREGNING a ON a.BEHANDLINGSRESULTAT_ID = b.ID
+                 WHERE b.BEH_TYPE = 'ÅRSAVREGNING' AND a.AAR = :aar`,
+                {aar: FORRIGE_AAR}
+            )
+        );
+        expect(
+            Number(antallMedÅr!.N),
+            `Det skal finnes nøyaktig én ÅRSAVREGNING for ${FORRIGE_AAR} (den injiserte) — ingen ny`
+        ).toBe(1);
+
+        // Den injiserte behandlingen skal fortsatt finnes (ikke feilaktig avsluttet/ryddet).
+        const fortsatt = await withDatabase(async (db) =>
+            db.queryOne<{STATUS: string}>('SELECT STATUS FROM BEHANDLING WHERE ID = :id', {
+                id: medÅrBehandlingId,
+            })
+        );
+        expect(fortsatt, 'Den injiserte årsavregningsbehandlingen skal fortsatt finnes').not.toBeNull();
+
+        await waitForProcessInstances(page.request, 30);
+        console.log('✅ Eksisterende årsavregning MED år blokkerte ny opprettelse uten misvisende feil.');
+    });
 });
