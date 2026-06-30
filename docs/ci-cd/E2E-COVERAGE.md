@@ -152,6 +152,7 @@ our backend services, each via a JaCoCo agent on its own host port:
 | melosys-trygdeavgift-beregning | 6304 | 17 | (JAR-extraction) |
 | melosys-trygdeavtale | 6305 | 17 | (JAR-extraction) |
 | melosys-inngangsvilkar | 6306 | 17 | (JAR-extraction) |
+| melosys-skjema-api | 6307 | — | (JAR-extraction) — profile-gated (`skjema`), only collected when skjema tests are in scope |
 
 **Why two methods?** melosys-api keeps its original *build-from-source* path (gives
 source-annotated HTML). The other six are a mix of Maven + Gradle on different JDKs, so

@@ -663,7 +663,9 @@ jobs:
           mkdir -p service-coverage
 
           # service:host-port (container name == service name); see docker-compose.yml
-          SERVICES="melosys-eessi:6301 faktureringskomponenten:6302 melosys-dokgen:6303 melosys-trygdeavgift-beregning:6304 melosys-trygdeavtale:6305 melosys-inngangsvilkar:6306"
+          # melosys-skjema-api is profile-gated (profiles: ["skjema"]); when the skjema
+          # stack isn't started the dump just fails-soft and the loop skips it.
+          SERVICES="melosys-eessi:6301 faktureringskomponenten:6302 melosys-dokgen:6303 melosys-trygdeavgift-beregning:6304 melosys-trygdeavtale:6305 melosys-inngangsvilkar:6306 melosys-skjema-api:6307"
 
           for entry in $SERVICES; do
             svc="${entry%%:*}"

@@ -640,6 +640,7 @@ services:
       melosys-mock:
         condition: service_started
     environment:
+      JAVA_TOOL_OPTIONS: ${JACOCO_AGENT_OPTS:-}
       SPRING_PROFILES_ACTIVE: local
       SERVER_PORT: "8090"
       # Schemaet "melosys-skjema" lages av Flyway (FLYWAY_ENABLED=true), som for de andre PG-appene.
@@ -655,8 +656,11 @@ services:
       VEDLEGG_MOCK_STORAGE_URL: "http://melosys-mock.melosys.docker-internal:8083/vedlegg-storage"
       CLAMAV_URL: "http://melosys-mock.melosys.docker-internal:8083/clamav"
       VARSLING_ARBEIDSTAKER_SKJEMA_LENKE: "http://localhost:3001/medlemskap-lovvalg/soknad/"
+    volumes:
+      - ./jacoco:/jacoco:ro  # Mount JaCoCo agent (optional, for E2E coverage)
     ports:
       - "8091:8090"
+      - "6307:6300"  # JaCoCo coverage port
     networks:
       melosys.docker-internal:
         aliases:
