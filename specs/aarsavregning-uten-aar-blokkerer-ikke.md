@@ -1,7 +1,7 @@
 ---
 jira: MELOSYS-8161
 epic: MELOSYS-7080 — Støtte til endringer i medlemskap og trygdeavgift for tidligere år
-status: implemented  # ny test skrevet foran melosys-api-fiksen; ikke CI-verifisert (se status-merknad)
+status: verified  # lokalt + CI rød-mot-master / grønn-mot-8161-fiks (run 28441194646 grønn fiks-image, 28441548657 rød latest). Sc.2 rød mot latest til api-fiks (PR #3408) merges. Se status-merknad.
 test: tests/aarsavregning/aarsavregning-uten-aar-blokkerer-ikke.spec.ts
 toggles: {}          # default-state; per-trigger-koreografi av melosys.faktureringskomponenten.ikke-tidligere-perioder er testmekanikk (se binding)
 tags: [årsavregning, ny-vurdering, tidligere-år, ftrl, auto-opprettelse, regresjon]
@@ -71,22 +71,31 @@ Gitt en FTRL-sak (PENSJONIST) med avgiftspliktige perioder i et foregående kale
 > og skal brukes **ordrett**. Ikke "korriger" dem mot eksempelverdier i POM-ens JSDoc — samme
 > dropdown bruker ulike koder i ulike flyter.
 
-> **Status-merknad (les denne før du tolker «rød/grønn»):**
-> 1. **Fiksen er ikke implementert i melosys-api ennå.** Det finnes ingen `8161`-branch
->    (verifisert `git branch -a | grep 8161` → tom 2026-06-30). Denne testen er skrevet *foran*
->    fiksen — samme mønster som [`aarsavregning-innhentingsbrev-saksbehandlingsflyt.md`](aarsavregning-innhentingsbrev-saksbehandlingsflyt.md) (8148)
->    ble skrevet foran sin api-feature. Den skal CI-verifiseres mot fiks-branchen i en **egen
->    orkestreringsrunde** (Hivemind/CI), ikke i spec-from-analysis-leveransen.
-> 2. **Reproduksjonen av selve pre-fiks-feilen er subtil.** Statisk lesning av
->    `OppretteÅrsavregningVedEndring.opprettÅrsavregning()` + `ÅrsavregningService.finnÅrsavregningerPåFagsak()`
->    viser at en *ren* «uten år»-behandling (uten `aarsavregning`-rad) faller bort i
->    `.mapNotNull { it.årsavregning }` → `harAktivÅrsavregningforÅr = false` → opprettelse går videre.
->    Dvs. nettopp den kanoniske «uten år»-tilstanden denne speken beskriver kan allerede være
->    håndtert i *denne* kodestien, slik at testen kan bli **grønn mot main**. Det er i seg selv et
->    nyttig funn (da ligger pre-fiks-feilen i en mer spesifikk tilstand, jf. analyserapportens
->    «Mangler/uklarheter»). Testen binder derfor **målatferden** (akseptansekriteriet) som en
->    aksept-/regresjonstest, ikke en garantert rød-til-fikset-reproduksjon. Når fiks-branchen
->    finnes: bekreft reproduksjon og stram inn precondition-tilstanden om nødvendig.
+> **Status-merknad (les denne før du tolker «rød/grønn») — oppdatert 2026-06-30 etter lokal kjøring:**
+> 1. **Fiksen er implementert** på melosys-api-branch `8161-aarsavregning-uten-aar`: gaten i
+>    `OppretteÅrsavregningVedEndring` byttet fra `finnÅrsavregningerPåFagsak(..., IKKE_FASTSATT)` til
+>    den nye `ÅrsavregningService.harAktivÅrsavregningForÅr` (sjekker ALLE aktive ÅRSAVREGNING-er
+>    defensivt, 8045-mønster). Apien har egne tester: unit (`ÅrsavregningServiceTest`,
+>    `OppretteÅrsavregningVedEndringTest`) + IT mot ekte DB (`ÅrsavregningDuplikatGateIT`).
+> 2. **To scenarier, ulik rød/grønn-profil — viktig:**
+>    - **Scenario 1 (uten år):** en *ren* «uten år»-behandling (uten `aarsavregning`-rad) faller bort
+>      i `.mapNotNull { it.årsavregning }` i den GAMLE gaten OG gir `null` defensivt i den NYE → begge
+>      gir `harAktiv = false` → opprettelse går videre. Denne er derfor **grønn mot BÅDE master og
+>      fiks** og tester *ikke* selve fiksen. Den er en regresjon for domenets scenario 1.
+>    - **Scenario 2 (den faktiske feilstien fiksen lukker):** en aktiv (ikke-AVSLUTTET) ÅRSAVREGNING
+>      **MED år** men med `RESULTAT_TYPE != IKKE_FASTSATT` (testen bruker `MEDLEM_I_FOLKETRYGDEN`).
+>      Den gamle gaten filtrerte på IKKE_FASTSATT og **bommet** på den, mens den nedstrøms SQL-guarden
+>      (`finnAntallÅrsavregningerPåFagsakForÅr`, kun `status != AVSLUTTET`) **telte** den → opprettelse
+>      startet → SQL-guarden kastet den misvisende `FunksjonellException`-en. **Verifisert RØD lokalt
+>      2026-06-30** mot master-gaten (reproduserte nøyaktig «Det finnes en annen åpen
+>      årsavregningsbehandling for samme år…» fra `ÅrsavregningService.opprettÅrsavregning:91`).
+>      Mot fiksen er gate og SQL-guard enige → blokkerer rent → **GRØNN**. Speiler api-IT-en
+>      `ÅrsavregningDuplikatGateIT` på e2e-nivå (full saksbehandlingsflyt).
+> 3. **Lærdom (MELOSYS-8161):** den opprinnelige «ren uten år»-e2e-en var grønn mot master og testet
+>    derfor ikke fiksen. Det avdekkes KUN ved å kjøre testen lokalt mot base/main FØR man melder grønt
+>    (se HARD GATE i `orchestrate-e2e-flow`). `erAktiv()` er `true` for `OPPRETTET`/`UNDER_BEHANDLING`
+>    (kun `AVSLUTTET`/`MIDLERTIDIG_LOVVALGSBESLUTNING` er inaktive), så en OPPRETTET-injeksjon fanges
+>    av den nye gaten.
 
 ### Bug-mekanikk (for den som binder/verifiserer)
 
@@ -209,10 +218,12 @@ finnes, ingen AARSAVREGNING-rad: `SELECT COUNT(*) FROM AARSAVREGNING WHERE BEHAN
 skal være 0) slik at en mislykket injeksjon feiler ved et tydelig, merket punkt — ikke som en
 forvirrende nedstrøms-feil.
 
-> **DB-injeksjon — vær obs:** dette er den eneste injeksjonen av en hel `BEHANDLING` i repoet (øvrige
-> tester kun `UPDATE`/`SELECT`). Den er skjemagrunnet, men ikke kjørt ende-til-ende (full stack/web
-> nede ved skriving). Hibernate-cache er ikke et problem her: `finnÅrsavregningerPåFagsak` kaller
-> `fagsakService.hentFagsak` på nytt (ny transaksjon) og re-leser `behandlinger` fra DB.
+> **DB-injeksjon — bekreftet:** dette er den eneste injeksjonen av en hel `BEHANDLING` i repoet (øvrige
+> tester kun `UPDATE`/`SELECT`). **Verifisert ende-til-ende lokalt 2026-06-30** (begge scenarier kjørt
+> mot levende stack). Hibernate-cache er ikke et problem: gaten kaller `fagsakService.hentFagsak` på
+> nytt (ny transaksjon) og re-leser `behandlinger` fra DB, så den injiserte behandlingen er synlig.
+> `scenario 2`-injeksjonen (status `OPPRETTET`) fanges av `harAktivÅrsavregningForÅr` fordi
+> `erAktiv()` = `!(erAvsluttet() || erMidlertidigLovvalgsbeslutning())` → `true` for `OPPRETTET`.
 
 ### Assertions (binder «Så»-linjene i scenario 1)
 
@@ -245,16 +256,34 @@ Etter NV-vedtaket + `waitForProcessInstances`:
 Avslutt testen med `waitForProcessInstances(page.request, 30)` slik at cleanup-fixturen ikke treffer
 aktive prosessinstanser.
 
-### Scenario 2 (test.fixme) — normal blokkering MED år
+### Scenario 2 (kjørbar — DEKKER FIKSEN) — aktiv årsavregning MED år, resultattype ≠ IKKE_FASTSATT
 
-Bundet som `test.fixme`. Domenelagets AC for scenario 2 er eksplisitt markert «*utledet — bekreft med
-fagperson at denne regelen er uendret*», og det beskriver **pre-eksisterende** atferd (ikke det 8161
-endrer). Konstruksjons-sti for senere aktivering: injiser en åpen ÅRSAVREGNING-behandling **med**
-`AARSAVREGNING`-rad `AAR = FORRIGE_AAR` og `RESULTAT_TYPE='IKKE_FASTSATT'` (da gir
-`finnÅrsavregningerPåFagsak(..., IKKE_FASTSATT)` treff → `harAktivÅrsavregningforÅr=true` → ingen ny
-opprettes), kjør samme NV-trigger, og assert at det fremdeles finnes **nøyaktig én** ÅRSAVREGNING for
-`FORRIGE_AAR`. «Tilbakestilles» (`resetEksisterendeÅrsavregning`, MELOSYS-7826) krever egen
-verifisering av at saksbehandler-input nullstilles; bekreft med fagperson før binding.
+Dette er den faktiske feilstien 8161 lukker, og den eneste av de to scenariene som faktisk skiller
+fiks fra master. Precondition (helper `gittÅpenÅrsavregningMedÅr(saksnummer, FORRIGE_AAR)`): injiser
+en åpen (status `OPPRETTET`, dvs. `erAktiv()=true`) ÅRSAVREGNING **med** `AARSAVREGNING`-rad
+`AAR = FORRIGE_AAR`, men `RESULTAT_TYPE = 'MEDLEM_I_FOLKETRYGDEN'` **(verbatim — må være ≠ IKKE_FASTSATT)**:
+
+- `INSERT INTO BEHANDLINGSRESULTAT (..., RESULTAT_TYPE, ...) VALUES (:id, 'MANUELT', 'MEDLEM_I_FOLKETRYGDEN', ...)`
+- `INSERT INTO AARSAVREGNING (BEHANDLINGSRESULTAT_ID, AAR) VALUES (:id, :aar)` (begge NOT NULL; `BEHANDLINGSRESULTAT_ID` = behandlingens ID).
+
+Kjør samme NV-trigger som scenario 1. **Forventet atferd:**
+- **mot master (gammel gate `finnÅrsavregningerPåFagsak(..., IKKE_FASTSATT)`):** den år-satte
+  behandlingen filtreres bort av IKKE_FASTSATT-filteret → `harAktiv=false` → opprettelse starter →
+  SQL-guarden (`finnAntallÅrsavregningerPåFagsakForÅr`, teller alle ikke-AVSLUTTET) treffer →
+  `opprettÅrsavregning` kaster den misvisende `FunksjonellException`-en → `OPPRETT_NY_BEHANDLING_AARSAVREGNING`
+  feiler → **RØD**.
+- **mot fiks (ny gate `harAktivÅrsavregningForÅr`):** gaten ser den aktive år-satte behandlingen →
+  `harAktiv=true` → ingen ny opprettes, ingen feil → **GRØNN**.
+
+**Assertions (binder scenario 2):**
+- `waitForProcessInstances` rett etter vedtaket — **bærende rød/grønn-diskriminator** (kaster på den
+  feilede `OPPRETT_NY_BEHANDLING_AARSAVREGNING`-prosessen mot master).
+- nøyaktig **én** ÅRSAVREGNING for `FORRIGE_AAR` (den injiserte) — ingen duplikat.
+- den injiserte behandlingen finnes fortsatt.
+
+> «Tilbakestilles» (`resetEksisterendeÅrsavregning`, MELOSYS-7826) er pre-eksisterende atferd og ikke
+> bundet her — domenelagets scenario-2-AC er markert «utledet/bekreft», så vi binder kun
+> «ingen ny + ingen misvisende feil» (det 8161 faktisk endrer).
 
 **Page Objects:** `HovedsidePage`, `OpprettNySakPage`, `MedlemskapPage`, `ArbeidsforholdPage`,
 `LovvalgPage`, `ResultatPeriodePage`, `TrygdeavgiftPage`, `VedtakPage`
@@ -290,3 +319,15 @@ verifisering av at saksbehandler-input nullstilles; bekreft med fagperson før b
   `AARSAVREGNING.BEHANDLINGSRESULTAT_ID = BEHANDLING.ID` i assertion 1. Agenten beholdt
   `forventetStatus:'OPPRETTET'` ordrett (mot gammel spec) — bekrefter at status-over-pinningen var en
   reell felle, allerede fjernet i assertion-robusthet-endringen over.
+- 2026-06-30 (KRITISK — testet faktisk fiksen): kjørte testen lokalt og oppdaget at den opprinnelige
+  «ren uten år»-varianten var **grønn også mot master** → testet ikke fiksen. Leste den faktiske
+  melosys-api-fiksen (branch `8161-aarsavregning-uten-aar`: ny `harAktivÅrsavregningForÅr`-gate +
+  api-IT `ÅrsavregningDuplikatGateIT`). Endret scenario 2 fra `test.fixme` til en **kjørbar** test som
+  injiserer den FAKTISKE feilstien: aktiv ÅRSAVREGNING MED år men `RESULTAT_TYPE='MEDLEM_I_FOLKETRYGDEN'`
+  (≠ IKKE_FASTSATT). **Verifisert lokalt:** scenario 2 RØD mot master-gaten (reproduserte
+  `FunksjonellException: «Det finnes en annen åpen årsavregningsbehandling...»` fra
+  `ÅrsavregningService.opprettÅrsavregning:91`), GRØNN mot 8161-fiks-gaten. Scenario 1 (uten år) grønn
+  begge veier. **Bekreftet i CI:** fiks-image grønn (run 28441194646, 2 passed), latest rød på
+  scenario 2 med eksakt ticket-feil (run 28441548657). Lærdom (lokal-først HARD GATE): kjør testen
+  lokalt RØD-mot-base FØR du melder grønt — en test som er grønn mot base tester ikke fiksen. Kodifisert
+  i `orchestrate-e2e-flow` + `muninn-delegation-handler`.
