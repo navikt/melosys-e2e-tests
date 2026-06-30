@@ -7,6 +7,20 @@ import { defineConfig, devices } from '@playwright/test';
 // require('dotenv').config();
 
 /**
+ * Felles Chromium-launch-options. Deles mellom hovedprosjektet, skjema-prosjektet og
+ * skjema-oppvarmings-setupet slik at host-resolver-regelen (wonderwall → host.docker.internal)
+ * gjelder overalt der skjema-innlogging skjer.
+ */
+const chromiumLaunchOptions = {
+  slowMo: 100,
+  // Skjema-innlogging: wonderwall redirecter nettleseren til host.docker.internal:8082
+  // (mock-oauth2). Chromium leser ikke pålitelig /etc/hosts, så vi tvinger mappingen på
+  // browser-nivå. Uskadelig for øvrige tester (ingen annen nettlesertrafikk går dit), og
+  // fungerer både lokalt og på CI (mock-oauth2 er publisert på localhost:8082 begge steder).
+  args: ['--host-resolver-rules=MAP host.docker.internal 127.0.0.1'],
+};
+
+/**
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
@@ -71,17 +85,35 @@ export default defineConfig({
   projects: [
     {
       name: 'chromium',
-      use: { 
+      use: {
         ...devices['Desktop Chrome'],
         // Slow down actions slightly for more stable tests
-        launchOptions: {
-          slowMo: 100,
-          // Skjema-innlogging: wonderwall redirecter nettleseren til host.docker.internal:8082
-          // (mock-oauth2). Chromium leser ikke pålitelig /etc/hosts, så vi tvinger mappingen på
-          // browser-nivå. Uskadelig for øvrige tester (ingen annen nettlesertrafikk går dit), og
-          // fungerer både lokalt og på CI (mock-oauth2 er publisert på localhost:8082 begge steder).
-          args: ['--host-resolver-rules=MAP host.docker.internal 127.0.0.1'],
-        }
+        launchOptions: chromiumLaunchOptions,
+      },
+      // Skjema-testene kjøres av det dedikerte 'skjema'-prosjektet (med oppvarmings-avhengighet),
+      // så de ekskluderes her for å unngå dobbeltkjøring.
+      testIgnore: /tests\/skjema\//,
+    },
+
+    // Skjema-oppvarming: kjøres ÉN gang før skjema-testene, og kun når skjema-tester faktisk er
+    // valgt (fordi 'skjema'-prosjektet avhenger av dette setupet). Matcher *.setup.ts.
+    {
+      name: 'skjema-setup',
+      testMatch: /tests\/skjema\/.*\.setup\.ts/,
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: chromiumLaunchOptions,
+      },
+    },
+
+    // Skjema-testene som egen prosjekt-enhet, slik at oppvarmingen kun trigges når disse kjøres.
+    {
+      name: 'skjema',
+      testMatch: /tests\/skjema\/.*\.spec\.ts/,
+      dependencies: ['skjema-setup'],
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: chromiumLaunchOptions,
       },
     },
 
