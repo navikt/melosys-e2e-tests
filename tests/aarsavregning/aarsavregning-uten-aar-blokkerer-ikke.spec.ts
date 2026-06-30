@@ -192,8 +192,15 @@ async function finnNyÅrsavregningMedÅr(aar: number, ekskluderBehandlingId: num
  * Gitt: en ÅPEN ÅRSAVREGNING-behandling MED år (aar) på saken, men med behandlingsresultattype
  * != IKKE_FASTSATT. Dette er nettopp feilstien fiksen lukker: den gamle gaten filtrerte på
  * IKKE_FASTSATT og BOMMET på denne, mens den nedstrøms SQL-guarden (kun status != AVSLUTTET) talte
- * den → «opprett-så-kast» med den misvisende feilmeldingen. Enum-verdier FK-verifisert mot live
- * Oracle (AARSAVREGNING-PK = (BEHANDLINGSRESULTAT_ID, AAR), begge NOT NULL).
+ * den → «opprett-så-kast» med den misvisende feilmeldingen.
+ *
+ * Tilstanden speiler den ENESTE måten en årsavregning faktisk er «åpen + type != IKKE_FASTSATT» på i
+ * prod: vinduet mellom vedtaksfatting og AVSLUTTET. ÅrsavregningVedtakService setter
+ * RESULTAT_TYPE=FASTSATT_TRYGDEAVGIFT og flytter behandlingen til IVERKSETTER_VEDTAK før
+ * iverksett-prosessen til slutt setter AVSLUTTET. Derfor injiseres nettopp STATUS=IVERKSETTER_VEDTAK +
+ * RESULTAT_TYPE=FASTSATT_TRYGDEAVGIFT (ikke MEDLEM_I_FOLKETRYGDEN — det er en FTRL førstegang/NV-
+ * resultattype, aldri en årsavregningstype). Enum-verdier FK-verifisert mot live Oracle
+ * (AARSAVREGNING-PK = (BEHANDLINGSRESULTAT_ID, AAR), begge NOT NULL).
  *
  * @returns BEHANDLING.ID for den injiserte med-år-behandlingen.
  */
@@ -203,7 +210,7 @@ async function gittÅpenÅrsavregningMedÅr(saksnummer: string, aar: number): Pr
             `INSERT INTO BEHANDLING
                  (SAKSNUMMER, STATUS, BEH_TYPE, REGISTRERT_DATO, ENDRET_DATO,
                   REGISTRERT_AV, ENDRET_AV, BEH_TEMA, BEHANDLINGSFRIST)
-             VALUES (:s, 'OPPRETTET', 'ÅRSAVREGNING', SYSTIMESTAMP, SYSTIMESTAMP,
+             VALUES (:s, 'IVERKSETTER_VEDTAK', 'ÅRSAVREGNING', SYSTIMESTAMP, SYSTIMESTAMP,
                      'Z123456', 'Z123456', 'YRKESAKTIV', SYSDATE)`,
             {s: saksnummer}
         );
@@ -219,7 +226,7 @@ async function gittÅpenÅrsavregningMedÅr(saksnummer: string, aar: number): Pr
         await db.execute(
             `INSERT INTO BEHANDLINGSRESULTAT
                  (BEHANDLING_ID, BEHANDLINGSMAATE, RESULTAT_TYPE, REGISTRERT_DATO, ENDRET_DATO)
-             VALUES (:id, 'MANUELT', 'MEDLEM_I_FOLKETRYGDEN', SYSTIMESTAMP, SYSTIMESTAMP)`,
+             VALUES (:id, 'MANUELT', 'FASTSATT_TRYGDEAVGIFT', SYSTIMESTAMP, SYSTIMESTAMP)`,
             {id}
         );
         await db.execute(
