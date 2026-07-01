@@ -1,4 +1,5 @@
 import { Page, expect } from '@playwright/test';
+import { SkjemaAuthHelper } from '../../helpers/skjema-auth-helper';
 import { ddmmyyyy, lagreOgFortsett, standardUtsendingsperiode, svarRadio } from './skjema-utils';
 
 /**
@@ -32,6 +33,50 @@ export class SoknadUtsendtArbeidstakerPage {
     await page.getByRole('checkbox', { name: /Jeg bekrefter/ }).check();
     await page.getByRole('button', { name: 'Start søknad' }).click();
 
+    await page.waitForURL(/\/skjema\/[^/]+\/utsendingsperiode-og-land/);
+    return hentSkjemaIdFraUrl(page);
+  }
+
+  /**
+   * MELOSYS-8170: Åpne DEG SELV-søknaden via varsel-lenken arbeidstaker får når arbeidsgiver har
+   * sendt inn sin del UTEN fullmakt. Skjema-api bygger lenken som VARSLING_ARBEIDSTAKER_SKJEMA_LENKE
+   * + `/oversikt?representasjonstype=DEG_SELV&arbeidsgiverOrgnr=…`, så arbeidstaker lander rett på
+   * /oversikt med arbeidsgivers orgnr FORHÅNDSUTFYLT (og EREG-resolvet) — hen slipper å taste det
+   * inn selv. I motsetning til {@link startSoknadSomDegSelv} går vi altså IKKE via rollevalget.
+   * Forutsetter innlogget bruker (kjør SkjemaAuthHelper.login() først).
+   *
+   * Verifiserer kjernen i 8170 før den starter søknaden:
+   *  - orgnr-feltet har lenkens orgnr som VERDI (satt av lenken, ikke tastet av testen),
+   *  - EREG-oppslaget lenken utløser har resolvet arbeidsgiveren (navnet vises),
+   *  - bekreftelsen er IKKE auto-huket (lenken forhåndsutfyller kun orgnr; arbeidstaker må fortsatt
+   *    aktivt bekrefte før start).
+   *
+   * @param arbeidsgiverOrgnr        orgnr lenken bærer (= arbeidsgivers innsendte orgnr).
+   * @param forventetArbeidsgiverNavn navnet EREG resolver orgnr til (ventes på før start).
+   * @returns søknads-id (UUID) fra URL-en.
+   */
+  async startSoknadViaVarselLenke(
+    arbeidsgiverOrgnr = '999999999',
+    forventetArbeidsgiverNavn = 'Ståles Stål AS'
+  ): Promise<string> {
+    const page = this.page;
+    const varselLenke = new URL(
+      `oversikt?representasjonstype=DEG_SELV&arbeidsgiverOrgnr=${arbeidsgiverOrgnr}`,
+      SkjemaAuthHelper.BASE_URL
+    ).toString();
+    await page.goto(varselLenke);
+    await page.waitForURL(/\/oversikt/);
+
+    await expect(
+      page.getByRole('textbox', { name: 'Arbeidsgivers organisasjonsnummer' })
+    ).toHaveValue(arbeidsgiverOrgnr);
+    await expect(page.getByText(forventetArbeidsgiverNavn)).toBeVisible({ timeout: 10000 });
+
+    const bekreftelse = page.getByRole('checkbox', { name: /Jeg bekrefter/ });
+    await expect(bekreftelse, 'lenken skal kun forhåndsutfylle orgnr, ikke auto-bekrefte').not.toBeChecked();
+    await bekreftelse.check();
+
+    await page.getByRole('button', { name: 'Start søknad' }).click();
     await page.waitForURL(/\/skjema\/[^/]+\/utsendingsperiode-og-land/);
     return hentSkjemaIdFraUrl(page);
   }
