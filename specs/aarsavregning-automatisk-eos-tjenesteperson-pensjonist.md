@@ -1,7 +1,7 @@
 ---
 jira: MELOSYS-8163
 epic: MELOSYS-7080 — Støtte til endringer i medlemskap og trygdeavgift for tidligere år
-status: implemented   # begge scenarier verifisert grønt LOKALT mot feature-branchene (2026-07-01); venter på CI-kjøring mot pushede images før verified
+status: verified   # begge scenarier grønt i CI (run 28525067636, 2026-07-01) mot api:8163-arsavregning-eos-tjenesteperson-6095c60a5f + web:8163-arsavregning-eos-melding
 test: tests/eu-eos/aarsavregning-automatisk-eos-tjenesteperson-pensjonist.spec.ts
 toggles: {}            # default-state generelt; toggle-overstyring for blokkerings-scenariene er testmekanikk (se binding)
 tags: [årsavregning, brev, innhenting, eu-eos, tjenesteperson, pensjonist, lovvalg, saksbehandlingsflyt]
@@ -285,6 +285,16 @@ brev-helperen `verifiserInnhentingsbrevSendt` (samme modul/mønster som i
   toggle-bevisst som pensjonist, eller fjern den helt siden wizarden nå har sin egen intern
   blokkering). Status forblir `implemented` til denne routing-fiksen lander; scenario B er allerede
   `verified`.
+- 2026-07-01 (CI-funn, ny bug): Første CI-kjøring (run 28517262526) mot begge feature-images viste
+  at scenario B er GRØNT i CI, men scenario A feiler — **ikke** på Playwright-assertionene (begge
+  forsøk passerte, inkl. den nye meldingen), men fordi den strenge docker-log-fixturen fanget en
+  reell 500-feil fra melosys-api: `GET /api/behandlinger/{id}/aarsavregninger` kaster
+  `IllegalArgumentException("Ukjent type for siste gjeldende avgiftspliktig periode")` i
+  `ÅrsavregningController.kt` (to `when`-blokker, linje ~167 og ~258, mangler en
+  `is LovvalgsperiodeForAvgift`-branch — typen produseres allerede av service-laget for
+  tjenesteperson, men controller-mappingen ble ikke oppdatert). **Usynlig i lokal testing** fordi
+  melosys-api kjørte på host der (docker-log-fixturen ser kun containere) — kun CI, som kjører api
+  i Docker, fanget dette. Rapportert til melosys-api-claude med fil/linje. Reell bug, ikke testfeil.
 - 2026-07-01 (fikset av melosys-web, verifisert lokalt): melosys-web fjernet den hardkodede
   blokken helt (commit `13d82a28a`, branch `feature/8163-arsavregning-eos-melding`) — sporet
   gjennom at `skalViseIngenFlyt()` uten den korrekt faller gjennom til `return false` for denne
@@ -294,3 +304,10 @@ brev-helperen `verifiserInnhentingsbrevSendt` (samme modul/mønster som i
   (8163-arsavregning-eos-tjenesteperson): 2 passed, 59.5s. Gjenstår: CI-kjøring mot pushede
   feature-images (delegert egen CI-runde fra melosys-2, run:c9f7424f) før status heves til
   `verified`.
+- 2026-07-01 (CI VERIFISERT GRØNT): melosys-api-claude bygget+pushet fiks-imaget
+  (`8163-arsavregning-eos-tjenesteperson-6095c60a5f`, commit 6095c60a5f — begge `when`-blokker i
+  `ÅrsavregningController.kt` fikset med `is LovvalgsperiodeForAvgift`-branch). Ny CI-kjøring (run
+  [28525067636](https://github.com/navikt/melosys-e2e-tests/actions/runs/28525067636)) mot dette
+  imaget + `melosys-web:8163-arsavregning-eos-melding` ga **2 passed (1.7m), ingen docker-log-feil,
+  ingen retries**. Begge scenariene (A: tjenesteperson art.11.3b, B: pensjonist) verifisert grønt i
+  CI. Status hevet til `verified`.
