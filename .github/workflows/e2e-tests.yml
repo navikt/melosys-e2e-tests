@@ -63,9 +63,9 @@ permissions:
 jobs:
   e2e-tests:
     runs-on: ubuntu-latest-8-cores
-    # Coverage runs additionally build melosys-api (~4 min cached, ~11 min cold) before
-    # the ~44 min suite, so they need generous headroom over the normal 60 min ceiling.
-    timeout-minutes: ${{ inputs.collect_coverage && 120 || 60 }}
+    # 2 hour ceiling gives headroom for the ~44 min suite plus, on coverage runs,
+    # the extra melosys-api build (~4 min cached, ~11 min cold).
+    timeout-minutes: 120
 
     steps:
       - name: Checkout code
