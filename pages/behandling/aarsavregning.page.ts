@@ -319,6 +319,25 @@ export class AarsavregningPage extends BasePage {
   }
 
   /**
+   * Select trygdedekning (coverage) from dropdown.
+   *
+   * For bestemmelser med kun én lovlig dekning (f.eks. § 2-1 → Full dekning)
+   * settes dekning automatisk og feltet er read-only — da trengs ikke dette kallet.
+   * For § 2-8 (frivillig) finnes det flere valg (f.eks. helse+pensjon).
+   *
+   * Dropdown har aria-label "Trygdedekning periode 1" (indeks-basert).
+   *
+   * @param dekning - Dekning code (e.g., 'FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON')
+   * @param periodeIndex - Period index (0-based, default 0)
+   */
+  async velgDekning(dekning: string, periodeIndex: number = 0): Promise<void> {
+    const dekningDropdown = this.page.getByLabel(`Trygdedekning periode ${periodeIndex + 1}`);
+    await dekningDropdown.waitFor({ state: 'visible', timeout: TIMEOUT_LONG });
+    await dekningDropdown.selectOption(dekning);
+    console.log(`✅ Selected dekning = ${dekning} (periode ${periodeIndex + 1})`);
+  }
+
+  /**
    * Fill "Fra og med periode" date field
    *
    * @param dato - Date in format DD.MM.YYYY (e.g., '06.01.2025')
@@ -422,6 +441,102 @@ export class AarsavregningPage extends BasePage {
 
     await this.inntektskildeDropdown.selectOption(inntektskilde);
     console.log(`✅ Selected Inntektskilde = ${inntektskilde}`);
+  }
+
+  /**
+   * Select "Betales aga?" (arbeidsgiveravgift) radio button.
+   *
+   * Vises kun for visse inntektskilder (f.eks. INNTEKT_FRA_UTLANDET).
+   * For ARBEIDSINNTEKT vises "Ikke relevant" i stedet.
+   *
+   * @param betalesAga - true for "Ja", false for "Nei"
+   */
+  async velgBetalesAga(betalesAga: boolean): Promise<void> {
+    const agaGroup = this.page.getByRole('group', { name: /Betales aga/ });
+    await agaGroup.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
+    const radio = agaGroup.getByRole('radio', { name: betalesAga ? 'Ja' : 'Nei' });
+    await radio.check();
+    console.log(`✅ Selected Betales aga = ${betalesAga ? 'Ja' : 'Nei'}`);
+  }
+
+  /**
+   * Klikk "Legg til inntekt" for å legge til en ny inntektskildeperiode.
+   */
+  async klikkLeggTilInntekt(): Promise<void> {
+    const knapp = this.page.getByRole('button', { name: 'Legg til inntekt' });
+    await knapp.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
+    await knapp.click();
+    console.log('✅ Klikket "Legg til inntekt"');
+  }
+
+  /**
+   * Select inntektskilde for en gitt rad-indeks (0-basert).
+   *
+   * @param indeks - Rad-indeks (0 = første, 1 = andre, osv.)
+   * @param inntektskilde - Inntektskilde-kode (f.eks. 'ARBEIDSINNTEKT', 'NÆRINGSINNTEKT')
+   */
+  async velgInntektskildeForIndeks(indeks: number, inntektskilde: string): Promise<void> {
+    const dropdown = this.page.locator(`select[name="inntektskilder[${indeks}].kildetype"]`);
+    await dropdown.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
+    await expect(dropdown).toBeEnabled({ timeout: TIMEOUT_LONG });
+
+    await this.page.waitForFunction(
+      (selector) => {
+        const el = document.querySelector(selector) as HTMLSelectElement;
+        return el && el.options.length > 1;
+      },
+      `select[name="inntektskilder[${indeks}].kildetype"]`,
+      { timeout: TIMEOUT_LONG }
+    );
+
+    await dropdown.selectOption(inntektskilde);
+    console.log(`✅ Selected Inntektskilde[${indeks}] = ${inntektskilde}`);
+  }
+
+  /**
+   * Fill bruttoinntekt for en gitt rad-indeks (0-basert).
+   * Trigger IKKE API-vent — bruk fyllInnBruttoinntektForIndeksMedApiVent for siste rad.
+   *
+   * NB: Kun rad 0 har accessible name "Bruttoinntekt" — påfølgende rader har tom
+   * label (hideLabel=true, label=""). Bruk derfor name-attributt for å lokalisere feltet.
+   *
+   * @param indeks - Rad-indeks (0 = første, 1 = andre, osv.)
+   * @param beløp - Beløp som string
+   */
+  async fyllInnBruttoinntektForIndeks(indeks: number, beløp: string): Promise<void> {
+    const felt = this.page.locator(`input[name="inntektskilder[${indeks}].bruttoInntekt"]`);
+    await felt.waitFor({ state: 'visible', timeout: TIMEOUT_LONG });
+    await felt.fill(beløp);
+    await felt.press('Tab');
+    console.log(`✅ Fylte inn Bruttoinntekt[${indeks}] = ${beløp}`);
+  }
+
+  /**
+   * Fill bruttoinntekt for en gitt rad-indeks MED API-vent.
+   * Bruk denne på SISTE rad for å vente på beregnings-responsen.
+   *
+   * @param indeks - Rad-indeks (0 = første, 1 = andre, osv.)
+   * @param beløp - Beløp som string
+   */
+  async fyllInnBruttoinntektForIndeksMedApiVent(indeks: number, beløp: string): Promise<void> {
+    await this.fyllInnInnbetaltTrygdeavgiftHvisPåkrevd('0');
+
+    const felt = this.page.locator(`input[name="inntektskilder[${indeks}].bruttoInntekt"]`);
+    await felt.waitFor({ state: 'visible', timeout: TIMEOUT_LONG });
+
+    const responsePromise = this.page.waitForResponse(
+      response =>
+        isTrygdeavgiftBeregningResponse(response) && response.request().method() === 'PUT',
+      { timeout: 30000 }
+    );
+
+    await felt.fill(beløp);
+    await felt.press('Tab');
+
+    await responsePromise;
+    console.log(`✅ Trygdeavgift calculation API completed (Bruttoinntekt[${indeks}] = ${beløp})`);
+
+    await expect(this.bekreftButton).toBeEnabled({ timeout: TIMEOUT_API });
   }
 
   /**
