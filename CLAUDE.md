@@ -318,9 +318,9 @@ Oracle database connection (configured via `.env` or environment variables):
 Key settings in `playwright.config.ts`:
 
 - **Base URL**: `http://localhost:3000`
-- **Trace**: Always on (`trace: 'on'`)
-- **Screenshots**: Always captured (`screenshot: 'on'`)
-- **Video**: Always recorded (`video: 'on'`)
+- **Trace**: On retry only (`trace: 'on-first-retry'`) - spares ressurser på grønne kjøringer; på CI (retries=1) fanges trace fra 2. forsøk. Lokalt (retries=0) skjer ingen retry → bruk `--trace on` ved behov.
+- **Screenshots**: On failure only (`screenshot: 'only-on-failure'`)
+- **Video**: On retry only (`video: 'on-first-retry'`) - samme retry-logikk som trace
 - **Slow motion**: 100ms delay between actions (`slowMo: 100`)
 - **Parallel execution**: Disabled (`fullyParallel: false`)
 - **Workers**: 1 on CI, unlimited locally
@@ -842,7 +842,7 @@ Key steps:
 - **Always run Docker Compose services first** - Tests will fail if services aren't running
 - **Use FormHelper for dynamic forms** - Many fields trigger API calls that need explicit waits
 - **Database verification is optional** - Commented out by default, uncomment when needed
-- **Traces are always captured** - Even for successful tests, useful for understanding workflows
+- **Traces/video captured on retry only** - `on-first-retry` sparer ressurser; grønne kjøringer produserer ingen tunge artefakter. Screenshot kun ved feil.
 - **Tests run sequentially** - `fullyParallel: false` to avoid race conditions
 - **Network must be idle on Trygdeavgift page** - Wait for calculations to complete before proceeding
 

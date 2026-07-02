@@ -51,14 +51,12 @@ export default defineConfig({
     /* Base URL to use in actions like `await page.goto('/')`. */
     baseURL: 'http://localhost:3000',
 
-    /* Collect trace on ALL runs - you can view replays of successful tests */
-    trace: 'on',  // Always record traces
-    
-    /* Screenshot on ALL runs - so you can see what happened */
-    screenshot: 'on',
-    
-    /* Video recording - record ALL tests */
-    video: 'on',
+    /* Artefakter kun ved behov for å spare ressurser: trace/video tas først når
+     * en test kjøres på nytt (retry), skjermbilde kun ved feil. Første grønne
+     * kjøring produserer altså ingen tunge artefakter. */
+    trace: 'on-first-retry',
+    screenshot: 'only-on-failure',
+    video: 'on-first-retry',
     
     /* Maximum time each action such as `click()` can take */
     actionTimeout: 10000,
