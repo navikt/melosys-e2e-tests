@@ -500,7 +500,9 @@ jobs:
           # Using an array instead of string + eval ensures arguments with
           # spaces or special characters (e.g. "EØS Medlemskap Lovvalg")
           # are passed correctly to Playwright as a single --grep value.
-          PLAYWRIGHT_ARGS=(test --project=chromium)
+          # Inkluderer både 'chromium' (alle ikke-skjema-tester) og 'skjema' (skjema-tester med
+          # oppvarmings-avhengighet). Uten 'skjema' her ville skjema-testene blitt hoppet over.
+          PLAYWRIGHT_ARGS=(test --project=chromium --project=skjema)
 
           # Add test filter if specified
           if [ -n "$TEST_GREP" ]; then
