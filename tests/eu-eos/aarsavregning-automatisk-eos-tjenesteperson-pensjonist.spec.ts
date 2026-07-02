@@ -34,15 +34,14 @@ import { setupPensjonistUtenGrunnlagMedAutoAarsavregning } from '../aarsavregnin
  * brev). Frem til hver sakstypes egen årsavregningsflyt er ferdigstilt vises en blokkerende
  * melding i årsavregningsflyten.
  *
- * STATUS (2026-07-01): Skrevet parallelt med at melosys-api-claude og melosys-web implementerer
- * MELOSYS-8163. Mot main: begge scenariene røde kun på den blokkerende meldingen (auto-opprett +
- * brev er allerede grønt). Verifisert mot feature-branchene (melosys-api:
- * 8163-arsavregning-eos-tjenesteperson, melosys-web: feature/8163-arsavregning-eos-melding):
- * Scenario B (pensjonist) er GRØNT. Scenario A (tjenesteperson) feiler fortsatt — men av en
- * konkret, diagnostisert årsak i melosys-web (IKKE poll-lag): `src/url/url.ts` sin
- * `skalViseIngenFlyt()` ruter tjenesteperson-årsavregning ubetinget til den gamle
- * `IngenFlytBehandling`-fallback-siden uansett toggle-state, så den nye meldingskomponenten nås
- * aldri. Rapportert til melosys-web via hivemind. Se endringsloggen i speken.
+ * STATUS (2026-07-02): Begge scenarier GRØNNE lokalt mot feature-branchene (melosys-api:
+ * 8163-arsavregning-eos-tjenesteperson @ c6f477f91a, melosys-web:
+ * feature/8163-arsavregning-eos-melding @ 08b6efbdb). Tidligere routing-bug i melosys-web
+ * (`src/url/url.ts` `skalViseIngenFlyt()` rutet tjenesteperson-årsavregning ubetinget til
+ * IngenFlytBehandling-fallbacken) er fikset. UI-atferd oppdatert etter Figma-mockup 2026-07-02:
+ * «Bekreft og fortsett»-knappen VISES nå men er `disabled` i ustøttet årsavregningsflyt (tidligere
+ * ble hele bekreft-underskjemaet skjult), og den blokkerende meldingen er flyttet under «Tidligere
+ * grunnlag». Testen asserterer nå toBeVisible()+toBeDisabled() på knappen. Se endringsloggen i speken.
  */
 
 const BREVMAL_INNHENTING = 'INNHENTING_AV_INNTEKTSOPPLYSNINGER';
@@ -99,11 +98,11 @@ async function verifiserInnhentingsbrevSendt(mottakerIdentifikatorer: string[]):
 
 /**
  * Binder de to siste «Så»-linjene i begge scenarier: den blokkerende meldingen vises, og
- * saksbehandler kan ikke bekrefte årsavregningssteget. Årsvelgeren (#aarVelger) rendres FØR
- * meldingen og er alltid synlig — det som faktisk skjules bak
- * `!erÅrsavregningIkkeStøttetSakstype` er bekreft-underskjemaet
- * (AarsavregningMedGrunnlag/AarsavregningUtenEllerDeltGrunnlag), altså «Bekreft og
- * fortsett»-knappen. Vi asserterer derfor fravær av DEN, ikke av årsvelgeren.
+ * saksbehandler kan ikke bekrefte årsavregningssteget. Årsvelgeren (#aarVelger) og «Tidligere
+ * grunnlag» rendres alltid — det som endres bak `erÅrsavregningIkkeStøttetSakstype` er at
+ * «Bekreft og fortsett»-knappen VISES men er DISABLED, og at meldingen rendres under «Tidligere
+ * grunnlag» (Figma-mockup 2026-07-02; tidligere skjulte web hele bekreft-underskjemaet). Vi
+ * asserterer derfor at knappen er disabled, ikke at den er fraværende.
  *
  * melosys-web henter featuretoggles KUN én gang per SPA-økt (rammeverk-mount ved
  * innlogging/reload) fra melosys-api sin egen /featuretoggle-endepunkt — som igjen reflekterer
@@ -136,12 +135,13 @@ async function verifiserBlokkerendeMelding(page: import('@playwright/test').Page
 
   await expect(melding).toHaveText(BLOKKERENDE_MELDING_TEKST);
 
-  // Årsvelgeren (#aarVelger) rendres FØR meldingen i vurderingAarsavregningInngang.tsx og er
-  // alltid synlig. Det som faktisk skjules bak `!erÅrsavregningIkkeStøttetSakstype` er
-  // AarsavregningMedGrunnlag/AarsavregningUtenEllerDeltGrunnlag — underskjemaet som inneholder
-  // «Bekreft og fortsett»-knappen. Det er DEN som skal være fraværende.
-  await expect(page.getByRole('button', { name: 'Bekreft og fortsett' })).toBeHidden();
-  console.log('✅ Blokkerende melding vises, bekreft-underskjemaet er skjult');
+  // «Bekreft og fortsett»-knappen VISES nå (Figma-mockup 2026-07-02) men er disabled så lenge
+  // sakstypen ikke støttes — saksbehandler kan se år/grunnlag, men ikke fatte årsavregningen.
+  // Vi asserterer at knappen er synlig men disabled, ikke at den er fraværende.
+  const bekreftKnapp = page.getByRole('button', { name: 'Bekreft og fortsett' });
+  await expect(bekreftKnapp).toBeVisible();
+  await expect(bekreftKnapp).toBeDisabled();
+  console.log('✅ Blokkerende melding vises, «Bekreft og fortsett» er synlig men disabled');
 }
 
 test.describe('Automatisk årsavregning for EU/EØS tjenesteperson og pensjonist (MELOSYS-8163)', () => {
