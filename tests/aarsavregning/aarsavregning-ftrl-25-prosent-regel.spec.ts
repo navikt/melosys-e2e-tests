@@ -43,8 +43,7 @@ import { hentMinstebeløp } from '../../helpers/trygdeavgift-beregning-helper';
  * Teststrategi:
  * - Første test (ordinær) verifiserer at årsavregning-flyten fungerer med
  *   25%-regel-toggle aktivert når ordinær sats gjelder.
- * - Påfølgende tester verifiserer 25%-regel-spesifikk visning i UI. Disse vil
- *   FEILE inntil frontend-støtte for 25%-regel i årsavregning er implementert.
+ * - Påfølgende tester verifiserer 25%-regel-spesifikk visning i UI.
  *
  * Viktig: Årsavregning bruker en EGEN beregningstabell (BeregnetTrygdeavgiftDetaljer)
  * som er forskjellig fra trygdeavgift-stegets (TrygdeavgiftsperioderTabell).
