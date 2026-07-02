@@ -304,8 +304,12 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
 
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
 
-        // Use dynamic dates for the API call - search current year to find the test period
-        const apiPeriod = TestPeriodsISO.currentYearPeriod;
+        // Use full current year (Jan 1 - Dec 31) for the API call. currentYearPeriod ender
+        // på "første i måneden +6 mnd", som i andre halvår ruller inn i neste kalenderår
+        // (f.eks. 2027-01-01). Backend krever fom/tom i samme år
+        // (ÅrsavregningIkkeSkattepliktigeProsessGenerator), så den async-jobben feilet stille
+        // og antallProsessert ble 0. fullCurrentYearPeriod holder seg innenfor året.
+        const apiPeriod = TestPeriodsISO.fullCurrentYearPeriod;
         await adminApi.finnIkkeSkattepliktigeSaker(
             request,
             apiPeriod.start,
