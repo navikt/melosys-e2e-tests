@@ -363,7 +363,7 @@ test.describe('Årsavregning FTRL — 25%-regelen', () => {
 
     // Første inntektskilde
     await aarsavregning.velgInntektskilde('ARBEIDSINNTEKT');
-    await aarsavregning.fyllInnBruttoinntektForIndeks(0, månedsinntektPerKilde);
+    await aarsavregning.fyllInnBruttoinntektForIndeksMedApiVent(0, månedsinntektPerKilde);
 
     // Andre inntektskilde
     await aarsavregning.klikkLeggTilInntekt();
