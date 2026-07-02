@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import * as path from 'path';
 import { SkjemaAuthHelper } from '../../helpers/skjema-auth-helper';
 import { SoknadArbeidsgiverPage } from '../../pages/skjema/soknad-arbeidsgiver.page';
+import { SkjemaMottakAssertions } from '../../pages/skjema/skjema-mottak.assertions';
 
 /**
  * T1b — full happy-path innsending av digital «Utsendt arbeidstaker»-søknad, variant ARBEIDSGIVER
@@ -24,7 +25,7 @@ test.describe('skjema-web innsending (arbeidsgiver)', () => {
   test('arbeidsgiver fyller ut og sender inn «Utsendt arbeidstaker»-søknad for begge deler', async ({
     page,
   }) => {
-    test.setTimeout(90000); // 11 steg + vedlegg-opplasting (ClamAV) tar lengre tid enn DEG SELV
+    test.setTimeout(120000); // 11 steg + vedlegg-opplasting (ClamAV) + drain (Kafka-konsum)
 
     const auth = new SkjemaAuthHelper(page);
     await auth.login('30056928150'); // KARAFFEL TRIVIELL, daglig leder
@@ -42,5 +43,13 @@ test.describe('skjema-web innsending (arbeidsgiver)', () => {
     expect(skjemaId).toMatch(/^[0-9a-f-]{36}$/i);
     expect(referanse).toMatch(/^[A-Z0-9]{5,6}$/);
     console.log('✅ Arbeidsgiver-søknad (begge deler) sendt inn, referanse:', referanse);
+
+    // Drain-at-source: vent til melosys-api har konsumert Kafka-meldingen (SKJEMA_SAK_MAPPING
+    // opprettet) FØR testen avslutter. Uten dette lever meldingen videre og konsumeres først
+    // etter at NESTE tests cleanup har tømt Oracle → en stray fagsak som velter tellingen i
+    // etterfølgende tester (f.eks. skjema-begge-deler «kun én fagsak»). Se
+    // memory/skjema_begge_deler_flake_kafka_leak.md.
+    await new SkjemaMottakAssertions().ventPaaSakForSkjema(skjemaId);
+    console.log('✅ Kafka-melding konsumert av melosys-api (drain OK)');
   });
 });
