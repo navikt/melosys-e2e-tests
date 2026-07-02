@@ -32,12 +32,14 @@ test.describe('skjema-web innsending', () => {
     expect(referanse).toMatch(/^[A-Z0-9]{5,6}$/);
     console.log('✅ Søknad sendt inn, referanse:', referanse);
 
-    // Drain-at-source: vent til melosys-api har konsumert Kafka-meldingen (SKJEMA_SAK_MAPPING
-    // opprettet) FØR testen avslutter. Uten dette lever meldingen videre og konsumeres først
-    // etter at NESTE tests cleanup har tømt Oracle → en stray fagsak som velter tellingen i
-    // etterfølgende tester (f.eks. skjema-begge-deler «kun én fagsak»). Se
-    // memory/skjema_begge_deler_flake_kafka_leak.md.
-    await new SkjemaMottakAssertions().ventPaaSakForSkjema(skjemaId);
-    console.log('✅ Kafka-melding konsumert av melosys-api (drain OK)');
+    // Drain-at-source: vent til melosys-api har kjørt HELE mottakssagaen (sak + journalføring i
+    // Oracle) FØR testen avslutter. Uten dette lever Kafka-meldingen videre og konsumeres først
+    // etter at NESTE tests cleanup har tømt Oracle. To skadevarianter: (1) sak opprettes etter
+    // clean → stray fagsak velter tellinger i etterfølgende tester (f.eks. skjema-begge-deler
+    // «kun én fagsak», CI run 28596547580); (2) journalførings-halen krysser grensen → naboens
+    // clean sletter sak/behandling midt i sagaen → melosys-api logger ERROR → docker-logs-fixturen
+    // feller en urelatert nabotest. Å draine helt til JOURNALPOST_ID er satt dekker begge.
+    await new SkjemaMottakAssertions().ventPaaJournalpostForSkjema(skjemaId);
+    console.log('✅ Mottakssaga ferdig i melosys-api (sak + journalpost, drain OK)');
   });
 });
