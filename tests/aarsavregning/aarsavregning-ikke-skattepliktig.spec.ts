@@ -19,6 +19,13 @@ import {verifiserAarsavregningBehandling} from '../../pages/behandling/aarsavreg
 
 test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
     test('skal opprette årsavregning for ikke-skattepliktig bruker', async ({page, request}) => {
+        // Full saksflyt → fatt vedtak → async ikke-skattepliktig-jobb → polling +
+        // ~15s Unleash toggle-bekreftelser ligger legitimt nær 60s. På en lastet
+        // CI-runner tipper den over default-timeouten (både grønn baseline-kjøring
+        // og denne lå på 60-62s). Scoped 120s — samme mønster som nyvurdering-
+        // skattestatus-testene (#305) — uten å røre global timeout.
+        test.setTimeout(120000);
+
         // Setup: Authentication
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);

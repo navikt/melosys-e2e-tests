@@ -104,8 +104,14 @@ export class ResultatPeriodePage extends BasePage {
     // på den siden. Med heading-change-verifisering re-klikkes overgangen til
     // stegoverskriften faktisk endrer seg (samme robuste mønster som eu-eos-/
     // aarsavregning-POM-ene bruker).
+    // Resultat-periode-steget auto-lagrer ikke (Perioder→Trygdeavgift byttes
+    // klientsidig, ingen avklartefakta/vilkaar-POST). Uten kort apiResponseTimeout
+    // venter waitForResponse hele 10s forgjeves på hvert klikk («Ingen API-respons»)
+    // — ren dødtid som presser lange tester (f.eks. ikke-skattepliktig) over 60s.
+    // Heading-endringen er uansett det reelle signalet for stegovergangen.
     await this.clickStepButtonWithRetry(this.bekreftOgFortsettButton, {
       verifyHeadingChange: true,
+      apiResponseTimeout: 1500,
     });
   }
 
