@@ -171,7 +171,13 @@ export class TrygdeavtaleBehandlingPage extends BasePage {
    * Click "Bekreft og fortsett" button with retry logic for reliable step transitions
    */
   async klikkBekreftOgFortsett(): Promise<void> {
-    await this.clickStepButtonWithRetry(this.bekreftOgFortsettButton);
+    // verifyHeadingChange: samme step-transition-robusthet som de øvrige
+    // behandlings-POM-ene — re-klikk til stegoverskriften faktisk endrer seg
+    // slik at en «droppet» overgang på lastet CI ikke etterlater flyten på
+    // forrige steg (bl.a. trygdeavtale-nyvurdering var flaky her).
+    await this.clickStepButtonWithRetry(this.bekreftOgFortsettButton, {
+      verifyHeadingChange: true,
+    });
   }
 
   /**

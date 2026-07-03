@@ -22,6 +22,12 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
             page,
             request
         }) => {
+        // Tung NV-skattestatus-flyt: to fulle vedtak + nyvurdering + faktura +
+        // flere prosessinstans-venter ligger nær 60s-taket og tipper over på en
+        // lastet CI-runner (tyngre full-stack etter at skjema ble en del av
+        // full-run). Scoped hev til 120s — global timeout beholdes på 60s.
+        test.setTimeout(120000);
+
         // Setup: Authentication
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);
@@ -165,6 +171,12 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
             page,
             request
         }) => {
+        // Tung NV-skattestatus-flyt: to fulle vedtak + nyvurdering + faktura +
+        // flere prosessinstans-venter ligger nær 60s-taket og tipper over på en
+        // lastet CI-runner (tyngre full-stack etter at skjema ble en del av
+        // full-run). Scoped hev til 120s — global timeout beholdes på 60s.
+        test.setTimeout(120000);
+
         // Setup: Authentication
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);

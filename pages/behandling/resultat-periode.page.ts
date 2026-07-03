@@ -97,7 +97,16 @@ export class ResultatPeriodePage extends BasePage {
    * Click "Bekreft og fortsett" button with retry logic for reliable step transitions
    */
   async klikkBekreftOgFortsett(): Promise<void> {
-    await this.clickStepButtonWithRetry(this.bekreftOgFortsettButton);
+    // verifyHeadingChange: klikket Perioder→Trygdeavgift kan «droppes» av React
+    // på en lastet CI-runner (step-transition-race) — da returnerte metoden mens
+    // vi fortsatt sto på «Medlemskapsperioder», og neste steg (trygdeavgift.
+    // ventPåSideLastet) timet ut på en «Skattepliktig»-gruppe som aldri fantes
+    // på den siden. Med heading-change-verifisering re-klikkes overgangen til
+    // stegoverskriften faktisk endrer seg (samme robuste mønster som eu-eos-/
+    // aarsavregning-POM-ene bruker).
+    await this.clickStepButtonWithRetry(this.bekreftOgFortsettButton, {
+      verifyHeadingChange: true,
+    });
   }
 
   /**
