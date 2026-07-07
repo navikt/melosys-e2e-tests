@@ -554,6 +554,54 @@ describe('Summary Generator', () => {
       assert(!result.includes('📄 trygdeavtale-vedtak'));
     });
 
+    test('should group generated specs by domain regardless of the features root dir name', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [
+          // features glob rooted in specs/ instead of features/
+          createTest({
+            title: 'scenario A',
+            file: '/Users/dev/melosys-e2e-tests/.features-gen/specs/trygdeavtale/trygdeavtale-vedtak.feature.spec.js'
+          }),
+          // custom featuresRoot: no mirrored root segment at all
+          createTest({
+            title: 'scenario B',
+            file: '/Users/dev/melosys-e2e-tests/.features-gen/aarsavregning/aarsavregning-ftrl.feature.spec.js'
+          }),
+        ]
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      assert(result.includes('<strong>trygdeavtale</strong>'));
+      assert(result.includes('<strong>aarsavregning</strong>'));
+      assert(!result.includes('<strong>root</strong>'));
+      assert(!result.includes('<strong>specs</strong>'));
+    });
+
+    test('should show the real domain folder for failed BDD tests in the Failed Tests section', () => {
+      const data: TestSummaryData = {
+        status: 'failed',
+        duration: 10000,
+        tests: [
+          createTest({
+            title: 'Innvilget trygdeavtale-vedtak',
+            status: 'failed',
+            file: '/Users/dev/melosys-e2e-tests/.features-gen/features/trygdeavtale/trygdeavtale-vedtak.feature.spec.js',
+            error: 'Forventet AVSLUTTET, fikk UNDER_BEHANDLING'
+          }),
+        ]
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      // Same parsing as the domain table — not the old 'root' fallback
+      assert(result.includes('**Folder:** `trygdeavtale`'));
+      assert(result.includes('**File:** `trygdeavtale-vedtak.feature.spec.js`'));
+      assert(!result.includes('**Folder:** `root`'));
+    });
+
   });
 
   describe('Duration Rollup', () => {

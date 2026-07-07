@@ -1,5 +1,6 @@
 import { test as base } from '@playwright/test';
 import { execSync } from 'child_process';
+import { hasTag } from '../lib/test-tags';
 import * as fs from 'fs';
 import * as path from 'path';
 
@@ -265,12 +266,9 @@ export const dockerLogsFixture = base.extend<{ dockerLogChecker: void }>({
 
     // Tests tagged with @expect-docker-errors intentionally trigger backend errors
     // (e.g., navigating to non-existent resources to test error handling).
-    // Check both the test title (plain Playwright specs put the tag in the title)
-    // and testInfo.tags (playwright-bdd emits Gherkin @tags into testInfo.tags).
-    const expectDockerErrors =
-      testInfo.title.includes('@expect-docker-errors') ||
-      testInfo.tags.some(tag => tag === '@expect-docker-errors');
-    if (expectDockerErrors) {
+    // Tag may live in the title (plain specs) or in testInfo.tags (playwright-bdd
+    // Gherkin @tags) — hasTag covers both with one shared, case-insensitive semantics.
+    if (hasTag(testInfo, '@expect-docker-errors')) {
       console.log(`\n⏭️  Skipping docker log check (@expect-docker-errors tag)`);
       return;
     }

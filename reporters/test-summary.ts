@@ -5,6 +5,7 @@ import * as fs from 'fs';
 import * as path from 'path';
 import { generateMarkdownSummary } from '../lib/summary-generator';
 import { TestSummaryData, TestData } from '../lib/types';
+import { hasTag } from '../lib/test-tags';
 
 /**
  * Custom Playwright reporter that creates a test summary
@@ -36,9 +37,11 @@ class TestSummaryReporter implements Reporter {
     // Create unique key for test (file + title)
     const key = `${test.location.file}::${test.title}`;
 
-    // Check if test is marked as known-error
+    // Check if test is marked as known-error: the fixture pushes an annotation,
+    // but tests that bypass the shared fixtures (e.g. plain @playwright/test specs
+    // or Gherkin scenarios tagged via test.tags) are covered by hasTag directly.
     const isKnownError = test.annotations.some(a => a.type === 'known-error') ||
-                        test.title.toLowerCase().includes('@known-error');
+                        hasTag({ title: test.title, tags: test.tags }, '@known-error');
 
     // Get or create test info
     let testInfo = this.testsByKey.get(key);
