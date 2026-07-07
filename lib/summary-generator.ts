@@ -229,16 +229,35 @@ interface ParsedTestPath {
 /**
  * Parse a test file path into domain / file label, stripping the redundant
  * leading "<domain>-" so file labels don't repeat the folder name.
+ *
+ * Handwritten specs live under `tests/<domain>/…`; playwright-bdd generated
+ * specs live under `.features-gen/…`, mirroring the features root dir (e.g.
+ * `.features-gen/features/<domain>/…`). Anchor on the machine-generated
+ * `.features-gen` segment — not a folder that happens to be named "features" —
+ * so BDD tests group by domain regardless of where the .feature files live.
  */
 function parseTestPath(file: string): ParsedTestPath {
   const parts = file.split('/');
-  const i = parts.indexOf('tests');
-  const after = i !== -1 ? parts.slice(i + 1) : parts.slice(-1);
+  const testsIdx = parts.indexOf('tests');
+  const genIdx = parts.indexOf('.features-gen');
+  let after: string[];
+  if (testsIdx !== -1) {
+    after = parts.slice(testsIdx + 1);
+  } else if (genIdx !== -1) {
+    after = parts.slice(genIdx + 1);
+    // Drop the mirrored features-root segment ('features/', 'specs/', …) so the
+    // domain folder comes first; with a custom featuresRoot there is no mirrored
+    // segment (only <domain>/<file>), hence the length guard.
+    if (after.length > 2) after = after.slice(1);
+  } else {
+    after = parts.slice(-1);
+  }
   const base = after[after.length - 1];
   const domain = after.length > 1 ? after[0] : 'root';
   const sub = after.length > 2 ? after.slice(1, -1).join('/') : '';
 
-  let label = base.replace(/\.spec\.ts$/, '');
+  // Handwritten: <name>.spec.ts. Generated: <name>.feature.spec.js.
+  let label = base.replace(/\.(feature\.)?spec\.(ts|js)$/, '');
   if (domain !== 'root' && label.startsWith(`${domain}-`)) {
     label = label.slice(domain.length + 1);
   }
@@ -298,7 +317,15 @@ interface FileGroup {
   hasFail: boolean;
 }
 
-/** Group a domain's tests by file label; failing files (and tests) sort first. */
+/**
+ * Group a domain's tests by file label; failing files (and tests) sort first.
+ *
+ * Known limitation: the key is the parsed label, so a handwritten spec and a
+ * BDD-generated twin with the same base name (tests/<d>/x.spec.ts and
+ * .features-gen/…/<d>/x.feature.spec.js) would merge into one entry. No such
+ * name pair exists today, and bdd/chromium report per invocation — revisit the
+ * key if the two ever land in the same run.
+ */
 function groupTestsByFile(tests: TestData[]): FileGroup[] {
   const map = new Map<string, TestData[]>();
   for (const t of tests) {
@@ -443,22 +470,14 @@ function generateFailedTestsSection(failedTests: TestData[]): string {
   let md = `## ❌ Failed Tests (${failedTests.length})\n\n`;
 
   for (const testInfo of failedTests) {
-    const filePath = testInfo.file;
-    const parts = filePath.split('/');
-    const fileName = parts[parts.length - 1];
-
-    // Find "tests" directory index
-    const testsIndex = parts.indexOf('tests');
-    let folderPath = 'root';
-
-    if (testsIndex !== -1 && testsIndex < parts.length - 1) {
-      const foldersAfterTests = parts.slice(testsIndex + 1, parts.length - 1);
-      folderPath = foldersAfterTests.length > 0 ? foldersAfterTests.join('/') : 'root';
-    }
+    // Same parsing as the domain grouping, so Folder/File here never disagree
+    // with the summary table (covers both tests/ and .features-gen/ paths).
+    const { domain, sub, base } = parseTestPath(testInfo.file);
+    const folderPath = domain === 'root' ? 'root' : (sub ? `${domain}/${sub}` : domain);
 
     md += `### ${testInfo.title}\n\n`;
     md += `**Folder:** \`${folderPath}\`  \n`;
-    md += `**File:** \`${fileName}\`  \n`;
+    md += `**File:** \`${base}\`  \n`;
     md += `**Attempts:** ${testInfo.totalAttempts} (${testInfo.failedAttempts} failed)  \n`;
     md += `**Duration:** ${Math.round(testInfo.duration / 1000)}s\n\n`;
 
