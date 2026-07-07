@@ -40,6 +40,7 @@ export class TrygdeavtaleDsl {
   private tom = STANDARD_TOM;
   private førsteBehandlingId?: string;
   private medlPeriodeId?: number;
+  private nyvurderingBakgrunn = 'NYE_OPPLYSNINGER';
 
   constructor(private readonly driver: TrygdeavtaleDriver) {}
 
@@ -69,7 +70,7 @@ export class TrygdeavtaleDsl {
       );
     }
     await this.driver.fyllUtOgFattVedtak(this.fom, this.tom);
-    await this.driver.ventPåIverksetting(60);
+    await this.driver.ventPåProsesser(60);
   }
 
   /** Verifiser at behandlingen er fullført: AVSLUTTET i DB med ferdig iverksetting. */
@@ -109,8 +110,9 @@ export class TrygdeavtaleDsl {
         `Ukjent grunn for nytt vedtak: «${grunn}». Gyldige: ${Object.keys(GRUNN_ENUM).join(', ')}.`
       );
     }
+    this.nyvurderingBakgrunn = enumVerdi;
     await this.driver.fattNyvurderingsvedtak(this.tom, enumVerdi);
-    await this.driver.ventPåIverksetting(60);
+    await this.driver.ventPåProsesser(60);
   }
 
   /** Verifiser at nyvurderingen er fullført i DB (forkortet periode, erstattet MEDL-periode). */
@@ -118,7 +120,7 @@ export class TrygdeavtaleDsl {
     this.medlPeriodeId = await this.driver.verifiserNyvurderingVedtak({
       fom,
       tom,
-      bakgrunn: 'NYE_OPPLYSNINGER',
+      bakgrunn: this.nyvurderingBakgrunn,
       bestemmelse: 'AUS_ART9_3',
     });
   }
@@ -152,11 +154,16 @@ export class TrygdeavtaleDsl {
       );
     }
     await this.driver.godkjennUnntak(kode);
+    // «Bekreft og avslutt» starter bare REGISTRERE_UNNTAK_FRA_MEDLEMSKAP; vent på at
+    // prosessen faktisk er FERDIG før verifiseringen (sluttilstands-asserten poller ikke).
+    await this.driver.ventPåProsesser(60);
   }
 
   /** «Ikke godkjenn» unntaket og avslutt (negativt utfall). */
   async ikkeGodkjennUnntak(): Promise<void> {
     await this.driver.ikkeGodkjennUnntak();
+    // Samme grunn som godkjennUnntak: vent på at prosessen er FERDIG før verifiseringen.
+    await this.driver.ventPåProsesser(60);
   }
 
   /** Verifiser at det godkjente unntaket er registrert i DB og MEDL (endelig periode). */

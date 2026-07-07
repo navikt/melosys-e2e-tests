@@ -114,7 +114,13 @@ export class TrygdeavtaleDriver {
     await arbeidssted.fyllUtArbeidsstedOgFattVedtak(ARBEIDSSTED);
   }
 
-  async ventPåIverksetting(timeoutSekunder: number = 60): Promise<void> {
+  /**
+   * Vent på at alle asynkrone prosessinstanser er ferdige (kaster ved feilede).
+   * Brukes før DB-verifisering i alle flytene: vedtak-/NV-iverksetting OG
+   * unntaksregistrering (REGISTRERE_UNNTAK_FRA_MEDLEMSKAP) — sluttilstands-
+   * assertions poller ikke, så prosessen må være FERDIG før de kjører.
+   */
+  async ventPåProsesser(timeoutSekunder: number = 60): Promise<void> {
     await waitForProcessInstances(this.page.request, timeoutSekunder);
   }
 
