@@ -12,6 +12,8 @@ import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page
 import { TrygdeavtaleBehandlingPage } from '../../pages/behandling/trygdeavtale-behandling.page';
 import { TrygdeavtaleArbeidsstedPage } from '../../pages/behandling/trygdeavtale-arbeidssted.page';
 import { USER_ID_VALID, SAKSTYPER, SAKSTEMA, BEHANDLINGSTEMA, AARSAK } from '../../pages/shared/constants';
+import { waitForProcessInstances } from '../../helpers/api-helper';
+import { verifiserBehandlingSluttilstand } from '../../pages/shared/behandling-sluttilstand.assertions';
 
 export class TrygdeavtaleDriver {
   private loggedIn = false;
@@ -49,5 +51,20 @@ export class TrygdeavtaleDriver {
   async fattVedtak(): Promise<void> {
     const arbeidssted = new TrygdeavtaleArbeidsstedPage(this.page);
     await arbeidssted.fyllUtArbeidsstedOgFattVedtak();
+  }
+
+  /**
+   * Hard sluttilstand i DB — samme standard som trygdeavtale-fullfort-vedtak.spec.ts:
+   * vent på at alle prosessinstanser er ferdige (kaster på feilede), og verifiser at
+   * behandlingen er AVSLUTTET med behandlingsresultat og at iverksettingen
+   * (IVERKSETT_VEDTAK_TRYGDEAVTALE) er FERDIG.
+   */
+  async verifiserFullført(): Promise<void> {
+    await waitForProcessInstances(this.page.request, 60);
+    await verifiserBehandlingSluttilstand({
+      // Live-verifisert resultat for innvilget trygdeavtale-søknad
+      forventetResultatType: 'FASTSATT_LOVVALGSLAND',
+      forventetIverksettProsess: 'IVERKSETT_VEDTAK_TRYGDEAVTALE',
+    });
   }
 }

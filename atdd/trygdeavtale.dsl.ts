@@ -29,8 +29,8 @@ export class TrygdeavtaleDsl {
     await this.driver.fattVedtak();
   }
 
-  /** Verifiser at behandlingen er fullført */
+  /** Verifiser at behandlingen er fullført: AVSLUTTET i DB med ferdig iverksetting */
   async verifiserFullført(): Promise<void> {
-    // TODO: Kan utvides med database-sjekk via driver
+    await this.driver.verifiserFullført();
   }
 }

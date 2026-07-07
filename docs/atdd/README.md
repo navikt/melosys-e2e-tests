@@ -34,6 +34,10 @@ test('skal fullføre trygdeavtale-arbeidsflyt med vedtak', async ({ page }) => {
     await behandling.velgArbeidsgiverOgFortsett('Ståles Stål AS');
     await behandling.innvilgeOgVelgBestemmelse('AUS_ART9_3');
     await arbeidssted.fyllUtArbeidsstedOgFattVedtak('Test');
+    await waitForProcessInstances(page.request, 60);
+    await behandling.assertions.verifiserBehandlingAvsluttet({
+      forventetIverksettProsess: 'IVERKSETT_VEDTAK_TRYGDEAVTALE',
+    });
 });
 ```
 
@@ -65,11 +69,11 @@ Egenskap: Trygdeavtale - fatte vedtak om medlemskap
 │  Ikke kode. Lesbart for fageksperter.                       │
 │  playwright-bdd verifiserer at feature matcher kode.        │
 ├─────────────────────────────────────────────────────────────┤
-│  Lag 2 — DSL + BINDINGER (dsl/)                             │
+│  Lag 2 — DSL + BINDINGER (atdd/)                            │
 │  TrygdeavtaleDsl: domenespråk, ingen POM-kjennskap.         │
 │  Steps: lim som kobler Gherkin → DSL (én linje per steg).   │
 ├─────────────────────────────────────────────────────────────┤
-│  Lag 3 — PROTOKOLLDRIVERE (dsl/drivers/, pages/, helpers/)  │
+│  Lag 3 — PROTOKOLLDRIVERE (atdd/drivers/, pages/, helpers/) │
 │  TrygdeavtaleDriver: oversetter domene → POM-kall.          │
 │  POMs, database-hjelpere, auth, cleanup.                    │
 ├─────────────────────────────────────────────────────────────┤
@@ -85,7 +89,7 @@ features/
   trygdeavtale/
     trygdeavtale-vedtak.feature        ← Lag 1: Spesifikasjonen
 
-dsl/
+atdd/
   trygdeavtale.dsl.ts                  ← Lag 2: DSL (ingen POM-imports)
   fixtures.ts                          ← Lag 2: Kobler driver → DSL → Playwright
   steps/
