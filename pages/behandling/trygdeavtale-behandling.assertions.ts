@@ -101,12 +101,10 @@ export class TrygdeavtaleBehandlingAssertions {
   /**
    * Verify period dates in database
    *
-   * @param fnr - User's national ID
    * @param fraOgMed - Expected start date (DD.MM.YYYY)
    * @param tilOgMed - Expected end date (DD.MM.YYYY)
    */
   async verifiserPeriodeIDatabase(
-    _fnr: string,
     fraOgMed: string,
     tilOgMed: string
   ): Promise<void> {
