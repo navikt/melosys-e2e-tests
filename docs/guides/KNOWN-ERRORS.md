@@ -20,6 +20,24 @@ When a test is tagged with `@known-error`:
 - ✅ CI pipeline **DOESN'T FAIL** regardless of test outcome
 - ✅ No unnecessary retries (test runs once only)
 
+### Where the tag can live (title or Gherkin `@tags`)
+
+Detection is done by the shared `hasTag()` helper (`lib/test-tags.ts`), used by both
+the known-error fixture and the docker-logs fixture. It matches the tag in **two**
+places (case-insensitive):
+
+- **Test title** — plain Playwright specs: `test('… @known-error #MELOSYS-123', …)`.
+- **`testInfo.tags`** — the opt-in ATDD/BDD example (playwright-bdd) can tag a Gherkin
+  scenario, e.g.:
+
+  ```gherkin
+  @known-error
+  Scenario: ...
+  ```
+
+So `@known-error` and `@expect-docker-errors` behave identically whether authored in a
+title or as a Gherkin tag.
+
 ## Usage
 
 ### Basic Usage

@@ -34,6 +34,17 @@ npm run test:debug
 npm run test:ui
 ```
 
+**Note:** `npm test` (and the `test:headed`/`test:debug`/`test:ui`/`test:record` siblings) are pinned to `--project=chromium`, so they do **not** run the opt-in ATDD/BDD example. That example runs only via `npm run test:bdd` (runs `npx bddgen` first, then `playwright test --project=bdd`) and is not part of CI. See `docs/atdd/README.md`.
+
+#### ATDD/BDD Example (opt-in — Trygdeavtale)
+
+```bash
+# Run the ATDD example (Gherkin .feature files → DSL → drivers → POMs)
+npm run test:bdd
+```
+
+Four-layer ATDD (Farley) example scoped to trygdeavtale. Opt-in, not in `npm test`/CI. See `docs/atdd/README.md` for the scenario catalogue, the override-step pattern, mock constraints, and the "Er playwright-bdd nødvendig?" verdict (with a plain-Playwright `@manual` demo that drives the same DSL without Gherkin).
+
 #### Unit Tests (Node.js built-in test runner)
 
 ```bash
@@ -602,6 +613,8 @@ See `tests/opprett-sak-pom-eksempel.spec.ts` for complete example.
 ## Test Tags
 
 Tests can be tagged to control their execution behavior. Tags are added to the test name.
+
+**Where a tag can live:** plain Playwright specs put the tag in the test **title** (e.g. `test('… @known-error #MELOSYS-123', …)`). The opt-in ATDD/BDD example (playwright-bdd) can instead put tags as Gherkin **`@tags`** above a scenario, which Playwright surfaces via `testInfo.tags`. The shared `hasTag()` helper (`lib/test-tags.ts`) matches **both** places (case-insensitive), so `@known-error` and `@expect-docker-errors` work identically whether tagged in a title or in Gherkin. See `docs/guides/KNOWN-ERRORS.md`.
 
 ### @manual - Manual-only Tests
 
