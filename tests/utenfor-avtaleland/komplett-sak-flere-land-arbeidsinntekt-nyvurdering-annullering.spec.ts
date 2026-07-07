@@ -85,9 +85,18 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og nyvurdering
         await resultatPeriode.ventPåSideLastet();
         await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
 
-        // Hent behandlingId fra URL
+        // Hent behandlingId og saksnummer fra URL. Saksnummeret brukes til å åpne
+        // årsavregningen scoped til NETTOPP denne saken (se steg 10) – hvis en tidligere
+        // (feilet) kjøring har lekket en avsluttet årsavregning for samme år i en annen sak,
+        // ville et løst «Årsavregning»-lokator ellers matche to lenker og gi strict-mode-feil.
         const opprinneligBehandlingId = new URL(page.url()).searchParams.get('behandlingID');
-        console.log(`OpprinneligBehandlingId: ${opprinneligBehandlingId}`);
+        // Saksnummeret er enten «MEL-<n>» (f.eks. /FTRL/saksbehandling/MEL-146/) eller et rent
+        // tall – fang segmentet rett etter «saksbehandling/» uansett format.
+        const saksnummer = new URL(page.url()).pathname.match(/saksbehandling\/([^/?]+)/)?.[1];
+        if (!saksnummer) {
+            throw new Error(`Fant ikke saksnummer i URL-en: ${page.url()}`);
+        }
+        console.log(`OpprinneligBehandlingId: ${opprinneligBehandlingId}, saksnummer: ${saksnummer}`);
 
         // Step 7: Trygdeavgift - Ikke-skattepliktig med arbeidsinntekt fra Norge
         console.log('Step 7: Filling trygdeavgift...');
@@ -109,7 +118,10 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og nyvurdering
         console.log('Step 10: Opening årsavregning behandling...');
         await hovedside.goto();
         await hovedside.søkEtterBruker(USER_ID_VALID);
-        await page.getByRole('link', {name: 'Yrkesaktiv - Årsavregning'}).getByRole('button').click();
+        // Scoped til denne sakens saksnummer (åpneAarsavregningForSaksnummer asserter
+        // nøyaktig én treff) slik at en evt. lekket årsavregning fra en tidligere kjøring
+        // ikke gir strict-mode-brudd på et retry-forsøk.
+        await hovedside.åpneAarsavregningForSaksnummer(saksnummer);
 
         // Step 11: Fyll ut årsavregning
         console.log('Step 11: Filling årsavregning...');
