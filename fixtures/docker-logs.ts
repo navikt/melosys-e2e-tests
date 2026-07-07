@@ -264,8 +264,13 @@ export const dockerLogsFixture = base.extend<{ dockerLogChecker: void }>({
     }
 
     // Tests tagged with @expect-docker-errors intentionally trigger backend errors
-    // (e.g., navigating to non-existent resources to test error handling)
-    if (testInfo.title.includes('@expect-docker-errors')) {
+    // (e.g., navigating to non-existent resources to test error handling).
+    // Check both the test title (plain Playwright specs put the tag in the title)
+    // and testInfo.tags (playwright-bdd emits Gherkin @tags into testInfo.tags).
+    const expectDockerErrors =
+      testInfo.title.includes('@expect-docker-errors') ||
+      testInfo.tags.some(tag => tag === '@expect-docker-errors');
+    if (expectDockerErrors) {
       console.log(`\n⏭️  Skipping docker log check (@expect-docker-errors tag)`);
       return;
     }

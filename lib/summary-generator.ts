@@ -229,16 +229,23 @@ interface ParsedTestPath {
 /**
  * Parse a test file path into domain / file label, stripping the redundant
  * leading "<domain>-" so file labels don't repeat the folder name.
+ *
+ * Handwritten specs live under `tests/<domain>/…`; playwright-bdd generated
+ * specs live under `.features-gen/features/<domain>/…`. Anchor on whichever
+ * root segment is present so BDD tests get grouped by domain too (rather than
+ * collapsing into a single "root" bucket).
  */
 function parseTestPath(file: string): ParsedTestPath {
   const parts = file.split('/');
-  const i = parts.indexOf('tests');
+  let i = parts.indexOf('tests');
+  if (i === -1) i = parts.indexOf('features'); // .features-gen/features/<domain>/…
   const after = i !== -1 ? parts.slice(i + 1) : parts.slice(-1);
   const base = after[after.length - 1];
   const domain = after.length > 1 ? after[0] : 'root';
   const sub = after.length > 2 ? after.slice(1, -1).join('/') : '';
 
-  let label = base.replace(/\.spec\.ts$/, '');
+  // Handwritten: <name>.spec.ts. Generated: <name>.feature.spec.js.
+  let label = base.replace(/\.(feature\.)?spec\.(ts|js)$/, '');
   if (domain !== 'root' && label.startsWith(`${domain}-`)) {
     label = label.slice(domain.length + 1);
   }

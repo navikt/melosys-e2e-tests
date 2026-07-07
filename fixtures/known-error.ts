@@ -25,10 +25,13 @@ import { test as base } from '@playwright/test';
  * ```
  */
 export const test = base.extend<{ autoTestFixture: void }>({
-  // Auto-detect @known-error tag in test title
+  // Auto-detect @known-error tag in test title or tags
   autoTestFixture: [async ({}, use, testInfo) => {
-    // Check if test title contains @known-error tag (case-insensitive)
-    if (testInfo.title.toLowerCase().includes('@known-error')) {
+    // Check both the test title (plain Playwright specs put the tag in the title)
+    // and testInfo.tags (playwright-bdd emits Gherkin @tags into testInfo.tags).
+    const inTitle = testInfo.title.toLowerCase().includes('@known-error');
+    const inTags = testInfo.tags.some(tag => tag.toLowerCase() === '@known-error');
+    if (inTitle || inTags) {
       // Add annotation to mark this test as tracking a known bug
       // The reporter will handle this specially:
       // - If it fails: Don't count as real failure (expected behavior)

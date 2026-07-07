@@ -530,6 +530,30 @@ describe('Summary Generator', () => {
       assert(result.indexOf('## ❗ Needs Attention') < result.indexOf('## 📊 Test Results'));
     });
 
+    test('should group playwright-bdd generated specs by domain and strip the .feature.spec suffix', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [
+          createTest({
+            title: 'Innvilget trygdeavtale-vedtak',
+            // playwright-bdd emits absolute paths into .features-gen/features/<domain>/…
+            file: '/Users/dev/melosys-e2e-tests/.features-gen/features/trygdeavtale/trygdeavtale-vedtak.feature.spec.js'
+          }),
+        ]
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      // Grouped under the real domain, not collapsed into "root"
+      assert(result.includes('<strong>trygdeavtale</strong>'));
+      assert(!result.includes('<strong>root</strong>'));
+      // Redundant "trygdeavtale-" prefix and ".feature.spec.js" suffix are stripped
+      assert(result.includes('📄 vedtak'));
+      assert(!result.includes('feature.spec.js'));
+      assert(!result.includes('📄 trygdeavtale-vedtak'));
+    });
+
   });
 
   describe('Duration Rollup', () => {

@@ -4,13 +4,13 @@
   "description": "End-to-end tests for Melosys using Playwright",
   "main": "index.js",
   "scripts": {
-    "test": "playwright test",
-    "test:headed": "playwright test --headed",
-    "test:debug": "playwright test --debug",
-    "test:ui": "playwright test --ui",
+    "test": "playwright test --project=chromium",
+    "test:headed": "playwright test --project=chromium --headed",
+    "test:debug": "playwright test --project=chromium --debug",
+    "test:ui": "playwright test --project=chromium --ui",
     "test:unit": "node --require ts-node/register --test lib/**/*.test.ts",
     "check:tests": "node scripts/check-vacuous-tests.mjs",
-    "test:record": "RECORD_API=true playwright test",
+    "test:record": "RECORD_API=true playwright test --project=chromium",
     "replay": "ts-node scripts/replay-api-calls.ts",
 
     "generate-summary": "ts-node scripts/generate-summary-from-json.ts",
