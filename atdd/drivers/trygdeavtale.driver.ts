@@ -55,7 +55,14 @@ export class TrygdeavtaleDriver {
 
   // ── Felles ───────────────────────────────────────────────────────────
 
-  async loggInn(): Promise<void> {
+  /**
+   * Innkapslet, idempotent innloggings-forutsetning. Login er teknisk system-
+   * kommunikasjon (auth mot mock-oauth2) og hører hjemme i driveren, ikke i DSL-en
+   * (domenespråk) eller fixturen (e2e-infrastruktur: cleanup/logging/lifecycle).
+   * Kalles som første linje i scenario-inngangsmetodene; `loggedIn`-guarden gjør
+   * gjentatte kall gratis (NV arver sesjonen fra førstegangsbehandlingen).
+   */
+  private async sikreInnlogget(): Promise<void> {
     if (this.loggedIn) return;
     await new AuthHelper(this.page).login();
     this.loggedIn = true;
@@ -71,6 +78,7 @@ export class TrygdeavtaleDriver {
    * BEHANDLING_ID/SAK_ID-spørring (jf. planen, issue 5).
    */
   async opprettFørstegangssak(): Promise<string> {
+    await this.sikreInnlogget();
     const hovedside = new HovedsidePage(this.page);
     const opprettSak = new OpprettNySakPage(this.page);
 
@@ -101,10 +109,19 @@ export class TrygdeavtaleDriver {
   // ── Førstegangs vedtak (scenario 1 + 2) ──────────────────────────────
 
   /**
-   * Fullfør førstegangs-behandlingen til fattet vedtak med gitt søknadsperiode.
-   * Land/arbeidsgiver/bestemmelse/arbeidssted er faste (mock-begrensning, se topp).
+   * Fatt vedtak med gitt resultat for en førstegangs-behandling, og vent til
+   * iverksettingen er ferdig. Driveren eier BÅDE hvordan vedtaket fattes OG hva
+   * som er realisert: kun `INNVILGET` er bygget ennå — andre resultat-typer kaster
+   * en informativ feil her (uten vakten ville en ustøttet type stille gitt
+   * innvilgelse uansett). Land/arbeidsgiver/bestemmelse/arbeidssted er faste
+   * (mock-begrensning, se topp).
    */
-  async fyllUtOgFattVedtak(fom: string, tom: string): Promise<void> {
+  async fattVedtak(resultat: string, fom: string, tom: string): Promise<void> {
+    if (resultat !== 'INNVILGET') {
+      throw new Error(
+        `Resultat «${resultat}» er ikke realisert i driveren ennå (kun INNVILGET er dekket).`
+      );
+    }
     const behandling = new TrygdeavtaleBehandlingPage(this.page);
     const arbeidssted = new TrygdeavtaleArbeidsstedPage(this.page);
 
@@ -112,15 +129,17 @@ export class TrygdeavtaleDriver {
     await behandling.velgArbeidsgiverOgFortsett(ARBEIDSGIVER);
     await behandling.innvilgeOgVelgBestemmelse(BESTEMMELSE);
     await arbeidssted.fyllUtArbeidsstedOgFattVedtak(ARBEIDSSTED);
+    await this.ventPåProsesser(60);
   }
 
   /**
    * Vent på at alle asynkrone prosessinstanser er ferdige (kaster ved feilede).
-   * Brukes før DB-verifisering i alle flytene: vedtak-/NV-iverksetting OG
-   * unntaksregistrering (REGISTRERE_UNNTAK_FRA_MEDLEMSKAP) — sluttilstands-
-   * assertions poller ikke, så prosessen må være FERDIG før de kjører.
+   * Privat: avslutter driverens egne handlinger (vedtak-/NV-iverksetting OG
+   * unntaksregistrering) slik at hver handling returnerer FØRST når prosessen er
+   * ferdig — sluttilstands-assertions poller ikke. DSL-en trenger aldri å nevne
+   * dette (timeouten `60` er en teknisk detalj som bor i Lag 3).
    */
-  async ventPåProsesser(timeoutSekunder: number = 60): Promise<void> {
+  private async ventPåProsesser(timeoutSekunder: number = 60): Promise<void> {
     await waitForProcessInstances(this.page.request, timeoutSekunder);
   }
 
@@ -192,13 +211,15 @@ export class TrygdeavtaleDriver {
 
   /**
    * Vedtak-steget for NV: synk vedtaksperiodens TOM med Inngang-endringen, oppgi
-   * obligatorisk grunn for nytt vedtak, og fatt vedtaket.
+   * obligatorisk grunn for nytt vedtak, fatt vedtaket og vent til NV-iverksettingen
+   * er ferdig (sluttilstands-assertions poller ikke).
    */
   async fattNyvurderingsvedtak(nyTilOgMed: string, grunnEnum: string): Promise<void> {
     const behandling = new TrygdeavtaleBehandlingPage(this.page);
     await behandling.endreVedtaksperiodeTom(nyTilOgMed);
     await behandling.velgGrunnForNyttVedtak(grunnEnum);
     await behandling.fattVedtak();
+    await this.ventPåProsesser(60);
   }
 
   /**
@@ -235,6 +256,7 @@ export class TrygdeavtaleDriver {
    * unntaksregistrering-siden via oppgavelenken på hovedsiden.
    */
   async opprettUnntakssakOgÅpne(): Promise<void> {
+    await this.sikreInnlogget();
     const hovedside = new HovedsidePage(this.page);
     const opprettSak = new OpprettNySakPage(this.page);
 
@@ -267,6 +289,9 @@ export class TrygdeavtaleDriver {
     const unntak = new TrygdeavtaleUnntaksregistreringPage(this.page);
     await unntak.godkjennMedBestemmelse(bestemmelse);
     await unntak.bekreftOgAvslutt();
+    // «Bekreft og avslutt» starter bare REGISTRERE_UNNTAK_FRA_MEDLEMSKAP; vent på at
+    // prosessen faktisk er FERDIG før verifiseringen (sluttilstands-asserten poller ikke).
+    await this.ventPåProsesser(60);
   }
 
   /** «Ikke godkjenn» unntaket og avslutt (negativt utfall). */
@@ -274,6 +299,8 @@ export class TrygdeavtaleDriver {
     const unntak = new TrygdeavtaleUnntaksregistreringPage(this.page);
     await unntak.ikkeGodkjenn();
     await unntak.bekreftOgAvslutt();
+    // Samme grunn som godkjennUnntak: vent på at prosessen er FERDIG før verifiseringen.
+    await this.ventPåProsesser(60);
   }
 
   /** Verifiser DB-utfallet av et GODKJENT unntak; returner medlperiode_id. */

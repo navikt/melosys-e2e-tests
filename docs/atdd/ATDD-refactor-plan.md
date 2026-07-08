@@ -32,6 +32,16 @@
 > - **«Parallell kjøring»-gevinsten er irrelevant** (`workers: 1`).
 > - **`npx bddgen &&`-steget er korrekt og MÅ beholdes** — generering skjer kun via
 >   `bddgen` CLI, ikke av `defineBddConfig`. `npm run test:bdd` gjør dette riktig.
+> - **Infrastruktur bor i driveren, ikke DSL-en.** Login (auth mot mock-oauth2),
+>   prosess-venting/timeouts og reload-retry er teknisk system-kommunikasjon → Lag 3
+>   (driveren). DSL-en (Lag 2) er *rent domenespråk* — den verken kaller eller *nevner*
+>   auth/timeout/implementasjons-status (heller ikke i docstrings/kommentarer). Fixturen
+>   eier cleanup/logging/lifecycle, ikke login. (Regel 6 under er presisert deretter.)
+> - **Farley-1:1 vs. komposisjon.** «One method = one domain concept» betyr ett
+>   *domenebegrep* per DSL-metode, ikke nødvendigvis ett driver-kall: en DSL-metode
+>   kan komponere flere driver-handlinger (`opprettBehandling` = `opprettFørstegangssak`
+>   + `åpneNyesteBehandling`) og forblir 1:1 med domenet. Bruddet på renhet er teknisk
+>   detalj som lekker inn, ikke antall driver-kall.
 
 **Vision:** Restructure melosys-e2e-tests to follow Dave Farley's four-layer Acceptance Test Driven Development model so that tests are executable specifications written in structured text, readable by domain experts, and fully decoupled from implementation.
 
@@ -930,10 +940,10 @@ The key requirement is that Layer 1 is **structured text in domain language**, n
 
 1. **One method = one domain concept.** `opprettBehandling`, `innvilg`, `fattVedtak`.
 2. **Heavy defaults.** Standard bruker, standard periode — only require what varies.
-3. **Hold state in DslContext.** Store IDs, current state — so later methods read implicitly.
+3. **Hold flow-state in private DSL fields.** Store IDs, current state — so later methods read implicitly. (Introduce a `DslContext` only if the DSL is later split; the implemented example uses private fields on the single DSL class — see reconciliation banner.)
 4. **Assertions are DSL methods.** `bekreftVedtakFattet()` verifies domain outcomes.
 5. **Delegate to protocol drivers.** DSL methods are thin — parse params and call POMs/helpers.
-6. **Hide all infrastructure.** Login, process-instance polling, page reloads — internal to DSL.
+6. **Hide all infrastructure.** Login, process-instance polling, page reloads — internal to the driver (never the DSL). The fixture owns cleanup/logging/lifecycle; the driver owns technical system-communication (auth, timeouts, reload-retry).
 
 ### For protocol-driver authors (Layer 3)
 

@@ -46,9 +46,8 @@ export class TrygdeavtaleDsl {
 
   // ── Førstegangs vedtak (scenario 1 + 2) ──────────────────────────────
 
-  /** Opprett en standard trygdeavtale-behandling (logg inn → opprett sak → åpne behandling). */
+  /** Opprett en standard trygdeavtale-behandling (opprett sak → åpne behandling). */
   async opprettBehandling(): Promise<void> {
-    await this.driver.loggInn();
     this.førsteBehandlingId = await this.driver.opprettFørstegangssak();
     await this.driver.åpneNyesteBehandling();
   }
@@ -62,15 +61,9 @@ export class TrygdeavtaleDsl {
     this.tom = tom;
   }
 
-  /** Fatt vedtak med gitt resultat. Kun INNVILGET er implementert (issue 3). */
+  /** Fatt vedtak med gitt resultat. */
   async fattVedtak(resultat: string): Promise<void> {
-    if (resultat !== 'INNVILGET') {
-      throw new Error(
-        `Resultat «${resultat}» er ikke implementert i DSL-en ennå (kun INNVILGET er dekket).`
-      );
-    }
-    await this.driver.fyllUtOgFattVedtak(this.fom, this.tom);
-    await this.driver.ventPåProsesser(60);
+    await this.driver.fattVedtak(resultat, this.fom, this.tom);
   }
 
   /** Verifiser at behandlingen er fullført: AVSLUTTET i DB med ferdig iverksetting. */
@@ -112,7 +105,6 @@ export class TrygdeavtaleDsl {
     }
     this.nyvurderingBakgrunn = enumVerdi;
     await this.driver.fattNyvurderingsvedtak(this.tom, enumVerdi);
-    await this.driver.ventPåProsesser(60);
   }
 
   /** Verifiser at nyvurderingen er fullført i DB (forkortet periode, erstattet MEDL-periode). */
@@ -140,7 +132,6 @@ export class TrygdeavtaleDsl {
   async opprettUnntaksregistrering(fom: string, tom: string): Promise<void> {
     this.fom = fom;
     this.tom = tom;
-    await this.driver.loggInn();
     await this.driver.opprettUnntakssakOgÅpne();
     await this.driver.fyllUtUnntaksInngang(fom, tom);
   }
@@ -154,16 +145,11 @@ export class TrygdeavtaleDsl {
       );
     }
     await this.driver.godkjennUnntak(kode);
-    // «Bekreft og avslutt» starter bare REGISTRERE_UNNTAK_FRA_MEDLEMSKAP; vent på at
-    // prosessen faktisk er FERDIG før verifiseringen (sluttilstands-asserten poller ikke).
-    await this.driver.ventPåProsesser(60);
   }
 
   /** «Ikke godkjenn» unntaket og avslutt (negativt utfall). */
   async ikkeGodkjennUnntak(): Promise<void> {
     await this.driver.ikkeGodkjennUnntak();
-    // Samme grunn som godkjennUnntak: vent på at prosessen er FERDIG før verifiseringen.
-    await this.driver.ventPåProsesser(60);
   }
 
   /** Verifiser at det godkjente unntaket er registrert i DB og MEDL (endelig periode). */

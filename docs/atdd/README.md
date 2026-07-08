@@ -249,6 +249,14 @@ bdd-only.
 - **Driveren absorberer system-quirks.** F.eks. re-velges arbeidsgiver/bestemmelse
   eksplisitt ved nyvurdering fordi mock-pre-valget racer — DSL/feature slipper å
   vite om det.
+- **Infrastruktur bor i driveren, ikke DSL-en.** Login (auth), prosess-venting/
+  timeouts og reload-retry er teknisk system-kommunikasjon → Lag 3. DSL-en verken
+  kaller eller *nevner* auth/timeout/implementasjons-status (heller ikke i docstrings/
+  kommentarer). Fixturen eier cleanup/logging/lifecycle, ikke login.
+- **Farley-1:1 = ett domenebegrep, ikke ett driver-kall.** En DSL-metode kan komponere
+  flere driver-handlinger (`opprettBehandling` = `opprettFørstegangssak` +
+  `åpneNyesteBehandling`) og forblir 1:1 med domenet. Komposisjon er *ikke* et brudd;
+  teknisk detalj som lekker inn er det.
 
 ---
 
