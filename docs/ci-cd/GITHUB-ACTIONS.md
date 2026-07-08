@@ -45,7 +45,7 @@ For debugging race conditions or running specific tests multiple times, use the 
 | `test_grep` | Filter tests by pattern (name, file, or tag) | `` (all tests) |
 | `repeat_each` | Run each test N times | `1` |
 | `disable_retries` | Disable test retries (for accurate race condition detection) | `false` |
-| `run_bdd` | Also run the opt-in ATDD/BDD example (`--project=bdd`) in the same run | `false` |
+| `run_bdd` | Run ONLY the opt-in ATDD/BDD example (`--project=bdd`) instead of chromium | `false` |
 
 ### Using GitHub CLI (`gh`)
 

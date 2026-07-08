@@ -34,7 +34,7 @@ npm run test:debug
 npm run test:ui
 ```
 
-**Note:** `npm test` (and the `test:headed`/`test:debug`/`test:ui`/`test:record` siblings) are pinned to `--project=chromium`, so they do **not** run the opt-in ATDD/BDD example. That example runs locally via `npm run test:bdd` (runs `npx bddgen` first, then `playwright test --project=bdd`) and is not part of CI by default — dispatch the `E2E Tests` workflow with `run_bdd=true` to also run it on CI (chromium + bdd in one combined run). See `docs/atdd/README.md`.
+**Note:** `npm test` (and the `test:headed`/`test:debug`/`test:ui`/`test:record` siblings) are pinned to `--project=chromium`, so they do **not** run the opt-in ATDD/BDD example. That example runs locally via `npm run test:bdd` (runs `npx bddgen` first, then `playwright test --project=bdd`) and is not part of CI by default — dispatch the `E2E Tests` workflow with `run_bdd=true` to run it on CI. While BDD is being stabilised, `run_bdd=true` runs **only** `--project=bdd` (not chromium), so an unrelated flaky chromium test can't sink the BDD experiment. See `docs/atdd/README.md`.
 
 #### ATDD/BDD Example (opt-in — Trygdeavtale)
 

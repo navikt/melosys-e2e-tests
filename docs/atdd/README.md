@@ -221,11 +221,12 @@ gh workflow run "E2E Tests" --ref <branch> \
   -f run_bdd=true
 ```
 
-Da kjører chromium + bdd i **samme** invokasjon (`bddgen` først, så
-`--project=chromium --project=bdd`) mot samme stack, og havner i én felles
-rapport (summary-reporteren grupperer `.features-gen`-stiene). `repository_dispatch`-
-kjøringene setter aldri denne inputen, så de forblir chromium-only. Lokal
-`npm run test:bdd` er fortsatt den vanlige gaten under utvikling.
+Da kjører **kun** bdd-prosjektet i denne invokasjonen (`bddgen` først, så
+`--project=bdd`) mot samme stack. Mens BDD stabiliseres kjøres altså **ikke**
+chromium i samme runde — slik at en urelatert flaky chromium-test ikke kan
+sabotere BDD-eksperimentet. `repository_dispatch`-kjøringene setter aldri denne
+inputen, så de forblir chromium-only. Lokal `npm run test:bdd` er fortsatt den
+vanlige gaten under utvikling.
 
 
 ---
