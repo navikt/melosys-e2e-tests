@@ -32,6 +32,11 @@ on:
         required: false
         type: boolean
         default: false
+      run_bdd:
+        description: 'Also run the opt-in ATDD/BDD example (features/ → --project=bdd) in the same run'
+        required: false
+        type: boolean
+        default: false
       unleash_force_disable:
         description: 'Comma-separated Unleash toggles to force OFF for the whole run (e.g. melosys.trygdeavgift.25-prosentregel)'
         required: false
@@ -529,6 +534,19 @@ jobs:
           # spaces or special characters (e.g. "EØS Medlemskap Lovvalg")
           # are passed correctly to Playwright as a single --grep value.
           PLAYWRIGHT_ARGS=(test --project=chromium)
+
+          # Opt-in: also run the ATDD/BDD example. It reuses the SAME running stack
+          # and the SAME invocation as chromium, so there is ONE combined
+          # test-summary (the reporter already groups .features-gen paths) and the
+          # false-green / CI-status logic below covers both projects. bddgen is
+          # mandatory (.features-gen is gitignored) and fails loudly on missing/
+          # duplicate step defs. Default off; repository_dispatch runs never set this
+          # input, so the automatic image-published CI stays chromium-only.
+          if [ "${{ inputs.run_bdd }}" = "true" ]; then
+            echo "🥒 Also running the opt-in ATDD/BDD example (--project=bdd)"
+            npx bddgen
+            PLAYWRIGHT_ARGS+=(--project=bdd)
+          fi
 
           # Add test filter if specified
           if [ -n "$TEST_GREP" ]; then

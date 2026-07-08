@@ -207,7 +207,26 @@ npx playwright test tests/trygdeavtale --project=chromium
 > dupliserte step-definisjoner — en gratis ekstra sjekk.
 
 NV-/unntak-scenarioene tar ~1–3 min hver og kjører sekvensielt (`workers: 1`).
-CI kjører ikke bdd-prosjektet — lokal kjøring er den reelle gaten.
+
+### På CI (opt-in)
+
+Vanlig CI (`E2E Tests`-workflowen — både `repository_dispatch` når tjenester
+publiserer images, og manuell `workflow_dispatch`) kjører **kun chromium**;
+bdd-prosjektet er ikke med som standard. Vil du kjøre eksempelet på CI, dispatch
+workflowen manuelt med inputen `run_bdd=true`:
+
+```bash
+gh workflow run "E2E Tests" --ref <branch> \
+  -f environment=latest \
+  -f run_bdd=true
+```
+
+Da kjører chromium + bdd i **samme** invokasjon (`bddgen` først, så
+`--project=chromium --project=bdd`) mot samme stack, og havner i én felles
+rapport (summary-reporteren grupperer `.features-gen`-stiene). `repository_dispatch`-
+kjøringene setter aldri denne inputen, så de forblir chromium-only. Lokal
+`npm run test:bdd` er fortsatt den vanlige gaten under utvikling.
+
 
 ---
 
