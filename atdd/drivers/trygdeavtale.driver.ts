@@ -332,12 +332,30 @@ export class TrygdeavtaleDriver {
   // ── Privat ───────────────────────────────────────────────────────────
 
   private async hentNyesteBehandlingId(): Promise<string> {
+    // Saksopprettelsen er asynkron: UI-en navigerer tilbake til hovedsiden så snart
+    // OPPRETT_SAK er trigget, men BEHANDLING-raden er ikke nødvendigvis committet i
+    // DB ennå (verifiserBehandlingOpprettet sjekker kun UI-navigasjon, ikke DB).
+    // Én enkelt spørring var derfor flaky («Forventet en behandling i DB» → null når
+    // vi vant kappløpet). Poll samme spørring på én åpen tilkobling til raden finnes.
     return withDatabase(async (db) => {
-      const row = await db.queryOne<{ ID: number }>(
-        `SELECT ID FROM BEHANDLING ORDER BY ID DESC FETCH FIRST 1 ROWS ONLY`
-      );
-      expect(row, 'Forventet en behandling i DB etter saksopprettelse').not.toBeNull();
-      return String(row!.ID);
+      let behandlingId: string | null = null;
+      await expect
+        .poll(
+          async () => {
+            const row = await db.queryOne<{ ID: number }>(
+              `SELECT ID FROM BEHANDLING ORDER BY ID DESC FETCH FIRST 1 ROWS ONLY`
+            );
+            behandlingId = row ? String(row.ID) : null;
+            return behandlingId;
+          },
+          {
+            message: 'Forventet en behandling i DB etter saksopprettelse',
+            timeout: 15_000,
+            intervals: [200, 500, 1000],
+          }
+        )
+        .not.toBeNull();
+      return behandlingId!;
     });
   }
 }
