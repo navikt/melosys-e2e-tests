@@ -69,6 +69,30 @@ export class DatabaseHelper {
   }
 
   /**
+   * Execute a DML statement (INSERT/UPDATE/DELETE) with autoCommit, so the change
+   * is immediately visible to melosys-api (which uses a separate connection).
+   *
+   * `query`/`queryOne` run without autoCommit and are meant for reads; use this for
+   * test setup that must persist. Returns the number of affected rows.
+   *
+   * @example
+   * await db.execute(
+   *   "INSERT INTO BEHANDLING (SAKSNUMMER, STATUS, BEH_TYPE, ...) VALUES (:s, 'OPPRETTET', ...)",
+   *   { s: saksnummer }
+   * );
+   */
+  async execute(sql: string, binds: any = {}): Promise<number> {
+    if (!this.connection) {
+      throw new Error('Database not connected. Call connect() first.');
+    }
+    const result = await this.connection.execute(sql, binds, {
+      autoCommit: true,
+      outFormat: oracledb.OUT_FORMAT_OBJECT,
+    });
+    return result.rowsAffected ?? 0;
+  }
+
+  /**
    * Clean all data tables except lookup tables and PROSESS_STEG
    * Excludes: tables ending with _TYPE, _TEMA, _STATUS, and PROSESS_STEG
    * @param silent - If true, suppress console output
