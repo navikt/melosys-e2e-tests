@@ -228,6 +228,11 @@ sabotere BDD-eksperimentet. `repository_dispatch`-kjøringene setter aldri denne
 inputen, så de forblir chromium-only. Lokal `npm run test:bdd` er fortsatt den
 vanlige gaten under utvikling.
 
+Test-summaryen (`test-summary.md` / GitHub job summary) viser et **🥒 BDD-only
+Run**-banner øverst når `run_bdd=true`, på samme måte som `🏷️ Docker Image Tags`
+og `🎚️ Unleash Toggle Overrides`, slik at det er lett å se at en kjøring var
+bdd-only.
+
 
 ---
 

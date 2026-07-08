@@ -620,6 +620,7 @@ jobs:
           TEST_GREP: ${{ inputs.test_grep }}
           RETRIES_DISABLED: ${{ inputs.disable_retries == true }}
           RECORD_API: ${{ inputs.record_api == true && 'true' || '' }}
+          RUN_BDD: ${{ inputs.run_bdd == true && 'true' || '' }}
           UNLEASH_FORCE_DISABLE: ${{ inputs.unleash_force_disable }}
           UNLEASH_FORCE_ENABLE: ${{ inputs.unleash_force_enable }}
 

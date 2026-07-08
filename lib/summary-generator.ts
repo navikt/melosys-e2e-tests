@@ -77,6 +77,12 @@ export function generateMarkdownSummary(
     md += `**Generated:** ${new Date().toISOString()}\n\n`;
   }
 
+  // Indicate when this was an opt-in BDD-only run (run_bdd=true → --project=bdd)
+  if (data.bddRun) {
+    md += `## 🥒 BDD-only Run\n\n`;
+    md += `- This run executed **only** the opt-in ATDD/BDD example (\`--project=bdd\`), not the chromium suite.\n\n`;
+  }
+
   // Display Docker image tags if available (only non-latest tags)
   if (data.tags && Object.keys(data.tags).length > 0) {
     const tags = data.tags;

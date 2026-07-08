@@ -954,6 +954,49 @@ describe('Summary Generator', () => {
 
   });
 
+  describe('BDD-only Run', () => {
+
+    test('should render BDD banner when bddRun is true', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [createTest({ status: 'passed' })],
+        bddRun: true
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      assert(result.includes('## 🥒 BDD-only Run'));
+      assert(result.includes('--project=bdd'));
+    });
+
+    test('should omit BDD banner when bddRun is not set', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [createTest({ status: 'passed' })]
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      assert(!result.includes('BDD-only Run'));
+    });
+
+    test('should omit BDD banner when bddRun is false', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [createTest({ status: 'passed' })],
+        bddRun: false
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      assert(!result.includes('BDD-only Run'));
+    });
+
+  });
+
 });
 
 /**
