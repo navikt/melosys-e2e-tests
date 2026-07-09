@@ -196,9 +196,19 @@ MANUAL_TESTS=true npx playwright test tests/trygdeavtale/trygdeavtale-vedtak-dsl
 # ATDD/BDD-eksempelet (opt-in — kjører bddgen først, så bdd-prosjektet)
 npm run test:bdd
 
+# BDD i UI-modus (genererer specs først, åpner Playwright UI for bdd-prosjektet)
+npx bddgen && npx playwright test --project=bdd --ui
+
+# BDD headed (synlig nettleser, uten UI-panel)
+npx bddgen && npx playwright test --project=bdd --headed
+
 # De opprinnelige testene (uendret — kjører også i default npm test / CI)
 npx playwright test tests/trygdeavtale --project=chromium
 ```
+
+> **Merk:** `npm run test:ui` viser kun chromium-prosjektet. BDD-testene ligger i
+> `.features-gen/` (gitignored) og krever `npx bddgen` før de finnes på disk.
+> Bruk kommandoene over for å se BDD-testene i UI/headed-modus.
 
 > **NB:** Kjør alltid `npm run test:bdd` — den kjører `npx bddgen` FØRST.
 > `defineBddConfig` auto-genererer ikke; `.features-gen/` er gitignored, så
