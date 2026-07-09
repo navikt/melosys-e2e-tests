@@ -6,8 +6,8 @@
 
 > ## ⚠️ Reconciliation (2026-07-07) — where this doc and the built example disagree, follow the example
 >
-> Et komplett, kjørbart eksempel er nå implementert i `atdd/`, `features/trygdeavtale/`
-> og dokumentert i [`README.md`](README.md). Under bygging viste det seg at deler av
+> Et komplett, kjørbart eksempel er nå implementert i `atdd/` (features, DSL,
+> steps, drivers) og dokumentert i [`README.md`](README.md). Under bygging viste
 > denne planen fulgte en tenkt design snarere enn koden. **Koden + `README.md` er
 > autoritative.** Konkrete avvik:
 >

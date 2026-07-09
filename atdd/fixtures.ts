@@ -19,7 +19,7 @@ import { dockerLogsFixture } from '../fixtures/docker-logs';
 import { test as knownErrorFixture } from '../fixtures/known-error';
 import { recordingFixture } from '../fixtures/recording';
 import { TrygdeavtaleDriver } from './drivers/trygdeavtale.driver';
-import { TrygdeavtaleDsl } from './trygdeavtale.dsl';
+import { TrygdeavtaleDsl } from './dsl/trygdeavtale.dsl';
 
 export type DslFixtures = {
   trygdeavtale: TrygdeavtaleDsl;

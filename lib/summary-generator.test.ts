@@ -537,8 +537,9 @@ describe('Summary Generator', () => {
         tests: [
           createTest({
             title: 'Innvilget trygdeavtale-vedtak',
-            // playwright-bdd emits absolute paths into .features-gen/features/<domain>/…
-            file: '/Users/dev/melosys-e2e-tests/.features-gen/features/trygdeavtale/trygdeavtale-vedtak.feature.spec.js'
+            // playwright-bdd emits absolute paths into .features-gen/<domain>/…
+            // (featuresRoot = atdd/features strips the mirrored segment)
+            file: '/Users/dev/melosys-e2e-tests/.features-gen/trygdeavtale/trygdeavtale-vedtak.feature.spec.js'
           }),
         ]
       };
@@ -588,7 +589,7 @@ describe('Summary Generator', () => {
           createTest({
             title: 'Innvilget trygdeavtale-vedtak',
             status: 'failed',
-            file: '/Users/dev/melosys-e2e-tests/.features-gen/features/trygdeavtale/trygdeavtale-vedtak.feature.spec.js',
+            file: '/Users/dev/melosys-e2e-tests/.features-gen/trygdeavtale/trygdeavtale-vedtak.feature.spec.js',
             error: 'Forventet AVSLUTTET, fikk UNDER_BEHANDLING'
           }),
         ]

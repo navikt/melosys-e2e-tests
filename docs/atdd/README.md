@@ -55,7 +55,7 @@ await behandling.innvilgeOgVelgBestemmelse('AUS_ART9_3');
 await arbeidssted.fyllUtArbeidsstedOgFattVedtak('Test');
 ```
 
-### Etter — `features/trygdeavtale/trygdeavtale-vedtak.feature`
+### Etter — `atdd/features/trygdeavtale/trygdeavtale-vedtak.feature`
 
 Strukturert tekst på norsk. En saksbehandler kan lese og verifisere dette.
 
@@ -73,10 +73,10 @@ Strukturert tekst på norsk. En saksbehandler kan lese og verifisere dette.
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│  Lag 1 — TESTTILFELLE (features/)                           │
+│  Lag 1 — TESTTILFELLE (atdd/features/)                      │
 │  Gherkin .feature-filer på norsk. Lesbart for fageksperter. │
 ├─────────────────────────────────────────────────────────────┤
-│  Lag 2 — DSL + BINDINGER (atdd/)                            │
+│  Lag 2 — DSL + BINDINGER (atdd/dsl, atdd/steps)              │
 │  TrygdeavtaleDsl: domenespråk + tilstand. Ingen POM-kjennskap.│
 │  Steps: lim Gherkin → DSL (én linje per steg).              │
 ├─────────────────────────────────────────────────────────────┤
@@ -90,22 +90,23 @@ Strukturert tekst på norsk. En saksbehandler kan lese og verifisere dette.
 ### Filstruktur
 
 ```
-features/trygdeavtale/
-  trygdeavtale-vedtak.feature              ← Lag 1: scenario 1 + 2
-  trygdeavtale-nyvurdering.feature         ← Lag 1: scenario 3
-  trygdeavtale-unntaksregistrering.feature ← Lag 1: scenario 4a + 4b
-
 atdd/
-  trygdeavtale.dsl.ts                      ← Lag 2: DSL (tilstand + domenespråk)
-  fixtures.ts                              ← Lag 2: kobler driver → DSL → Playwright
+  features/trygdeavtale/
+    trygdeavtale-vedtak.feature              ← Lag 1: scenario 1 + 2
+    trygdeavtale-nyvurdering.feature         ← Lag 1: scenario 3
+    trygdeavtale-unntaksregistrering.feature ← Lag 1: scenario 4a + 4b
+
+  dsl/
+    trygdeavtale.dsl.ts                      ← Lag 2: DSL (tilstand + domenespråk)
+  fixtures.ts                                ← Lag 2: kobler driver → DSL → Playwright
   steps/
-    trygdeavtale-vedtak.steps.ts           ← Lag 2: binding (én fil per feature)
+    trygdeavtale-vedtak.steps.ts             ← Lag 2: binding (én fil per feature)
     trygdeavtale-nyvurdering.steps.ts
     trygdeavtale-unntaksregistrering.steps.ts
   drivers/
-    trygdeavtale.driver.ts                 ← Lag 3: protokolldriver (POM-orkestrering)
+    trygdeavtale.driver.ts                   ← Lag 3: protokolldriver (POM-orkestrering)
 
-pages/, helpers/                           ← Lag 3: POMs + hjelpere (uendret)
+pages/, helpers/                             ← Lag 3: POMs + hjelpere (uendret)
 ```
 
 ### Importregel (Farley-korrekt — se merknaden om refactor-plan-dokumentet)

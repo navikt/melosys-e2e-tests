@@ -14,7 +14,7 @@
  * søknadsperioden har fornuftige standardverdier og overstyres kun når et scenario
  * sier det eksplisitt (oppgiPeriode).
  */
-import { TrygdeavtaleDriver } from './drivers/trygdeavtale.driver';
+import { TrygdeavtaleDriver } from '../drivers/trygdeavtale.driver';
 
 /** Standard søknadsperiode — brukt når et scenario ikke oppgir en egen (oppgiPeriode). */
 const STANDARD_FOM = '01.01.2024';
