@@ -2,7 +2,7 @@ We want to implement Acceptance Test Driven Development in this project.
 
 We want to use Dave Farley's four layer model, which consists of:
 
-1. Test Cases Layer: Executable specifications in plain text writen from the persepective of an external user, focusing on WHAT the system does,
+1. Test Cases Layer: Executable specifications in plain text written from the perspective of an external user, focusing on WHAT the system does,
    NOT HOW it does it, using the language of the problem domain.
 
 2. Domain Specific Language (DSL) Layer: A shared language between the test cases that make it easy to write tests with precision where needed,
