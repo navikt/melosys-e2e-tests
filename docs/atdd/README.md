@@ -168,7 +168,7 @@ Kort svar: **DSL-en er verdien; Gherkin er valgfri innpakning.** Farleys fire-la
 modell krever bare at Lag 1 er *strukturert tekst på domenespråk* — ingenting i Lag
 2–4 avhenger av Gherkin. Vi beholder likevel playwright-bdd fordi:
 
-- `ATTD-goal.md` sikter eksplisitt på fagekspert-lesbare norske spesifikasjoner —
+- `ATDD-goal.md` sikter eksplisitt på fagekspert-lesbare norske spesifikasjoner —
   det krever strukturert tekst, altså en runner.
 - Blant runnerne (cucumber-js, egen parser, playwright-bdd) er playwright-bdd den
   eneste som beholder de bærende Playwright-fixturene gratis: `fixtures/cleanup.ts`
@@ -272,7 +272,7 @@ bdd-only.
 
 ## Referanser
 
-- [ATTD-goal.md](ATTD-goal.md) — hvorfor vi gjør dette
+- [ATDD-goal.md](ATDD-goal.md) — hvorfor vi gjør dette
 - [ATDD-refactor-plan.md](ATDD-refactor-plan.md) — bredere migrasjonsplan (revidert 2026-07-07; les merknaden på toppen)
 - [Dave Farleys kurseksempler](https://github.com/davef77/atdd-course-examples)
 - [playwright-bdd](https://github.com/vitalets/playwright-bdd)

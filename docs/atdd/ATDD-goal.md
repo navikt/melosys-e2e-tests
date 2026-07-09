@@ -6,10 +6,10 @@ We want to use Dave Farley's four layer model, which consists of:
    NOT HOW it does it, using the language of the problem domain.
 
 2. Domain Specific Language (DSL) Layer: A shared language between the test cases that make it easy to write tests with precision where needed,
-   while allowing details to be skipped where they are not needed.
+   while allowing detailed to be skipped where they are not needed.
 
 3. Protocol Drivers and Stubs Layer: Translators and adapters that convert between the DSL and the
-   actual system implementation, isolating all test infrastructure knowledge of the system.
+   actual system implementation, isolation all test infrastructure knowledge of the system.
 
 4. System Under Test (SUT) Layer: The actual implementation that fulfills the requirements of the test cases,
    deployed using the same tools and techniques that would be used in production.
