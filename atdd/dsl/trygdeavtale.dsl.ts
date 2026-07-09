@@ -18,7 +18,7 @@ import { TrygdeavtaleDriver } from '../drivers/trygdeavtale.driver';
 
 /** Standard søknadsperiode — brukt når et scenario ikke oppgir en egen (oppgiPeriode). */
 const STANDARD_FOM = '01.01.2024';
-const STANDARD_TOM = '01.01.2026';
+const STANDARD_TOM = '31.12.2025';
 
 /** AUS_ART9_3 gir dette grunnlaget i MEDL-mocken (Australia art. 9 nr. 3). */
 const MEDL_GRUNNLAG_AUS = 'Australia_9_3';
