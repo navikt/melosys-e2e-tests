@@ -29,6 +29,10 @@ import { expect } from '@playwright/test';
 
 test.describe('Komplett saksflyt - FTRL flere land', () => {
   test('skal fullføre komplett saksflyt - delevis skattepliktig - med flere inntektskilder', async ({ page, request }) => {
+    // Flyten lå allerede tett på 60s-defaulten; SYNK_SKJEMA_SAKSSTATUS-steget i
+    // avslutt-flytene tippet den over. 120s som de øvrige komplett-sak-testene.
+    test.setTimeout(120000);
+
     // Setup
     const auth = new AuthHelper(page);
     await auth.login();
