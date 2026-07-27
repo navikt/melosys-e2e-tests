@@ -181,8 +181,6 @@ export class TrygdeavtaleUnntaksregistreringAssertions {
     );
     expect(prosess, 'Forventet en REGISTRERE_UNNTAK_FRA_MEDLEMSKAP-prosessinstans').not.toBeNull();
     expect(prosess!.STATUS).toBe('FERDIG');
-    // SYNK_SKJEMA_SAKSSTATUS er siste steg i alle avslutt-flyter (no-op for
-    // saker uten skjema-kobling), jf. ProsessflytDefinisjon i melosys-api.
     expect(prosess!.SIST_FULLFORT_STEG).toBe('SYNK_SKJEMA_SAKSSTATUS');
     console.log(
       '✅ REGISTRERE_UNNTAK_FRA_MEDLEMSKAP FERDIG (sist fullført steg: SYNK_SKJEMA_SAKSSTATUS)'
