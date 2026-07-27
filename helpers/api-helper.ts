@@ -184,6 +184,28 @@ export class AdminApiHelper {
   }
 
   /**
+   * MELOSYS-8084: Trigger massesynk av saksstatus til melosys-skjema-api.
+   *
+   * Kaller POST /admin/skjema-saksstatus/synk i melosys-api, som går gjennom alle rader i
+   * SKJEMA_SAK_MAPPING, mapper fagsakens status (OPPRETTET → MOTTATT, alt annet → AVSLUTTET)
+   * og kaller PUT /m2m/api/skjema/saksstatus/bulk mot skjema-api (én oppdatering per skjemaId).
+   * Responsen er SkjemaSaksstatusSynkRapport; antallOppdatert/ukjenteSkjemaIder/konfliktSkjemaIder
+   * settes kun ved reell synk (null i dry-run).
+   *
+   * @param request - Playwright API request context
+   * @param dryRun - true: kun rapport, ingen endringer skrives til skjema-api
+   * @returns API-respons med synk-rapport
+   */
+  async synkSkjemaSaksstatus(request: APIRequestContext, dryRun: boolean) {
+    return await this.callAdminEndpoint(
+      request,
+      'POST',
+      '/admin/skjema-saksstatus/synk',
+      { dryRun }
+    );
+  }
+
+  /**
    * Add more admin API methods here following this pattern:
    *
    * @example
