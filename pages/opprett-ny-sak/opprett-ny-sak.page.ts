@@ -46,8 +46,18 @@ export class OpprettNySakPage extends BasePage {
 
   private readonly behandlingstypeDropdown = this.page.getByLabel('Behandlingstype');
 
-  // melosys-web renders the existing-sak checkbox without an accessible label.
-  private readonly eksisterendeSakCheckbox = this.page.getByLabel('', { exact: true });
+  // melosys-web rendrer radioen for eksisterende sak uten tilgjengelig label, men gir
+  // den id="saksnummer-<saksnummer>". Vi matcher på id-prefikset i stedet for
+  // getByLabel('', { exact: true }) – den gamle lokatoren traff ALLE ulabelede felt og
+  // ga strict-mode-brudd så snart brukeren hadde mer enn én sak (f.eks. en lekket sak
+  // fra et tidligere, feilet forsøk).
+  private readonly eksisterendeSakRadios = this.page.locator('input[type="radio"][id^="saksnummer-"]');
+
+  private eksisterendeSakRadio(saksnummer?: string) {
+    return saksnummer
+      ? this.page.locator(`#saksnummer-${saksnummer}`)
+      : this.eksisterendeSakRadios;
+  }
 
   private readonly euEosTrygdeavgiftHeading = this.page.getByRole('heading', {
     name: 'EU/EØS-land - Trygdeavgift'
@@ -271,10 +281,16 @@ export class OpprettNySakPage extends BasePage {
    *
    * @param fnr - User's national ID
    * @param aarsak - Reason for reassessment (e.g., 'SØKNAD')
+   * @param saksnummer - Valgfritt saksnummer (f.eks. 'MEL-99'). Oppgi det når testen
+   *   kjenner saken sin – da velges riktig sak selv om brukeren har flere saker.
    */
-  async opprettNyVurdering(fnr: string, aarsak: string = AARSAK.SØKNAD): Promise<void> {
+  async opprettNyVurdering(
+    fnr: string,
+    aarsak: string = AARSAK.SØKNAD,
+    saksnummer?: string
+  ): Promise<void> {
     await this.fyllInnBrukerID(fnr);
-    await this.eksisterendeSakCheckbox.check();
+    await this.eksisterendeSakRadio(saksnummer).check();
     await this.velgNyVurdering();
     await this.velgAarsak(aarsak);
     await this.leggBehandlingIMine();

@@ -191,6 +191,50 @@ export class FaktureringHelper {
     return parseFloat(belop.toFixed(2));
   }
 
+  /**
+   * Poll den sammenslåtte kjeden til den summerer til `forventetSum`.
+   *
+   * Kreditering etter annullering skjer asynkront: melosys-api oppretter en
+   * prosessinstans (ANNULLER_SAK) som sender kreditserien videre til
+   * faktureringskomponenten. `waitForProcessInstances` venter kun på
+   * prosessinstanser som ALLEREDE er opprettet – kalles den ~200 ms etter
+   * annulleringsklikket, rekker den å svare «alle N ferdige» før annulleringens
+   * egen instans er registrert. Kjeden er da fortsatt ukreditert, og en
+   * umiddelbar sum-assertion feiler (observert på CI: sum 121482 i stedet for 0).
+   *
+   * Returnerer alltid siste hentede kjede – også ved timeout – slik at kalleren
+   * kan logge seriene og la `expect` produsere feilmeldingen.
+   */
+  async ventPåKjedeSum(
+    referanser: string[],
+    forventetSum: number,
+    options: { timeoutMs?: number; intervallMs?: number; aar?: number } = {}
+  ): Promise<Fakturaserie[]> {
+    const { timeoutMs = 30_000, intervallMs = 500, aar } = options;
+    const start = Date.now();
+    let serier: Fakturaserie[] = [];
+
+    while (true) {
+      serier = await this.hentSammenslåttKjede(...referanser);
+      const sum = this.avrundBelop(this.totalBelopKjede(serier, aar));
+      const elapsedMs = Date.now() - start;
+
+      if (sum === forventetSum) {
+        console.log(`✅ Fakturaserie-kjede summerer til ${forventetSum} etter ${elapsedMs} ms`);
+        return serier;
+      }
+
+      if (elapsedMs > timeoutMs) {
+        console.log(
+          `⚠️  Fakturaserie-kjede summerer til ${sum} (forventet ${forventetSum}) etter ${Math.round(elapsedMs / 1000)}s – gir opp`
+        );
+        return serier;
+      }
+
+      await new Promise(resolve => setTimeout(resolve, intervallMs));
+    }
+  }
+
   // --- Admin-endepunkter (krever NAIS_CLUSTER_NAME=dev-gcp i faktureringskomponenten) ---
 
   /**

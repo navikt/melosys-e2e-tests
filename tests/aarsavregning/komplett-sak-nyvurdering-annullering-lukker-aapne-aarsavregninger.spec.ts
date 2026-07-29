@@ -174,11 +174,17 @@ test.describe('Komplett saksflyt - Nyvurdering annullering lukker åpne årsavre
         }
 
         const faktureringHelper = new FaktureringHelper(request);
-        const opprinneligKjede = await faktureringHelper.hentFakturaserieKjede(opprinneligFakturaserieReferanse);
+        const avregningsÅr = getYearFromDate(period.end)
+        // Krediteringen er asynkron (se FaktureringHelper.ventPåKjedeSum) – poll i stedet
+        // for å lese kjeden rett etter waitForProcessInstances.
+        const opprinneligKjede = await faktureringHelper.ventPåKjedeSum(
+            [opprinneligFakturaserieReferanse],
+            0,
+            {aar: avregningsÅr}
+        );
 
         opprinneligKjede.forEach(s => faktureringHelper.loggFakturaserie(s));
 
-        const avregningsÅr = getYearFromDate(period.end)
         const sum = faktureringHelper.avrundBelop(faktureringHelper.totalBelopKjede(opprinneligKjede, avregningsÅr));
 
         console.log(`Sum kjede for ${avregningsÅr}: ${sum} kr`);

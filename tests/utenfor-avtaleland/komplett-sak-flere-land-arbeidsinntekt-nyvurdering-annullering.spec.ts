@@ -150,7 +150,7 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og nyvurdering
         // Step 13: Opprett ny vurdering
         console.log('Step 13: Creating nyvurdering...');
         await hovedside.klikkOpprettNySak();
-        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
+        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD', saksnummer);
         await waitForProcessInstances(page.request, 30);
 
         // Step 14: Åpne ny behandling
@@ -180,7 +180,13 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og nyvurdering
         }
 
         const faktureringHelper = new FaktureringHelper(request);
-        const alleSerier = await faktureringHelper.hentSammenslåttKjede(opprinneligFakturaserieReferanse, arsavregningFakturaserieRef);
+        // Krediteringen etter annullering er asynkron og kan komme etter at
+        // waitForProcessInstances har svart (den venter kun på instanser som alt er
+        // opprettet). Poll derfor til kjeden er avregnet før vi asserter.
+        const alleSerier = await faktureringHelper.ventPåKjedeSum(
+            [opprinneligFakturaserieReferanse, arsavregningFakturaserieRef],
+            0
+        );
 
         alleSerier.forEach(s => faktureringHelper.loggFakturaserie(s));
 
