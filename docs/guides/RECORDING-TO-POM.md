@@ -104,6 +104,31 @@ sequenceDiagram
 | Etter `fattVedtak()` og testen fortsetter | `await waitForProcessInstances(page.request, 60)` |
 | Etter journalføring | `await waitForProcessInstances(page.request, 30)` |
 
+#### Fallgruve: waitForProcessInstances venter ikke på prosesser som ikke finnes ennå
+
+Endepunktet `/internal/e2e/process-instances/await` venter kun på prosessinstanser som
+**allerede er opprettet**. Kalles det umiddelbart etter en UI-handling, kan API-et rekke å
+svare «alle N ferdige» før handlingens egen instans er registrert — og da er ventingen
+verdiløs.
+
+Observert på CI (kjøring 30331105445 og 30452518268): rett etter annullering svarte
+endepunktet «8 av 8 ferdige» ~200 ms etter klikket, mens grønne kjøringer viste 9
+instanser. Krediteringen i faktureringskomponenten hadde ikke skjedd, og
+`expect(sum).toBe(0)` feilet med 121482.
+
+**Regel:** når du leser tilstand i en *annen* tjeneste (faktureringskomponenten,
+melosys-eessi) etter en asynkron handling, ikke stol på `waitForProcessInstances` alene —
+poll på den faktiske tilstanden:
+
+```typescript
+// I stedet for å lese kjeden rett etter waitForProcessInstances:
+const serier = await faktureringHelper.ventPåKjedeSum(
+  [opprinneligRef, arsavregningRef],
+  0
+); // poller inntil 30 s, returnerer siste kjede også ved timeout
+expect(faktureringHelper.avrundBelop(faktureringHelper.totalBelopKjede(serier))).toBe(0);
+```
+
 ## Steg 3: Test lokalt
 
 ```bash
