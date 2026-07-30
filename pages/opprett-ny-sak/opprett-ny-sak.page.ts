@@ -54,40 +54,9 @@ export class OpprettNySakPage extends BasePage {
   // oppgir saksnummer, og med en lesbar feilmelding når den ikke gjør det.
   private readonly eksisterendeSakRadios = this.page.locator('input[type="radio"][id^="saksnummer-"]');
 
-  // Attributt-likhet i stedet for #id-syntaks: saksnummeret hentes fra URL-en og
-  // trenger da ingen CSS-escaping.
-  private eksisterendeSakRadio(saksnummer?: string) {
-    return saksnummer
-      ? this.page.locator(`input[type="radio"][id="saksnummer-${saksnummer}"]`)
-      : this.eksisterendeSakRadios;
-  }
-
-  /**
-   * Velg radioen for eksisterende sak.
-   *
-   * Uten `saksnummer` krever vi at brukeren har nøyaktig én sak. Har den flere, er
-   * det nesten alltid data som har lekket fra en tidligere test eller et feilet
-   * forsøk (cleanup rekker ikke alltid å tømme Oracle) – da er en eksplisitt
-   * feilmelding langt mer nyttig enn Playwrights rå strict-mode-brudd.
-   */
-  private async velgEksisterendeSak(saksnummer?: string): Promise<void> {
-    if (!saksnummer) {
-      await this.eksisterendeSakRadios.first().waitFor({ state: 'attached' });
-      const antall = await this.eksisterendeSakRadios.count();
-
-      if (antall !== 1) {
-        const ider = await this.eksisterendeSakRadios.evaluateAll(
-          elementer => elementer.map(element => element.id)
-        );
-        throw new Error(
-          `Fant ${antall} eksisterende saker for brukeren (${ider.join(', ')}). ` +
-          'Oppgi saksnummer til opprettNyVurdering() for å velge riktig sak.'
-        );
-      }
-    }
-
-    await this.eksisterendeSakRadio(saksnummer).check();
-  }
+  // melosys-web viser kun de 4 første sakene (customRadioPanelGruppe, begrensVisteRadios);
+  // resten ligger bak denne knappen og finnes ikke i DOM før den er klikket.
+  private readonly visFlereSakerButton = this.page.getByRole('button', { name: 'Vis flere saker' });
 
   private readonly euEosTrygdeavgiftHeading = this.page.getByRole('heading', {
     name: 'EU/EØS-land - Trygdeavgift'
@@ -127,6 +96,59 @@ export class OpprettNySakPage extends BasePage {
   constructor(page: Page) {
     super(page);
     this.assertions = new OpprettNySakAssertions(page);
+  }
+
+  /**
+   * Lokator for radioen som velger en eksisterende sak.
+   *
+   * Attributt-likhet i stedet for `#id`-syntaks: saksnummeret hentes fra URL-en og
+   * trenger da ingen CSS-escaping.
+   */
+  private eksisterendeSakRadio(saksnummer?: string) {
+    return saksnummer
+      ? this.page.locator(`input[type="radio"][id="saksnummer-${saksnummer}"]`)
+      : this.eksisterendeSakRadios;
+  }
+
+  /**
+   * Velg radioen for eksisterende sak.
+   *
+   * Uten `saksnummer` krever vi at brukeren har nøyaktig én sak. Har den flere, er det
+   * nesten alltid data som har lekket fra en tidligere test eller et feilet forsøk
+   * (cleanup rekker ikke alltid å tømme Oracle) – da er en eksplisitt feilmelding langt
+   * mer nyttig enn Playwrights rå strict-mode-brudd.
+   *
+   * Begge stier utvider først saklisten, siden melosys-web bare rendrer de 4 første
+   * sakene: uten det ville tellingen vært kappet på 4, og et saksnummer lenger ned i
+   * lista ville ikke finnes i DOM.
+   */
+  private async velgEksisterendeSak(saksnummer?: string): Promise<void> {
+    await this.eksisterendeSakRadios.first().waitFor({ state: 'attached' });
+
+    if (await this.visFlereSakerButton.isVisible()) {
+      await this.visFlereSakerButton.click();
+    }
+
+    if (!saksnummer) {
+      const antall = await this.eksisterendeSakRadios.count();
+
+      if (antall !== 1) {
+        const ider = await this.eksisterendeSakRadios.evaluateAll(
+          elementer => elementer.map(element => element.id)
+        );
+        throw new Error(
+          `Fant ${antall} eksisterende saker for brukeren (${ider.join(', ')}). ` +
+          'Oppgi saksnummer til opprettNyVurdering() for å velge riktig sak.'
+        );
+      }
+
+      // .first() gjør klikket robust hvis listen re-rendres mellom telling og klikk;
+      // antallet er allerede verifisert til nøyaktig én.
+      await this.eksisterendeSakRadios.first().check();
+      return;
+    }
+
+    await this.eksisterendeSakRadio(saksnummer).check();
   }
 
   /**

@@ -192,26 +192,41 @@ export class FaktureringHelper {
   }
 
   /**
+   * Antall fakturalinjer i kjeden, med samme årsfilter som `totalBelop`.
+   *
+   * Brukes av `ventPåKjedeSum` til å skille «summen er 0 fordi alt er avregnet» fra
+   * «summen er 0 fordi det ikke finnes linjer å måle på ennå».
+   */
+  private antallFakturaLinjer(serier: Fakturaserie[], aar?: number): number {
+    return serier
+      .flatMap(serie => serie.faktura)
+      .flatMap(faktura => faktura.fakturaLinje)
+      .filter(l => aar === undefined || l.periodeFra.startsWith(`${aar}-`) || l.periodeTil.startsWith(`${aar}-`))
+      .length;
+  }
+
+  /**
    * Poll den sammenslåtte kjeden til den summerer til `forventetSum`.
    *
-   * Kreditering etter annullering skjer asynkront og i en ANNEN tjeneste:
-   * melosys-api oppretter en prosessinstans (ANNULLER_SAK) som sender kreditserien
-   * videre til faktureringskomponenten. `waitForProcessInstances` hjelper ikke her,
-   * av to grunner: den venter kun på prosessinstanser som ALLEREDE er opprettet
-   * (kalt ~200 ms etter annulleringsklikket svarer den «alle N ferdige» før
-   * annulleringens egen instans er registrert), og selv en ferdig instans i
-   * melosys-api sier ingenting om at faktureringskomponenten har behandlet
-   * meldingen. Observert på CI: sum 121482 i stedet for 0.
+   * Bakgrunn: `waitForProcessInstances` svarer COMPLETED så snart den ser noe fullført
+   * arbeid – også prosessinstanser fra forrige steg. Kalles den ~200 ms etter
+   * annulleringsklikket, rekker den å svare «alle N ferdige» før annulleringens egen
+   * instans er registrert, og da har ANNULLER_SAK-steget ikke kjørt ennå. Selve
+   * krediteringen er derimot synkron: steget kaller faktureringskomponenten over REST
+   * og blokkerer til den svarer, så når instansen er FERDIG er kreditserien commitet.
+   * Det er altså registreringen vi må vente på, ikke en asynkron melding.
+   * Observert på CI: sum 121482 i stedet for 0.
    *
-   * Ved timeout returneres siste hentede kjede – ikke et unntak – slik at kalleren
-   * kan logge seriene og la `expect` produsere feilmeldingen. To tilfeller bryter
-   * med det og kaster i stedet, fordi de ellers ville gitt en vakuøs grønn test:
-   * ugyldige referanser, og en kjede som fortsatt er tom når tiden er ute
-   * (endepunktet svarer 200 med `[]` for ukjent referanse, og `totalBelop([])` er 0
-   * – som tilfeldigvis er `forventetSum` i alle dagens kallsteder).
+   * Ved timeout returneres siste brukbare kjede – ikke et unntak – slik at kalleren kan
+   * logge seriene og la `expect` produsere feilmeldingen. Unntak kastes kun når det ikke
+   * finnes noe å asserte på, fordi en sum-assertion da ville vært vakuøs:
+   * ugyldige argumenter, eller ingen fakturalinjer å måle (endepunktet svarer 200 med
+   * `[]` for ukjent referanse, og `totalBelopKjede([])` er 0 – som tilfeldigvis er
+   * `forventetSum` i alle dagens kallsteder). Med `aar` satt gjelder det samme når
+   * kjeden ikke har linjer i det året.
    *
-   * Transiente HTTP-feil fra faktureringskomponenten svelges og gir nytt forsøk:
-   * vi poller nettopp gjennom vinduet der tjenesten står midt i arbeidet.
+   * Transiente HTTP-feil fra faktureringskomponenten gir nytt forsøk. Varer feilen ut
+   * timeouten uten at vi har en brukbar kjede fra et tidligere forsøk, kastes den.
    */
   async ventPåKjedeSum(
     referanser: string[],
@@ -226,29 +241,31 @@ export class FaktureringHelper {
       );
     }
 
+    if (!Number.isFinite(forventetSum)) {
+      throw new Error(`ventPåKjedeSum krever et tall som forventetSum (fikk: ${forventetSum})`);
+    }
+
     const start = Date.now();
     let serier: Fakturaserie[] = [];
+    let sisteSum: number | undefined;
+    let harLinjerAaMaale = false;
     let sisteFeil: unknown;
 
     while (true) {
-      let sum: number | undefined;
-
       try {
         serier = await this.hentSammenslåttKjede(...referanser);
         sisteFeil = undefined;
-        // Tom kjede = referansen finnes ikke i faktureringskomponenten. Summen blir
-        // da 0 og ville matchet forventetSum uten at noe er verifisert – behandle
-        // det som «ikke klar ennå» og la timeout-grenen kaste.
-        if (serier.length > 0) {
-          sum = this.avrundBelop(this.totalBelopKjede(serier, aar));
-        }
+        harLinjerAaMaale = this.antallFakturaLinjer(serier, aar) > 0;
+        sisteSum = harLinjerAaMaale ? this.avrundBelop(this.totalBelopKjede(serier, aar)) : undefined;
       } catch (feil) {
+        // Behold forrige runde sitt resultat: en transient feil skal ikke frata oss en
+        // kjede vi allerede har hentet.
         sisteFeil = feil;
       }
 
       const elapsedMs = Date.now() - start;
 
-      if (sum === forventetSum) {
+      if (harLinjerAaMaale && sisteSum === forventetSum) {
         console.log(`✅ Fakturaserie-kjede summerer til ${forventetSum} etter ${elapsedMs} ms`);
         return serier;
       }
@@ -256,19 +273,23 @@ export class FaktureringHelper {
       if (elapsedMs > timeoutMs) {
         const sekunder = Math.round(elapsedMs / 1000);
 
-        if (sisteFeil !== undefined) {
-          throw sisteFeil;
-        }
-
-        if (serier.length === 0) {
+        if (!harLinjerAaMaale) {
+          if (sisteFeil !== undefined) {
+            throw sisteFeil;
+          }
           throw new Error(
-            `Fant ingen fakturaserier for referanse(r) ${referanser.join(', ')} innen ${sekunder}s. ` +
-            'En sum-assertion på en tom kjede ville vært vakuøs – sjekk at fakturaserie-referansen er riktig.'
+            `Fant ingen fakturalinjer${aar !== undefined ? ` for ${aar}` : ''} på referanse(r) ` +
+            `${referanser.join(', ')} innen ${sekunder}s. En sum-assertion ville vært vakuøs – ` +
+            'sjekk at fakturaserie-referansen og eventuelt årstallet er riktig.'
           );
         }
 
+        if (sisteFeil !== undefined) {
+          console.log(`⚠️  Siste forsøk feilet (${sisteFeil}) – bruker forrige hentede kjede`);
+        }
+
         console.log(
-          `⚠️  Fakturaserie-kjede summerer til ${sum} (forventet ${forventetSum}) etter ${sekunder}s – gir opp`
+          `⚠️  Fakturaserie-kjede summerer til ${sisteSum} (forventet ${forventetSum}) etter ${sekunder}s – gir opp`
         );
         return serier;
       }
