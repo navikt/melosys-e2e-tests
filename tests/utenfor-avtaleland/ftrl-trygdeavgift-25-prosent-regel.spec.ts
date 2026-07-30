@@ -175,6 +175,7 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
       { beregningsregel: 'TJUEFEM_PROSENT_REGEL', trygdesatsErNull: true, avgiftsdel: 'HELSE' },
       { beregningsregel: 'TJUEFEM_PROSENT_REGEL', trygdesatsErNull: true, avgiftsdel: 'PENSJON' },
     ]);
+
     const vedtak = new VedtakPage(page);
     await vedtak.klikkFattVedtak();
   });

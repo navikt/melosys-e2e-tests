@@ -1,7 +1,7 @@
 import { Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 import { OpprettNySakAssertions } from './opprett-ny-sak.assertions';
-import { SAKSTYPER, SAKSTEMA, BEHANDLINGSTEMA, AARSAK, TIMEOUT_MEDIUM } from '../shared/constants';
+import { SAKSTYPER, SAKSTEMA, BEHANDLINGSTEMA, AARSAK, TIMEOUT_MEDIUM, TIMEOUT_LONG } from '../shared/constants';
 
 /**
  * Page Object for creating a new case in Melosys
@@ -52,7 +52,13 @@ export class OpprettNySakPage extends BasePage {
   // ga strict-mode-brudd så snart brukeren hadde mer enn én sak – f.eks. en lekket sak
   // fra et tidligere, feilet forsøk. Vi matcher på id-en i stedet: entydig når testen
   // oppgir saksnummer, og med en lesbar feilmelding når den ikke gjør det.
-  private readonly eksisterendeSakRadios = this.page.locator('input[type="radio"][id^="saksnummer-"]');
+  // Prefikset kommer fra feltNavn="saksnummer" i melosys-web (fagsakVelger →
+  // customRadioPanelGruppe, id={`${feltNavn}-${value}`}).
+  private static readonly SAK_RADIO_ID_PREFIX = 'saksnummer-';
+
+  private readonly eksisterendeSakRadios = this.page.locator(
+    `input[type="radio"][id^="${OpprettNySakPage.SAK_RADIO_ID_PREFIX}"]`
+  );
 
   // melosys-web viser kun de 4 første sakene (customRadioPanelGruppe, begrensVisteRadios);
   // resten ligger bak denne knappen og finnes ikke i DOM før den er klikket.
@@ -105,7 +111,9 @@ export class OpprettNySakPage extends BasePage {
    * trenger da ingen CSS-escaping.
    */
   private eksisterendeSakRadio(saksnummer: string) {
-    return this.page.locator(`input[type="radio"][id="saksnummer-${saksnummer}"]`);
+    return this.page.locator(
+      `input[type="radio"][id="${OpprettNySakPage.SAK_RADIO_ID_PREFIX}${saksnummer}"]`
+    );
   }
 
   /**
@@ -122,14 +130,14 @@ export class OpprettNySakPage extends BasePage {
    */
   private async velgEksisterendeSak(saksnummer?: string): Promise<void> {
     try {
-      await this.eksisterendeSakRadios.first().waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
+      await this.eksisterendeSakRadios.first().waitFor({ state: 'visible', timeout: TIMEOUT_LONG });
     } catch {
-      // Uten denne grenen får man kun en rå lokator-timeout. At brukeren står helt uten
-      // saker betyr normalt at steget som skulle opprette saken feilet, eller at cleanup
-      // tømte Oracle for tidlig – si det rett ut.
+      // Uten denne grenen får man kun en rå lokator-timeout. Meldingen holder begge
+      // muligheter åpne: saken kan mangle, men fagsak-oppslaget kan også bare ha vært
+      // tregere enn budsjettet på en lastet CI-maskin.
       throw new Error(
-        'Fant ingen eksisterende saker for brukeren på «opprett ny sak»-skjermen. ' +
-        'Ble saken faktisk opprettet før nyvurderingen, eller rakk cleanup å tømme databasen?'
+        `Ingen eksisterende saker dukket opp på «opprett ny sak»-skjermen innen ${TIMEOUT_LONG} ms. ` +
+        'Enten ble saken aldri opprettet (eller ryddet bort), eller så var fagsak-oppslaget tregere enn det.'
       );
     }
 
@@ -149,13 +157,13 @@ export class OpprettNySakPage extends BasePage {
         );
       }
 
-      // .first() gjør klikket robust hvis listen re-rendres mellom telling og klikk;
-      // antallet er allerede verifisert til nøyaktig én.
+      // .first() unngår strict-mode; antallet er allerede verifisert til én, så treffet
+      // er entydig i praksis.
       await this.eksisterendeSakRadios.first().check();
       return;
     }
 
-    if (!tilgjengeligeIder.includes(`saksnummer-${saksnummer}`)) {
+    if (!tilgjengeligeIder.includes(`${OpprettNySakPage.SAK_RADIO_ID_PREFIX}${saksnummer}`)) {
       throw new Error(
         `Fant ingen sak med saksnummer ${saksnummer}. Tilgjengelige: ${tilgjengeligeIder.join(', ') || '(ingen)'}.`
       );

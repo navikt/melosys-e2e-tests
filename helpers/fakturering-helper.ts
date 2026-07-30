@@ -108,7 +108,8 @@ export class FaktureringHelper {
    */
   private async callEndpoint(
     method: 'GET' | 'POST' | 'PUT' | 'DELETE',
-    path: string
+    path: string,
+    timeoutMs?: number
   ) {
     const token = await this.getToken();
     const url = `${this.baseUrl}${path}`;
@@ -123,7 +124,12 @@ export class FaktureringHelper {
         'Nav-User-Id': 'melosys-e2e-tests',
       },
       failOnStatusCode: false,
+      // Uten eksplisitt timeout arver kallet APIRequestContext-defaulten på 30 s. Det
+      // gjør at en poll-løkke med eget budsjett kan bruke budsjettet + 30 s i verste
+      // fall; kallere som poller sender derfor gjenstående tid inn her.
+      ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),
     };
+
 
     switch (method) {
       case 'GET':
@@ -165,8 +171,8 @@ export class FaktureringHelper {
    * Bruker query-parameter-endepunktet som traverserer hele erstattet_med-kjeden,
    * i motsetning til hentFakturaserie som kun returnerer én serie.
    */
-  async hentFakturaserieKjede(referanse: string): Promise<Fakturaserie[]> {
-    const response = await this.callEndpoint('GET', `/fakturaserier?referanse=${referanse}`);
+  async hentFakturaserieKjede(referanse: string, timeoutMs?: number): Promise<Fakturaserie[]> {
+    const response = await this.callEndpoint('GET', `/fakturaserier?referanse=${referanse}`, timeoutMs);
 
     if (!response.ok()) {
       const text = await response.text();
@@ -187,8 +193,8 @@ export class FaktureringHelper {
    * Hent og slå sammen flere fakturaserie-kjeder, deduplisert på referanse.
    * Nødvendig når krediterings-serier lenkes til flere kjeder via erstattet_med.
    */
-  async hentSammenslåttKjede(...referanser: string[]): Promise<Fakturaserie[]> {
-    const kjeder = await Promise.all(referanser.map(r => this.hentFakturaserieKjede(r)));
+  async hentSammenslåttKjede(referanser: string[], timeoutMs?: number): Promise<Fakturaserie[]> {
+    const kjeder = await Promise.all(referanser.map(r => this.hentFakturaserieKjede(r, timeoutMs)));
     const sett = new Map<string, Fakturaserie>();
     kjeder.flat().forEach(s => sett.set(s.fakturaserieReferanse, s));
     return [...sett.values()];
@@ -211,8 +217,20 @@ export class FaktureringHelper {
     return serier
       .flatMap(serie => serie.faktura)
       .flatMap(faktura => faktura.fakturaLinje)
-      .filter(l => aar === undefined || l.periodeFra.startsWith(`${aar}-`) || l.periodeTil.startsWith(`${aar}-`))
+      .filter(linje => this.matcherAar(linje, aar))
       .length;
+  }
+
+  /**
+   * Hører fakturalinjen til `aar`? Uten `aar` teller alle linjer.
+   *
+   * Delt mellom `antallFakturaLinjer` og `totalBelop` slik at teller og sum ikke kan
+   * komme i utakt.
+   */
+  private matcherAar(linje: FakturaLinje, aar?: number): boolean {
+    return aar === undefined
+      || linje.periodeFra.startsWith(`${aar}-`)
+      || linje.periodeTil.startsWith(`${aar}-`);
   }
 
   /**
@@ -227,16 +245,23 @@ export class FaktureringHelper {
    * Det er altså registreringen vi må vente på, ikke en asynkron melding.
    * Observert på CI: sum 121482 i stedet for 0.
    *
-   * Ved timeout returneres siste brukbare kjede – ikke et unntak – slik at kalleren kan
-   * logge seriene og la `expect` produsere feilmeldingen. Unntak kastes kun når det ikke
-   * finnes noe å asserte på, fordi en sum-assertion da ville vært vakuøs:
-   * ugyldige argumenter, eller ingen fakturalinjer å måle (endepunktet svarer 200 med
-   * `[]` for ukjent referanse, og `totalBelopKjede([])` er 0 – som tilfeldigvis er
-   * `forventetSum` i alle dagens kallsteder). Med `aar` satt gjelder det samme når
-   * kjeden ikke har linjer i det året.
+   * Normaltilfellet ved timeout er å returnere siste brukbare kjede – ikke kaste – slik at
+   * kalleren kan logge seriene og la `expect` produsere feilmeldingen. Metoden kaster i
+   * fire tilfeller, fordi en sum-assertion da ville pekt feil vei:
    *
-   * Transiente HTTP-feil fra faktureringskomponenten gir nytt forsøk. Varer feilen ut
-   * timeouten uten at vi har en brukbar kjede fra et tidligere forsøk, kastes den.
+   * 1. Ugyldige argumenter (tom referanseliste, tom streng, ikke-tall som forventet sum).
+   * 2. Sentinel-referansen «Kansellert» – da ble ingenting kreditert, og en 0-sum er
+   *    legitim uten å bety at avregningen gikk bra.
+   * 3. Ingen fakturalinjer å måle innen tiden. Endepunktet svarer 200 med `[]` for ukjent
+   *    referanse, og `totalBelopKjede([])` er 0 – som tilfeldigvis er `forventetSum` i alle
+   *    dagens kallsteder. Med `aar` satt gjelder det samme når kjeden mangler linjer i det
+   *    året.
+   * 4. Siste forsøk feilet mot faktureringskomponenten. Da er kjeden vi eventuelt har
+   *    foreldet, og «feil beløp» ville skjult at tjenesten ikke svarte.
+   *
+   * Transiente HTTP-feil underveis gir nytt forsøk så lenge det er tid igjen. Selve
+   * utregningen skjer utenfor forsøks-håndteringen, så feil i vår egen kode bobler opp
+   * umiddelbart i stedet for å bli prøvd på nytt som om det var tjenesten som svikter.
    */
   async ventPåKjedeSum(
     referanser: string[],
@@ -251,21 +276,31 @@ export class FaktureringHelper {
       );
     }
 
-    // Kansellering uten kreditering (ingen BESTILTE linjer) returnerer sentinel-strengen
-    // «Kansellert» i stedet for en ULID, og melosys-api skriver den rått til
-    // behandlingsresultat.fakturaserieReferanse. Uten denne sjekken ville vi pollet i 30 s
-    // og deretter klaget på «feil referanse», som sender feilsøkingen i grøfta.
+    // Kansellering uten kreditering returnerer sentinel-strengen «Kansellert» i stedet for
+    // en ULID, og melosys-api skriver den rått til behandlingsresultat.fakturaserieReferanse.
+    // Uten denne sjekken ville vi pollet i 30 s og deretter klaget på «feil referanse».
     const sentinel = referanser.find(referanse => referanse === FAKTURASERIE_KANSELLERT_UTEN_KREDITERING);
     if (sentinel !== undefined) {
       throw new Error(
         `Fakturaserie-referansen er «${sentinel}» – faktureringskomponenten kansellerte uten å ` +
-        'kreditere, fordi serien ikke hadde noen BESTILTE fakturalinjer. Sjekk at fakturaene ble ' +
-        'satt til BESTILT før annulleringen.'
+        'kreditere. Det skjer enten fordi ingen fakturalinjer var BESTILT, eller fordi de ' +
+        'bestilte linjene allerede netter til 0 per år (kjeden er kreditert fra før).'
       );
     }
 
     if (!Number.isFinite(forventetSum)) {
-      throw new Error(`ventPåKjedeSum krever et tall som forventetSum (fikk: ${forventetSum})`);
+      throw new Error(
+        `ventPåKjedeSum krever et tall som forventetSum (fikk: ${JSON.stringify(forventetSum)} ` +
+        `av type ${typeof forventetSum})`
+      );
+    }
+
+    if (aar !== undefined && !Number.isInteger(aar)) {
+      throw new Error(`ventPåKjedeSum krever et helt årstall som aar (fikk: ${aar})`);
+    }
+
+    if (!Number.isFinite(intervallMs) || intervallMs <= 0) {
+      throw new Error(`ventPåKjedeSum krever et positivt intervallMs (fikk: ${intervallMs})`);
     }
 
     const maalSum = this.avrundBelop(forventetSum);
@@ -277,24 +312,33 @@ export class FaktureringHelper {
     let sisteFeil: unknown;
 
     while (true) {
-      try {
-        // Alt-eller-ingenting: de avledede verdiene må høre til kjeden vi lagrer, ellers
-        // kan vi ende opp med å logge én sum og returnere en kjede med en annen.
-        const nyeSerier = await this.hentSammenslåttKjede(...referanser);
-        const harLinjer = this.antallFakturaLinjer(nyeSerier, aar) > 0;
+      let nyeSerier: Fakturaserie[] | undefined;
 
-        if (harLinjer) {
-          sisteBrukbareSerier = nyeSerier;
-          sisteBrukbareSum = this.avrundBelop(this.totalBelopKjede(nyeSerier, aar));
-        }
+      try {
+        // Gi kallet resten av budsjettet, ellers arver det APIRequestContext-defaulten på
+        // 30 s og kan skyve faktisk ventetid til timeoutMs + 30 s.
+        nyeSerier = await this.hentSammenslåttKjede(
+          referanser,
+          Math.max(1_000, timeoutMs - (Date.now() - start))
+        );
         sisteFeil = undefined;
       } catch (feil) {
+        // Kun HENTINGEN prøves på nytt. Utregningen under ligger utenfor, så en feil der
+        // (kontraktsbrudd i responsen) boblet opp med en gang i stedet for å bli
+        // feilrapportert som «tjenesten svarer ikke».
         sisteFeil = feil;
+      }
+
+      if (nyeSerier !== undefined && this.antallFakturaLinjer(nyeSerier, aar) > 0) {
+        // Alt-eller-ingenting: summen må høre til kjeden vi lagrer, ellers kan vi ende opp
+        // med å logge én sum og returnere en kjede med en annen.
+        sisteBrukbareSerier = nyeSerier;
+        sisteBrukbareSum = this.avrundBelop(this.totalBelopKjede(nyeSerier, aar));
       }
 
       const elapsedMs = Date.now() - start;
 
-      if (sisteBrukbareSerier !== undefined && sisteBrukbareSum === maalSum && sisteFeil === undefined) {
+      if (sisteBrukbareSerier !== undefined && sisteBrukbareSum === maalSum) {
         console.log(`✅ Fakturaserie-kjede summerer til ${maalSum} etter ${elapsedMs} ms`);
         return sisteBrukbareSerier;
       }
@@ -303,29 +347,30 @@ export class FaktureringHelper {
         const sekunder = Math.round(elapsedMs / 1000);
         const aarSuffiks = aar !== undefined ? ` for ${aar}` : '';
 
-        if (sisteBrukbareSerier === undefined) {
-          const forklaring =
-            `Fant ingen fakturalinjer${aarSuffiks} på referanse(r) ${referanser.join(', ')} innen ` +
-            `${sekunder}s. En sum-assertion ville vært vakuøs – sjekk at fakturaserie-referansen ` +
-            'og eventuelt årstallet er riktig.';
-          throw sisteFeil !== undefined
-            ? new Error(`${forklaring} Siste kall feilet også: ${sisteFeil}`, { cause: sisteFeil })
-            : new Error(forklaring);
-        }
-
+        // La årsaken som faktisk stoppet oss lede meldingen: sto tjenesten og feilet, er
+        // «sjekk referansen» aktivt villedende – referansen kan være helt riktig.
         if (sisteFeil !== undefined) {
-          // Vi har en kjede, men den er foreldet – å la kalleren asserte på den ville pekt
-          // på «feil beløp» når årsaken egentlig var at tjenesten ikke svarte.
+          const maaltSum = sisteBrukbareSerier !== undefined
+            ? ` Sist målte sum${aarSuffiks} var ${sisteBrukbareSum} (forventet ${maalSum}).`
+            : ' Vi fikk aldri et brukbart svar.';
           throw new Error(
-            `Kunne ikke verifisere fakturaserie-kjeden innen ${sekunder}s: siste kall mot ` +
-            `faktureringskomponenten feilet (${sisteFeil}). Sist målte sum${aarSuffiks} var ` +
-            `${sisteBrukbareSum} (forventet ${maalSum}).`,
+            `Kunne ikke verifisere fakturaserie-kjeden for ${referanser.join(', ')} innen ` +
+            `${sekunder}s: siste kall mot faktureringskomponenten feilet (${sisteFeil}).${maaltSum}`,
             { cause: sisteFeil }
           );
         }
 
+        if (sisteBrukbareSerier === undefined) {
+          throw new Error(
+            `Fant ingen fakturalinjer${aarSuffiks} på referanse(r) ${referanser.join(', ')} innen ` +
+            `${sekunder}s. En sum-assertion ville vært vakuøs – sjekk at fakturaserie-referansen ` +
+            'og eventuelt årstallet er riktig.'
+          );
+        }
+
         console.log(
-          `⚠️  Fakturaserie-kjede summerer til ${sisteBrukbareSum} (forventet ${maalSum}) etter ${sekunder}s – gir opp`
+          `⚠️  Fakturaserie-kjede summerer til ${sisteBrukbareSum} (forventet ${maalSum}) etter ` +
+          `${sekunder}s – gir opp. Merk at tallet er fra siste runde som hadde linjer å måle.`
         );
         return sisteBrukbareSerier;
       }
@@ -399,7 +444,7 @@ export class FaktureringHelper {
   totalBelop(serie: Fakturaserie, aar?: number): number {
     return serie.faktura.reduce(
         (sum, f) => sum + f.fakturaLinje
-            .filter(l => aar === undefined || l.periodeFra.startsWith(`${aar}-`) || l.periodeTil.startsWith(`${aar}-`))
+            .filter(l => this.matcherAar(l, aar))
             .reduce((s, l) => s + l.belop, 0),
         0
     );
