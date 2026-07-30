@@ -175,7 +175,7 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og nyvurdering
         const opprinneligFakturaserieReferanse = await getFakturaserieReferanse(opprinneligBehandlingId);
         const arsavregningFakturaserieRef = await getFakturaserieReferanse(arsavregningBehandlingId);
 
-        if (opprinneligFakturaserieReferanse === undefined || arsavregningFakturaserieRef === undefined) {
+        if (!opprinneligFakturaserieReferanse || !arsavregningFakturaserieRef) {
             throw new Error(`Fakturaserie referanse er ikke satt. Opprinnelig: ${opprinneligFakturaserieReferanse} (behandlingId: ${opprinneligBehandlingId}), Årsavregning: ${arsavregningFakturaserieRef} (behandlingId: ${arsavregningBehandlingId})`);
         }
 

@@ -46,17 +46,47 @@ export class OpprettNySakPage extends BasePage {
 
   private readonly behandlingstypeDropdown = this.page.getByLabel('Behandlingstype');
 
-  // melosys-web rendrer radioen for eksisterende sak uten tilgjengelig label, men gir
-  // den id="saksnummer-<saksnummer>". Vi matcher på id-prefikset i stedet for
-  // getByLabel('', { exact: true }) – den gamle lokatoren traff ALLE ulabelede felt og
-  // ga strict-mode-brudd så snart brukeren hadde mer enn én sak (f.eks. en lekket sak
-  // fra et tidligere, feilet forsøk).
+  // Radioen for «velg eksisterende sak» rendres av melosys-web med tom label-tekst
+  // (aksel-Radio med tomt barn), men med id="saksnummer-<saksnummer>". Den gamle
+  // lokatoren getByLabel('', { exact: true }) matchet derfor én kontroll PER SAK, og
+  // ga strict-mode-brudd så snart brukeren hadde mer enn én sak – f.eks. en lekket sak
+  // fra et tidligere, feilet forsøk. Vi matcher på id-en i stedet: entydig når testen
+  // oppgir saksnummer, og med en lesbar feilmelding når den ikke gjør det.
   private readonly eksisterendeSakRadios = this.page.locator('input[type="radio"][id^="saksnummer-"]');
 
+  // Attributt-likhet i stedet for #id-syntaks: saksnummeret hentes fra URL-en og
+  // trenger da ingen CSS-escaping.
   private eksisterendeSakRadio(saksnummer?: string) {
     return saksnummer
-      ? this.page.locator(`#saksnummer-${saksnummer}`)
+      ? this.page.locator(`input[type="radio"][id="saksnummer-${saksnummer}"]`)
       : this.eksisterendeSakRadios;
+  }
+
+  /**
+   * Velg radioen for eksisterende sak.
+   *
+   * Uten `saksnummer` krever vi at brukeren har nøyaktig én sak. Har den flere, er
+   * det nesten alltid data som har lekket fra en tidligere test eller et feilet
+   * forsøk (cleanup rekker ikke alltid å tømme Oracle) – da er en eksplisitt
+   * feilmelding langt mer nyttig enn Playwrights rå strict-mode-brudd.
+   */
+  private async velgEksisterendeSak(saksnummer?: string): Promise<void> {
+    if (!saksnummer) {
+      await this.eksisterendeSakRadios.first().waitFor({ state: 'attached' });
+      const antall = await this.eksisterendeSakRadios.count();
+
+      if (antall !== 1) {
+        const ider = await this.eksisterendeSakRadios.evaluateAll(
+          elementer => elementer.map(element => element.id)
+        );
+        throw new Error(
+          `Fant ${antall} eksisterende saker for brukeren (${ider.join(', ')}). ` +
+          'Oppgi saksnummer til opprettNyVurdering() for å velge riktig sak.'
+        );
+      }
+    }
+
+    await this.eksisterendeSakRadio(saksnummer).check();
   }
 
   private readonly euEosTrygdeavgiftHeading = this.page.getByRole('heading', {
@@ -290,7 +320,7 @@ export class OpprettNySakPage extends BasePage {
     saksnummer?: string
   ): Promise<void> {
     await this.fyllInnBrukerID(fnr);
-    await this.eksisterendeSakRadio(saksnummer).check();
+    await this.velgEksisterendeSak(saksnummer);
     await this.velgNyVurdering();
     await this.velgAarsak(aarsak);
     await this.leggBehandlingIMine();

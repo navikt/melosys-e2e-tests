@@ -148,16 +148,22 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         const opprinneligFakturaserieReferanse = await getFakturaserieReferanse(opprinneligBehandlingId);
         const fakturaserieReferanse = await getFakturaserieReferanse(behandlingId);
 
-        if (opprinneligFakturaserieReferanse === undefined || fakturaserieReferanse === undefined) {
+        if (!opprinneligFakturaserieReferanse || !fakturaserieReferanse) {
             throw new Error(`Fakturaserie referanse er ikke satt. Opprinnelig: ${opprinneligFakturaserieReferanse} (behandlingId: ${opprinneligBehandlingId}), Ny: ${fakturaserieReferanse} (behandlingId: ${behandlingId})`);
         }
 
         const faktureringHelper = new FaktureringHelper(request);
-        const alleSerier = await faktureringHelper.hentSammenslåttKjede(opprinneligFakturaserieReferanse, fakturaserieReferanse);
+        const avregningsÅr = getYearFromDate(period.end)
+        // Avregningen skjer asynkront i faktureringskomponenten – poll i stedet for å
+        // lese kjeden rett etter waitForProcessInstances (se FaktureringHelper.ventPåKjedeSum).
+        const alleSerier = await faktureringHelper.ventPåKjedeSum(
+            [opprinneligFakturaserieReferanse, fakturaserieReferanse],
+            0,
+            {aar: avregningsÅr}
+        );
 
         alleSerier.forEach(s => faktureringHelper.loggFakturaserie(s));
 
-        const avregningsÅr = getYearFromDate(period.end)
         const sum = faktureringHelper.avrundBelop(faktureringHelper.totalBelopKjede(alleSerier, avregningsÅr));
 
         console.log(`Sum kjede for ${avregningsÅr}: ${sum} kr`);

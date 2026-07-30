@@ -75,7 +75,14 @@ test.describe('Komplett saksflyt - Nyvurdering annullering lukker åpne årsavre
 
         // Hent behandlingId fra URL
         const opprinneligBehandlingId = new URL(page.url()).searchParams.get('behandlingID');
-        console.log(`OpprinneligBehandlingId: ${opprinneligBehandlingId}`);
+        // Saksnummeret brukes i steg 10 for å velge NØYAKTIG denne saken ved nyvurdering –
+        // uten det bommer valget hvis en tidligere, feilet kjøring har lekket en sak på
+        // samme bruker. Formatet er «MEL-<n>» eller et rent tall.
+        const saksnummer = new URL(page.url()).pathname.match(/saksbehandling\/([^/?]+)/)?.[1];
+        if (!saksnummer) {
+            throw new Error(`Fant ikke saksnummer i URL-en: ${page.url()}`);
+        }
+        console.log(`OpprinneligBehandlingId: ${opprinneligBehandlingId}, saksnummer: ${saksnummer}`);
 
         // Step 5: Lovvalg - 2-8 a med alle vilkar
         console.log('Step 5: Answering lovvalg questions...');
@@ -114,7 +121,7 @@ test.describe('Komplett saksflyt - Nyvurdering annullering lukker åpne årsavre
         // Step 10: Opprett ny vurdering
         console.log('Step 10: Creating nyvurdering...');
         await hovedside.klikkOpprettNySak();
-        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
+        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD', saksnummer);
         await waitForProcessInstances(page.request, 30);
 
         // Step 11: Åpne ny behandling
@@ -169,7 +176,7 @@ test.describe('Komplett saksflyt - Nyvurdering annullering lukker åpne årsavre
 
         const opprinneligFakturaserieReferanse = await getFakturaserieReferanse(opprinneligBehandlingId);
 
-        if (opprinneligFakturaserieReferanse === undefined) {
+        if (!opprinneligFakturaserieReferanse) {
             throw new Error(`Fakturaserie referanse er ikke satt for opprinnelig behandling ${opprinneligBehandlingId}`);
         }
 

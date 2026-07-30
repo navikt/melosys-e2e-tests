@@ -106,26 +106,33 @@ sequenceDiagram
 
 #### Fallgruve: waitForProcessInstances venter ikke på prosesser som ikke finnes ennå
 
-Endepunktet `/internal/e2e/process-instances/await` venter kun på prosessinstanser som
-**allerede er opprettet**. Kalles det umiddelbart etter en UI-handling, kan API-et rekke å
-svare «alle N ferdige» før handlingens egen instans er registrert — og da er ventingen
-verdiløs.
+Endepunktet `/internal/e2e/process-instances/await` svarer COMPLETED så snart det ser
+*noe* fullført arbeid — også instanser fra forrige steg (`recentInstances`, 60 s vindu).
+Kalles det umiddelbart etter en UI-handling, kan det rekke å svare «alle N ferdige» før
+handlingens egen instans er registrert, og da er ventingen verdiløs.
 
 Observert på CI (kjøring 30331105445 og 30452518268): rett etter annullering svarte
 endepunktet «8 av 8 ferdige» ~200 ms etter klikket, mens grønne kjøringer viste 9
 instanser. Krediteringen i faktureringskomponenten hadde ikke skjedd, og
 `expect(sum).toBe(0)` feilet med 121482.
 
-**Regel:** når du leser tilstand i en *annen* tjeneste (faktureringskomponenten,
-melosys-eessi) etter en asynkron handling, ikke stol på `waitForProcessInstances` alene —
-poll på den faktiske tilstanden:
+**Innenfor melosys-api** har endepunktet allerede en garde mot dette: query-parameteren
+`expectedInstances=N` tvinger det til å vente til den N-te instansen er registrert.
+`waitForProcessInstances` sender den ikke i dag (og `timeoutSeconds`-argumentet brukes
+kun som HTTP-klienttimeout, ikke som server-parameter) — verdt å utvide helperen når
+noen trenger det.
+
+**På tvers av tjenester** hjelper ingen av delene: at melosys-api er ferdig sier ingenting
+om at faktureringskomponenten eller melosys-eessi har konsumert meldingen. Leser du
+tilstand i en annen tjeneste etter en asynkron handling, poll på den faktiske tilstanden:
 
 ```typescript
 // I stedet for å lese kjeden rett etter waitForProcessInstances:
 const serier = await faktureringHelper.ventPåKjedeSum(
   [opprinneligRef, arsavregningRef],
   0
-); // poller inntil 30 s, returnerer siste kjede også ved timeout
+); // poller inntil 30 s; kaster hvis kjeden er tom (vakuøs assertion), ellers
+   // returneres siste kjede så expect gir feilmeldingen
 expect(faktureringHelper.avrundBelop(faktureringHelper.totalBelopKjede(serier))).toBe(0);
 ```
 
