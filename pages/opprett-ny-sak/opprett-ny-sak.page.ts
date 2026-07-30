@@ -143,17 +143,22 @@ export class OpprettNySakPage extends BasePage {
 
     if (await this.visFlereSakerButton.isVisible()) {
       await this.visFlereSakerButton.click();
+      // evaluateAll auto-venter ikke, og click() venter kun på at eventet dispatches – uten
+      // dette kunne snapshotet under fortsatt vise de 4 første sakene. Knappen bytter tekst
+      // når lista er utvidet, så den forsvinner fra denne lokatoren.
+      await this.visFlereSakerButton.waitFor({ state: 'detached', timeout: TIMEOUT_MEDIUM });
     }
 
-    const tilgjengeligeIder = await this.eksisterendeSakRadios.evaluateAll(
-      elementer => elementer.map(element => element.id)
-    );
+    const tilgjengeligeSaksnummer = (
+      await this.eksisterendeSakRadios.evaluateAll(elementer => elementer.map(element => element.id))
+    ).map(id => id.slice(OpprettNySakPage.SAK_RADIO_ID_PREFIX.length));
 
     if (!saksnummer) {
-      if (tilgjengeligeIder.length !== 1) {
+      if (tilgjengeligeSaksnummer.length !== 1) {
         throw new Error(
-          `Fant ${tilgjengeligeIder.length} eksisterende saker for brukeren (${tilgjengeligeIder.join(', ')}). ` +
-          'Oppgi saksnummer til opprettNyVurdering() for å velge riktig sak.'
+          `Fant ${tilgjengeligeSaksnummer.length} eksisterende saker for brukeren ` +
+          `(${tilgjengeligeSaksnummer.join(', ')}). Oppgi saksnummer til opprettNyVurdering() ` +
+          'for å velge riktig sak.'
         );
       }
 
@@ -163,9 +168,10 @@ export class OpprettNySakPage extends BasePage {
       return;
     }
 
-    if (!tilgjengeligeIder.includes(`${OpprettNySakPage.SAK_RADIO_ID_PREFIX}${saksnummer}`)) {
+    if (!tilgjengeligeSaksnummer.includes(saksnummer)) {
       throw new Error(
-        `Fant ingen sak med saksnummer ${saksnummer}. Tilgjengelige: ${tilgjengeligeIder.join(', ') || '(ingen)'}.`
+        `Fant ingen sak med saksnummer ${saksnummer}. ` +
+        `Tilgjengelige: ${tilgjengeligeSaksnummer.join(', ') || '(ingen)'}.`
       );
     }
 

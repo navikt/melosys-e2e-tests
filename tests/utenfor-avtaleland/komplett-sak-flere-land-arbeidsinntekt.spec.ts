@@ -75,6 +75,12 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
 
         // Hent behandlingId fra URL
         const opprinneligBehandlingId = new URL(page.url()).searchParams.get('behandlingID');
+        // Saksnummeret brukes ved nyvurderingen for å velge NØYAKTIG denne saken – uten det
+        // bommer valget hvis en tidligere, feilet kjøring har lekket en sak på samme bruker.
+        const saksnummer = new URL(page.url()).pathname.match(/saksbehandling\/([^/?]+)/)?.[1];
+        if (!saksnummer) {
+            throw new Error(`Fant ikke saksnummer i URL-en: ${page.url()}`);
+        }
         console.log(`OpprinneligBehandlingId: ${opprinneligBehandlingId}`);
 
         // Step 5: Lovvalg - 2-8 a med alle vilkar
@@ -114,7 +120,7 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         // Step 10: Create nyvurdering - endre skattestatus til skattepliktig
         console.log('Step 10: Creating nyvurdering...');
         await hovedside.klikkOpprettNySak();
-        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
+        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD', saksnummer);
 
         console.log('Step 11: Waiting for behandling creation...');
         await waitForProcessInstances(page.request, 30);

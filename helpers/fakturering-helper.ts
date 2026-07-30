@@ -17,7 +17,8 @@ import { APIRequestContext } from '@playwright/test';
 
 /**
  * Sentinel-verdi faktureringskomponenten returnerer i stedet for en ULID når en
- * fakturaserie kanselleres uten kreditering (ingen BESTILTE fakturalinjer).
+ * fakturaserie kanselleres uten kreditering – enten fordi ingen fakturalinjer var
+ * BESTILT, eller fordi de bestilte linjene allerede netter til 0 per år.
  * melosys-api skriver den rått til behandlingsresultat.fakturaserieReferanse.
  * Kilde: faktureringskomponenten KanselleringService.kansellerFakuraserieUtenKreditering
  */
@@ -249,7 +250,8 @@ export class FaktureringHelper {
    * kalleren kan logge seriene og la `expect` produsere feilmeldingen. Metoden kaster i
    * fire tilfeller, fordi en sum-assertion da ville pekt feil vei:
    *
-   * 1. Ugyldige argumenter (tom referanseliste, tom streng, ikke-tall som forventet sum).
+   * 1. Ugyldige argumenter (tom referanseliste, tom streng, eller ikke-tall som forventet
+   *    sum, årstall, intervall eller timeout).
    * 2. Sentinel-referansen «Kansellert» – da ble ingenting kreditert, og en 0-sum er
    *    legitim uten å bety at avregningen gikk bra.
    * 3. Ingen fakturalinjer å måle innen tiden. Endepunktet svarer 200 med `[]` for ukjent
@@ -270,7 +272,7 @@ export class FaktureringHelper {
   ): Promise<Fakturaserie[]> {
     const { timeoutMs = 30_000, intervallMs = 500, aar } = options;
 
-    if (referanser.length === 0 || referanser.some(referanse => !referanse)) {
+    if (!Array.isArray(referanser) || referanser.length === 0 || referanser.some(referanse => !referanse)) {
       throw new Error(
         `ventPåKjedeSum krever minst én gyldig fakturaserie-referanse (fikk: ${JSON.stringify(referanser)})`
       );
@@ -290,8 +292,8 @@ export class FaktureringHelper {
 
     if (!Number.isFinite(forventetSum)) {
       throw new Error(
-        `ventPåKjedeSum krever et tall som forventetSum (fikk: ${JSON.stringify(forventetSum)} ` +
-        `av type ${typeof forventetSum})`
+        `ventPåKjedeSum krever et endelig tall som forventetSum ` +
+        `(fikk: ${String(forventetSum)} av type ${typeof forventetSum})`
       );
     }
 
@@ -300,7 +302,13 @@ export class FaktureringHelper {
     }
 
     if (!Number.isFinite(intervallMs) || intervallMs <= 0) {
-      throw new Error(`ventPåKjedeSum krever et positivt intervallMs (fikk: ${intervallMs})`);
+      throw new Error(`ventPåKjedeSum krever et positivt intervallMs (fikk: ${String(intervallMs)})`);
+    }
+
+    // Uten denne ville timeoutMs = NaN gjort «elapsedMs > timeoutMs» permanent usann og
+    // sovetiden til 0 – altså en løkke som hamrer tjenesten til testen dør på timeout.
+    if (!Number.isFinite(timeoutMs) || timeoutMs <= 0) {
+      throw new Error(`ventPåKjedeSum krever et positivt timeoutMs (fikk: ${String(timeoutMs)})`);
     }
 
     const maalSum = this.avrundBelop(forventetSum);
@@ -347,25 +355,29 @@ export class FaktureringHelper {
         const sekunder = Math.round(elapsedMs / 1000);
         const aarSuffiks = aar !== undefined ? ` for ${aar}` : '';
 
-        // La årsaken som faktisk stoppet oss lede meldingen: sto tjenesten og feilet, er
-        // «sjekk referansen» aktivt villedende – referansen kan være helt riktig.
-        if (sisteFeil !== undefined) {
-          const maaltSum = sisteBrukbareSerier !== undefined
-            ? ` Sist målte sum${aarSuffiks} var ${sisteBrukbareSum} (forventet ${maalSum}).`
-            : ' Vi fikk aldri et brukbart svar.';
-          throw new Error(
-            `Kunne ikke verifisere fakturaserie-kjeden for ${referanser.join(', ')} innen ` +
-            `${sekunder}s: siste kall mot faktureringskomponenten feilet (${sisteFeil}).${maaltSum}`,
-            { cause: sisteFeil }
-          );
-        }
-
         if (sisteBrukbareSerier === undefined) {
+          // Vi har ingenting å asserte på. Da må feilen – hvis den finnes – lede meldingen:
+          // «sjekk referansen» er aktivt villedende når tjenesten aldri svarte.
+          if (sisteFeil !== undefined) {
+            throw new Error(
+              `Fikk aldri et brukbart svar fra faktureringskomponenten for ` +
+              `${referanser.join(', ')} innen ${sekunder}s. Siste feil: ${sisteFeil}`,
+              { cause: sisteFeil }
+            );
+          }
+
           throw new Error(
             `Fant ingen fakturalinjer${aarSuffiks} på referanse(r) ${referanser.join(', ')} innen ` +
             `${sekunder}s. En sum-assertion ville vært vakuøs – sjekk at fakturaserie-referansen ` +
             'og eventuelt årstallet er riktig.'
           );
+        }
+
+        // Vi HAR en målt kjede. Da returnerer vi den selv om siste forsøk feilet: kalleren
+        // sin expect gir en langt mer presis feilmelding enn en avsluttende transient feil,
+        // som ellers ville kastet bort hele diagnostikken.
+        if (sisteFeil !== undefined) {
+          console.log(`⚠️  Siste forsøk mot faktureringskomponenten feilet: ${sisteFeil}`);
         }
 
         console.log(
