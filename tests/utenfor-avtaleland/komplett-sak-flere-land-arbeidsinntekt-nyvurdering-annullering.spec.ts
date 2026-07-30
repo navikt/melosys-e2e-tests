@@ -180,9 +180,9 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og nyvurdering
         }
 
         const faktureringHelper = new FaktureringHelper(request);
-        // Krediteringen etter annullering er asynkron og kan komme etter at
-        // waitForProcessInstances har svart (den venter kun på instanser som alt er
-        // opprettet). Poll derfor til kjeden er avregnet før vi asserter.
+        // waitForProcessInstances kan svare COMPLETED før annulleringens egen
+        // prosessinstans er registrert – selve krediteringen er synkron, så det er
+        // registreringen vi poller rundt (se FaktureringHelper.ventPåKjedeSum).
         const alleSerier = await faktureringHelper.ventPåKjedeSum(
             [opprinneligFakturaserieReferanse, arsavregningFakturaserieRef],
             0

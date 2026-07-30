@@ -182,8 +182,9 @@ test.describe('Komplett saksflyt - Nyvurdering annullering lukker åpne årsavre
 
         const faktureringHelper = new FaktureringHelper(request);
         const avregningsÅr = getYearFromDate(period.end)
-        // Krediteringen er asynkron (se FaktureringHelper.ventPåKjedeSum) – poll i stedet
-        // for å lese kjeden rett etter waitForProcessInstances.
+        // waitForProcessInstances kan svare COMPLETED før annulleringens egen
+        // prosessinstans er registrert (se FaktureringHelper.ventPåKjedeSum) – poll i
+        // stedet for å lese kjeden rett etterpå.
         const opprinneligKjede = await faktureringHelper.ventPåKjedeSum(
             [opprinneligFakturaserieReferanse],
             0,

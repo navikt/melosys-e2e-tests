@@ -154,8 +154,9 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
 
         const faktureringHelper = new FaktureringHelper(request);
         const avregningsÅr = getYearFromDate(period.end)
-        // Avregningen skjer asynkront i faktureringskomponenten – poll i stedet for å
-        // lese kjeden rett etter waitForProcessInstances (se FaktureringHelper.ventPåKjedeSum).
+        // waitForProcessInstances kan svare COMPLETED før nyvurderingens egen
+        // prosessinstans er registrert (se FaktureringHelper.ventPåKjedeSum) – poll i
+        // stedet for å lese kjeden rett etterpå.
         const alleSerier = await faktureringHelper.ventPåKjedeSum(
             [opprinneligFakturaserieReferanse, fakturaserieReferanse],
             0,

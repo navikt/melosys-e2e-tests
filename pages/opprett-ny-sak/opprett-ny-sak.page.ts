@@ -99,15 +99,13 @@ export class OpprettNySakPage extends BasePage {
   }
 
   /**
-   * Lokator for radioen som velger en eksisterende sak.
+   * Lokator for radioen som velger en gitt eksisterende sak.
    *
    * Attributt-likhet i stedet for `#id`-syntaks: saksnummeret hentes fra URL-en og
    * trenger da ingen CSS-escaping.
    */
-  private eksisterendeSakRadio(saksnummer?: string) {
-    return saksnummer
-      ? this.page.locator(`input[type="radio"][id="saksnummer-${saksnummer}"]`)
-      : this.eksisterendeSakRadios;
+  private eksisterendeSakRadio(saksnummer: string) {
+    return this.page.locator(`input[type="radio"][id="saksnummer-${saksnummer}"]`);
   }
 
   /**
@@ -123,21 +121,30 @@ export class OpprettNySakPage extends BasePage {
    * lista ville ikke finnes i DOM.
    */
   private async velgEksisterendeSak(saksnummer?: string): Promise<void> {
-    await this.eksisterendeSakRadios.first().waitFor({ state: 'attached' });
+    try {
+      await this.eksisterendeSakRadios.first().waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
+    } catch {
+      // Uten denne grenen får man kun en rå lokator-timeout. At brukeren står helt uten
+      // saker betyr normalt at steget som skulle opprette saken feilet, eller at cleanup
+      // tømte Oracle for tidlig – si det rett ut.
+      throw new Error(
+        'Fant ingen eksisterende saker for brukeren på «opprett ny sak»-skjermen. ' +
+        'Ble saken faktisk opprettet før nyvurderingen, eller rakk cleanup å tømme databasen?'
+      );
+    }
 
     if (await this.visFlereSakerButton.isVisible()) {
       await this.visFlereSakerButton.click();
     }
 
-    if (!saksnummer) {
-      const antall = await this.eksisterendeSakRadios.count();
+    const tilgjengeligeIder = await this.eksisterendeSakRadios.evaluateAll(
+      elementer => elementer.map(element => element.id)
+    );
 
-      if (antall !== 1) {
-        const ider = await this.eksisterendeSakRadios.evaluateAll(
-          elementer => elementer.map(element => element.id)
-        );
+    if (!saksnummer) {
+      if (tilgjengeligeIder.length !== 1) {
         throw new Error(
-          `Fant ${antall} eksisterende saker for brukeren (${ider.join(', ')}). ` +
+          `Fant ${tilgjengeligeIder.length} eksisterende saker for brukeren (${tilgjengeligeIder.join(', ')}). ` +
           'Oppgi saksnummer til opprettNyVurdering() for å velge riktig sak.'
         );
       }
@@ -146,6 +153,12 @@ export class OpprettNySakPage extends BasePage {
       // antallet er allerede verifisert til nøyaktig én.
       await this.eksisterendeSakRadios.first().check();
       return;
+    }
+
+    if (!tilgjengeligeIder.includes(`saksnummer-${saksnummer}`)) {
+      throw new Error(
+        `Fant ingen sak med saksnummer ${saksnummer}. Tilgjengelige: ${tilgjengeligeIder.join(', ') || '(ingen)'}.`
+      );
     }
 
     await this.eksisterendeSakRadio(saksnummer).check();
