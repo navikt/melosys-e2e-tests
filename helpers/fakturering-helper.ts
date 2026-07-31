@@ -223,11 +223,43 @@ export class FaktureringHelper {
   }
 
   /**
+   * Hvilke år har kjeden faktisk fakturalinjer for?
+   *
+   * Brukes kun i feilmeldingen når `ventPåKjedeSum` ikke finner noe å måle. Uten den må
+   * man grave i loggene fra en annen kjøring for å se om årstallet man spurte om i det
+   * hele tatt finnes i kjeden – det var nettopp det som skjulte at ett kallsted utledet
+   * avregningsåret fra en periodeslutt som lå i neste kalenderår.
+   *
+   * Defensiv mot manglende felter: den kjører i en feilsti og skal aldri kaste selv.
+   */
+  private oppsummerAarIKjede(serier: Fakturaserie[]): string {
+    const linjer = (serier ?? [])
+      .flatMap(serie => serie?.faktura ?? [])
+      .flatMap(faktura => faktura?.fakturaLinje ?? []);
+
+    if (linjer.length === 0) {
+      return `Kjeden har ${serier?.length ?? 0} serie(r), men ingen fakturalinjer i det hele tatt.`;
+    }
+
+    const linjerPerAar = new Map<string, number>();
+    for (const linje of linjer) {
+      const aar = String(linje?.periodeFra ?? '').slice(0, 4) || 'ukjent';
+      linjerPerAar.set(aar, (linjerPerAar.get(aar) ?? 0) + 1);
+    }
+
+    const fordeling = [...linjerPerAar.entries()]
+      .sort(([a], [b]) => a.localeCompare(b))
+      .map(([aar, antall]) => `${aar} (${antall} linjer)`)
+      .join(', ');
+
+    return `Kjeden har ${serier.length} serie(r) med linjer for: ${fordeling}.`;
+  }
+
+  /**
    * Hører fakturalinjen til `aar`? Uten `aar` teller alle linjer.
    *
    * Delt mellom `antallFakturaLinjer` og `totalBelop` slik at teller og sum ikke kan
-   * komme i utakt.
-   */
+   * komme i utakt.   */
   private matcherAar(linje: FakturaLinje, aar?: number): boolean {
     return aar === undefined
       || linje.periodeFra.startsWith(`${aar}-`)
@@ -317,6 +349,9 @@ export class FaktureringHelper {
     // slik at en avsluttende tom eller feilende runde ikke frarøver kalleren diagnostikken.
     let sisteBrukbareSerier: Fakturaserie[] | undefined;
     let sisteBrukbareSum: number | undefined;
+    // Siste kjede vi klarte å hente, uansett om den hadde målbare linjer. Brukes kun til å
+    // gjøre «fant ingen linjer»-feilen diagnostiserbar fra testrapporten alene.
+    let sisteHentedeSerier: Fakturaserie[] | undefined;
     let sisteFeil: unknown;
 
     while (true) {
@@ -337,11 +372,15 @@ export class FaktureringHelper {
         sisteFeil = feil;
       }
 
-      if (nyeSerier !== undefined && this.antallFakturaLinjer(nyeSerier, aar) > 0) {
-        // Alt-eller-ingenting: summen må høre til kjeden vi lagrer, ellers kan vi ende opp
-        // med å logge én sum og returnere en kjede med en annen.
-        sisteBrukbareSerier = nyeSerier;
-        sisteBrukbareSum = this.avrundBelop(this.totalBelopKjede(nyeSerier, aar));
+      if (nyeSerier !== undefined) {
+        sisteHentedeSerier = nyeSerier;
+
+        if (this.antallFakturaLinjer(nyeSerier, aar) > 0) {
+          // Alt-eller-ingenting: summen må høre til kjeden vi lagrer, ellers kan vi ende opp
+          // med å logge én sum og returnere en kjede med en annen.
+          sisteBrukbareSerier = nyeSerier;
+          sisteBrukbareSum = this.avrundBelop(this.totalBelopKjede(nyeSerier, aar));
+        }
       }
 
       const elapsedMs = Date.now() - start;
@@ -368,8 +407,9 @@ export class FaktureringHelper {
 
           throw new Error(
             `Fant ingen fakturalinjer${aarSuffiks} på referanse(r) ${referanser.join(', ')} innen ` +
-            `${sekunder}s. En sum-assertion ville vært vakuøs – sjekk at fakturaserie-referansen ` +
-            'og eventuelt årstallet er riktig.'
+            `${sekunder}s. ${this.oppsummerAarIKjede(sisteHentedeSerier ?? [])} ` +
+            'En sum-assertion ville vært vakuøs – sjekk at fakturaserie-referansen og ' +
+            'eventuelt årstallet er riktig.'
           );
         }
 

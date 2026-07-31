@@ -177,7 +177,12 @@ test.describe('Komplett saksflyt - Nyvurdering periode endres til kun tidligere 
         }
 
         const faktureringHelper = new FaktureringHelper(request);
-        const avregningsÅr = getYearFromDate(period.end)
+        // MERK: .start, ikke .end. currentYearPeriod slutter seks måneder frem i tid, altså
+        // i NESTE kalenderår fra og med juli. Fakturalinjene ligger i året perioden starter,
+        // så .end ga et årstall uten linjer – og dermed en sum som var 0 uansett. Testen var
+        // vakuøst grønn hvert andre halvår (observert: «Sum kjede for 2027: 0 kr» på en kjede
+        // som kun hadde 2026-linjer).
+        const avregningsÅr = getYearFromDate(period.start)
         // waitForProcessInstances kan svare COMPLETED før nyvurderingens egen
         // prosessinstans er registrert (se FaktureringHelper.ventPåKjedeSum) – poll i
         // stedet for å lese kjeden rett etterpå.
