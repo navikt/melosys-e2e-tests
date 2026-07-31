@@ -24,6 +24,13 @@ import { APIRequestContext } from '@playwright/test';
  */
 export const FAKTURASERIE_KANSELLERT_UTEN_KREDITERING = 'Kansellert';
 
+/**
+ * Nedre grense for timeouten vi gir ett enkelt kall mot faktureringskomponenten når
+ * `ventPåKjedeSum` poller. Under dette rekker ikke kallet å svare uansett, så et nytt
+ * forsøk startes ikke – da ville totalen sklidd forbi `timeoutMs`.
+ */
+const MIN_KALL_TIMEOUT_MS = 1_000;
+
 // --- Types ---
 
 export interface FakturaLinje {
@@ -131,7 +138,6 @@ export class FaktureringHelper {
       ...(timeoutMs !== undefined ? { timeout: timeoutMs } : {}),
     };
 
-
     switch (method) {
       case 'GET':
         return await this.request.get(url, options);
@@ -173,7 +179,11 @@ export class FaktureringHelper {
    * i motsetning til hentFakturaserie som kun returnerer én serie.
    */
   async hentFakturaserieKjede(referanse: string, timeoutMs?: number): Promise<Fakturaserie[]> {
-    const response = await this.callEndpoint('GET', `/fakturaserier?referanse=${referanse}`, timeoutMs);
+    const response = await this.callEndpoint(
+      'GET',
+      `/fakturaserier?referanse=${encodeURIComponent(referanse)}`,
+      timeoutMs
+    );
 
     if (!response.ok()) {
       const text = await response.text();
@@ -259,7 +269,8 @@ export class FaktureringHelper {
    * Hører fakturalinjen til `aar`? Uten `aar` teller alle linjer.
    *
    * Delt mellom `antallFakturaLinjer` og `totalBelop` slik at teller og sum ikke kan
-   * komme i utakt.   */
+   * komme i utakt.
+   */
   private matcherAar(linje: FakturaLinje, aar?: number): boolean {
     return aar === undefined
       || linje.periodeFra.startsWith(`${aar}-`)
@@ -280,22 +291,29 @@ export class FaktureringHelper {
    *
    * Normaltilfellet ved timeout er å returnere siste brukbare kjede – ikke kaste – slik at
    * kalleren kan logge seriene og la `expect` produsere feilmeldingen. Metoden kaster i
-   * fire tilfeller, fordi en sum-assertion da ville pekt feil vei:
+   * tre tilfeller, fordi en sum-assertion da ville pekt feil vei:
    *
    * 1. Ugyldige argumenter (tom referanseliste, tom streng, eller ikke-tall som forventet
    *    sum, årstall, intervall eller timeout).
    * 2. Sentinel-referansen «Kansellert» – da ble ingenting kreditert, og en 0-sum er
    *    legitim uten å bety at avregningen gikk bra.
-   * 3. Ingen fakturalinjer å måle innen tiden. Endepunktet svarer 200 med `[]` for ukjent
+   * 3. Vi fikk aldri noe å måle på innen tiden. Feilmeldingen skiller to årsaker: enten
+   *    svarte tjenesten aldri (siste forsøk feilet), eller så svarte den uten
+   *    fakturalinjer. Det siste er farlig fordi endepunktet svarer 200 med `[]` for ukjent
    *    referanse, og `totalBelopKjede([])` er 0 – som tilfeldigvis er `forventetSum` i alle
    *    dagens kallsteder. Med `aar` satt gjelder det samme når kjeden mangler linjer i det
    *    året.
-   * 4. Siste forsøk feilet mot faktureringskomponenten. Da er kjeden vi eventuelt har
-   *    foreldet, og «feil beløp» ville skjult at tjenesten ikke svarte.
+   *
+   * Har vi derimot en målt kjede, returneres den selv om det aller siste forsøket feilet –
+   * da logges feilen i stedet, siden kallerens `expect` gir en mer presis feilmelding enn
+   * en avsluttende transient HTTP-feil.
    *
    * Transiente HTTP-feil underveis gir nytt forsøk så lenge det er tid igjen. Selve
    * utregningen skjer utenfor forsøks-håndteringen, så feil i vår egen kode bobler opp
    * umiddelbart i stedet for å bli prøvd på nytt som om det var tjenesten som svikter.
+   *
+   * Total ventetid holdes innenfor `timeoutMs`: hvert kall får kun resten av budsjettet,
+   * og et nytt forsøk startes ikke når det gjenstår mindre enn `MIN_KALL_TIMEOUT_MS`.
    */
   async ventPåKjedeSum(
     referanser: string[],
@@ -353,23 +371,34 @@ export class FaktureringHelper {
     // gjøre «fant ingen linjer»-feilen diagnostiserbar fra testrapporten alene.
     let sisteHentedeSerier: Fakturaserie[] | undefined;
     let sisteFeil: unknown;
+    let harForsøkt = false;
 
     while (true) {
       let nyeSerier: Fakturaserie[] | undefined;
+      const gjenstaendeMs = timeoutMs - (Date.now() - start);
 
-      try {
-        // Gi kallet resten av budsjettet, ellers arver det APIRequestContext-defaulten på
-        // 30 s og kan skyve faktisk ventetid til timeoutMs + 30 s.
-        nyeSerier = await this.hentSammenslåttKjede(
-          referanser,
-          Math.max(1_000, timeoutMs - (Date.now() - start))
-        );
-        sisteFeil = undefined;
-      } catch (feil) {
-        // Kun HENTINGEN prøves på nytt. Utregningen under ligger utenfor, så en feil der
-        // (kontraktsbrudd i responsen) boblet opp med en gang i stedet for å bli
-        // feilrapportert som «tjenesten svarer ikke».
-        sisteFeil = feil;
+      // Kallet får kun resten av budsjettet – uten eksplisitt timeout arver det
+      // APIRequestContext-defaulten på 30 s og kan skyve faktisk ventetid til
+      // timeoutMs + 30 s. Gjenstår det mindre enn MIN_KALL_TIMEOUT_MS starter vi ikke et
+      // nytt forsøk i det hele tatt: et kall med lengre timeout enn budsjettet ville
+      // overskredet timeoutMs, og et kall med kortere ville bare rukket å produsere en
+      // kunstig «tjenesten svarte ikke»-feil. Første runde er unntatt, slik at en kaller
+      // med et bittelite budsjett likevel får ett reelt forsøk.
+      if (!harForsøkt || gjenstaendeMs >= MIN_KALL_TIMEOUT_MS) {
+        harForsøkt = true;
+
+        try {
+          nyeSerier = await this.hentSammenslåttKjede(
+            referanser,
+            Math.max(MIN_KALL_TIMEOUT_MS, gjenstaendeMs)
+          );
+          sisteFeil = undefined;
+        } catch (feil) {
+          // Kun HENTINGEN prøves på nytt. Utregningen under ligger utenfor, så en feil der
+          // (kontraktsbrudd i responsen) boblet opp med en gang i stedet for å bli
+          // feilrapportert som «tjenesten svarer ikke».
+          sisteFeil = feil;
+        }
       }
 
       if (nyeSerier !== undefined) {
@@ -390,7 +419,7 @@ export class FaktureringHelper {
         return sisteBrukbareSerier;
       }
 
-      if (elapsedMs > timeoutMs) {
+      if (elapsedMs >= timeoutMs) {
         const sekunder = Math.round(elapsedMs / 1000);
         const aarSuffiks = aar !== undefined ? ` for ${aar}` : '';
 

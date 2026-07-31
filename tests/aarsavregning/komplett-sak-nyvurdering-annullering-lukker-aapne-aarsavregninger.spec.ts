@@ -11,6 +11,7 @@ import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
 import {getYearFromDate, TestPeriods} from '../../helpers/date-helper';
 import {waitForProcessInstances} from '../../helpers/api-helper';
+import {hentSaksnummerFraUrl} from '../../helpers/url-helper';
 import {withFaktureringDatabase} from '../../helpers/pg-db-helper';
 import {getFakturaserieReferanse, withDatabase} from '../../helpers/db-helper';
 import {FaktureringHelper} from '../../helpers/fakturering-helper';
@@ -78,10 +79,7 @@ test.describe('Komplett saksflyt - Nyvurdering annullering lukker åpne årsavre
         // Saksnummeret brukes i steg 10 for å velge NØYAKTIG denne saken ved nyvurdering –
         // uten det bommer valget hvis en tidligere, feilet kjøring har lekket en sak på
         // samme bruker. Formatet er «MEL-<n>» eller et rent tall.
-        const saksnummer = new URL(page.url()).pathname.match(/saksbehandling\/([^/?]+)/)?.[1];
-        if (!saksnummer) {
-            throw new Error(`Fant ikke saksnummer i URL-en: ${page.url()}`);
-        }
+        const saksnummer = hentSaksnummerFraUrl(page.url());
         console.log(`OpprinneligBehandlingId: ${opprinneligBehandlingId}, saksnummer: ${saksnummer}`);
 
         // Step 5: Lovvalg - 2-8 a med alle vilkar

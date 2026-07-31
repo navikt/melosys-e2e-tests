@@ -131,13 +131,15 @@ export class OpprettNySakPage extends BasePage {
   private async velgEksisterendeSak(saksnummer?: string): Promise<void> {
     try {
       await this.eksisterendeSakRadios.first().waitFor({ state: 'visible', timeout: TIMEOUT_LONG });
-    } catch {
+    } catch (feil) {
       // Uten denne grenen får man kun en rå lokator-timeout. Meldingen holder begge
       // muligheter åpne: saken kan mangle, men fagsak-oppslaget kan også bare ha vært
-      // tregere enn budsjettet på en lastet CI-maskin.
+      // tregere enn budsjettet på en lastet CI-maskin. Den opprinnelige feilen henges på
+      // som `cause` – ellers mister vi lokator-detaljene helt.
       throw new Error(
         `Ingen eksisterende saker dukket opp på «opprett ny sak»-skjermen innen ${TIMEOUT_LONG} ms. ` +
-        'Enten ble saken aldri opprettet (eller ryddet bort), eller så var fagsak-oppslaget tregere enn det.'
+        'Enten ble saken aldri opprettet (eller ryddet bort), eller så var fagsak-oppslaget tregere enn det.',
+        { cause: feil }
       );
     }
 

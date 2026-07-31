@@ -135,10 +135,11 @@ tjeneste — poll på den faktiske tilstanden i stedet:
 const serier = await faktureringHelper.ventPåKjedeSum(
   [opprinneligRef, arsavregningRef],
   0
-); // poller inntil 30 s. Kaster ved ugyldige argumenter, ved sentinel-referansen
-   // «Kansellert», når det ikke finnes fakturalinjer å måle (en sum-assertion ville
-   // vært vakuøs), og når siste kall mot tjenesten feilet (da er kjeden foreldet).
-   // Ellers returneres siste brukbare kjede, så expect gir feilmeldingen.
+); // poller inntil 30 s, og holder seg innenfor budsjettet (hvert kall får kun resten
+   // av det). Kaster ved ugyldige argumenter, ved sentinel-referansen «Kansellert», og
+   // når den aldri fikk noe å måle på – enten fordi tjenesten ikke svarte, eller fordi
+   // kjeden manglet fakturalinjer (en sum-assertion ville vært vakuøs). Ellers
+   // returneres siste brukbare kjede, så expect gir feilmeldingen.
 expect(faktureringHelper.avrundBelop(faktureringHelper.totalBelopKjede(serier))).toBe(0);
 ```
 
