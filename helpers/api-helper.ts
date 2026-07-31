@@ -220,11 +220,90 @@ export class AdminApiHelper {
    */
 }
 
+const PROCESS_INSTANCE_BASE_URL = 'http://localhost:8080/internal/e2e/process-instances';
+
+/**
+ * Hent en markør (servertid) FØR handlingen som starter en prosess.
+ *
+ * Markøren er nøkkelen til race-fri venting: sendes den til `waitForNewProcessInstances`,
+ * teller kun prosessinstanser registrert etter den — forrige stegs arbeid kan ikke oppfylle
+ * ventingen.
+ *
+ * Bruk helst `runAndWaitForProcessInstances`, som gjør dette for deg.
+ */
+export async function getProcessMarker(request: APIRequestContext): Promise<string> {
+  const response = await request.get(`${PROCESS_INSTANCE_BASE_URL}/marker`, {
+    failOnStatusCode: false,
+    timeout: 10_000
+  });
+
+  if (!response.ok()) {
+    throw new Error(
+      `Kunne ikke hente prosessmarkør (HTTP ${response.status()}). ` +
+      `Kjører melosys-api et image med markør-endepunktet?`
+    );
+  }
+
+  return (await response.json()).marker;
+}
+
+/**
+ * Vent på at prosessene som ble startet ETTER markøren er ferdige.
+ *
+ * I motsetning til `waitForProcessInstances` kan denne ikke svare COMPLETED på forrige stegs
+ * arbeid: serveren krever at minst `expectedNew` prosessinstanser registrert etter markøren
+ * finnes, og at alle er FERDIG.
+ *
+ * @param markør - fra `getProcessMarker`, hentet FØR handlingen
+ * @param expectedNew - antall nye prosessinstanser handlingen starter (default 1).
+ *                      0 betyr ren tømming: «alt som er registrert etter markøren skal være
+ *                      ferdig», uten å kreve at noe nytt finnes. Brukes av cleanup-fixturen.
+ */
+export async function waitForNewProcessInstances(
+  request: APIRequestContext,
+  markør: string,
+  options: { expectedNew?: number; timeoutSeconds?: number } = {}
+): Promise<void> {
+  const {expectedNew = 1, timeoutSeconds = 30} = options;
+
+  return await awaitProcessInstances(request, timeoutSeconds, {
+    after: markør,
+    expectedNew: String(expectedNew)
+  });
+}
+
+/**
+ * Hent markør → kjør handlingen → vent på prosessene handlingen startet.
+ *
+ * Dette er den anbefalte formen. Den er umulig å bruke feil, fordi markøren alltid tas før
+ * handlingen:
+ *
+ * ```typescript
+ * await runAndWaitForProcessInstances(page.request, () => vedtak.klikkFattVedtak());
+ * ```
+ *
+ * Returverdien fra handlingen sendes videre, så den kan brukes rundt handlinger som gir data.
+ */
+export async function runAndWaitForProcessInstances<T>(
+  request: APIRequestContext,
+  handling: () => Promise<T>,
+  options: { expectedNew?: number; timeoutSeconds?: number } = {}
+): Promise<T> {
+  const markør = await getProcessMarker(request);
+  const resultat = await handling();
+  await waitForNewProcessInstances(request, markør, options);
+  return resultat;
+}
+
 /**
  * Wait for all process instances to complete
  *
  * This calls the melosys-api test endpoint that monitors async process instances.
  * It ensures all background processes complete before we clean up the database.
+ *
+ * ⚠️ Uten markør kan endepunktet svare COMPLETED på arbeid fra FORRIGE steg — det ser bare
+ * på alt som er registrert de siste 60 sekundene. For venting rundt en konkret handling,
+ * bruk `runAndWaitForProcessInstances`.
  *
  * Returns:
  * - COMPLETED: All processes finished successfully
@@ -233,8 +312,18 @@ export class AdminApiHelper {
  * - ERROR: Unexpected error occurred
  */
 export async function waitForProcessInstances(request: APIRequestContext, timeoutSeconds: number = 30): Promise<void> {
+  return await awaitProcessInstances(request, timeoutSeconds);
+}
+
+async function awaitProcessInstances(
+  request: APIRequestContext,
+  timeoutSeconds: number,
+  ekstraParametre: Record<string, string> = {}
+): Promise<void> {
+  const params = new URLSearchParams({timeoutSeconds: String(timeoutSeconds), ...ekstraParametre});
+
   try {
-    const response = await request.get('http://localhost:8080/internal/e2e/process-instances/await', {
+    const response = await request.get(`${PROCESS_INSTANCE_BASE_URL}/await?${params}`, {
       failOnStatusCode: false,
       timeout: (timeoutSeconds + 5) * 1000 // Add 5s buffer
     });

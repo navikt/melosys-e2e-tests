@@ -11,7 +11,7 @@ import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
 import {getYearFromDate, TestPeriods} from '../../helpers/date-helper';
-import {waitForProcessInstances} from '../../helpers/api-helper';
+import {runAndWaitForProcessInstances} from '../../helpers/api-helper';
 import {hentSaksnummerFraUrl} from '../../helpers/url-helper';
 import {withFaktureringDatabase} from '../../helpers/pg-db-helper';
 import {getFakturaserieReferanse} from '../../helpers/db-helper';
@@ -102,13 +102,9 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
         await trygdeavgift.klikkBekreftOgFortsett();
 
-        // Step 8: Vedtak
+        // Step 8-9: Vedtak + vent på prosessene vedtaket starter, så faktura til BESTILT
         console.log('Step 8: Making decision...');
-        await vedtak.klikkFattVedtak();
-
-        // Step 9: Wait for processes and set faktura to BESTILT
-        console.log('Step 9: Waiting for processes and updating faktura...');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(page.request, () => vedtak.klikkFattVedtak());
 
         await withFaktureringDatabase(async (db) => {
             const updated = await db.execute("UPDATE faktura SET status = 'BESTILT'");
@@ -118,10 +114,11 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         // Step 10: Create nyvurdering - endre skattestatus til skattepliktig
         console.log('Step 10: Creating nyvurdering...');
         await hovedside.klikkOpprettNySak();
-        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD', saksnummer);
-
-        console.log('Step 11: Waiting for behandling creation...');
-        await waitForProcessInstances(page.request, 30);
+        console.log('Step 11: Creating nyvurdering and waiting for behandling creation...');
+        await runAndWaitForProcessInstances(
+            page.request,
+            () => opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD', saksnummer)
+        );
 
         // Step 12: Open the new active behandling
         console.log('Step 12: Opening new behandling...');
@@ -140,8 +137,10 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         // Step 14: Fatt vedtak for nyvurdering
         console.log('Step 14: Submitting vedtak for nyvurdering...');
         await page.waitForLoadState('networkidle');
-        await vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+            page.request,
+            () => vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING')
+        );
 
 
         console.log('Workflow completed successfully!');
@@ -158,9 +157,9 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
 
         const faktureringHelper = new FaktureringHelper(request);
         const avregningsÅr = getYearFromDate(period.end)
-        // waitForProcessInstances kan svare COMPLETED før nyvurderingens egen
-        // prosessinstans er registrert (se FaktureringHelper.ventPåKjedeSum) – poll i
-        // stedet for å lese kjeden rett etterpå.
+        // Beholdt som defense-in-depth: markør-ventingen over dekker prosessinstansen,
+        // mens pollingen i tillegg dekker forsinkelse mot faktureringskomponenten
+        // (se FaktureringHelper.ventPåKjedeSum).
         const alleSerier = await faktureringHelper.ventPåKjedeSum(
             [opprinneligFakturaserieReferanse, fakturaserieReferanse],
             0,

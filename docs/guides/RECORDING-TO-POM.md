@@ -99,21 +99,25 @@ sequenceDiagram
 
 | Situasjon | Hva du gjør |
 |-----------|-------------|
-| Etter `klikkOpprettNyBehandling()` | `await waitForProcessInstances(page.request, 30)` |
+| Rundt en handling som starter en prosess | `await runAndWaitForProcessInstances(page.request, () => handling())` |
 | Etter `fattVedtak()` som siste steg | Ingenting — fixturen håndterer det |
-| Etter `fattVedtak()` og testen fortsetter | `await waitForProcessInstances(page.request, 30)` |
-| Etter journalføring | `await waitForProcessInstances(page.request, 30)` |
+| Du har allerede kjørt handlingen | `getProcessMarker()` FØR handlingen, så `waitForNewProcessInstances(request, markør)` |
 
-> Tallet er **kun** Playwrights HTTP-timeout mot endepunktet. `waitForProcessInstances`
-> sender det ikke videre som query-parameter, så serveren venter alltid sine egne 30 s
-> (`@RequestParam(defaultValue = "30")`). Å be om 60 gir altså ikke lengre venting —
-> helperen må utvides først.
+`runAndWaitForProcessInstances` henter markør → kjører handlingen → venter på prosessene
+*handlingen* startet. Bruk den. Den er umulig å bruke feil, fordi markøren alltid tas først.
 
-#### Fallgruve: waitForProcessInstances venter ikke på prosesser som ikke finnes ennå
+```typescript
+await runAndWaitForProcessInstances(page.request, () => vedtak.klikkFattVedtak());
 
-Endepunktet `/internal/e2e/process-instances/await` svarer COMPLETED så snart det ser
+// Starter handlingen flere prosesser, si en per SED:
+await runAndWaitForProcessInstances(page.request, () => sendAlleSed(), {expectedNew: 3});
+```
+
+#### Fallgruve: `waitForProcessInstances` venter ikke på prosesser som ikke finnes ennå
+
+Den **markørløse** varianten (`waitForProcessInstances`) svarer COMPLETED så snart den ser
 *noe* fullført arbeid — også instanser fra forrige steg (`recentInstances`, 60 s vindu).
-Kalles det umiddelbart etter en UI-handling, kan det rekke å svare «alle N ferdige» før
+Kalles den umiddelbart etter en UI-handling, kan den rekke å svare «alle N ferdige» før
 handlingens egen instans er registrert, og da er ventingen verdiløs.
 
 Observert på CI (kjøring 30331105445 og 30452518268): rett etter annullering svarte
@@ -121,11 +125,17 @@ endepunktet «8 av 8 ferdige» ~200 ms etter klikket, mens grønne kjøringer vi
 instanser. ANNULLER_SAK-steget hadde altså ikke kjørt, krediteringen var ikke gjort, og
 `expect(sum).toBe(0)` feilet med 121482.
 
-Endepunktet har en query-parameter `expectedInstances=N`, men merk semantikken: kravet er
-at det finnes **minst N instanser totalt i 60 s-vinduet** (`recentInstances.size >= N`) —
-ikke N *nye* siden handlingen din. `expectedInstances=1` blir derfor trivielt oppfylt av
-instanser fra forrige steg. Skal den brukes riktig, må kalleren telle instanser før
-handlingen og sende `før + forventet`. `waitForProcessInstances` sender den ikke i dag.
+Racet er reprodusert kunstig og målt: med `melosys.e2e.initial-settling-delay-ms=0` og en
+treg backend løy den markørløse varianten i 9 av 10 forsøk, mens markør-varianten traff
+0 av 10 (`scripts/prosessinstans-race-repro.ts`).
+
+**Derfor: bruk `runAndWaitForProcessInstances`.** Den tar en markør før handlingen, og
+serveren krever da at minst én prosessinstans registrert *etter* markøren finnes og er
+FERDIG. Forrige stegs arbeid kan ikke oppfylle den.
+
+`expectedInstances=N` (gammel parameter) løser ikke dette: kravet er «minst N instanser
+**totalt** i 60 s-vinduet», ikke N *nye* siden handlingen din. Den kan ikke kombineres med
+`after` — serveren svarer 400 om du prøver.
 
 Leser du tilstand som settes *etter* at instansen er registrert — særlig i en annen
 tjeneste — poll på den faktiske tilstanden i stedet:

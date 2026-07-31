@@ -10,7 +10,7 @@ import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
 import {getYearFromDate, TestPeriods} from '../../helpers/date-helper';
-import {waitForProcessInstances} from '../../helpers/api-helper';
+import {runAndWaitForProcessInstances} from '../../helpers/api-helper';
 import {hentSaksnummerFraUrl} from '../../helpers/url-helper';
 import {withFaktureringDatabase} from '../../helpers/pg-db-helper';
 import {getFakturaserieReferanse, withDatabase} from '../../helpers/db-helper';
@@ -105,12 +105,9 @@ test.describe('Komplett saksflyt - Nyvurdering annullering lukker åpne årsavre
 
         // Step 8: Vedtak
         console.log('Step 8: Making decision...');
-        await vedtak.klikkFattVedtak();
+        await runAndWaitForProcessInstances(page.request, () => vedtak.klikkFattVedtak());
 
         // Step 9: Wait for processes and set faktura to BESTILT
-        console.log('Step 9: Waiting for processes and updating faktura...');
-        await waitForProcessInstances(page.request, 30);
-
         await withFaktureringDatabase(async (db) => {
             const updated = await db.execute("UPDATE faktura SET status = 'BESTILT'");
             console.log(`Updated ${updated} faktura rows to BESTILT`);
@@ -119,8 +116,10 @@ test.describe('Komplett saksflyt - Nyvurdering annullering lukker åpne årsavre
         // Step 10: Opprett ny vurdering
         console.log('Step 10: Creating nyvurdering...');
         await hovedside.klikkOpprettNySak();
-        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD', saksnummer);
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+            page.request,
+            () => opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD', saksnummer)
+        );
 
         // Step 11: Åpne ny behandling
         console.log('Step 11: Opening new behandling...');
@@ -133,8 +132,7 @@ test.describe('Komplett saksflyt - Nyvurdering annullering lukker åpne årsavre
 
         // Step 12: Annuller saken
         console.log('Step 12: Annullering...');
-        await annullering.annullerSak();
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(page.request, () => annullering.annullerSak());
 
         console.log('✅ Workflow completed successfully!');
 
@@ -180,9 +178,9 @@ test.describe('Komplett saksflyt - Nyvurdering annullering lukker åpne årsavre
 
         const faktureringHelper = new FaktureringHelper(request);
         const avregningsÅr = getYearFromDate(period.end)
-        // waitForProcessInstances kan svare COMPLETED før annulleringens egen
-        // prosessinstans er registrert (se FaktureringHelper.ventPåKjedeSum) – poll i
-        // stedet for å lese kjeden rett etterpå.
+        // Beholdt som defense-in-depth: markør-ventingen over dekker prosessinstansen,
+        // mens pollingen i tillegg dekker forsinkelse mot faktureringskomponenten
+        // (se FaktureringHelper.ventPåKjedeSum).
         const opprinneligKjede = await faktureringHelper.ventPåKjedeSum(
             [opprinneligFakturaserieReferanse],
             0,

@@ -2,7 +2,7 @@ import {test as base} from '@playwright/test';
 import {DatabaseHelper} from '../helpers/db-helper';
 import {PgDatabaseHelper} from '../helpers/pg-db-helper';
 import {clearMockDataSilent} from '../helpers/mock-helper';
-import {clearApiCaches, waitForProcessInstances} from '../helpers/api-helper';
+import {clearApiCaches, getProcessMarker, waitForNewProcessInstances, waitForProcessInstances} from '../helpers/api-helper';
 import {UnleashHelper} from '../helpers/unleash-helper';
 
 /**
@@ -118,6 +118,19 @@ async function cleanupTestData(page: any, waitForProcesses: boolean = false): Pr
     }
 }
 
+/**
+ * Markør-endepunktet finnes bare i melosys-api-images som har den race-frie ventingen.
+ * Mangler det, faller fixturen tilbake til den gamle tømmingen i stedet for å velte testen.
+ */
+async function hentMarkørEllerNull(request: any): Promise<string | null> {
+    try {
+        return await getProcessMarker(request);
+    } catch (error: any) {
+        console.log(`   ⚠️  Prosessmarkør utilgjengelig, bruker gammel tømming: ${error.message || error}`);
+        return null;
+    }
+}
+
 export const cleanupFixture = base.extend<{ autoCleanup: void }>({
     autoCleanup: [async ({page, request}, use) => {
         // BEFORE test: clean for fresh start
@@ -125,12 +138,22 @@ export const cleanupFixture = base.extend<{ autoCleanup: void }>({
         await cleanupTestData(page, false); // Don't wait for processes
         console.log('');
 
+        // Markør tatt før testen kjører: tømmingen etterpå venter da på ALT testen startet,
+        // ikke bare på det som ligger innenfor serverens 60-sekundersvindu.
+        const markør = await hentMarkørEllerNull(page.request);
+
         // Run the test
         await use();
 
         // AFTER test: wait for processes to complete
         try {
-            await waitForProcessInstances(page.request, 30);
+            if (markør) {
+                // expectedNew: 0 — testen kan ha startet null prosesser (f.eks. rene søketester),
+                // men alt den faktisk startet må være ferdig før vi rydder.
+                await waitForNewProcessInstances(page.request, markør, {expectedNew: 0, timeoutSeconds: 30});
+            } else {
+                await waitForProcessInstances(page.request, 30);
+            }
         } catch (error: any) {
             const errorMessage = error.message || String(error);
             console.log(`   ⚠️  Process instance check failed: ${errorMessage}`);

@@ -9,7 +9,7 @@ import {ResultatPeriodePage} from '../../pages/behandling/resultat-periode.page'
 import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
-import {waitForProcessInstances} from '../../helpers/api-helper';
+import {runAndWaitForProcessInstances} from '../../helpers/api-helper';
 import {hentSaksnummerFraUrl} from '../../helpers/url-helper';
 import {withFaktureringDatabase} from '../../helpers/pg-db-helper';
 import {AnnulleringPage} from '../../pages/behandling/annullering.page';
@@ -105,13 +105,9 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og nyvurdering
         await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
         await trygdeavgift.klikkBekreftOgFortsett();
 
-        // Step 8: Vedtak
+        // Step 8-9: Vedtak + vent på prosessene vedtaket starter
         console.log('Step 8: Making decision...');
-        await vedtak.klikkFattVedtak();
-
-        // Step 9: Vent på prosesser
-        console.log('Step 9: Waiting for processes...');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(page.request, () => vedtak.klikkFattVedtak());
 
         // Step 10: Søk opp bruker og åpne årsavregningsbehandling
         console.log('Step 10: Opening årsavregning behandling...');
@@ -136,9 +132,7 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og nyvurdering
 
         // Step 12: Fatt vedtak for årsavregning
         console.log('Step 12: Making årsavregning decision...');
-        await vedtak.klikkFattVedtak();
-
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(page.request, () => vedtak.klikkFattVedtak());
         console.log('✅ Årsavregning vedtak completed');
 
         await withFaktureringDatabase(async (db) => {
@@ -149,8 +143,10 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og nyvurdering
         // Step 13: Opprett ny vurdering
         console.log('Step 13: Creating nyvurdering...');
         await hovedside.klikkOpprettNySak();
-        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD', saksnummer);
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+            page.request,
+            () => opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD', saksnummer)
+        );
 
         // Step 14: Åpne ny behandling
         console.log('Step 14: Opening new behandling...');
@@ -163,8 +159,9 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og nyvurdering
 
         // Step 15: Annuller saken
         console.log('Step 15: Annullering...');
-        await annullering.annullerSak();
-        await waitForProcessInstances(page.request, 30);
+        // Markøren tas før klikket, så ventingen ikke kan svare COMPLETED på forrige stegs
+        // prosessinstanser — annulleringens egen ANNULLER_SAK er den vi faktisk venter på.
+        await runAndWaitForProcessInstances(page.request, () => annullering.annullerSak());
 
         console.log('✅ Workflow completed successfully!');
 
@@ -179,9 +176,9 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og nyvurdering
         }
 
         const faktureringHelper = new FaktureringHelper(request);
-        // waitForProcessInstances kan svare COMPLETED før annulleringens egen
-        // prosessinstans er registrert – selve krediteringen er synkron, så det er
-        // registreringen vi poller rundt (se FaktureringHelper.ventPåKjedeSum).
+        // Beholdt som defense-in-depth: markør-ventingen over dekker annulleringens egen
+        // prosessinstans, mens denne pollingen i tillegg dekker forsinkelse mot
+        // faktureringskomponenten (se FaktureringHelper.ventPåKjedeSum).
         const alleSerier = await faktureringHelper.ventPåKjedeSum(
             [opprinneligFakturaserieReferanse, arsavregningFakturaserieRef],
             0
