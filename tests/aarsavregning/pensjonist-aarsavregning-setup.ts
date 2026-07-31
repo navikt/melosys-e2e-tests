@@ -1,5 +1,6 @@
 import { Page } from '@playwright/test';
 import { waitForProcessInstances } from '../../helpers/api-helper';
+import { hentSaksnummerFraUrl } from '../../helpers/url-helper';
 import { AarsavregningPage } from '../../pages/behandling/aarsavregning.page';
 import { EuEosPensjonistBehandlingPage } from '../../pages/behandling/eu-eos-pensjonist-behandling.page';
 import { HovedsidePage } from '../../pages/hovedside.page';
@@ -26,24 +27,6 @@ export const PENSJONIST_AARSAVREGNING_TEST_DATA = {
   innbetaltAvvik: '300',
   inntektskilde: 'PENSJON',
 } as const;
-
-function hentSaksnummerFraUrl(url: string): string {
-  // Saksnummer er enten «MEL-<n>» (EU/EØS-flyten, f.eks.
-  // /melosys/EU_EOS/pensjonist/MEL-40/) eller et rent tall (FTRL-flyten,
-  // f.eks. /FTRL/saksbehandling/2024000001). MEL- prioriteres siden det er
-  // entydig og aldri kan forveksles med fødselsnummeret (11 siffer). Det rene
-  // tallet ankres derfor på «saksbehandling/» for å unngå å plukke opp fnr.
-  const pathname = new URL(url).pathname;
-  const saksnummer =
-    pathname.match(/\b(MEL-\d+)\b/)?.[1] ??
-    pathname.match(/saksbehandling\/(\d{10,})/)?.[1];
-
-  if (!saksnummer) {
-    throw new Error(`Fant ikke saksnummer i URL-en: ${url}`);
-  }
-
-  return decodeURIComponent(saksnummer);
-}
 
 /**
  * Opprett en EØS-pensjonist førstegangsbehandling, åpne den fra hovedsiden og

@@ -101,8 +101,51 @@ sequenceDiagram
 |-----------|-------------|
 | Etter `klikkOpprettNyBehandling()` | `await waitForProcessInstances(page.request, 30)` |
 | Etter `fattVedtak()` som siste steg | Ingenting — fixturen håndterer det |
-| Etter `fattVedtak()` og testen fortsetter | `await waitForProcessInstances(page.request, 60)` |
+| Etter `fattVedtak()` og testen fortsetter | `await waitForProcessInstances(page.request, 30)` |
 | Etter journalføring | `await waitForProcessInstances(page.request, 30)` |
+
+> Tallet er **kun** Playwrights HTTP-timeout mot endepunktet. `waitForProcessInstances`
+> sender det ikke videre som query-parameter, så serveren venter alltid sine egne 30 s
+> (`@RequestParam(defaultValue = "30")`). Å be om 60 gir altså ikke lengre venting —
+> helperen må utvides først.
+
+#### Fallgruve: waitForProcessInstances venter ikke på prosesser som ikke finnes ennå
+
+Endepunktet `/internal/e2e/process-instances/await` svarer COMPLETED så snart det ser
+*noe* fullført arbeid — også instanser fra forrige steg (`recentInstances`, 60 s vindu).
+Kalles det umiddelbart etter en UI-handling, kan det rekke å svare «alle N ferdige» før
+handlingens egen instans er registrert, og da er ventingen verdiløs.
+
+Observert på CI (kjøring 30331105445 og 30452518268): rett etter annullering svarte
+endepunktet «8 av 8 ferdige» ~200 ms etter klikket, mens grønne kjøringer viste 9
+instanser. ANNULLER_SAK-steget hadde altså ikke kjørt, krediteringen var ikke gjort, og
+`expect(sum).toBe(0)` feilet med 121482.
+
+Endepunktet har en query-parameter `expectedInstances=N`, men merk semantikken: kravet er
+at det finnes **minst N instanser totalt i 60 s-vinduet** (`recentInstances.size >= N`) —
+ikke N *nye* siden handlingen din. `expectedInstances=1` blir derfor trivielt oppfylt av
+instanser fra forrige steg. Skal den brukes riktig, må kalleren telle instanser før
+handlingen og sende `før + forventet`. `waitForProcessInstances` sender den ikke i dag.
+
+Leser du tilstand som settes *etter* at instansen er registrert — særlig i en annen
+tjeneste — poll på den faktiske tilstanden i stedet:
+
+```typescript
+// I stedet for å lese kjeden rett etter waitForProcessInstances:
+const serier = await faktureringHelper.ventPåKjedeSum(
+  [opprinneligRef, arsavregningRef],
+  0
+); // poller inntil 30 s, og holder seg innenfor budsjettet (hvert kall får kun resten
+   // av det). Kaster ved ugyldige argumenter, ved sentinel-referansen «Kansellert», og
+   // når den aldri fikk noe å måle på – enten fordi tjenesten ikke svarte, eller fordi
+   // kjeden manglet fakturalinjer (en sum-assertion ville vært vakuøs). Ellers
+   // returneres siste brukbare kjede, så expect gir feilmeldingen.
+expect(faktureringHelper.avrundBelop(faktureringHelper.totalBelopKjede(serier))).toBe(0);
+```
+
+Merk at krediteringen mot faktureringskomponenten i seg selv er **synkron** (steget kaller
+REST og blokkerer), så her er det registreringen av prosessinstansen vi venter på. For
+melosys-eessi, som er Kafka-basert, kommer i tillegg den ekte kryss-tjeneste-forsinkelsen.
 
 ## Steg 3: Test lokalt
 

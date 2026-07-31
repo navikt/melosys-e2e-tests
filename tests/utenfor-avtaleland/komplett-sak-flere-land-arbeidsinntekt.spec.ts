@@ -12,6 +12,7 @@ import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
 import {getYearFromDate, TestPeriods} from '../../helpers/date-helper';
 import {waitForProcessInstances} from '../../helpers/api-helper';
+import {hentSaksnummerFraUrl} from '../../helpers/url-helper';
 import {withFaktureringDatabase} from '../../helpers/pg-db-helper';
 import {getFakturaserieReferanse} from '../../helpers/db-helper';
 import {FaktureringHelper} from '../../helpers/fakturering-helper';
@@ -75,7 +76,10 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
 
         // Hent behandlingId fra URL
         const opprinneligBehandlingId = new URL(page.url()).searchParams.get('behandlingID');
-        console.log(`OpprinneligBehandlingId: ${opprinneligBehandlingId}`);
+        // Saksnummeret brukes ved nyvurderingen for å velge NØYAKTIG denne saken – uten det
+        // bommer valget hvis en tidligere, feilet kjøring har lekket en sak på samme bruker.
+        const saksnummer = hentSaksnummerFraUrl(page.url());
+        console.log(`OpprinneligBehandlingId: ${opprinneligBehandlingId}, saksnummer: ${saksnummer}`);
 
         // Step 5: Lovvalg - 2-8 a med alle vilkar
         console.log('Step 5: Answering lovvalg questions...');
@@ -114,7 +118,7 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         // Step 10: Create nyvurdering - endre skattestatus til skattepliktig
         console.log('Step 10: Creating nyvurdering...');
         await hovedside.klikkOpprettNySak();
-        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
+        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD', saksnummer);
 
         console.log('Step 11: Waiting for behandling creation...');
         await waitForProcessInstances(page.request, 30);
@@ -148,16 +152,23 @@ test.describe('Komplett saksflyt - Flere land med arbeidsinntekt', () => {
         const opprinneligFakturaserieReferanse = await getFakturaserieReferanse(opprinneligBehandlingId);
         const fakturaserieReferanse = await getFakturaserieReferanse(behandlingId);
 
-        if (opprinneligFakturaserieReferanse === undefined || fakturaserieReferanse === undefined) {
+        if (!opprinneligFakturaserieReferanse || !fakturaserieReferanse) {
             throw new Error(`Fakturaserie referanse er ikke satt. Opprinnelig: ${opprinneligFakturaserieReferanse} (behandlingId: ${opprinneligBehandlingId}), Ny: ${fakturaserieReferanse} (behandlingId: ${behandlingId})`);
         }
 
         const faktureringHelper = new FaktureringHelper(request);
-        const alleSerier = await faktureringHelper.hentSammenslåttKjede(opprinneligFakturaserieReferanse, fakturaserieReferanse);
+        const avregningsÅr = getYearFromDate(period.end)
+        // waitForProcessInstances kan svare COMPLETED før nyvurderingens egen
+        // prosessinstans er registrert (se FaktureringHelper.ventPåKjedeSum) – poll i
+        // stedet for å lese kjeden rett etterpå.
+        const alleSerier = await faktureringHelper.ventPåKjedeSum(
+            [opprinneligFakturaserieReferanse, fakturaserieReferanse],
+            0,
+            {aar: avregningsÅr}
+        );
 
         alleSerier.forEach(s => faktureringHelper.loggFakturaserie(s));
 
-        const avregningsÅr = getYearFromDate(period.end)
         const sum = faktureringHelper.avrundBelop(faktureringHelper.totalBelopKjede(alleSerier, avregningsÅr));
 
         console.log(`Sum kjede for ${avregningsÅr}: ${sum} kr`);

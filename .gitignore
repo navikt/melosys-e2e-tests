@@ -111,3 +111,8 @@ debug-*.jpg
 
 # Serena (AI assistant files)
 .serena/
+
+# Scratch/review-kataloger (har blitt feilcommittet før)
+/.review-tmp/
+/.probe-tmp/
+/.features-gen/

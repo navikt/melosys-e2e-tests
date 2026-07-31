@@ -10,6 +10,7 @@ import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
 import {waitForProcessInstances} from '../../helpers/api-helper';
+import {hentSaksnummerFraUrl} from '../../helpers/url-helper';
 import {withFaktureringDatabase} from '../../helpers/pg-db-helper';
 import {AnnulleringPage} from '../../pages/behandling/annullering.page';
 import {getFakturaserieReferanse} from '../../helpers/db-helper';
@@ -90,12 +91,10 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og nyvurdering
         // (feilet) kjøring har lekket en avsluttet årsavregning for samme år i en annen sak,
         // ville et løst «Årsavregning»-lokator ellers matche to lenker og gi strict-mode-feil.
         const opprinneligBehandlingId = new URL(page.url()).searchParams.get('behandlingID');
-        // Saksnummeret er enten «MEL-<n>» (f.eks. /FTRL/saksbehandling/MEL-146/) eller et rent
-        // tall – fang segmentet rett etter «saksbehandling/» uansett format.
-        const saksnummer = new URL(page.url()).pathname.match(/saksbehandling\/([^/?]+)/)?.[1];
-        if (!saksnummer) {
-            throw new Error(`Fant ikke saksnummer i URL-en: ${page.url()}`);
-        }
+        // Saksnummeret brukes til å scope oppslagene under til NØYAKTIG denne saken – uten
+        // det bommer valget hvis en tidligere, feilet kjøring har lekket en sak på samme
+        // bruker. Formatvariantene håndteres av hentSaksnummerFraUrl.
+        const saksnummer = hentSaksnummerFraUrl(page.url());
         console.log(`OpprinneligBehandlingId: ${opprinneligBehandlingId}, saksnummer: ${saksnummer}`);
 
         // Step 7: Trygdeavgift - Ikke-skattepliktig med arbeidsinntekt fra Norge
@@ -150,7 +149,7 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og nyvurdering
         // Step 13: Opprett ny vurdering
         console.log('Step 13: Creating nyvurdering...');
         await hovedside.klikkOpprettNySak();
-        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
+        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD', saksnummer);
         await waitForProcessInstances(page.request, 30);
 
         // Step 14: Åpne ny behandling
@@ -175,12 +174,18 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og nyvurdering
         const opprinneligFakturaserieReferanse = await getFakturaserieReferanse(opprinneligBehandlingId);
         const arsavregningFakturaserieRef = await getFakturaserieReferanse(arsavregningBehandlingId);
 
-        if (opprinneligFakturaserieReferanse === undefined || arsavregningFakturaserieRef === undefined) {
+        if (!opprinneligFakturaserieReferanse || !arsavregningFakturaserieRef) {
             throw new Error(`Fakturaserie referanse er ikke satt. Opprinnelig: ${opprinneligFakturaserieReferanse} (behandlingId: ${opprinneligBehandlingId}), Årsavregning: ${arsavregningFakturaserieRef} (behandlingId: ${arsavregningBehandlingId})`);
         }
 
         const faktureringHelper = new FaktureringHelper(request);
-        const alleSerier = await faktureringHelper.hentSammenslåttKjede(opprinneligFakturaserieReferanse, arsavregningFakturaserieRef);
+        // waitForProcessInstances kan svare COMPLETED før annulleringens egen
+        // prosessinstans er registrert – selve krediteringen er synkron, så det er
+        // registreringen vi poller rundt (se FaktureringHelper.ventPåKjedeSum).
+        const alleSerier = await faktureringHelper.ventPåKjedeSum(
+            [opprinneligFakturaserieReferanse, arsavregningFakturaserieRef],
+            0
+        );
 
         alleSerier.forEach(s => faktureringHelper.loggFakturaserie(s));
 

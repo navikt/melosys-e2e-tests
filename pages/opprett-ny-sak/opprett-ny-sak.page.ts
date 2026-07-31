@@ -1,7 +1,7 @@
 import { Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 import { OpprettNySakAssertions } from './opprett-ny-sak.assertions';
-import { SAKSTYPER, SAKSTEMA, BEHANDLINGSTEMA, AARSAK, TIMEOUT_MEDIUM } from '../shared/constants';
+import { SAKSTYPER, SAKSTEMA, BEHANDLINGSTEMA, AARSAK, TIMEOUT_MEDIUM, TIMEOUT_LONG } from '../shared/constants';
 
 /**
  * Page Object for creating a new case in Melosys
@@ -46,8 +46,23 @@ export class OpprettNySakPage extends BasePage {
 
   private readonly behandlingstypeDropdown = this.page.getByLabel('Behandlingstype');
 
-  // melosys-web renders the existing-sak checkbox without an accessible label.
-  private readonly eksisterendeSakCheckbox = this.page.getByLabel('', { exact: true });
+  // Radioen for «velg eksisterende sak» rendres av melosys-web med tom label-tekst
+  // (aksel-Radio med tomt barn), men med id="saksnummer-<saksnummer>". Den gamle
+  // lokatoren getByLabel('', { exact: true }) matchet derfor én kontroll PER SAK, og
+  // ga strict-mode-brudd så snart brukeren hadde mer enn én sak – f.eks. en lekket sak
+  // fra et tidligere, feilet forsøk. Vi matcher på id-en i stedet: entydig når testen
+  // oppgir saksnummer, og med en lesbar feilmelding når den ikke gjør det.
+  // Prefikset kommer fra feltNavn="saksnummer" i melosys-web (fagsakVelger →
+  // customRadioPanelGruppe, id={`${feltNavn}-${value}`}).
+  private static readonly SAK_RADIO_ID_PREFIX = 'saksnummer-';
+
+  private readonly eksisterendeSakRadios = this.page.locator(
+    `input[type="radio"][id^="${OpprettNySakPage.SAK_RADIO_ID_PREFIX}"]`
+  );
+
+  // melosys-web viser kun de 4 første sakene (customRadioPanelGruppe, begrensVisteRadios);
+  // resten ligger bak denne knappen og finnes ikke i DOM før den er klikket.
+  private readonly visFlereSakerButton = this.page.getByRole('button', { name: 'Vis flere saker' });
 
   private readonly euEosTrygdeavgiftHeading = this.page.getByRole('heading', {
     name: 'EU/EØS-land - Trygdeavgift'
@@ -87,6 +102,82 @@ export class OpprettNySakPage extends BasePage {
   constructor(page: Page) {
     super(page);
     this.assertions = new OpprettNySakAssertions(page);
+  }
+
+  /**
+   * Lokator for radioen som velger en gitt eksisterende sak.
+   *
+   * Attributt-likhet i stedet for `#id`-syntaks: saksnummeret hentes fra URL-en og
+   * trenger da ingen CSS-escaping.
+   */
+  private eksisterendeSakRadio(saksnummer: string) {
+    return this.page.locator(
+      `input[type="radio"][id="${OpprettNySakPage.SAK_RADIO_ID_PREFIX}${saksnummer}"]`
+    );
+  }
+
+  /**
+   * Velg radioen for eksisterende sak.
+   *
+   * Uten `saksnummer` krever vi at brukeren har nøyaktig én sak. Har den flere, er det
+   * nesten alltid data som har lekket fra en tidligere test eller et feilet forsøk
+   * (cleanup rekker ikke alltid å tømme Oracle) – da er en eksplisitt feilmelding langt
+   * mer nyttig enn Playwrights rå strict-mode-brudd.
+   *
+   * Begge stier utvider først saklisten, siden melosys-web bare rendrer de 4 første
+   * sakene: uten det ville tellingen vært kappet på 4, og et saksnummer lenger ned i
+   * lista ville ikke finnes i DOM.
+   */
+  private async velgEksisterendeSak(saksnummer?: string): Promise<void> {
+    try {
+      await this.eksisterendeSakRadios.first().waitFor({ state: 'visible', timeout: TIMEOUT_LONG });
+    } catch (feil) {
+      // Uten denne grenen får man kun en rå lokator-timeout. Meldingen holder begge
+      // muligheter åpne: saken kan mangle, men fagsak-oppslaget kan også bare ha vært
+      // tregere enn budsjettet på en lastet CI-maskin. Den opprinnelige feilen henges på
+      // som `cause` – ellers mister vi lokator-detaljene helt.
+      throw new Error(
+        `Ingen eksisterende saker dukket opp på «opprett ny sak»-skjermen innen ${TIMEOUT_LONG} ms. ` +
+        'Enten ble saken aldri opprettet (eller ryddet bort), eller så var fagsak-oppslaget tregere enn det.',
+        { cause: feil }
+      );
+    }
+
+    if (await this.visFlereSakerButton.isVisible()) {
+      await this.visFlereSakerButton.click();
+      // evaluateAll auto-venter ikke, og click() venter kun på at eventet dispatches – uten
+      // dette kunne snapshotet under fortsatt vise de 4 første sakene. Knappen bytter tekst
+      // når lista er utvidet, så den forsvinner fra denne lokatoren.
+      await this.visFlereSakerButton.waitFor({ state: 'detached', timeout: TIMEOUT_MEDIUM });
+    }
+
+    const tilgjengeligeSaksnummer = (
+      await this.eksisterendeSakRadios.evaluateAll(elementer => elementer.map(element => element.id))
+    ).map(id => id.slice(OpprettNySakPage.SAK_RADIO_ID_PREFIX.length));
+
+    if (!saksnummer) {
+      if (tilgjengeligeSaksnummer.length !== 1) {
+        throw new Error(
+          `Fant ${tilgjengeligeSaksnummer.length} eksisterende saker for brukeren ` +
+          `(${tilgjengeligeSaksnummer.join(', ')}). Oppgi saksnummer til opprettNyVurdering() ` +
+          'for å velge riktig sak.'
+        );
+      }
+
+      // .first() unngår strict-mode; antallet er allerede verifisert til én, så treffet
+      // er entydig i praksis.
+      await this.eksisterendeSakRadios.first().check();
+      return;
+    }
+
+    if (!tilgjengeligeSaksnummer.includes(saksnummer)) {
+      throw new Error(
+        `Fant ingen sak med saksnummer ${saksnummer}. ` +
+        `Tilgjengelige: ${tilgjengeligeSaksnummer.join(', ') || '(ingen)'}.`
+      );
+    }
+
+    await this.eksisterendeSakRadio(saksnummer).check();
   }
 
   /**
@@ -271,10 +362,16 @@ export class OpprettNySakPage extends BasePage {
    *
    * @param fnr - User's national ID
    * @param aarsak - Reason for reassessment (e.g., 'SØKNAD')
+   * @param saksnummer - Valgfritt saksnummer (f.eks. 'MEL-99'). Oppgi det når testen
+   *   kjenner saken sin – da velges riktig sak selv om brukeren har flere saker.
    */
-  async opprettNyVurdering(fnr: string, aarsak: string = AARSAK.SØKNAD): Promise<void> {
+  async opprettNyVurdering(
+    fnr: string,
+    aarsak: string = AARSAK.SØKNAD,
+    saksnummer?: string
+  ): Promise<void> {
     await this.fyllInnBrukerID(fnr);
-    await this.eksisterendeSakCheckbox.check();
+    await this.velgEksisterendeSak(saksnummer);
     await this.velgNyVurdering();
     await this.velgAarsak(aarsak);
     await this.leggBehandlingIMine();
