@@ -239,12 +239,18 @@ export async function getProcessMarker(request: APIRequestContext): Promise<stri
 
   if (!response.ok()) {
     throw new Error(
-      `Kunne ikke hente prosessmarkør (HTTP ${response.status()}). ` +
-      `Kjører melosys-api et image med markør-endepunktet?`
+      `Kunne ikke hente prosessmarkør (HTTP ${response.status()}). melosys-api-imaget må ha ` +
+      `/internal/e2e/process-instances/marker (navikt/melosys-api#3436) — kjører du et eldre image?`
     );
   }
 
-  return (await response.json()).marker;
+  const {marker} = await response.json();
+  if (typeof marker !== 'string' || marker.length === 0) {
+    // Uten dette ville en tom respons gitt `after=undefined`, som serveren avviser med 400
+    // FØRST etter at handlingen er kjørt — altså en langt mer forvirrende feilmelding.
+    throw new Error(`Prosessmarkør-endepunktet svarte uten markør: ${JSON.stringify(marker)}`);
+  }
+  return marker;
 }
 
 /**

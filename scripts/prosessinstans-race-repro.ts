@@ -23,6 +23,7 @@
 import * as dotenv from 'dotenv';
 import * as path from 'node:path';
 import oracledb from 'oracledb';
+import {USER_ID_VALID} from '../pages/shared/constants';
 
 dotenv.config({path: path.resolve(__dirname, '../.env')});
 dotenv.config({path: path.resolve(__dirname, '../.env.local'), override: true});
@@ -45,7 +46,7 @@ async function opprettSak(): Promise<number> {
         headers: {'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json; charset=utf-8'},
         body: JSON.stringify({
             hovedpart: 'BRUKER',
-            brukerID: '30056928150',
+            brukerID: USER_ID_VALID,
             sakstype: 'FTRL',
             sakstema: 'MEDLEMSKAP_LOVVALG',
             behandlingstema: 'YRKESAKTIV',
@@ -81,20 +82,30 @@ async function ventNy(markør: string): Promise<any> {
     return res.json();
 }
 
-async function tellInstanser(conn: oracledb.Connection): Promise<{ total: number; uferdige: number }> {
+type Instans = { id: string; status: string };
+
+/**
+ * Leser instansene som IDer, ikke som antall: da kan «nye siden handlingen» avgjøres eksakt,
+ * uten å blande inn eldre uferdige rader fra tidligere kjøringer.
+ */
+async function hentInstanser(conn: oracledb.Connection): Promise<Instans[]> {
     const r: any = await conn.execute(
-        `SELECT COUNT(*) AS TOTAL, SUM(CASE WHEN STATUS <> 'FERDIG' THEN 1 ELSE 0 END) AS UFERDIGE FROM PROSESSINSTANS`,
+        `SELECT RAWTOHEX(UUID) AS ID, STATUS FROM PROSESSINSTANS`,
         [], {outFormat: oracledb.OUT_FORMAT_OBJECT}
     );
-    return {total: r.rows[0].TOTAL, uferdige: r.rows[0].UFERDIGE ?? 0};
+    return r.rows.map((rad: any) => ({id: rad.ID, status: rad.STATUS}));
 }
 
-/** Venter til den nye instansen faktisk er registrert og ferdig — fasit på hvor lang tid det tar. */
-async function ventPåSannheten(conn: oracledb.Connection, før: number, maxMs = 30000): Promise<number> {
+function nyeSiden(før: Set<string>, etter: Instans[]): Instans[] {
+    return etter.filter(i => !før.has(i.id));
+}
+
+/** Venter til handlingens egen instans faktisk er registrert og ferdig — fasit på hvor lang tid det tar. */
+async function ventPåSannheten(conn: oracledb.Connection, før: Set<string>, maxMs = 30000): Promise<number> {
     const start = Date.now();
     while (Date.now() - start < maxMs) {
-        const n = await tellInstanser(conn);
-        if (n.total > før && n.uferdige === 0) return Date.now() - start;
+        const nye = nyeSiden(før, await hentInstanser(conn));
+        if (nye.length > 0 && nye.every(i => i.status === 'FERDIG')) return Date.now() - start;
         await new Promise(r => setTimeout(r, 50));
     }
     return -1;
@@ -103,10 +114,21 @@ async function ventPåSannheten(conn: oracledb.Connection, før: number, maxMs =
 (async () => {
     const conn = await oracledb.getConnection(dbConfig);
     let løgner = 0;
-    console.log(`\n=== waitForProcessInstances-race — modus: ${MODE.toUpperCase()}, ${ITERATIONS} iterasjoner ===\n`);
+    let forkastet = 0;
+    console.log(`\n=== prosessinstans-race — modus: ${MODE.toUpperCase()}, ${ITERATIONS} iterasjoner ===`);
+    if (MODE === 'old') {
+        // Uten dette leses «0 løgner» lett som «racet finnes ikke», når det egentlig betyr
+        // «betingelsene som fremkaller racet er ikke satt opp».
+        console.log(
+            'NB: `old` gir 0 løgner på en frisk backend — POST-en committer på ~20 ms og rekker\n' +
+            '    innenfor settling-forsinkelsen. Racet krever settling-delay 0 OG treg registrering\n' +
+            '    (se filhodet). Er de ikke satt opp, måler denne kjøringen ingenting.'
+        );
+    }
+    console.log('');
 
     for (let i = 1; i <= ITERATIONS; i++) {
-        const før = await tellInstanser(conn);
+        const før = new Set((await hentInstanser(conn)).map(x => x.id));
 
         const markør = MODE === 'new' ? await hentMarkør() : null;
 
@@ -118,27 +140,36 @@ async function ventPåSannheten(conn: oracledb.Connection, før: number, maxMs =
         const svar = markør ? await ventNy(markør) : await ventGammel();
         const ventetMs = Date.now() - t0;
 
-        const etter = await tellInstanser(conn);
-        const nye = etter.total - før.total;
-        const løy = svar.status === 'COMPLETED' && (nye < 1 || etter.uferdige > 0);
-        if (løy) løgner++;
+        const nye = nyeSiden(før, await hentInstanser(conn));
 
+        // Iterasjoner der handlingen aldri traff må forkastes FØR de telles: en feilet POST
+        // oppretter ingen instans, og ville da garantert blitt bokført som en løgn.
         const status = await postPromise;
         if (status !== 204) {
             console.log(`  ${i}: POST /api/fagsaker ga ${status} — iterasjonen forkastes`);
+            forkastet++;
             continue;
         }
 
-        const sannhetMs = await ventPåSannheten(conn, før.total);
+        const uferdige = nye.filter(x => x.status !== 'FERDIG').length;
+        const løy = svar.status === 'COMPLETED' && (nye.length < 1 || uferdige > 0);
+        if (løy) løgner++;
+
+        const sannhetMs = await ventPåSannheten(conn, før);
 
         console.log(
             `  ${i}: ${løy ? '❌ LØY  ' : '✅ ok   '} svar=${svar.status} etter ${ventetMs}ms | ` +
-            `nye instanser ved svartidspunkt=${nye}, uferdige=${etter.uferdige} | ` +
-            `faktisk ferdig etter ~${sannhetMs}ms`
+            `nye instanser ved svartidspunkt=${nye.length}, uferdige=${uferdige} | ` +
+            `faktisk ferdig etter ${sannhetMs < 0 ? 'ALDRI (timeout)' : `~${sannhetMs}ms`}`
         );
     }
 
-    console.log(`\n=== ${løgner}/${ITERATIONS} falske COMPLETED (${MODE}) ===\n`);
+    const talt = ITERATIONS - forkastet;
+    console.log(`\n=== ${løgner}/${talt} falske COMPLETED (${MODE})${forkastet ? `, ${forkastet} forkastet` : ''} ===`);
+    console.log(
+        'Merk: skriptet lager ekte saker og rydder ikke opp. Kjør cleanup-fixturen eller\n' +
+        '`npx playwright test` etterpå hvis du vil ha ren database.\n'
+    );
     await conn.close();
     process.exit(løgner > 0 && MODE === 'new' ? 1 : 0);
 })();

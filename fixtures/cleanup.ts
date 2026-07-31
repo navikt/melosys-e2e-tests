@@ -1,4 +1,4 @@
-import {test as base} from '@playwright/test';
+import {APIRequestContext, test as base} from '@playwright/test';
 import {DatabaseHelper} from '../helpers/db-helper';
 import {PgDatabaseHelper} from '../helpers/pg-db-helper';
 import {clearMockDataSilent} from '../helpers/mock-helper';
@@ -122,7 +122,7 @@ async function cleanupTestData(page: any, waitForProcesses: boolean = false): Pr
  * Markør-endepunktet finnes bare i melosys-api-images som har den race-frie ventingen.
  * Mangler det, faller fixturen tilbake til den gamle tømmingen i stedet for å velte testen.
  */
-async function hentMarkørEllerNull(request: any): Promise<string | null> {
+async function hentMarkørEllerNull(request: APIRequestContext): Promise<string | null> {
     try {
         return await getProcessMarker(request);
     } catch (error: any) {
@@ -138,8 +138,11 @@ export const cleanupFixture = base.extend<{ autoCleanup: void }>({
         await cleanupTestData(page, false); // Don't wait for processes
         console.log('');
 
-        // Markør tatt før testen kjører: tømmingen etterpå venter da på ALT testen startet,
-        // ikke bare på det som ligger innenfor serverens 60-sekundersvindu.
+        // Markør tatt før testen kjører: tømmingen etterpå dekker da alt testen har rukket å
+        // registrere, ikke bare det som ligger innenfor serverens 60-sekundersvindu. En lang test
+        // lekket før uferdige prosesser videre til neste test. Merk at en prosess som ennå ikke er
+        // registrert når tømmingen starter, fortsatt bare dekkes av serverens settling-forsinkelse
+        // — markøren hjelper ikke der, siden en tømming per definisjon ikke vet hva den venter på.
         const markør = await hentMarkørEllerNull(page.request);
 
         // Run the test
@@ -149,7 +152,7 @@ export const cleanupFixture = base.extend<{ autoCleanup: void }>({
         try {
             if (markør) {
                 // expectedNew: 0 — testen kan ha startet null prosesser (f.eks. rene søketester),
-                // men alt den faktisk startet må være ferdig før vi rydder.
+                // men alt som er registrert må være ferdig før vi rydder.
                 await waitForNewProcessInstances(page.request, markør, {expectedNew: 0, timeoutSeconds: 30});
             } else {
                 await waitForProcessInstances(page.request, 30);

@@ -101,10 +101,18 @@ sequenceDiagram
 |-----------|-------------|
 | Rundt en handling som starter en prosess | `await runAndWaitForProcessInstances(page.request, () => handling())` |
 | Etter `fattVedtak()` som siste steg | Ingenting — fixturen håndterer det |
-| Du har allerede kjørt handlingen | `getProcessMarker()` FØR handlingen, så `waitForNewProcessInstances(request, markør)` |
+| Handlingen lar seg ikke pakke inn | `getProcessMarker()` FØR handlingen, så `waitForNewProcessInstances(request, markør)` |
 
 `runAndWaitForProcessInstances` henter markør → kjører handlingen → venter på prosessene
-*handlingen* startet. Bruk den. Den er umulig å bruke feil, fordi markøren alltid tas først.
+*handlingen* startet. Bruk den — da kan ikke markøren havne på feil side av handlingen.
+
+To ting å vite:
+
+* **Handlingen må faktisk starte en prosessinstans.** Gjør den ikke det, venter serveren ut hele
+  timeouten og kastet feilen sier «only 0 of 1 expected new process instance(s)». Skal du bare
+  vente på at det som allerede kjører blir ferdig, er det tømming — bruk `expectedNew: 0`.
+* **`timeoutSeconds` sendes nå til serveren.** Før var tallet kun Playwrights HTTP-timeout, og
+  serveren ventet alltid sine egne 30 s. Ber du om 90, kan et kall som feiler nå blokkere i 90 s.
 
 ```typescript
 await runAndWaitForProcessInstances(page.request, () => vedtak.klikkFattVedtak());
