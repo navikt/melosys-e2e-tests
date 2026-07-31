@@ -5,11 +5,13 @@
 /**
  * Hent saksnummeret ut av en saksbehandlings-URL.
  *
- * Saksnummer er enten «MEL-<n>» (EU/EØS-flyten, f.eks. /melosys/EU_EOS/pensjonist/MEL-40/,
- * og også FTRL: /FTRL/saksbehandling/MEL-146/) eller et rent tall (FTRL-flyten, f.eks.
- * /FTRL/saksbehandling/2024000001). MEL- prioriteres siden det er entydig og aldri kan
- * forveksles med fødselsnummeret (11 siffer). Det rene tallet ankres derfor på
- * «saksbehandling/» for å unngå å plukke opp fnr.
+ * Saksnummer er i praksis alltid «MEL-<n>» – melosys-api setter FAGSAKID_PREFIX = "MEL-"
+ * for alle fagsaker, i både EU/EØS-flyten (/melosys/EU_EOS/pensjonist/MEL-40/) og
+ * FTRL-flyten (/FTRL/saksbehandling/MEL-146/). Den rent numeriske grenen under er en
+ * arvet fallback for eldre saksnummer uten prefiks; den er ikke observert i dagens data.
+ * MEL- prioriteres siden den er entydig og aldri kan forveksles med fødselsnummeret
+ * (11 siffer). Det rene tallet ankres derfor på «saksbehandling/» og krever minst ti
+ * siffer, for ikke å plukke opp fnr.
  *
  * @throws når URL-en ikke inneholder et gjenkjennbart saksnummer – å returnere undefined
  *   her ville bare flyttet feilen til et kallsted som er vanskeligere å tolke.

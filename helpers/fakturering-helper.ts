@@ -162,7 +162,7 @@ export class FaktureringHelper {
    * console.log(serie.faktura.length); // Number of invoices
    */
   async hentFakturaserie(referanse: string): Promise<Fakturaserie> {
-    const response = await this.callEndpoint('GET', `/fakturaserier/${referanse}`);
+    const response = await this.callEndpoint('GET', `/fakturaserier/${encodeURIComponent(referanse)}`);
 
     if (!response.ok()) {
       const text = await response.text();
@@ -205,9 +205,28 @@ export class FaktureringHelper {
    * Nødvendig når krediterings-serier lenkes til flere kjeder via erstattet_med.
    */
   async hentSammenslåttKjede(referanser: string[], timeoutMs?: number): Promise<Fakturaserie[]> {
+    return this.slåSammenKjeder(await this.hentKjederPerReferanse(referanser, timeoutMs));
+  }
+
+  /**
+   * Hent kjeden for hver referanse for seg, uten å slå dem sammen.
+   *
+   * `ventPåKjedeSum` trenger å vite hvilken referanse som eventuelt ga tom kjede: etter
+   * sammenslåing er «den ene referansen finnes ikke» ikke lenger til å se, fordi den andre
+   * referansens linjer maskerer den.
+   */
+  private async hentKjederPerReferanse(
+    referanser: string[],
+    timeoutMs?: number
+  ): Promise<Map<string, Fakturaserie[]>> {
     const kjeder = await Promise.all(referanser.map(r => this.hentFakturaserieKjede(r, timeoutMs)));
+    return new Map(referanser.map((referanse, i) => [referanse, kjeder[i]]));
+  }
+
+  /** Slå sammen flere kjeder, deduplisert på fakturaserie-referanse. */
+  private slåSammenKjeder(perReferanse: Map<string, Fakturaserie[]>): Fakturaserie[] {
     const sett = new Map<string, Fakturaserie>();
-    kjeder.flat().forEach(s => sett.set(s.fakturaserieReferanse, s));
+    [...perReferanse.values()].flat().forEach(s => sett.set(s.fakturaserieReferanse, s));
     return [...sett.values()];
   }
 
@@ -297,12 +316,18 @@ export class FaktureringHelper {
    *    sum, årstall, intervall eller timeout).
    * 2. Sentinel-referansen «Kansellert» – da ble ingenting kreditert, og en 0-sum er
    *    legitim uten å bety at avregningen gikk bra.
-   * 3. Vi fikk aldri noe å måle på innen tiden. Feilmeldingen skiller to årsaker: enten
-   *    svarte tjenesten aldri (siste forsøk feilet), eller så svarte den uten
-   *    fakturalinjer. Det siste er farlig fordi endepunktet svarer 200 med `[]` for ukjent
-   *    referanse, og `totalBelopKjede([])` er 0 – som tilfeldigvis er `forventetSum` i alle
-   *    dagens kallsteder. Med `aar` satt gjelder det samme når kjeden mangler linjer i det
-   *    året.
+   * 3. Vi fikk aldri noe å måle på innen tiden. Feilmeldingen skiller tre årsaker: tjenesten
+   *    svarte aldri (siste forsøk feilet), én av referansene ga tom kjede, eller kjeden
+   *    manglet fakturalinjer i året vi spurte om. De to siste er farlige fordi endepunktet
+   *    svarer 200 med `[]` for ukjent referanse, og `totalBelopKjede([])` er 0 – som
+   *    tilfeldigvis er `forventetSum` i alle dagens kallsteder.
+   *
+   *    Tomhets-sjekken går PER REFERANSE, ikke på den sammenslåtte kjeden: med to
+   *    referanser der den ene er ukjent, foreldet eller ennå ikke skrevet, ville den andres
+   *    linjer ellers maskert hullet, og pollen returnert med det samme på en sum som bare
+   *    dekker halve påstanden. Det er nøyaktig den vakuøsiteten helperen finnes for å
+   *    hindre. Årsfilteret brukes derimot på den sammenslåtte kjeden – en enkelt referanse
+   *    kan legitimt mangle linjer i det året uten at påstanden blir meningsløs.
    *
    * Har vi derimot en målt kjede, returneres den selv om det aller siste forsøket feilet –
    * da logges feilen i stedet, siden kallerens `expect` gir en mer presis feilmelding enn
@@ -314,6 +339,9 @@ export class FaktureringHelper {
    *
    * Total ventetid holdes innenfor `timeoutMs`: hvert kall får kun resten av budsjettet,
    * og et nytt forsøk startes ikke når det gjenstår mindre enn `MIN_KALL_TIMEOUT_MS`.
+   * Eneste unntak er første runde, som alltid får minst `MIN_KALL_TIMEOUT_MS` – en kaller
+   * med et budsjett under gulvet skal fortsatt få ett reelt forsøk, og overskrider da
+   * budsjettet med opptil differansen.
    */
   async ventPåKjedeSum(
     referanser: string[],
@@ -370,11 +398,15 @@ export class FaktureringHelper {
     // Siste kjede vi klarte å hente, uansett om den hadde målbare linjer. Brukes kun til å
     // gjøre «fant ingen linjer»-feilen diagnostiserbar fra testrapporten alene.
     let sisteHentedeSerier: Fakturaserie[] | undefined;
+    // Referansene som ga tom kjede i siste vellykkede runde. Holdes for feilmeldingen:
+    // «fant ingen linjer» og «denne ene referansen finnes ikke» krever ulik feilsøking.
+    let sisteTommeReferanser: string[] | undefined;
     let sisteFeil: unknown;
     let harForsøkt = false;
 
     while (true) {
       let nyeSerier: Fakturaserie[] | undefined;
+      let tommeReferanser: string[] | undefined;
       const gjenstaendeMs = timeoutMs - (Date.now() - start);
 
       // Kallet får kun resten av budsjettet – uten eksplisitt timeout arver det
@@ -388,10 +420,14 @@ export class FaktureringHelper {
         harForsøkt = true;
 
         try {
-          nyeSerier = await this.hentSammenslåttKjede(
+          const perReferanse = await this.hentKjederPerReferanse(
             referanser,
             Math.max(MIN_KALL_TIMEOUT_MS, gjenstaendeMs)
           );
+          tommeReferanser = [...perReferanse]
+            .filter(([, kjede]) => kjede.length === 0)
+            .map(([referanse]) => referanse);
+          nyeSerier = this.slåSammenKjeder(perReferanse);
           sisteFeil = undefined;
         } catch (feil) {
           // Kun HENTINGEN prøves på nytt. Utregningen under ligger utenfor, så en feil der
@@ -403,8 +439,11 @@ export class FaktureringHelper {
 
       if (nyeSerier !== undefined) {
         sisteHentedeSerier = nyeSerier;
+        sisteTommeReferanser = tommeReferanser;
 
-        if (this.antallFakturaLinjer(nyeSerier, aar) > 0) {
+        // Alle referanser må ha truffet noe. Én tom kjede betyr at den referansen er ukjent,
+        // foreldet eller ennå ikke skrevet – og da dekker summen bare halve påstanden.
+        if (tommeReferanser?.length === 0 && this.antallFakturaLinjer(nyeSerier, aar) > 0) {
           // Alt-eller-ingenting: summen må høre til kjeden vi lagrer, ellers kan vi ende opp
           // med å logge én sum og returnere en kjede med en annen.
           sisteBrukbareSerier = nyeSerier;
@@ -420,7 +459,8 @@ export class FaktureringHelper {
       }
 
       if (elapsedMs >= timeoutMs) {
-        const sekunder = Math.round(elapsedMs / 1000);
+        // Under ett sekund ville Math.round gitt «innen 0s» midt i en feilmelding.
+        const sekunder = elapsedMs < 1000 ? (elapsedMs / 1000).toFixed(1) : Math.round(elapsedMs / 1000);
         const aarSuffiks = aar !== undefined ? ` for ${aar}` : '';
 
         if (sisteBrukbareSerier === undefined) {
@@ -431,6 +471,16 @@ export class FaktureringHelper {
               `Fikk aldri et brukbart svar fra faktureringskomponenten for ` +
               `${referanser.join(', ')} innen ${sekunder}s. Siste feil: ${sisteFeil}`,
               { cause: sisteFeil }
+            );
+          }
+
+          if (sisteTommeReferanser !== undefined && sisteTommeReferanser.length > 0) {
+            throw new Error(
+              `Referanse(ne) ${sisteTommeReferanser.join(', ')} ga tom kjede innen ${sekunder}s ` +
+              `(av ${referanser.join(', ')}). Endepunktet svarer 200 med tom liste for ukjent ` +
+              'referanse, så dette betyr at fakturaserien ikke finnes – ikke at den er kreditert. ' +
+              'En sum over de øvrige referansene ville dekket bare halve påstanden. ' +
+              `${this.oppsummerAarIKjede(sisteHentedeSerier ?? [])}`
             );
           }
 
