@@ -442,7 +442,6 @@ export class UnleashHelper {
         'melosys.arsavregning',
         'melosys.arsavregning.uten.flyt',
         'melosys.faktureringskomponenten.ikke-tidligere-perioder',
-        'melosys.eos_fakturering_av_trygdeavgift',
       ];
 
       const features = featureNames || defaultFeatures;
