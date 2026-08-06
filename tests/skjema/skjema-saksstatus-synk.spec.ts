@@ -16,8 +16,10 @@ import { EuEosBehandlingPage } from '../../pages/behandling/eu-eos-behandling.pa
  * T4 — MELOSYS-8084 saksstatus-synk: melosys-api holder skjema-api oppdatert om sakens status.
  *
  * Semantikk (produkteierbeslutning 2026-07-21):
- *   - Ved MOTTAK får innsendingen `saksnummer` via M2M-callback, men `saksstatus` forblir NULL
- *     (vises som Mottatt for innsender). Synk skjer KUN når fagsakens status ENDRES i melosys-api.
+ *   - Ved MOTTAK får innsendingen `saksnummer` via M2M-callback, og skjema-api setter samtidig
+ *     `saksstatus = MOTTATT`: melosys-api publiserer kun status*endringer*, og en nyopprettet sak
+ *     har ingen — saksnummeret er beviset på at saken finnes. Videre synk skjer når fagsakens
+ *     status ENDRES i melosys-api.
  *   - Mappingen er en REN funksjon av fagsakstatus: OPPRETTET → MOTTATT, alt annet (inkl.
  *     LOVVALG_AVKLART etter vedtak, henlagt, annullert) → AVSLUTTET. Behandlingsstatus er irrelevant.
  *   - Mottakssiden (skjema-api) oppdaterer PER skjemaId (ingen kohort-sweep på saksnummer):
@@ -157,14 +159,23 @@ async function fattVedtakSomSaksbehandler(
   }
 }
 
-/** Assert at innsendingen fortsatt er usynket: saksstatus NULL (vises som Mottatt for innsender). */
-async function forventSaksstatusNull(mottak: SkjemaMottakAssertions, skjemaId: string): Promise<void> {
+/**
+ * Assert at innsendingen står som MOTTATT — statusen skjema-api setter sammen med saksnummeret,
+ * før noen fagsak-statusendring har skjedd. Trygg som punkt-i-tid-sjekk fordi begge feltene
+ * skrives i samme transaksjon: har saksnummeret rukket frem, har statusen det også.
+ */
+async function forventSaksstatusMottatt(
+  mottak: SkjemaMottakAssertions,
+  skjemaId: string
+): Promise<void> {
   const { saksstatus, saksstatusOppdatert } = await mottak.hentSaksstatusISkjemaApi(skjemaId);
-  expect(saksstatus, `saksstatus skal være NULL etter mottak (skjema ${skjemaId})`).toBeNull();
+  expect(saksstatus, `saksstatus skal være MOTTATT etter mottak (skjema ${skjemaId})`).toBe(
+    'MOTTATT'
+  );
   expect(
     saksstatusOppdatert,
-    `saksstatus_oppdatert skal være NULL når ingen synk har kjørt (skjema ${skjemaId})`
-  ).toBeNull();
+    `saksstatus_oppdatert skal settes sammen med statusen (skjema ${skjemaId})`
+  ).not.toBeNull();
 }
 
 test.describe('MELOSYS-8084 saksstatus-synk: melosys-api → skjema-api', () => {
@@ -187,12 +198,12 @@ test.describe('MELOSYS-8084 saksstatus-synk: melosys-api → skjema-api', () => 
       const { skjemaId, referanse } = await soknad.fyllUtOgSendInnKomplettSoknad(ORGNR, 'Frankrike');
       console.log('📨 Søknad sendt:', { skjemaId, referanse });
 
-      // ---- 2. Sak opprettes i melosys-api, saksnummer synkes tilbake — saksstatus forblir NULL
+      // ---- 2. Sak opprettes i melosys-api, saksnummer synkes tilbake — status blir MOTTATT ---
       const { saksnummer } = await mottak.ventPaaSakForSkjema(skjemaId);
       await mottak.verifiserSakOgBehandling(saksnummer); // UTSENDT_ARBEIDSTAKER / FØRSTEGANG
       await mottak.ventPaaSaksnummerISkjemaApi(skjemaId, saksnummer);
-      // Synk skjer KUN ved fagsak-statusendring — mottak alene skal IKKE sette saksstatus.
-      await forventSaksstatusNull(mottak, skjemaId);
+      // Saksnummeret beviser at saken finnes — statusen settes i samme slengen, ikke av synken.
+      await forventSaksstatusMottatt(mottak, skjemaId);
 
       // ---- 3. Saksbehandler fatter vedtak → fagsak LOVVALG_AVKLART -------------------------
       await fattVedtakSomSaksbehandler(browser, request, saksnummer);
@@ -257,9 +268,9 @@ test.describe('MELOSYS-8084 saksstatus-synk: melosys-api → skjema-api', () => 
         await atContext.close();
       }
 
-      // Ingen fagsak-statusendring ennå → begge innsendinger skal fortsatt være usynket (NULL).
-      await forventSaksstatusNull(mottak, agSkjemaId);
-      await forventSaksstatusNull(mottak, atSkjemaId);
+      // Ingen fagsak-statusendring ennå → begge innsendinger står som MOTTATT fra mottaket.
+      await forventSaksstatusMottatt(mottak, agSkjemaId);
+      await forventSaksstatusMottatt(mottak, atSkjemaId);
 
       // ---- 3. Saksbehandler avslutter saken (vedtak → LOVVALG_AVKLART) ----------------------
       await fattVedtakSomSaksbehandler(browser, request, saksnummer);
@@ -289,7 +300,7 @@ test.describe('MELOSYS-8084 saksstatus-synk: melosys-api → skjema-api', () => 
       await withPgDatabase('melosys-skjema', (db) => db.cleanDatabase(true));
       expect(await mottak.tellFagsaker(), 'ingen fagsaker ved teststart (Kafka-leak-vakt)').toBe(0);
 
-      // ---- 1. Innsending → sak → saksnummer synket, saksstatus fortsatt NULL ----------------
+      // ---- 1. Innsending → sak → saksnummer synket, status MOTTATT fra mottaket -------------
       const auth = new SkjemaAuthHelper(page);
       await auth.login(ARBEIDSTAKER_FNR);
 
@@ -298,7 +309,7 @@ test.describe('MELOSYS-8084 saksstatus-synk: melosys-api → skjema-api', () => 
 
       const { saksnummer } = await mottak.ventPaaSakForSkjema(skjemaId);
       await mottak.ventPaaSaksnummerISkjemaApi(skjemaId, saksnummer);
-      await forventSaksstatusNull(mottak, skjemaId);
+      await forventSaksstatusMottatt(mottak, skjemaId);
 
       // ---- 2. Avslutt saken UTENOM eventflyten (direkte i Oracle) ---------------------------
       // LOVVALG_AVKLART er statusen et vedtak normalt setter — men uten event fanger ikke den
@@ -313,8 +324,8 @@ test.describe('MELOSYS-8084 saksstatus-synk: melosys-api → skjema-api', () => 
       // melosys-api kan ha fagsaken i JPA/Hibernate-cache — tøm så massesynken leser fersk status.
       await clearApiCaches(request);
 
-      // skjema-api skal fortsatt være usynket (ingen event → ingen løpende synk).
-      await forventSaksstatusNull(mottak, skjemaId);
+      // Ingen event → ingen løpende synk: statusen står fortsatt på MOTTATT fra mottaket.
+      await forventSaksstatusMottatt(mottak, skjemaId);
 
       // ---- 3. dryRun=true: rapport, men INGEN endring i skjema-api --------------------------
       // Rapportkontrakt: SkjemaSaksstatusSynkRapport i melosys-api. antallOppdatert,
@@ -337,7 +348,7 @@ test.describe('MELOSYS-8084 saksstatus-synk: melosys-api → skjema-api', () => 
       expect(dryRunRapport.konfliktSkjemaIder ?? null, 'konfliktSkjemaIder settes ikke i dry-run').toBeNull();
 
       // dry-run skal IKKE ha endret databasen.
-      await forventSaksstatusNull(mottak, skjemaId);
+      await forventSaksstatusMottatt(mottak, skjemaId);
 
       // ---- 4. dryRun=false: reell synk → AVSLUTTET + saksstatus_oppdatert satt --------------
       const synkRespons = await adminApi.synkSkjemaSaksstatus(request, false);
