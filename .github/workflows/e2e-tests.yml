@@ -550,8 +550,11 @@ jobs:
             exit 1
           fi
 
+          # Kollapset: tabellen er forensikk for en feilende kjøring, ikke noe man vil ha
+          # utbrettet på hver grønne kjøring. Full tekstversjon står uansett i jobbloggen
+          # (printf-en i løkken over), så ingenting går tapt ved å folde den sammen her.
           {
-            echo "### 🐳 Images"
+            echo "<details><summary>🐳 Images ($inspected tjenester) — digester og effektive entrypoints</summary>"
             echo ""
             echo "| tjeneste | image | digest | effektiv entrypoint + cmd |"
             echo "|---|---|---|---|"
@@ -560,6 +563,8 @@ jobs:
             else
               echo "| _(ingen tjenester med image)_ | | | |"
             fi
+            echo ""
+            echo "</details>"
             echo ""
           } >> "$GITHUB_STEP_SUMMARY"
 
