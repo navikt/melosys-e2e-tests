@@ -397,6 +397,47 @@ jobs:
           wait
           echo "✅ All images pre-pulled successfully"
 
+      - name: Registrer image-digester og entrypoints
+        # `latest` er en bevegelig tag: to kjøringer av samme workflow kan bruke ulike
+        # images. Uten digest i loggen er en feilende kjøring ikke etterprøvbar i
+        # ettertid (GAR beholder digesten, men ingenting knytter den til denne kjøringen).
+        #
+        # Entrypoint/Cmd er med fordi flere tjenester har `CMD ["-jar", "/app/app.jar"]`
+        # og arver ENTRYPOINT fra base-imaget. Et base-image-bytte som mister
+        # ENTRYPOINT gir `exec: "-jar": executable file not found in $PATH` først under
+        # `compose up` — her fanges det før stacken starter, med navn på imaget.
+        run: |
+          echo "### 🐳 Images" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "| image | digest | entrypoint | cmd |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
+
+          for img in $(docker compose config --images | sort -u); do
+            # Images bak en avslått compose-profil er ikke pullet — hopp over dem.
+            # {{"\t"}} framfor en reell tab: en literal tab i YAML er skjør — spises den av
+            # en formatter, returnerer `cut -f1` hele linja og tabellen blir stille feil.
+            meta=$(docker image inspect "$img" --format \
+              '{{if .RepoDigests}}{{index .RepoDigests 0}}{{else}}-{{end}}{{"\t"}}{{json .Config.Entrypoint}}{{"\t"}}{{json .Config.Cmd}}' \
+              2>/dev/null) || continue
+
+            digest=$(printf '%s' "$meta" | cut -f1)
+            entrypoint=$(printf '%s' "$meta" | cut -f2)
+            cmd=$(printf '%s' "$meta" | cut -f3)
+
+            printf '%-100s %s\n' "$img" "${digest##*@}"
+            echo "| \`$img\` | \`${digest##*@}\` | \`$entrypoint\` | \`$cmd\` |" >> "$GITHUB_STEP_SUMMARY"
+
+            # Manglende ENTRYPOINT er i seg selv helt normalt (postgres, kafka, alpine …).
+            # Det som ikke kan starte, er kombinasjonen «ingen ENTRYPOINT» + en CMD som
+            # begynner med et flagg — da er CMD argumenter til en runtime som ikke finnes.
+            case "$entrypoint$cmd" in
+              null\[\"-*)
+                echo "::warning ::$img har ingen ENTRYPOINT, men CMD starter med et flagg ($cmd). Containeren vil ikke starte."
+                ;;
+            esac
+          done
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
       - name: Start Docker Compose services
         run: |
           docker compose up -d
@@ -414,6 +455,60 @@ jobs:
           MELOSYS_MOCK_TAG: ${{ steps.image-tags.outputs.melosys_mock_tag }}
           MELOSYS_DOKGEN_TAG: ${{ steps.image-tags.outputs.melosys_dokgen_tag }}
           JACOCO_AGENT_OPTS: ${{ inputs.collect_coverage && '-javaagent:/jacoco/jacocoagent.jar=output=tcpserver,address=*,port=6300' || '' }}
+
+      - name: Diagnoser feilet oppstart av stacken
+        # `docker compose up` skriver feilen fra daemonen uten å si HVILKEN container den
+        # gjelder — i run 32011161950 måtte «Container X Starting» diffes mot «Container X
+        # Started» over 4958 loggelinjer for å finne navnet. Denne steget navngir hver
+        # container som ikke kjører, med .State.Error (den fulle daemon-feilen),
+        # exit-koden og image-ets entrypoint/cmd.
+        #
+        # `docker logs` er med fordi en container som *startet* og deretter døde har
+        # brukbar logg — men den er tom når prosessen aldri ble exec'et, og da er
+        # .State.Error den eneste kilden.
+        if: failure()
+        run: |
+          echo "## ❌ Stacken startet ikke" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+
+          docker compose ps -a
+
+          failed=""
+          for c in $(docker compose ps -aq); do
+            [ "$(docker inspect -f '{{.State.Status}}' "$c")" = "running" ] && continue
+
+            name=$(docker inspect -f '{{.Name}}' "$c" | sed 's|^/||')
+            failed="$failed $name"
+
+            {
+              echo "<details><summary><code>$name</code></summary>"
+              echo ""
+              echo '```'
+              # {{"\n"}} i stedet for reelle linjeskift: templaten må holde seg innenfor
+              # YAML-blokkens innrykk, ellers brekker workflow-filen.
+              docker inspect "$c" --format \
+                'image:      {{.Config.Image}}{{"\n"}}entrypoint: {{json .Config.Entrypoint}}{{"\n"}}cmd:        {{json .Config.Cmd}}{{"\n"}}status:     {{.State.Status}} (exit {{.State.ExitCode}}){{"\n"}}error:      {{.State.Error}}'
+              echo ""
+              echo "--- siste 50 loggelinjer ---"
+              # `docker logs` gir exit 0 med tom output når prosessen aldri ble exec'et,
+              # så tomhet må sjekkes eksplisitt — ikke via exit-koden.
+              logs=$(docker logs --tail=50 "$c" 2>&1 || true)
+              if [ -n "$logs" ]; then
+                echo "$logs"
+              else
+                echo "(ingen logg — prosessen startet aldri)"
+              fi
+              echo '```'
+              echo "</details>"
+              echo ""
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+          done
+
+          if [ -n "$failed" ]; then
+            echo "::error ::Startet ikke:$failed"
+          else
+            echo "Alle containere kjører — feilen ligger utenfor compose." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
 
       - name: Wait for services to be healthy
         run: |
@@ -630,8 +725,15 @@ jobs:
             if [ "$FLAKY" -gt 0 ]; then
               HAS_FLAKY="true"
             fi
+          else
+            # Ingen test-summary.json = Playwright kjørte aldri (stacken startet ikke, eller
+            # et steg før testene feilet). Uten dette ga steget `has-failures: false` og
+            # sammendraget «❌ Failed | 0» — som leses som «alt grønt» når null tester kjørte.
+            echo "⚠️ playwright-report/test-summary.json mangler — testene kjørte ikke"
+            STATUS="did-not-run"
+            HAS_FAILURES="true"
           fi
-          
+
           echo "status=$STATUS" >> $GITHUB_OUTPUT
           echo "has-failures=$HAS_FAILURES" >> $GITHUB_OUTPUT
           echo "has-flaky=$HAS_FLAKY" >> $GITHUB_OUTPUT
@@ -769,6 +871,11 @@ jobs:
         run: |
           echo "## 🎭 Playwright Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
+
+          if [ "${{ steps.test-status.outputs.status }}" = "did-not-run" ]; then
+            echo "> ⚠️ **Ingen tester kjørte.** Tallene under er ikke et testresultat — se «Diagnoser feilet oppstart av stacken» lenger opp." >> $GITHUB_STEP_SUMMARY
+            echo "" >> $GITHUB_STEP_SUMMARY
+          fi
 
           # Add trigger information if this was a repository dispatch
           if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
