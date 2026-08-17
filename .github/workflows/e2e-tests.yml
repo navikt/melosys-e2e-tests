@@ -678,10 +678,12 @@ jobs:
         # ville skrevet overskriften «Stacken startet ikke» om noe helt annet.
         if: failure() && (steps.compose-up.outcome == 'failure' || steps.wait-healthy.outcome == 'failure')
         run: |
+          # tee, ikke bare >>: uten overskriften på stdout starter jobbloggen rett i en
+          # `ps`-tabell uten kontekst om hvorfor diagnostikken kjørte.
           if [ "${{ steps.compose-up.outcome }}" = "failure" ]; then
-            echo "## ❌ Stacken startet ikke" >> "$GITHUB_STEP_SUMMARY"
+            echo "## ❌ Stacken startet ikke" | tee -a "$GITHUB_STEP_SUMMARY"
           else
-            echo "## ❌ Stacken ble aldri healthy" >> "$GITHUB_STEP_SUMMARY"
+            echo "## ❌ Stacken ble aldri healthy" | tee -a "$GITHUB_STEP_SUMMARY"
           fi
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
