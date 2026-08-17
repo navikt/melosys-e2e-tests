@@ -402,43 +402,101 @@ jobs:
         # images. Uten digest i loggen er en feilende kjøring ikke etterprøvbar i
         # ettertid (GAR beholder digesten, men ingenting knytter den til denne kjøringen).
         #
-        # Entrypoint/Cmd er med fordi flere tjenester har `CMD ["-jar", "/app/app.jar"]`
+        # Entrypoint/cmd er med fordi flere tjenester har `CMD ["-jar", "/app/app.jar"]`
         # og arver ENTRYPOINT fra base-imaget. Et base-image-bytte som mister
         # ENTRYPOINT gir `exec: "-jar": executable file not found in $PATH` først under
-        # `compose up` — her fanges det før stacken starter, med navn på imaget.
+        # `compose up` — her fanges det før stacken starter, med navn på tjenesten.
+        #
+        # MELOSYS_*_TAG kommer fra $GITHUB_ENV («Set environment variables for GitHub
+        # Actions» over), så `docker compose config` resolver samme tags som `compose up`.
+        # Ikke dupliser dem i en env-blokk her — da må to steder holdes i synk.
         run: |
           echo "### 🐳 Images" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
-          echo "| image | digest | entrypoint | cmd |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| tjeneste | image | digest | effektiv entrypoint + cmd |" >> "$GITHUB_STEP_SUMMARY"
           echo "|---|---|---|---|" >> "$GITHUB_STEP_SUMMARY"
 
-          for img in $(docker compose config --images | sort -u); do
-            # Images bak en avslått compose-profil er ikke pullet — hopp over dem.
+          # Hard exit hvis config ikke kan leses: et stille no-op her ville rapportert
+          # «alt i orden» uten å ha sjekket noe.
+          compose_config=$(mktemp)
+          trap 'rm -f "$compose_config"' EXIT
+          if ! docker compose config --format json > "$compose_config"; then
+            echo "::error::docker compose config feilet — image-tabellen kan ikke bygges"
+            exit 1
+          fi
+
+          # Markdown-celler: `|` i en cmd ville ellers splittet raden i flere kolonner.
+          md_cell() { printf '%s' "$1" | sed 's/|/\\|/g'; }
+
+          # Alt utveksles som rene tekstfelt, aldri JSON: `@json` inne i `@tsv` dobler
+          # backslash-escapene, så en command som inneholder anførselstegn kom tilbake som
+          # ugyldig JSON og drepte jq. Feltene er derfor «første token» og «hele strengen»
+          # hver for seg — bash trenger aldri å parse JSON.
+          #
+          # Både compose-nivå og image-nivå entrypoint/command er med: compose overstyrer
+          # imagets, og uten begge gir sjekken både falske positiver (kafka og
+          # felles-kodeverk setter entrypoint i compose) og falske negativer
+          # (melosys-skjema-web-auth har en command som starter med `--`).
+          # Feltskille er unit separator (0x1f), ikke tab: tab er IFS-whitespace, så bash
+          # kollapser sammenhengende tabber og TOMME felt forsvinner — kolonnene forskyves
+          # og en tjeneste får feil entrypoint tilskrevet. 0x1f er ikke whitespace og
+          # bevarer tomme felt.
+          jq -r '
+            def toks: if type == "string" then split(" ") elif type == "array" then . else [] end;
+            # Ett gsub per tegn med ENKEL backslash, så jq selv oversetter escapen til
+            # tegnet før regexen ser den. `"[\\n\\r\\u001f]"` ville gitt regex-motoren
+            # tegnene \, u, 0, 1, f som klassemedlemmer og slettet de bokstavene fra
+            # enhver command.
+            def clean: gsub("\n"; " ") | gsub("\r"; " ") | gsub("\u001f"; " ");
+            .services | to_entries[]
+            | select(.value.image)
+            | [ .key,
+                .value.image,
+                (.value.entrypoint | toks | .[0] // "" | clean),
+                (.value.command    | toks | .[0] // "" | clean),
+                (.value.entrypoint | toks | join(" ") | clean),
+                (.value.command    | toks | join(" ") | clean) ]
+            | join("\u001f")
+          ' "$compose_config" | while IFS="$(printf '\037')" read -r svc img cfg_exe cfg_arg0 cfg_ep cfg_cmd; do
             # {{"\t"}} framfor en reell tab: en literal tab i YAML er skjør — spises den av
             # en formatter, returnerer `cut -f1` hele linja og tabellen blir stille feil.
-            meta=$(docker image inspect "$img" --format \
-              '{{if .RepoDigests}}{{index .RepoDigests 0}}{{else}}-{{end}}{{"\t"}}{{json .Config.Entrypoint}}{{"\t"}}{{json .Config.Cmd}}' \
-              2>/dev/null) || continue
+            if ! meta=$(docker image inspect "$img" --format \
+              '{{if .RepoDigests}}{{index .RepoDigests 0}}{{else}}-{{end}}{{"\t"}}{{if .Config.Entrypoint}}{{index .Config.Entrypoint 0}}{{end}}{{"\t"}}{{if .Config.Cmd}}{{index .Config.Cmd 0}}{{end}}{{"\t"}}{{if .Config.Entrypoint}}{{join .Config.Entrypoint " "}}{{end}}{{"\t"}}{{if .Config.Cmd}}{{join .Config.Cmd " "}}{{end}}' \
+              2>/dev/null); then
+              # Images bak en avslått compose-profil er ikke pullet.
+              echo "  $svc: $img ikke pullet lokalt — hoppes over"
+              continue
+            fi
 
             digest=$(printf '%s' "$meta" | cut -f1)
-            entrypoint=$(printf '%s' "$meta" | cut -f2)
-            cmd=$(printf '%s' "$meta" | cut -f3)
+            img_exe=$(printf '%s' "$meta" | cut -f2)
+            img_arg0=$(printf '%s' "$meta" | cut -f3)
+            img_ep=$(printf '%s' "$meta" | cut -f4)
+            img_cmd=$(printf '%s' "$meta" | cut -f5)
 
-            printf '%-100s %s\n' "$img" "${digest##*@}"
-            echo "| \`$img\` | \`${digest##*@}\` | \`$entrypoint\` | \`$cmd\` |" >> "$GITHUB_STEP_SUMMARY"
+            if [ -n "$cfg_ep" ]; then eff_ep="$cfg_ep"; eff_exe="$cfg_exe"; else eff_ep="$img_ep"; eff_exe="$img_exe"; fi
+            if [ -n "$cfg_cmd" ]; then eff_cmd="$cfg_cmd"; eff_arg0="$cfg_arg0"; else eff_cmd="$img_cmd"; eff_arg0="$img_arg0"; fi
 
-            # Manglende ENTRYPOINT er i seg selv helt normalt (postgres, kafka, alpine …).
-            # Det som ikke kan starte, er kombinasjonen «ingen ENTRYPOINT» + en CMD som
-            # begynner med et flagg — da er CMD argumenter til en runtime som ikke finnes.
-            case "$entrypoint$cmd" in
-              null\[\"-*)
-                echo "::warning ::$img har ingen ENTRYPOINT, men CMD starter med et flagg ($cmd). Containeren vil ikke starte."
-                ;;
+            # Entrypoint er kjørbaren når den finnes; ellers er cmd[0] det.
+            exe="$eff_exe"
+            [ -z "$exe" ] && exe="$eff_arg0"
+
+            printf '%-32s %-72s %s\n' "$svc" "$img" "${digest##*@}"
+            echo "| $svc | \`$(md_cell "$img")\` | \`${digest##*@}\` | \`$(md_cell "${eff_ep:-(ingen)}") + $(md_cell "${eff_cmd:-(ingen)}")\` |" >> "$GITHUB_STEP_SUMMARY"
+
+            # Starter det første tokenet med et flagg, er det argumenter til en runtime
+            # som ikke finnes — containeren kan ikke starte.
+            case "$exe" in
+              # ${exe} må ha krøllparenteser: uten dem sluker bash første byte av «»» inn i
+              # variabelnavnet i locale der høye bytes regnes som bokstaver, og verdien
+              # forsvinner stille fra meldingen.
+              -*) echo "::error::$svc ($img) kan ikke starte: kommandoen begynner med «${exe}», ingen kjørbar fil. Mangler imaget ENTRYPOINT?" ;;
             esac
           done
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Start Docker Compose services
+        id: compose-up
         run: |
           docker compose up -d
         env:
@@ -466,48 +524,73 @@ jobs:
         # `docker logs` er med fordi en container som *startet* og deretter døde har
         # brukbar logg — men den er tom når prosessen aldri ble exec'et, og da er
         # .State.Error den eneste kilden.
-        if: failure()
+        #
+        # Betingelsen er bundet til compose-up-steget, ikke bare failure(): et bart
+        # `if: failure()` fyrer også når npm ci, check:tests eller nais/login feiler, og
+        # ville skrevet overskriften «Stacken startet ikke» om noe helt annet.
+        if: failure() && steps.compose-up.outcome == 'failure'
         run: |
           echo "## ❌ Stacken startet ikke" >> "$GITHUB_STEP_SUMMARY"
           echo "" >> "$GITHUB_STEP_SUMMARY"
 
-          docker compose ps -a
+          # `|| true` overalt under: steget kjører med `bash -e`, og et fatalt kall her
+          # ville drept diagnostikken før ::error-annotasjonen ble skrevet — altså mistet
+          # nettopp den informasjonen steget finnes for.
+          docker compose ps -a || true
 
-          failed=""
-          for c in $(docker compose ps -aq); do
-            [ "$(docker inspect -f '{{.State.Status}}' "$c")" = "running" ] && continue
+          # Summary-fila er kappet på 1 MiB, og ved overflyt forkastes HELE fila stille.
+          # En delvis startet stack (~20 døde containere) er nettopp tilfellet som ville
+          # sprengt taket, så loggen kappes i bytes per container. tee gir full tekst til
+          # stdout uansett, så ingenting går tapt fra råloggen.
+          LOG_BYTES=4000
 
-            name=$(docker inspect -f '{{.Name}}' "$c" | sed 's|^/||')
-            failed="$failed $name"
+          broken=""
+          for c in $(docker compose ps -aq || true); do
+            status=$(docker inspect -f '{{.State.Status}}' "$c" 2>/dev/null) || continue
+            [ "$status" = "running" ] && continue
+
+            name=$(docker inspect -f '{{.Name}}' "$c" 2>/dev/null | sed 's|^/||') || continue
+            code=$(docker inspect -f '{{.State.ExitCode}}' "$c" 2>/dev/null || echo "?")
+
+            # En container som kjørte ferdig med exit 0 (init-/engangstjeneste) er ikke en
+            # feil — den skal vises, men ikke navngis som «startet ikke».
+            if [ "$status" != "exited" ] || [ "$code" != "0" ]; then
+              broken="$broken $name"
+            fi
 
             {
-              echo "<details><summary><code>$name</code></summary>"
+              echo "<details><summary><code>$name</code> — $status (exit $code)</summary>"
               echo ""
-              echo '```'
+              # Fire backticks: en loggelinje med tre backticks ville ellers lukket blokken
+              # og ødelagt resten av sammendraget. CommonMark krever at lukkegjerdet er
+              # minst like langt som åpnegjerdet.
+              echo '````'
               # {{"\n"}} i stedet for reelle linjeskift: templaten må holde seg innenfor
               # YAML-blokkens innrykk, ellers brekker workflow-filen.
               docker inspect "$c" --format \
-                'image:      {{.Config.Image}}{{"\n"}}entrypoint: {{json .Config.Entrypoint}}{{"\n"}}cmd:        {{json .Config.Cmd}}{{"\n"}}status:     {{.State.Status}} (exit {{.State.ExitCode}}){{"\n"}}error:      {{.State.Error}}'
+                'image:      {{.Config.Image}}{{"\n"}}entrypoint: {{json .Config.Entrypoint}}{{"\n"}}cmd:        {{json .Config.Cmd}}{{"\n"}}status:     {{.State.Status}} (exit {{.State.ExitCode}}){{"\n"}}error:      {{.State.Error}}' || true
               echo ""
-              echo "--- siste 50 loggelinjer ---"
+              echo "--- logg (siste 50 linjer, maks ${LOG_BYTES}B) ---"
               # `docker logs` gir exit 0 med tom output når prosessen aldri ble exec'et,
               # så tomhet må sjekkes eksplisitt — ikke via exit-koden.
-              logs=$(docker logs --tail=50 "$c" 2>&1 || true)
+              logs=$(docker logs --tail=50 "$c" 2>&1 | head -c "$LOG_BYTES" | sed 's/^````*/[backticks]/' || true)
               if [ -n "$logs" ]; then
                 echo "$logs"
+              elif [ "$status" = "created" ]; then
+                echo "(ingen logg — prosessen ble aldri exec'et)"
               else
-                echo "(ingen logg — prosessen startet aldri)"
+                echo "(tom logg — prosessen kjørte, men skrev ingenting)"
               fi
-              echo '```'
+              echo '````'
               echo "</details>"
               echo ""
             } | tee -a "$GITHUB_STEP_SUMMARY"
           done
 
-          if [ -n "$failed" ]; then
-            echo "::error ::Startet ikke:$failed"
+          if [ -n "$broken" ]; then
+            echo "::error::Startet ikke:$broken"
           else
-            echo "Alle containere kjører — feilen ligger utenfor compose." | tee -a "$GITHUB_STEP_SUMMARY"
+            echo "Ingen container-feil funnet — se compose-utdata over." | tee -a "$GITHUB_STEP_SUMMARY"
           fi
 
       - name: Wait for services to be healthy
@@ -727,8 +810,11 @@ jobs:
             fi
           else
             # Ingen test-summary.json = Playwright kjørte aldri (stacken startet ikke, eller
-            # et steg før testene feilet). Uten dette ga steget `has-failures: false` og
-            # sammendraget «❌ Failed | 0» — som leses som «alt grønt» når null tester kjørte.
+            # et steg før testene feilet). Uten dette ble STATUS stående på «unknown», og
+            # «Generate test summary» falt tilbake til å telle kataloger i test-results/ —
+            # som ga «❌ Failed | 0», altså grønt utseende når null tester kjørte.
+            # `status` er den eneste av disse outputsene noen leser (se banneret i
+            # «Generate test summary»); has-failures/has-flaky har ingen konsumenter i dag.
             echo "⚠️ playwright-report/test-summary.json mangler — testene kjørte ikke"
             STATUS="did-not-run"
             HAS_FAILURES="true"
@@ -873,7 +959,10 @@ jobs:
           echo "" >> $GITHUB_STEP_SUMMARY
 
           if [ "${{ steps.test-status.outputs.status }}" = "did-not-run" ]; then
-            echo "> ⚠️ **Ingen tester kjørte.** Tallene under er ikke et testresultat — se «Diagnoser feilet oppstart av stacken» lenger opp." >> $GITHUB_STEP_SUMMARY
+            # Ikke pek på et spesifikt steg her: årsaken kan være at stacken ikke startet,
+            # at den aldri ble healthy, eller at et steg før testene feilet — og
+            # diagnostikk-steget kjører bare i det første tilfellet.
+            echo "> ⚠️ **Ingen tester kjørte.** Eventuelle tall under er ikke et testresultat. Se det feilende steget i jobbloggen." >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
 
