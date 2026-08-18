@@ -102,6 +102,7 @@ sequenceDiagram
 | Rundt en handling som starter en prosess | `await runAndWaitForProcessInstances(page.request, () => handling())` |
 | Etter `fattVedtak()` som siste steg | Ingenting — fixturen håndterer det |
 | Handlingen lar seg ikke pakke inn | `getProcessMarker()` FØR handlingen, så `waitForNewProcessInstances(request, markør)` |
+| Lukke etterslep (oppgave/brev) før en DB-assert | `waitForProcessInstances(page.request, N)` — eneste gjenværende bruk av den markørløse |
 
 `runAndWaitForProcessInstances` henter markør → kjører handlingen → venter på prosessene
 *handlingen* startet. Bruk den — da kan ikke markøren havne på feil side av handlingen.
@@ -270,8 +271,8 @@ graph TD
 - [ ] Copilot har laget POM-test med `pom-from-recording`-skill
 - [ ] Importerer fra `../../fixtures` (ikke `@playwright/test`)
 - [ ] `test.setTimeout(120000)` for tester med vedtak
-- [ ] `waitForProcessInstances` etter saksopprettelse
-- [ ] Ikke manuell `waitForProcessInstances` etter siste vedtak
+- [ ] `runAndWaitForProcessInstances` rundt saksopprettelsen (ikke markørløs venting etterpå)
+- [ ] Ingen manuell venting etter siste vedtak — fixturen håndterer det
 - [ ] Bruker konstanter fra `pages/shared/constants.ts`
 - [ ] Testen kjører grønt lokalt
 - [ ] Pushet til GitHub og CI er grønn
