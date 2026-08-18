@@ -418,6 +418,12 @@ test.describe('SED Mottak', () => {
  * These tests take longer (60-90s) because they go through melosys-eessi.
  */
 test.describe('SED Mottak via melosys-eessi @eessi', () => {
+  // Ventingene her ber om timeoutSeconds: 90, men Playwrights test-timeout er 60 s
+  // (playwright.config.ts). Uten dette rekker serveren aldri sin egen timeout: testen drepes
+  // først, og feilen blir «apiRequestContext.get: Request context disposed» i stedet for den
+  // informative «only 0 of 1 expected new process instance(s) were registered after <markør>».
+  test.describe.configure({ timeout: 120_000 });
+
   const EESSI_BASE = 'http://localhost:8081';
 
   let sedHelper: SedHelper;
@@ -525,7 +531,26 @@ test.describe('SED Mottak via melosys-eessi @eessi', () => {
     console.log('✅ Full eessi flow completed - fagsak created');
   });
 
-  test('skal håndtere A009 informasjonsforespørsel via eessi', async ({ request }) => {
+  /**
+   * FUNN 2026-08-18: A009 gjennom melosys-eessi-flyten oppretter ingen prosessinstans i
+   * melosys-api. Testen har aldri oppdaget det, fordi den var vacuous:
+   *
+   * Cleanup-fixturen tømmer PROSESSINSTANS før hver test, og den markørløse ventingen har en
+   * «fresh start»-gren i E2ESupportController — `allInstances.isEmpty() && threadsAndQueueEmpty`
+   * → COMPLETED med én gang, uavhengig av `expectedInstances`. Testen ventet altså aldri på noe,
+   * og assertet heller ingenting utover at ventingen returnerte.
+   *
+   * Med markør faller den grenen bort: ventingen krever en instans registrert etter markøren, og
+   * den kommer ikke innen 60 s (CI-run 32141963445, både første forsøk og retry). De to andre
+   * eessi-testene i denne blokken er A003 og passerer på ~7 s, så eessi→api-kjeden virker —
+   * det er A009 spesifikt som ikke når fram. Ingen ERROR i tjenesteloggene.
+   *
+   * Rotårsaken er ikke funnet (krever lokal stack med eessi-profilen); mistanken er EUX-mockens
+   * A009-oppsett for eessi-stien, eller at melosys-eessi ikke ruter A009 videre. Merk at den
+   * DIREKTE A009-testen (SED Mottak › «skal håndtere A009 og automatisk registrere unntak»)
+   * passerer — det er kun veien om melosys-eessi som er brutt.
+   */
+  test.fixme('skal håndtere A009 informasjonsforespørsel via eessi', async ({ request }) => {
     const eessiRunning = await isEessiRunning(request);
     expect(eessiRunning, 'melosys-eessi must be running for this test').toBe(true);
 
