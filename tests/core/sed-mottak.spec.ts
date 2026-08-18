@@ -532,33 +532,33 @@ test.describe('SED Mottak via melosys-eessi @eessi', () => {
   });
 
   /**
-   * FUNN 2026-08-18 — rotårsak funnet, ligger i melosys-mock (ikke i api eller her).
+   * A009 via eessi var vacuous og grønn på falskt grunnlag fram til 2026-08-18. To ting måtte
+   * fikses før den faktisk testet noe:
    *
-   * `mock/src/main/resources/eux/sedA009.json` beskriver en ANNEN person enn testpersonen:
-   * `kjoenn: "K"` og `pin[0]: "01058312345"`, mens `USER_ID_VALID` (30056928150) er en mann
-   * født samme dato. sedA003.json — den eneste templaten som peker på testpersonen — har
-   * `kjoenn: "M"` og riktig fnr, og derfor virker A003 via eessi.
+   * 1. `mock/src/main/resources/eux/sedA009.json` beskrev en ANNEN person enn testpersonen
+   *    (`kjoenn: "K"`, `pin[0]: "01058312345"`), mens USER_ID_VALID (30056928150) er en mann
+   *    født samme dato. melosys-eessi fant personen på fødselsdato, avviste på kjønn
+   *    («Identifisering feilet på kjønn» → FEIL_KJONN) og opprettet en ID-og-fordelingsoppgave
+   *    i stedet for å publisere videre til api — korrekt oppførsel for en uidentifisert person.
+   *    Ingen MOTTAK_SED ble derfor opprettet. Rettet i melosys-docker-compose; sedA003.json var
+   *    den eneste templaten som allerede pekte på testpersonen, og det er grunnen til at A003 via
+   *    eessi virket mens denne ikke gjorde det. Merk at identifiseringen er tolerant på navn
+   *    (A003 logger «Navnemismatch ... ville feilet med navnesjekk») men streng på kjønn.
    *
-   * melosys-eessi finner personen på fødselsdato, men avviser på kjønn og gjør så det den SKAL:
-   * oppretter en ID-og-fordelingsoppgave i stedet for å publisere videre til api. Verifisert i
-   * eessi-loggen lokalt:
-   *   A003: «Navnemismatch ... (ville feilet med navnesjekk)» → «Publiserer eessiMelding» ✓
-   *   A009: «Identifisering feilet på kjønn» → FEIL_KJONN → «Oppgave til ID og fordeling opprettet»
-   * Identifiseringen er altså tolerant på navn, men streng på kjønn.
+   * 2. Ventingen var markørløs, og traff «fresh start»-grenen i E2ESupportController:
+   *    cleanup-fixturen tømmer PROSESSINSTANS før hver test, og
+   *    `allInstances.isEmpty() && threadsAndQueueEmpty` ga COMPLETED med én gang, uavhengig av
+   *    `expectedInstances`. Testen ventet altså aldri, og assertet ingenting utover det.
    *
-   * Ingen MOTTAK_SED skal opprettes for en uidentifisert person, så ventingen her kan aldri
-   * innfris. Testen har likevel vært grønn, fordi den var vacuous: cleanup-fixturen tømmer
-   * PROSESSINSTANS før hver test, og den markørløse ventingen har en «fresh start»-gren i
-   * E2ESupportController (`allInstances.isEmpty() && threadsAndQueueEmpty` → COMPLETED med én
-   * gang, uavhengig av expectedInstances). Den assertet heller ingenting utover at ventingen
-   * returnerte.
+   * Med markør + rettet template kjører flyten nå ende-til-ende: MOTTAK_SED →
+   * REGISTRERING_UNNTAK_NY_SAK → REGISTRERING_UNNTAK_GODKJENN → OPPRETT_OG_DISTRIBUER_BREV.
+   * Verifisert lokalt mot eessi-profilen 2026-08-18 (13/13 i denne filen).
    *
-   * Fiksen er å la sedA009.json bruke testpersonen, som sedA003.json gjør — en endring i
-   * melosys-docker-compose, utenfor denne PR-en. A001/A008/A010-templatene har samme feil, men
-   * treffes ikke: de testes bare via den direkte mock-veien, som ikke går gjennom eessis
-   * personidentifisering.
+   * A001/A008/A010-templatene har samme feil person, men treffes ikke: de testes kun via den
+   * direkte mock-veien, som ikke går gjennom eessis personidentifisering. Skrives det en ny
+   * eessi-test for dem, må templaten rettes først.
    */
-  test.fixme('skal håndtere A009 informasjonsforespørsel via eessi', async ({ request }) => {
+  test('skal håndtere A009 informasjonsforespørsel via eessi', async ({ request }) => {
     const eessiRunning = await isEessiRunning(request);
     expect(eessiRunning, 'melosys-eessi must be running for this test').toBe(true);
 
