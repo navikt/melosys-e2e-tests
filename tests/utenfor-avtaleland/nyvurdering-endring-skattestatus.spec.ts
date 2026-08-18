@@ -11,7 +11,7 @@ import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
 import {UnleashHelper} from "../../helpers/unleash-helper";
-import {AdminApiHelper, waitForProcessInstances} from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, AdminApiHelper, waitForProcessInstances } from '../../helpers/api-helper';
 import {expect} from "@playwright/test";
 import {TestPeriods, TestPeriodsISO} from '../../helpers/date-helper';
 
@@ -102,10 +102,11 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
 
         // Step 8: Fatt vedtak (without filling text fields)
         console.log('📝 Step 8: Making decision...');
-        await vedtak.klikkFattVedtak();
-
-        console.log('📝 Step 9: Wait for process instances after first vedtak...');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => vedtak.klikkFattVedtak(),
+          { timeoutSeconds: 30 }
+        );
 
         // Step 10: Navigate and search for case
         console.log('📝 Step 10: Search for case and verify...');
@@ -117,10 +118,11 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         // Step 11: Create ny vurdering
         console.log('📝 Step 11: Creating ny vurdering...');
         await hovedside.klikkOpprettNySak();
-        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
-
-        console.log('📝 Step 12: Wait for behandling creation...');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD'),
+          { timeoutSeconds: 30 }
+        );
 
         // Step 13: Open the NEW active behandling immediately (before it auto-completes)
         console.log('📝 Step 13: Opening active behandling BEFORE it completes...');
@@ -153,12 +155,13 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
 
         // Step 15: Submit vedtak for ny vurdering
         console.log('📝 Step 15: Submitting vedtak for ny vurdering...');
-        await vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING');
-
         // Step 16: Hard sluttilstand - vent på NV-iverksetting + verifiser DB end-state
         // (NV-behandlingen skal være AVSLUTTET med alle prosessinstanser FERDIG)
-        console.log('📝 Step 16: Waiting for iverksetting + verifying DB end-state...');
-        await waitForProcessInstances(page.request, 60);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING'),
+          { timeoutSeconds: 60 }
+        );
         await vedtak.assertions.verifiserBehandlingAvsluttet({ behandlingId: nvBehandlingId });
 
         // Note: Toggle will be reset to default (enabled) before next test runs
@@ -253,10 +256,11 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
 
         // Step 8: Fatt vedtak (without filling text fields)
         console.log('📝 Step 8: Making decision...');
-        await vedtak.klikkFattVedtak();
-
-        console.log('📝 Step 9: Wait for process instances after first vedtak...');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => vedtak.klikkFattVedtak(),
+          { timeoutSeconds: 30 }
+        );
 
         // Step 10: Navigate and search for case
         console.log('📝 Step 10: Search for case and verify...');
@@ -268,10 +272,11 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
         // Step 11: Create ny vurdering
         console.log('📝 Step 11: Creating ny vurdering...');
         await hovedside.klikkOpprettNySak();
-        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
-
-        console.log('📝 Step 12: Wait for behandling creation...');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD'),
+          { timeoutSeconds: 30 }
+        );
 
         // Step 13: Open the NEW active behandling immediately (before it auto-completes)
         console.log('📝 Step 13: Opening active behandling BEFORE it completes...');
@@ -304,12 +309,13 @@ test.describe('Nyvurdering - Endring av skattestatus', () => {
 
         // Step 15: Submit vedtak for ny vurdering
         console.log('📝 Step 15: Submitting vedtak for ny vurdering...');
-        await vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING');
-
         // Step 16: Wait for IVERKSETT_VEDTAK_FTRL process to complete and commit to database
         // This ensures behandling.status = 'AVSLUTTET' is committed before the job queries
-        console.log('📝 Step 16: Wait for vedtak process to complete...');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING'),
+          { timeoutSeconds: 30 }
+        );
 
         // Hard sluttilstand: NV-behandlingen skal være AVSLUTTET med alle prosessinstanser FERDIG
         await vedtak.assertions.verifiserBehandlingAvsluttet({ behandlingId: nvBehandlingId });

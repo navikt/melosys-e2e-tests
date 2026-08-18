@@ -6,7 +6,7 @@ import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page
 import { EuEosBehandlingPage } from '../../pages/behandling/eu-eos-behandling.page';
 import { ArbeidFlereLandBehandlingPage } from '../../pages/behandling/arbeid-flere-land-behandling.page';
 import { USER_ID_VALID, EU_EOS_LAND } from '../../pages/shared/constants';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
 import { withDatabase } from '../../helpers/db-helper';
 import { APIRequestContext } from '@playwright/test';
 import {
@@ -68,10 +68,11 @@ test.describe('Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () => {
 
     await opprettSak.velgAarsak('SØKNAD');
     await opprettSak.leggBehandlingIMine();
-    await opprettSak.klikkOpprettNyBehandling();
-
-    console.log('📝 Venter på prosessinstanser etter saksopprettelse...');
-    await waitForProcessInstances(page.request, 30);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => opprettSak.klikkOpprettNyBehandling(),
+      { timeoutSeconds: 30 }
+    );
     await hovedside.goto();
 
     await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).click();
@@ -235,9 +236,11 @@ test.describe('Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () => {
 
     const docsBefore = await fetchStoredSedDocuments(request, 'A003');
     const jpBefore = await fetchStoredJournalposter(request);
-    await behandling.fattVedtak();
-
-    await waitForProcessInstances(page.request, 60);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => behandling.fattVedtak(),
+      { timeoutSeconds: 60 }
+    );
     await verifiserSedSendtTilEessi(request, docsBefore);
     await verifiserUtgaaendeJournalpostOpprettet(request, jpBefore, 'SE');
     await verifiserProsessinstanserEtterVedtak(['FO']);
@@ -266,9 +269,11 @@ test.describe('Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () => {
 
     const docsBefore = await fetchStoredSedDocuments(request, 'A003');
     const jpBefore = await fetchStoredJournalposter(request);
-    await behandling.fattVedtak();
-
-    await waitForProcessInstances(page.request, 60);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => behandling.fattVedtak(),
+      { timeoutSeconds: 60 }
+    );
     await verifiserSedSendtTilEessi(request, docsBefore);
     await verifiserUtgaaendeJournalpostOpprettet(request, jpBefore, 'SE');
     await verifiserProsessinstanserEtterVedtak(['FO', 'GL']);
@@ -300,9 +305,11 @@ test.describe('Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () => {
 
     const docsBefore = await fetchStoredSedDocuments(request, 'A003');
     const jpBefore = await fetchStoredJournalposter(request);
-    await behandling.fattVedtak();
-
-    await waitForProcessInstances(page.request, 60);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => behandling.fattVedtak(),
+      { timeoutSeconds: 60 }
+    );
     await verifiserSedSendtTilEessi(request, docsBefore);
     await verifiserUtgaaendeJournalpostOpprettet(request, jpBefore, 'SE');
     await verifiserProsessinstanserEtterVedtak([]);

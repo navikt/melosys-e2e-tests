@@ -11,7 +11,7 @@ import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
 import {UnleashHelper} from "../../helpers/unleash-helper";
-import {AdminApiHelper, waitForProcessInstances} from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, AdminApiHelper, waitForProcessInstances } from '../../helpers/api-helper';
 import {expect} from "@playwright/test";
 import {withDatabase} from '../../helpers/db-helper';
 import {verifiserAarsavregningBehandling} from '../../pages/behandling/aarsavregning.assertions';
@@ -93,10 +93,11 @@ test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
 
         // Step 8: Fatt vedtak (without filling text fields)
         console.log('📝 Step 8: Making decision...');
-        await vedtak.klikkFattVedtak();
-
-        console.log('📝 Step 9: Wait for process instances after first vedtak...');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => vedtak.klikkFattVedtak(),
+          { timeoutSeconds: 30 }
+        );
 
         // Re-enable toggle for årsavregning job (was disabled at start of test)
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');

@@ -4,7 +4,7 @@ import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import { EuEosSkipBehandlingPage } from '../../pages/behandling/eu-eos-skip-behandling.page';
 import { USER_ID_VALID } from '../../pages/shared/constants';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
 
 /**
  * Komplett EU/EØS Skip (Ship) arbeidsflyt test
@@ -53,11 +53,12 @@ test.describe('EU/EØS Skip - Komplett arbeidsflyt', () => {
     await skipBehandling.velgLand('Danmark');
     await opprettSak.velgAarsak('SØKNAD');
     await opprettSak.leggBehandlingIMine();
-    await opprettSak.klikkOpprettNyBehandling();
-
     // Vent på prosessinstanser
-    console.log('📝 Venter på prosessinstanser...');
-    await waitForProcessInstances(page.request, 30);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => opprettSak.klikkOpprettNyBehandling(),
+      { timeoutSeconds: 30 }
+    );
     await hovedside.goto();
 
     // Naviger til behandling

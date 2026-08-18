@@ -5,7 +5,7 @@ import {OpprettNySakPage} from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import {EuEosBehandlingPage} from '../../pages/behandling/eu-eos-behandling.page';
 import {AnnulleringPage} from '../../pages/behandling/annullering.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
-import {waitForProcessInstances} from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 import {withDatabase} from '../../helpers/db-helper';
 
 /**
@@ -65,9 +65,11 @@ test.describe('EU/EØS - Annullering (MEDL-avvisning)', () => {
         await behandling.velgLand('Danmark');
         await opprettSak.velgAarsak('SØKNAD');
         await opprettSak.leggBehandlingIMine();
-        await opprettSak.klikkOpprettNyBehandling();
-
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => opprettSak.klikkOpprettNyBehandling(),
+          { timeoutSeconds: 30 }
+        );
         await hovedside.goto();
         await hovedside.åpneBehandling('TRIVIELL KARAFFEL -');
         await page.waitForLoadState('networkidle');
@@ -79,10 +81,11 @@ test.describe('EU/EØS - Annullering (MEDL-avvisning)', () => {
         await behandling.velgArbeidstype(true);
         await behandling.svarJaOgFortsett();
         await behandling.svarJaOgFortsett();
-        await behandling.innvilgeOgFattVedtak();
-
-        console.log('📝 Del A: Venter på iverksetting av førstegangsvedtak...');
-        await waitForProcessInstances(page.request, 60);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => behandling.innvilgeOgFattVedtak(),
+          { timeoutSeconds: 60 }
+        );
 
         // Hent MEDL-periode-id-en som førstegangsvedtaket opprettet (eneste rad etter rensing).
         const medlPeriodeId = await withDatabase(async (db) => {
@@ -101,8 +104,11 @@ test.describe('EU/EØS - Annullering (MEDL-avvisning)', () => {
         console.log('📝 Del B: Oppretter nyvurdering...');
         await hovedside.goto();
         await hovedside.klikkOpprettNySak();
-        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD'),
+          { timeoutSeconds: 30 }
+        );
 
         // Åpne den NYE aktive behandlingen (åpneBehandling tar nyeste lenke, med reload-retry)
         await hovedside.goto();
@@ -111,10 +117,11 @@ test.describe('EU/EØS - Annullering (MEDL-avvisning)', () => {
 
         // === DEL C: Annuller saken ===
         console.log('📝 Del C: Annullerer saken...');
-        await annullering.annullerSak();
-
-        console.log('📝 Del C: Venter på iverksetting av annullering (kaster ved feilede prosessinstanser)...');
-        await waitForProcessInstances(page.request, 60);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => annullering.annullerSak(),
+          { timeoutSeconds: 60 }
+        );
 
         // === DEL D: Verifiser annulleringen ===
         await annullering.assertions.verifiserAnnulleringIverksatt(request, medlPeriodeId);

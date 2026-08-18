@@ -11,7 +11,7 @@ import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {FORRIGE_AAR, USER_ID_VALID} from '../../pages/shared/constants';
 import {UnleashHelper} from '../../helpers/unleash-helper';
-import {AdminApiHelper, waitForProcessInstances} from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, AdminApiHelper, waitForProcessInstances } from '../../helpers/api-helper';
 import {publishSkattehendelse} from '../../helpers/skattehendelse-helper';
 import {TestPeriods, TestPeriodsISO} from '../../helpers/date-helper';
 import {withDatabase} from '../../helpers/db-helper';
@@ -105,8 +105,11 @@ async function opprettVedtattIkkeSkattepliktigSak(page: Page): Promise<void> {
     await trygdeavgift.klikkBekreftOgFortsett();
 
     console.log('📝 Fatter vedtak...');
-    await vedtak.klikkFattVedtak();
-    await waitForProcessInstances(page.request, 30);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => vedtak.klikkFattVedtak(),
+      { timeoutSeconds: 30 }
+    );
 }
 
 /**

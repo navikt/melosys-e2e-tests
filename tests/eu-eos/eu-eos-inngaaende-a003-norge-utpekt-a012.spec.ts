@@ -3,7 +3,7 @@ import { AuthHelper } from '../../helpers/auth-helper';
 import { SedHelper } from '../../helpers/sed-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { EuEosUtpekingPage } from '../../pages/behandling/eu-eos-utpeking.page';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
 import { fetchStoredJournalposter, fetchStoredSedDocuments } from '../../helpers/mock-helper';
 import { BRUKERNAVN_VALID } from '../../pages/shared/constants';
 
@@ -72,10 +72,11 @@ test.describe('EU/EØS - Inngående A003 (Norge utpekt)', () => {
 
     // === DEL B: Godkjenn utpeking og fatt vedtak ===
     console.log('📝 Del B: Godkjenner utpeking og fatter vedtak...');
-    await utpeking.godkjennUtpekingOgFattVedtak();
-
-    console.log('📝 Del B: Venter på iverksetting (sender A012, kaster ved feilede prosessinstanser)...');
-    await waitForProcessInstances(request, 90);
+    await runAndWaitForProcessInstances(
+      request,
+      () => utpeking.godkjennUtpekingOgFattVedtak(),
+      { timeoutSeconds: 90 }
+    );
 
     // === DEL C: Verifiser A012 sendt + norsk lovvalg/MEDL iverksatt ===
     await utpeking.assertions.verifiserA012Sendt(request, sedFør, jpFør);

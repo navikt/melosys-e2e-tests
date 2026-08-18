@@ -14,7 +14,7 @@ import {
   EU_EOS_LOVVALG,
   FORRIGE_AAR,
 } from '../../pages/shared/constants';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
 import { verifiserBehandlingSluttilstand } from '../../pages/shared/behandling-sluttilstand.assertions';
 import { withDatabase } from '../../helpers/db-helper';
 
@@ -101,11 +101,13 @@ test.describe('EØS Medlemskap Lovvalg - Offentlig tjenesteperson 11.3b', () => 
 
     // Step 7: Vedtak
     console.log('Step 7: Fatting vedtak...');
-    await vedtak.klikkFattVedtak();
-
     // Step 8: Verifiser interim-oppførsel (se faglig notat øverst)
     console.log('Step 8: Verifying årsavregning cannot be created (interim behaviour)...');
-    await waitForProcessInstances(page.request, 60);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => vedtak.klikkFattVedtak(),
+      { timeoutSeconds: 60 }
+    );
     await hovedside.goto();
 
     await hovedside.åpneBehandling(behandlingLenke);

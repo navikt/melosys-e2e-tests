@@ -1,5 +1,5 @@
 import { Page } from '@playwright/test';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
 import { hentSaksnummerFraUrl } from '../../helpers/url-helper';
 import { AarsavregningPage } from '../../pages/behandling/aarsavregning.page';
 import { EuEosPensjonistBehandlingPage } from '../../pages/behandling/eu-eos-pensjonist-behandling.page';
@@ -82,10 +82,11 @@ export async function setupPensjonistMedAarsavregning(
   await trygdeavgift.klikkBekreftOgFortsett();
 
   await pensjonistBehandling.assertions.verifiserBekreftOgSendSynlig();
-  await pensjonistBehandling.klikkBekreftOgSend();
-
-  console.log('📝 Venter på prosessinstanser etter innsending av pensjonistbehandling...');
-  await waitForProcessInstances(page.request, 60);
+  await runAndWaitForProcessInstances(
+    page.request,
+    () => pensjonistBehandling.klikkBekreftOgSend(),
+    { timeoutSeconds: 60 }
+  );
   await hovedside.goto();
 
   await hovedside.klikkOpprettNySak();
@@ -141,10 +142,11 @@ export async function setupPensjonistUtenGrunnlagMedAutoAarsavregning(
   await trygdeavgift.klikkBekreftOgFortsett();
 
   await pensjonistBehandling.assertions.verifiserBekreftOgSendSynlig();
-  await pensjonistBehandling.klikkBekreftOgSend();
-
-  console.log('📝 Venter på prosessinstanser (inkl. auto-opprettet årsavregning)...');
-  await waitForProcessInstances(page.request, 60);
+  await runAndWaitForProcessInstances(
+    page.request,
+    () => pensjonistBehandling.klikkBekreftOgSend(),
+    { timeoutSeconds: 60 }
+  );
   await hovedside.goto();
   await hovedside.åpneAarsavregningForSaksnummer(saksnummer);
 

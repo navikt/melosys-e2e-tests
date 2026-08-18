@@ -10,7 +10,7 @@ import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
 import {TestPeriods} from '../../helpers/date-helper';
-import {waitForProcessInstances} from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 import {expect} from '@playwright/test';
 
 /**
@@ -91,11 +91,12 @@ test.describe('Komplett saksflyt - Utenfor avtaleland (§2-8b student)', () => {
 
         // Step 8: Fatt vedtak
         console.log('📝 Step 8: Making decision...');
-        await vedtak.klikkFattVedtak();
-
         // Step 9: Hard sluttilstand - vent på iverksetting + verifiser DB end-state
-        console.log('📝 Step 9: Waiting for iverksetting + verifying DB end-state...');
-        await waitForProcessInstances(page.request, 60);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => vedtak.klikkFattVedtak(),
+          { timeoutSeconds: 60 }
+        );
         await vedtak.assertions.verifiserBehandlingAvsluttet({
             behandlingId,
             forventetResultatType: 'MEDLEM_I_FOLKETRYGDEN',

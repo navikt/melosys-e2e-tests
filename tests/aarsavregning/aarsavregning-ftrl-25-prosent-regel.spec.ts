@@ -14,7 +14,7 @@ import {
   BEHANDLINGSTYPE,
   FORRIGE_AAR,
 } from '../../pages/shared/constants';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
 import { UnleashHelper } from '../../helpers/unleash-helper';
 import { hentMinstebeløp } from '../../helpers/trygdeavgift-beregning-helper';
 
@@ -216,9 +216,11 @@ test.describe('Årsavregning FTRL — 25%-regelen', () => {
 
     // Fullfør flyten: Bekreft + vedtak
     await aarsavregning.klikkBekreftOgFortsett();
-    await vedtak.klikkFattVedtak();
-
-    await waitForProcessInstances(page.request, 60);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => vedtak.klikkFattVedtak(),
+      { timeoutSeconds: 60 }
+    );
     await vedtak.assertions.verifiserBehandlingAvsluttet();
 
     console.log('✅ Årsavregning: ordinær beregning + vedtak fullført');

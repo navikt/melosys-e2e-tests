@@ -10,7 +10,7 @@ import { LovvalgPage } from '../../pages/behandling/lovvalg.page';
 import { TrygdeavgiftPage } from '../../pages/trygdeavgift/trygdeavgift.page';
 import { VedtakPage } from '../../pages/vedtak/vedtak.page';
 import { USER_ID_VALID } from '../../pages/shared/constants';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 import { expect } from '@playwright/test';
 
 /**
@@ -86,11 +86,12 @@ test.describe('Komplett saksflyt - FTRL flere land', () => {
     expect(behandlingId, 'behandlingID skal finnes i URL').not.toBeNull();
 
     // Steg 7: Vedtak
-    await vedtak.fattVedtak('fritekst', 'begrunnelse', 'trygdeavgift');
-
     // Steg 8: Hard sluttilstand - vent på iverksetting + verifiser DB end-state
-    console.log('📝 Steg 8: Venter på iverksetting + verifiserer DB-sluttilstand...');
-    await waitForProcessInstances(page.request, 60);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => vedtak.fattVedtak('fritekst', 'begrunnelse', 'trygdeavgift'),
+      { timeoutSeconds: 60 }
+    );
     await vedtak.assertions.verifiserBehandlingAvsluttet({
       behandlingId,
       forventetResultatType: 'MEDLEM_I_FOLKETRYGDEN',

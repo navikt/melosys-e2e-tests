@@ -19,7 +19,7 @@ import {
   POPP_INNTEKT_TYPE,
   POPP_INNTEKT_TYPE_BESKRIVELSE,
 } from '../../pages/shared/constants';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
 import { UnleashHelper } from '../../helpers/unleash-helper';
 import { clearPoppSeed, seedPoppInntekt, PoppInntektSeed } from '../../helpers/mock-helper';
 
@@ -96,9 +96,11 @@ async function opprettOgÅpneAutoÅrsavregning(page: Page): Promise<void> {
   await lovvalg.klikkBekreftOgFortsett();
   await lovvalg.klikkBekreftOgFortsett();
 
-  await vedtak.klikkFattVedtak();
-
-  await waitForProcessInstances(page.request, 60);
+  await runAndWaitForProcessInstances(
+    page.request,
+    () => vedtak.klikkFattVedtak(),
+    { timeoutSeconds: 60 }
+  );
   await hovedside.goto();
   const aarsavregningLink = await hovedside.ventPåBehandlingslenke(ÅRSAVREGNING_LINK_REGEX);
   await expect(aarsavregningLink).toBeVisible({ timeout: 15000 });

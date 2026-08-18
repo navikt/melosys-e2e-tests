@@ -5,7 +5,7 @@ import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page
 import { TrygdeavtaleBehandlingPage } from '../../pages/behandling/trygdeavtale-behandling.page';
 import { TrygdeavtaleArbeidsstedPage } from '../../pages/behandling/trygdeavtale-arbeidssted.page';
 import { USER_ID_VALID } from '../../pages/shared/constants';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
 
 /**
  * Nyvurdering (NV) på trygdeavtale-sak — forkortet periode erstatter MEDL-periode
@@ -70,17 +70,21 @@ test.describe('Trygdeavtale - Nyvurdering', () => {
     await behandling.fyllUtPeriodeOgLand(FØRSTE_FRA, FØRSTE_TIL, 'AU');
     await behandling.velgArbeidsgiverOgFortsett('Ståles Stål AS');
     await behandling.innvilgeOgVelgBestemmelse('AUS_ART9_3');
-    await arbeidssted.fyllUtArbeidsstedOgFattVedtak('Test');
-
-    console.log('📝 Del A: Venter på iverksetting av førstegangsvedtak...');
-    await waitForProcessInstances(page.request, 30);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => arbeidssted.fyllUtArbeidsstedOgFattVedtak('Test'),
+      { timeoutSeconds: 30 }
+    );
 
     // === DEL B: Opprett Nyvurdering på samme sak ===
     console.log('📝 Del B: Oppretter nyvurdering...');
     await hovedside.goto();
     await hovedside.klikkOpprettNySak();
-    await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
-    await waitForProcessInstances(page.request, 30);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD'),
+      { timeoutSeconds: 30 }
+    );
 
     // Åpne den NYE aktive behandlingen (åpneBehandling tar første lenke = nyeste)
     await hovedside.goto();
@@ -102,11 +106,12 @@ test.describe('Trygdeavtale - Nyvurdering', () => {
     console.log('📝 Del C: Vedtak-steget — synker TOM, velger grunn og fatter vedtak...');
     await behandling.endreVedtaksperiodeTom(NV_FORKORTET_TIL);
     await behandling.velgGrunnForNyttVedtak('NYE_OPPLYSNINGER');
-    await behandling.fattVedtak();
-
     // === DEL D: Verifiser DB + MEDL ===
-    console.log('📝 Del D: Venter på iverksetting av NV-vedtak (kaster ved feilede prosessinstanser)...');
-    await waitForProcessInstances(page.request, 30);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => behandling.fattVedtak(),
+      { timeoutSeconds: 30 }
+    );
 
     const medlPeriodeId = await behandling.assertions.verifiserNyVurderingVedtakIDatabase({
       fom: FØRSTE_FRA,

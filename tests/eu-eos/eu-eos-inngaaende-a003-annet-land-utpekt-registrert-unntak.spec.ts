@@ -3,7 +3,7 @@ import { AuthHelper } from '../../helpers/auth-helper';
 import { SedHelper } from '../../helpers/sed-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { EuEosUtpekingPage } from '../../pages/behandling/eu-eos-utpeking.page';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
 import { fetchStoredSedDocuments } from '../../helpers/mock-helper';
 import { BRUKERNAVN_VALID } from '../../pages/shared/constants';
 
@@ -69,10 +69,11 @@ test.describe('EU/EØS - Inngående A003 (annet land utpekt)', () => {
 
     // === DEL B: Godkjenn at annet land er utpekt og registrer unntaket ===
     console.log('📝 Del B: Godkjenner lovvalgsbeslutningen og registrerer unntak...');
-    await utpeking.godkjennUtpekingAnnetLand({ varsleUtland: false });
-
-    console.log('📝 Del B: Venter på at REGISTRERING_UNNTAK_GODKJENN fullfører (kaster ved feilede instanser)...');
-    await waitForProcessInstances(request, 90);
+    await runAndWaitForProcessInstances(
+      request,
+      () => utpeking.godkjennUtpekingAnnetLand({ varsleUtland: false }),
+      { timeoutSeconds: 90 }
+    );
 
     // === DEL C: Verifiser REGISTRERT_UNNTAK + MEDL-overføring + ingen SED ===
     await utpeking.assertions.verifiserRegistrertUnntakIverksatt(request, {

@@ -15,7 +15,7 @@ import {
   EU_EOS_LOVVALG,
 } from '../../pages/shared/constants';
 import { TestPeriods } from '../../helpers/date-helper';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
 import { verifiserBehandlingSluttilstand } from '../../pages/shared/behandling-sluttilstand.assertions';
 import { withDatabase } from '../../helpers/db-helper';
 
@@ -114,11 +114,13 @@ test.describe('EØS Medlemskap Lovvalg - Offentlig tjenesteperson 11.3b med tryg
 
     // Step 7: Vedtak
     console.log('Step 7: Fatting vedtak...');
-    await vedtak.klikkFattVedtak();
-
     // Step 8: Verifiser DB-sluttilstand
     console.log('Step 8: Verifying DB state...');
-    await waitForProcessInstances(page.request, 60);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => vedtak.klikkFattVedtak(),
+      { timeoutSeconds: 60 }
+    );
 
     // Slå opp FØRSTEGANG-behandlingen i DB (cleanup-fixturen gir nøyaktig én per test)
     const lovvalgBehandlingId = await withDatabase(async (db) => {

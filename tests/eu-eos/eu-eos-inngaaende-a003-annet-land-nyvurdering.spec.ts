@@ -4,7 +4,7 @@ import { SedHelper } from '../../helpers/sed-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import { EuEosUtpekingPage } from '../../pages/behandling/eu-eos-utpeking.page';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
 import { BRUKERNAVN_VALID, USER_ID_VALID } from '../../pages/shared/constants';
 
 /**
@@ -60,15 +60,21 @@ test.describe('EU/EØS - Nyvurdering av inngående A003 (annet land utpekt)', ()
     await page.waitForLoadState('networkidle').catch(() => {});
 
     console.log('📝 Del A: Godkjenner utpekingen og registrerer førstegangs-unntaket...');
-    await utpeking.godkjennUtpekingAnnetLand({ varsleUtland: false });
-    await waitForProcessInstances(request, 90);
+    await runAndWaitForProcessInstances(
+      request,
+      () => utpeking.godkjennUtpekingAnnetLand({ varsleUtland: false }),
+      { timeoutSeconds: 90 }
+    );
 
     // === DEL B: Opprett nyvurdering og bekreft at NV-grenen (riktig tema) ble truffet ===
     console.log('📝 Del B: Oppretter nyvurdering...');
     await hovedside.goto();
     await hovedside.klikkOpprettNySak();
-    await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
-    await waitForProcessInstances(request, 30);
+    await runAndWaitForProcessInstances(
+      request,
+      () => opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD'),
+      { timeoutSeconds: 30 }
+    );
 
     // Hele poenget med cellen: NV-behandlingen skal ha annet-land-temaet — ikke UTSENDT.
     await utpeking.assertions.verifiserNyVurderingAnnetLandOpprettet();
@@ -80,10 +86,11 @@ test.describe('EU/EØS - Nyvurdering av inngående A003 (annet land utpekt)', ()
 
     // === DEL C: Fullfør NV-grenen og verifiser re-registrert unntak ende-til-ende ===
     console.log('📝 Del C: Godkjenner lovvalgsbeslutningen på nytt i nyvurderingen...');
-    await utpeking.godkjennUtpekingAnnetLand({ varsleUtland: false });
-
-    console.log('📝 Del C: Venter på at NV-ens REGISTRERING_UNNTAK_GODKJENN fullfører...');
-    await waitForProcessInstances(request, 90);
+    await runAndWaitForProcessInstances(
+      request,
+      () => utpeking.godkjennUtpekingAnnetLand({ varsleUtland: false }),
+      { timeoutSeconds: 90 }
+    );
 
     // Gjenbruk P1-assertionen — tar nyeste rad = NV-behandlingens sluttilstand.
     await utpeking.assertions.verifiserRegistrertUnntakIverksatt(request, {

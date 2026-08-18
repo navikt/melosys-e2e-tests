@@ -6,7 +6,7 @@ import { OpprettNySakPage } from '../../../pages/opprett-ny-sak/opprett-ny-sak.p
 import { EuEosBehandlingPage } from '../../../pages/behandling/eu-eos-behandling.page';
 import { AnmodningUnntakPage } from '../../../pages/eu-eos/unntak/anmodning-unntak.page';
 import { SvarAnmodningUnntakAssertions } from '../../../pages/eu-eos/unntak/svar-anmodning-unntak.assertions';
-import { waitForProcessInstances } from '../../../helpers/api-helper';
+import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../../helpers/api-helper';
 import { UnleashHelper } from '../../../helpers/unleash-helper';
 import { fetchStoredSedDocuments, findNewRinaSedDocument } from '../../../helpers/mock-helper';
 import { SedHelper } from '../../../helpers/sed-helper';
@@ -60,10 +60,11 @@ test.describe('EU/EØS Anmodning om unntak - motta svar (A002/A011)', () => {
     await behandling.velgLand(EU_EOS_LAND.DANMARK);
     await opprettSak.velgAarsak(AARSAK.SØKNAD);
     await opprettSak.leggBehandlingIMine();
-    await opprettSak.klikkOpprettNyBehandling();
-
-    console.log('Steg 2: Venter på prosessinstanser og navigerer til behandling');
-    await waitForProcessInstances(page.request, 30);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => opprettSak.klikkOpprettNyBehandling(),
+      { timeoutSeconds: 30 }
+    );
     await hovedside.goto();
     await hovedside.åpneSak('TRIVIELL KARAFFEL -');
     await page.waitForLoadState('networkidle');
