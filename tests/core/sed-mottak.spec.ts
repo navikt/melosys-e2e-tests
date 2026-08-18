@@ -10,6 +10,7 @@ import {
 } from '../../pages/shared/sed-mottak.assertions';
 import { EuEosUtpekingAssertions } from '../../pages/behandling/eu-eos-utpeking.assertions';
 import { fetchStoredJournalposter } from '../../helpers/mock-helper';
+import { getProcessMarker, waitForNewProcessInstances } from '../../helpers/api-helper';
 
 /**
  * Test suite for SED (Structured Electronic Document) intake flow
@@ -28,8 +29,6 @@ import { fetchStoredJournalposter } from '../../helpers/mock-helper';
  * - POST /internal/e2e/caches/clear - clears caches after DB changes
  */
 test.describe('SED Mottak', () => {
-  const E2E_API_BASE = 'http://localhost:8080/internal/e2e';
-
   let auth: AuthHelper;
   let sedHelper: SedHelper;
   let hovedside: HovedsidePage;
@@ -42,60 +41,18 @@ test.describe('SED Mottak', () => {
     sokPage = new SokPage(page);
   });
 
-  /**
-   * Wait for process instances to complete using E2E Support API
-   */
-  async function awaitProcessInstances(
-    request: any,
-    options: { timeoutSeconds?: number; expectedInstances?: number } = {}
-  ): Promise<{ success: boolean; status: string; message: string; failedInstances?: any[] }> {
-    const timeout = options.timeoutSeconds || 30;
-    const params = new URLSearchParams({ timeoutSeconds: timeout.toString() });
-    if (options.expectedInstances) {
-      params.set('expectedInstances', options.expectedInstances.toString());
-    }
-
-    const response = await request.get(
-      `${E2E_API_BASE}/process-instances/await?${params}`,
-      { failOnStatusCode: false }
-    );
-
-    const data = await response.json();
-
-    return {
-      success: response.ok(),
-      status: data.status,
-      message: data.message,
-      failedInstances: data.failedInstances,
-    };
-  }
-
   test('skal trigge MOTTAK_SED prosess ved mottak av A003', async ({ request }) => {
     // This test verifies the complete flow from SED to process creation
 
     console.log('📝 Step 1: Sending A003 SED via mock service...');
+    const markør = await getProcessMarker(request);
     const result = await sedHelper.sendSed(SED_SCENARIOS.A003_MINIMAL);
 
     expect(result.success, `Send SED failed: ${result.message}`).toBe(true);
     console.log(`   ✅ SED sent: sedId=${result.sedId}, rinaSaksnummer=${result.rinaSaksnummer}`);
 
     console.log('📝 Step 2: Waiting for MOTTAK_SED process to complete...');
-    const processResult = await awaitProcessInstances(request, {
-      timeoutSeconds: 60,
-      expectedInstances: 1,
-    });
-
-    console.log(`   Status: ${processResult.status}`);
-    console.log(`   Message: ${processResult.message}`);
-
-    if (processResult.failedInstances && processResult.failedInstances.length > 0) {
-      console.log('   ❌ Failed instances:');
-      for (const instance of processResult.failedInstances) {
-        console.log(`      - ${instance.type}: ${instance.error?.melding || 'Unknown error'}`);
-      }
-    }
-
-    expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
+    await waitForNewProcessInstances(request, markør, { expectedNew: 1, timeoutSeconds: 60 });
 
     // P2: verifiser at A003 (annet land enn NO) faktisk RUTES til riktig utfall —
     // en behandling med tema BESLUTNING_LOVVALG_ANNET_LAND + ARBEID_FLERE_LAND_NY_SAK FERDIG
@@ -115,18 +72,14 @@ test.describe('SED Mottak', () => {
 
   test('skal opprette fagsak ved mottak av A003 fra Sverige', async ({ request }) => {
     console.log('📝 Step 1: Sending A003 from Sweden...');
+    const markør = await getProcessMarker(request);
     const result = await sedHelper.sendSed(SED_SCENARIOS.A003_FRA_SVERIGE);
 
     expect(result.success, `Send SED failed: ${result.message}`).toBe(true);
     console.log(`   ✅ SED sent: sedId=${result.sedId}`);
 
     console.log('📝 Step 2: Waiting for process to complete...');
-    const processResult = await awaitProcessInstances(request, {
-      timeoutSeconds: 60,
-      expectedInstances: 1,
-    });
-
-    expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
+    await waitForNewProcessInstances(request, markør, { expectedNew: 1, timeoutSeconds: 60 });
 
     // P2: A003 fra Sverige (lovvalgsland SE ≠ NO) skal rutes til BESLUTNING_LOVVALG_ANNET_LAND
     // og ARBEID_FLERE_LAND_NY_SAK skal være FERDIG — ikke bare at «en fagsak finnes».
@@ -156,19 +109,14 @@ test.describe('SED Mottak', () => {
     // automatiske kjeden faktisk produserer riktig UTFALL (REGISTRERT_UNNTAK), ikke
     // bare at rutingsprosessen kjørte.
     console.log('📝 Step 1: Sending A009 information request from Germany...');
+    const markør = await getProcessMarker(request);
     const result = await sedHelper.sendSed(SED_SCENARIOS.A009_FRA_TYSKLAND);
 
     expect(result.success, `Send SED failed: ${result.message}`).toBe(true);
     console.log(`   ✅ SED sent: sedId=${result.sedId}`);
 
     console.log('📝 Step 2: Waiting for process to complete...');
-    const processResult = await awaitProcessInstances(request, {
-      timeoutSeconds: 60,
-      expectedInstances: 1,
-    });
-
-    console.log(`   Status: ${processResult.status}, Message: ${processResult.message}`);
-    expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
+    await waitForNewProcessInstances(request, markør, { expectedNew: 1, timeoutSeconds: 60 });
 
     // P2: A009 (informasjonsforespørsel) rutes til registrering av unntak fra norsk trygd
     console.log('📝 Step 3: Verifying A009 routed to REGISTRERING_UNNTAK...');
@@ -211,19 +159,14 @@ test.describe('SED Mottak', () => {
     // der fanges ikke av A009-testen. Ingen mock-endring: A010 går gjennom det generiske
     // /lag-melosys-eessi-melding-endepunktet på lik linje med A009.
     console.log('📝 Step 1: Sending A010 provisional determination from Germany...');
+    const markør = await getProcessMarker(request);
     const result = await sedHelper.sendSed(SED_SCENARIOS.A010_FRA_TYSKLAND);
 
     expect(result.success, `Send SED failed: ${result.message}`).toBe(true);
     console.log(`   ✅ SED sent: sedId=${result.sedId}`);
 
     console.log('📝 Step 2: Waiting for process to complete...');
-    const processResult = await awaitProcessInstances(request, {
-      timeoutSeconds: 60,
-      expectedInstances: 1,
-    });
-
-    console.log(`   Status: ${processResult.status}, Message: ${processResult.message}`);
-    expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
+    await waitForNewProcessInstances(request, markør, { expectedNew: 1, timeoutSeconds: 60 });
 
     // P2: A010 rutes til registrering av unntak fra norsk trygd – øvrige (≠ A009 _UTSTASJONERING)
     console.log('📝 Step 3: Verifying A010 routed to REGISTRERING_UNNTAK_NORSK_TRYGD_ØVRIGE...');
@@ -253,19 +196,14 @@ test.describe('SED Mottak', () => {
 
   test('skal håndtere A001 søknad fra Danmark', async ({ request }) => {
     console.log('📝 Step 1: Sending A001 application from Denmark...');
+    const markør = await getProcessMarker(request);
     const result = await sedHelper.sendSed(SED_SCENARIOS.A001_FRA_DANMARK);
 
     expect(result.success, `Send SED failed: ${result.message}`).toBe(true);
     console.log(`   ✅ SED sent: sedId=${result.sedId}`);
 
     console.log('📝 Step 2: Waiting for process to complete...');
-    const processResult = await awaitProcessInstances(request, {
-      timeoutSeconds: 60,
-      expectedInstances: 1,
-    });
-
-    console.log(`   Status: ${processResult.status}, Message: ${processResult.message}`);
-    expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
+    await waitForNewProcessInstances(request, markør, { expectedNew: 1, timeoutSeconds: 60 });
 
     // P2: A001 (søknad om unntak / anmodning) rutes til ANMODNING_OM_UNNTAK_HOVEDREGEL
     console.log('📝 Step 3: Verifying A001 routed to ANMODNING_OM_UNNTAK...');
@@ -298,6 +236,7 @@ test.describe('SED Mottak', () => {
       periodeTom: '2025-12-31',
     };
 
+    const markør = await getProcessMarker(request);
     const result = await sedHelper.sendSed(customConfig);
 
     console.log(`   BUC Type: ${customConfig.bucType}`);
@@ -309,12 +248,7 @@ test.describe('SED Mottak', () => {
     console.log(`   ✅ SED sent: sedId=${result.sedId}`);
 
     console.log('📝 Step 2: Waiting for process to complete...');
-    const processResult = await awaitProcessInstances(request, {
-      timeoutSeconds: 60,
-      expectedInstances: 1,
-    });
-
-    expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
+    await waitForNewProcessInstances(request, markør, { expectedNew: 1, timeoutSeconds: 60 });
 
     // P2: tilpasset A003 (lovvalgsland FI ≠ NO) rutes til BESLUTNING_LOVVALG_ANNET_LAND
     console.log('📝 Step 3: Verifying custom A003 routed correctly...');
@@ -336,18 +270,14 @@ test.describe('SED Mottak', () => {
     // Full end-to-end test: SED -> Case visible in UI
     console.log('📝 Step 1: Sending SED with specific person...');
 
+    const markør = await getProcessMarker(request);
     const result = await sedHelper.sendSed(SED_SCENARIOS.A003_MED_PERSON);
 
     expect(result.success, `Send SED failed: ${result.message}`).toBe(true);
     console.log(`   ✅ SED sent: sedId=${result.sedId}, fnr=${SED_SCENARIOS.A003_MED_PERSON.fnr}`);
 
     console.log('📝 Step 2: Waiting for processing...');
-    const processResult = await awaitProcessInstances(request, {
-      timeoutSeconds: 60,
-      expectedInstances: 1,
-    });
-
-    expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
+    await waitForNewProcessInstances(request, markør, { expectedNew: 1, timeoutSeconds: 60 });
 
     // P2/P3: bekreft at SED-en ble rutet riktig OG journalført FØR vi sjekker UI-søkbarhet
     const ruting = await verifiserSedRutetTilTema({
@@ -390,6 +320,9 @@ test.describe('SED Mottak', () => {
 
     const sentSeds: { name: string; sedId: string }[] = [];
 
+    // Markør før HELE sekvensen — de tre SED-ene ventes på under ett til slutt.
+    const markør = await getProcessMarker(request);
+
     for (const { name, config } of sedConfigs) {
       console.log(`   Sending ${name}...`);
       const result = await sedHelper.sendSed(config);
@@ -404,21 +337,7 @@ test.describe('SED Mottak', () => {
     }
 
     console.log('📝 Waiting for all processes to complete...');
-    const processResult = await awaitProcessInstances(request, {
-      timeoutSeconds: 90,
-      expectedInstances: 3, // Expecting 3 process instances
-    });
-
-    console.log(`   Status: ${processResult.status}, Message: ${processResult.message}`);
-
-    if (processResult.failedInstances && processResult.failedInstances.length > 0) {
-      console.log(`   ⚠️ ${processResult.failedInstances.length} process(es) failed:`);
-      for (const instance of processResult.failedInstances) {
-        console.log(`      - ${instance.type}: ${instance.error?.melding || 'Unknown'}`);
-      }
-    }
-
-    expect(processResult.success, `Processes failed: ${processResult.message}`).toBe(true);
+    await waitForNewProcessInstances(request, markør, { expectedNew: 3, timeoutSeconds: 90 });
 
     // P2: ingen av de 3 SED-ene skal ha gitt en FEILET prosessinstans
     console.log('📝 Verifying no failed process instances...');
@@ -453,17 +372,13 @@ test.describe('SED Mottak', () => {
   test('skal verifisere prosessinstanser i databasen', async ({ request }) => {
     // Send a SED and verify process instance is created in database
     console.log('📝 Step 1: Sending minimal A003...');
+    const markør = await getProcessMarker(request);
     const result = await sedHelper.sendSed(SED_SCENARIOS.A003_MINIMAL);
 
     expect(result.success, `Send SED failed: ${result.message}`).toBe(true);
 
     console.log('📝 Step 2: Waiting for process to complete...');
-    const processResult = await awaitProcessInstances(request, {
-      timeoutSeconds: 60,
-      expectedInstances: 1,
-    });
-
-    expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
+    await waitForNewProcessInstances(request, markør, { expectedNew: 1, timeoutSeconds: 60 });
 
     // P2: bekreft full ruting i databasen — MOTTAK_SED FERDIG + behandling med riktig tema
     // + ARBEID_FLERE_LAND_NY_SAK FERDIG (ingen FEILET). Erstatter den tidligere
@@ -503,7 +418,6 @@ test.describe('SED Mottak', () => {
  * These tests take longer (60-90s) because they go through melosys-eessi.
  */
 test.describe('SED Mottak via melosys-eessi @eessi', () => {
-  const E2E_API_BASE = 'http://localhost:8080/internal/e2e';
   const EESSI_BASE = 'http://localhost:8081';
 
   let sedHelper: SedHelper;
@@ -527,33 +441,6 @@ test.describe('SED Mottak via melosys-eessi @eessi', () => {
     }
   }
 
-  /**
-   * Wait for process instances to complete
-   */
-  async function awaitProcessInstances(
-    request: any,
-    options: { timeoutSeconds?: number; expectedInstances?: number } = {}
-  ): Promise<{ success: boolean; status: string; message: string; failedInstances?: any[] }> {
-    const timeout = options.timeoutSeconds || 60;
-    const params = new URLSearchParams({ timeoutSeconds: timeout.toString() });
-    if (options.expectedInstances) {
-      params.set('expectedInstances', options.expectedInstances.toString());
-    }
-
-    const response = await request.get(
-      `${E2E_API_BASE}/process-instances/await?${params}`,
-      { failOnStatusCode: false }
-    );
-
-    const data = await response.json();
-    return {
-      success: response.ok(),
-      status: data.status,
-      message: data.message,
-      failedInstances: data.failedInstances,
-    };
-  }
-
   // Merk: melosys-eessi-tilgjengelighet sjekkes nå én gang i global-setup.ts (PÅKREVD
   // tjeneste — hele kjøringen aborter om den er nede). Den tidligere frittstående
   // «skal verifisere at melosys-eessi er tilgjengelig»-testen er fjernet (ren infra-ping
@@ -566,6 +453,7 @@ test.describe('SED Mottak via melosys-eessi @eessi', () => {
     console.log('📝 Step 1: Sending SedHendelse via melosys-eessi flow...');
     console.log('   This publishes to eessibasis-sedmottatt-v1-local Kafka topic');
 
+    const markør = await getProcessMarker(request);
     const result = await sedHelper.sendSedViaEessi(EESSI_SED_SCENARIOS.A003_EESSI_FRA_DANMARK);
 
     expect(result.success, `Send SedHendelse failed: ${result.message}`).toBe(true);
@@ -574,23 +462,8 @@ test.describe('SED Mottak via melosys-eessi @eessi', () => {
     console.log('📝 Step 2: Waiting for melosys-eessi to process and forward to melosys-api...');
     console.log('   Flow: SedHendelse → melosys-eessi → EUX mock → PDL mock → MelosysEessiMelding → melosys-api');
 
-    // Give melosys-eessi time to process (it needs to fetch from EUX mock, identify person, etc.)
-    const processResult = await awaitProcessInstances(request, {
-      timeoutSeconds: 90, // Longer timeout for eessi flow
-      expectedInstances: 1,
-    });
-
-    console.log(`   Status: ${processResult.status}`);
-    console.log(`   Message: ${processResult.message}`);
-
-    if (processResult.failedInstances && processResult.failedInstances.length > 0) {
-      console.log('   ❌ Failed instances:');
-      for (const instance of processResult.failedInstances) {
-        console.log(`      - ${instance.type}: ${instance.error?.melding || 'Unknown error'}`);
-      }
-    }
-
-    expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
+    // Lengre timeout: eessi-flyten henter fra EUX-mock, identifiserer person i PDL osv.
+    await waitForNewProcessInstances(request, markør, { expectedNew: 1, timeoutSeconds: 90 });
     console.log('✅ MOTTAK_SED process completed via melosys-eessi flow');
   });
 
@@ -599,47 +472,20 @@ test.describe('SED Mottak via melosys-eessi @eessi', () => {
     expect(eessiRunning, 'melosys-eessi must be running for this test').toBe(true);
 
     console.log('📝 Step 1: Sending A003 from Sweden via melosys-eessi...');
+    const markør = await getProcessMarker(request);
     const result = await sedHelper.sendSedViaEessi(EESSI_SED_SCENARIOS.A003_EESSI_FRA_SVERIGE);
 
     expect(result.success, `Send failed: ${result.message}`).toBe(true);
     console.log(`   ✅ SedHendelse published`);
 
-    console.log('📝 Step 2: Waiting for Kafka message to be consumed...');
-    // Poll database until process instance appears (Kafka consumption can take a few seconds)
-    let processInstanceFound = false;
-    const maxWaitMs = 30000;
-    const pollIntervalMs = 1000;
-    const startTime = Date.now();
+    // Den tidligere DB-pollingen på «finnes det en instans i siste minutt?» er fjernet: den
+    // ventet på nøyaktig det ventingen under nå garanterer, med samme vindu-antimønster som
+    // markøren fjerner. Uteblir instansen, sier timeout-meldingen nå eksplisitt at 0 av 1
+    // forventet ny instans ble registrert etter markøren — en bedre diagnose enn advarselen.
+    console.log('📝 Step 2: Waiting for process to complete...');
+    await waitForNewProcessInstances(request, markør, { expectedNew: 1, timeoutSeconds: 90 });
 
-    while (!processInstanceFound && Date.now() - startTime < maxWaitMs) {
-      const hasInstance = await withDatabase(async (db) => {
-        const result = await db.query(
-          `SELECT COUNT(*) as CNT FROM PROSESSINSTANS WHERE REGISTRERT_DATO > SYSDATE - INTERVAL '1' MINUTE`
-        );
-        return result[0]?.CNT > 0;
-      });
-
-      if (hasInstance) {
-        processInstanceFound = true;
-        console.log(`   ✅ Process instance found after ${Date.now() - startTime}ms`);
-      } else {
-        await new Promise((resolve) => setTimeout(resolve, pollIntervalMs));
-      }
-    }
-
-    if (!processInstanceFound) {
-      console.log(`   ⚠️ No process instance found after ${maxWaitMs}ms - Kafka message may not have been consumed`);
-    }
-
-    console.log('📝 Step 3: Waiting for process to complete...');
-    const processResult = await awaitProcessInstances(request, {
-      timeoutSeconds: 90,
-      expectedInstances: 1,
-    });
-
-    expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
-
-    console.log('📝 Step 4: Verifying fagsak was created...');
+    console.log('📝 Step 3: Verifying fagsak was created...');
     const fagsak = await withDatabase(async (db) => {
       const fagsaker = await db.query(
         `SELECT f.SAKSNUMMER, f.GSAK_SAKSNUMMER, f.STATUS, f.REGISTRERT_DATO
@@ -684,18 +530,13 @@ test.describe('SED Mottak via melosys-eessi @eessi', () => {
     expect(eessiRunning, 'melosys-eessi must be running for this test').toBe(true);
 
     console.log('📝 Sending A009 from Germany via melosys-eessi...');
+    const markør = await getProcessMarker(request);
     const result = await sedHelper.sendSedViaEessi(EESSI_SED_SCENARIOS.A009_EESSI_FRA_TYSKLAND);
 
     expect(result.success, `Send failed: ${result.message}`).toBe(true);
 
     console.log('📝 Waiting for processing...');
-    const processResult = await awaitProcessInstances(request, {
-      timeoutSeconds: 90,
-      expectedInstances: 1,
-    });
-
-    console.log(`   Status: ${processResult.status}, Message: ${processResult.message}`);
-    expect(processResult.success, `Process failed: ${processResult.message}`).toBe(true);
+    await waitForNewProcessInstances(request, markør, { expectedNew: 1, timeoutSeconds: 90 });
 
     console.log('✅ A009 via eessi processed');
   });
@@ -705,20 +546,23 @@ test.describe('SED Mottak via melosys-eessi @eessi', () => {
     expect(eessiRunning, 'melosys-eessi must be running for this test').toBe(true);
 
     console.log('📝 Test 1: Direct flow (bypasses melosys-eessi)...');
+    // Markøren hentes utenfor målingen, så de to flytene sammenlignes på samme grunnlag.
+    const direkteMarkør = await getProcessMarker(request);
     const directStart = Date.now();
     const directResult = await sedHelper.sendSed({ sedType: 'A003', bucType: 'LA_BUC_02' });
     expect(directResult.success).toBe(true);
 
-    await awaitProcessInstances(request, { timeoutSeconds: 60, expectedInstances: 1 });
+    await waitForNewProcessInstances(request, direkteMarkør, { expectedNew: 1, timeoutSeconds: 60 });
     const directTime = Date.now() - directStart;
     console.log(`   Direct flow: ${directTime}ms`);
 
     console.log('📝 Test 2: EESSI flow (through melosys-eessi)...');
+    const eessiMarkør = await getProcessMarker(request);
     const eessiStart = Date.now();
     const eessiResult = await sedHelper.sendSedViaEessi({ bucType: 'LA_BUC_02', sedType: 'A003' });
     expect(eessiResult.success).toBe(true);
 
-    await awaitProcessInstances(request, { timeoutSeconds: 90, expectedInstances: 1 });
+    await waitForNewProcessInstances(request, eessiMarkør, { expectedNew: 1, timeoutSeconds: 90 });
     const eessiTime = Date.now() - eessiStart;
     console.log(`   EESSI flow: ${eessiTime}ms`);
 
