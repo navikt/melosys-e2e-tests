@@ -4,7 +4,7 @@ import { SedHelper } from '../../helpers/sed-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import { EuEosUtpekingPage } from '../../pages/behandling/eu-eos-utpeking.page';
-import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, getProcessMarker, waitForNewProcessInstances } from '../../helpers/api-helper';
 import { BRUKERNAVN_VALID, USER_ID_VALID } from '../../pages/shared/constants';
 
 /**
@@ -44,6 +44,9 @@ test.describe('EU/EØS - Nyvurdering av inngående A003 (annet land utpekt)', ()
     // === DEL A: Etabler førstegangs-saken (inngående A003 annet land → REGISTRERT_UNNTAK) ===
     console.log('📝 Del A: Injiserer inngående A003 (annet land utpekt, lovvalgsland=SE)...');
     const sed = new SedHelper(request);
+    // Markør før sendingen, men ventingen etter assertionen: feiler selve sendingen,
+    // skal testen si «Send A003 feilet» med én gang, ikke bruke 60 s på en timeout.
+    const markør = await getProcessMarker(request);
     const result = await sed.sendSed({
       sedType: 'A003',
       bucType: 'LA_BUC_02',
@@ -52,7 +55,7 @@ test.describe('EU/EØS - Nyvurdering av inngående A003 (annet land utpekt)', ()
       // varsleUtland=false sender ingen SED → ingen åpen BUC i RINA-store nødvendig.
     });
     expect(result.success, `Send A003 feilet: ${result.message}`).toBe(true);
-    await waitForProcessInstances(request, 60);
+    await waitForNewProcessInstances(request, markør, { expectedNew: 1, timeoutSeconds: 60 });
 
     await auth.login();
     await hovedside.goto();

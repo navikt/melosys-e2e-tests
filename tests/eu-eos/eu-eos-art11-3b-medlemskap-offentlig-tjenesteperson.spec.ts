@@ -14,7 +14,7 @@ import {
   EU_EOS_LOVVALG,
   FORRIGE_AAR,
 } from '../../pages/shared/constants';
-import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 import { verifiserBehandlingSluttilstand } from '../../pages/shared/behandling-sluttilstand.assertions';
 import { withDatabase } from '../../helpers/db-helper';
 
@@ -69,12 +69,14 @@ test.describe('EØS Medlemskap Lovvalg - Offentlig tjenesteperson 11.3b', () => 
     await opprettSak.velgArbeidsland(EU_EOS_LAND.BULGARIA);
 
     await opprettSak.leggBehandlingIMine();
-    await opprettSak.klikkOpprettNyBehandling();
-    await opprettSak.assertions.verifiserBehandlingOpprettet();
-
+    await runAndWaitForProcessInstances(
+      page.request,
+      async () => {
+        await opprettSak.klikkOpprettNyBehandling();
+        await opprettSak.assertions.verifiserBehandlingOpprettet();
+      }, { timeoutSeconds: 30 }
+    );
     // Vent på at asynkrone prosessinstanser fra saksopprettelsen er ferdige
-    console.log('Venter på prosessinstanser etter saksopprettelse...');
-    await waitForProcessInstances(page.request, 30);
     await hovedside.goto();
 
     // Step 2: Open behandling

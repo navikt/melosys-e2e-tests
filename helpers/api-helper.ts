@@ -311,6 +311,13 @@ export async function runAndWaitForProcessInstances<T>(
  * på alt som er registrert de siste 60 sekundene. For venting rundt en konkret handling,
  * bruk `runAndWaitForProcessInstances`.
  *
+ * De gjenværende kallstedene på denne formen står IGJEN MED VILJE. De venter ikke på én
+ * bestemt handling, men på at etterslep skal roe seg — «lukk auto-prosesser (oppgave, brev)
+ * før DB-asserten», eller «ikke la cleanup-fixturen treffe aktive prosesser». Det finnes
+ * ingen enkelthandling å ta markør rundt, og en markør med expectedNew=0 ville ikke hjulpet:
+ * den venter heller ikke på at prosessen rekker å bli registrert. Skal de bli race-frie,
+ * må de vite hvor mange prosesser de faktisk venter på — en egen jobb, ikke en omskriving.
+ *
  * Returns:
  * - COMPLETED: All processes finished successfully
  * - FAILED: Some processes failed (details included)

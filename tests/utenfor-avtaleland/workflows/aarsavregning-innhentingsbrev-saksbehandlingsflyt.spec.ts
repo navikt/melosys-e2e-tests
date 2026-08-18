@@ -88,10 +88,13 @@ async function opprettVedtattSakInneværendeÅr(page: Page): Promise<void> {
 
     console.log('📝 Oppretter sak (inneværende år)...');
     await hovedside.gotoOgOpprettNySak();
-    await opprettSak.opprettStandardSak(USER_ID_VALID);
-    await opprettSak.assertions.verifiserBehandlingOpprettet();
-
-    await waitForProcessInstances(page.request, 30);
+    await runAndWaitForProcessInstances(
+      page.request,
+      async () => {
+        await opprettSak.opprettStandardSak(USER_ID_VALID);
+        await opprettSak.assertions.verifiserBehandlingOpprettet();
+      }, { timeoutSeconds: 30 }
+    );
     await hovedside.goto();
     await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).click();
 
@@ -280,11 +283,14 @@ test.describe('Automatisk innhentingsbrev ved årsavregning i saksbehandlingsfly
         await opprettSak.velgBehandlingstype(BEHANDLINGSTYPE.ÅRSAVREGNING);
         await opprettSak.velgAarsak(AARSAK.SØKNAD);
         await opprettSak.leggBehandlingIMine();
-        await opprettSak.klikkOpprettNyBehandling();
-        await opprettSak.assertions.verifiserBehandlingOpprettet();
-
+        await runAndWaitForProcessInstances(
+          page.request,
+          async () => {
+            await opprettSak.klikkOpprettNyBehandling();
+            await opprettSak.assertions.verifiserBehandlingOpprettet();
+          }, { timeoutSeconds: 30 }
+        );
         // La opprettelses-prosessinstansene bli ferdige før vi sjekker fravær av brev.
-        await waitForProcessInstances(page.request, 30);
 
         // «Så skal Melosys ikke sende brevet "Innhenting av inntektsopplysninger"»
         console.log('🔍 Verifiserer at ingen innhentingsbrev ble sendt...');

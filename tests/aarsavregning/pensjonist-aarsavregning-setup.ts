@@ -1,5 +1,5 @@
 import { Page } from '@playwright/test';
-import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 import { hentSaksnummerFraUrl } from '../../helpers/url-helper';
 import { AarsavregningPage } from '../../pages/behandling/aarsavregning.page';
 import { EuEosPensjonistBehandlingPage } from '../../pages/behandling/eu-eos-pensjonist-behandling.page';
@@ -45,11 +45,13 @@ async function opprettOgÅpnePensjonistSak(
   await opprettSak.velgBehandlingstema(BEHANDLINGSTEMA.PENSJONIST);
   await opprettSak.velgAarsak(AARSAK.SØKNAD);
   await opprettSak.leggBehandlingIMine();
-  await opprettSak.klikkOpprettNyBehandling();
-  await opprettSak.assertions.verifiserBehandlingOpprettet();
-
-  console.log('📝 Venter på prosessinstanser etter opprettelse av pensjonistbehandling...');
-  await waitForProcessInstances(page.request, 30);
+  await runAndWaitForProcessInstances(
+    page.request,
+    async () => {
+      await opprettSak.klikkOpprettNyBehandling();
+      await opprettSak.assertions.verifiserBehandlingOpprettet();
+    }, { timeoutSeconds: 30 }
+  );
   await hovedside.goto();
   await hovedside.åpneSak(BRUKERNAVN_VALID);
   return hentSaksnummerFraUrl(page.url());
@@ -94,11 +96,13 @@ export async function setupPensjonistMedAarsavregning(
   await opprettSak.velgPensjonistAarsavregning();
   await opprettSak.velgAarsak(AARSAK.SØKNAD);
   await opprettSak.leggBehandlingIMine();
-  await opprettSak.klikkOpprettNyBehandling();
-  await opprettSak.assertions.verifiserBehandlingOpprettet();
-
-  console.log('📝 Venter på prosessinstanser etter opprettelse av årsavregning...');
-  await waitForProcessInstances(page.request, 30);
+  await runAndWaitForProcessInstances(
+    page.request,
+    async () => {
+      await opprettSak.klikkOpprettNyBehandling();
+      await opprettSak.assertions.verifiserBehandlingOpprettet();
+    }, { timeoutSeconds: 30 }
+  );
   await hovedside.goto();
   await hovedside.åpneAarsavregningForSaksnummer(saksnummer);
 

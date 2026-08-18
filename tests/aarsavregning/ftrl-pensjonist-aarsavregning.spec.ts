@@ -44,12 +44,14 @@ test.describe('FTRL Pensjonist - Automatisk årsavregning', () => {
     await opprettSak.velgBehandlingstema(BEHANDLINGSTEMA.PENSJONIST);
     await opprettSak.velgAarsak(AARSAK.SØKNAD);
     await opprettSak.leggBehandlingIMine();
-    await opprettSak.klikkOpprettNyBehandling();
-    await opprettSak.assertions.verifiserBehandlingOpprettet();
-
+    await runAndWaitForProcessInstances(
+      page.request,
+      async () => {
+        await opprettSak.klikkOpprettNyBehandling();
+        await opprettSak.assertions.verifiserBehandlingOpprettet();
+      }, { timeoutSeconds: 30 }
+    );
     // Vent på at asynkrone prosessinstanser fra saksopprettelsen er ferdige
-    console.log('Venter på prosessinstanser etter saksopprettelse...');
-    await waitForProcessInstances(page.request, 30);
     await hovedside.goto();
 
     // Step 2: Open behandling

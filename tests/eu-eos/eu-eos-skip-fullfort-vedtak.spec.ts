@@ -4,7 +4,7 @@ import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import { EuEosSkipBehandlingPage } from '../../pages/behandling/eu-eos-skip-behandling.page';
 import { USER_ID_VALID } from '../../pages/shared/constants';
-import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 
 /**
  * Komplett EU/EØS Skip (Ship) arbeidsflyt test
@@ -67,16 +67,17 @@ test.describe('EU/EØS Skip - Komplett arbeidsflyt', () => {
     await page.waitForLoadState('networkidle');
 
     // Bruk hjelpemetode for resten av flyten
-    await skipBehandling.fyllUtSkipBehandling('Hilda', 'Ståles Stål AS');
-
-    // Verifiser
-    await skipBehandling.assertions.verifiserVedtakFattet();
-
     // Hard sluttilstand: vent på iverksetting + verifiser DB end-state.
     // Skip-behandlingen er nyeste behandling (ren DB per fixture): skal være AVSLUTTET
     // med behandlingsresultat og alle prosessinstanser FERDIG.
-    console.log('📝 Venter på iverksetting + verifiserer DB-sluttilstand...');
-    await waitForProcessInstances(page.request, 60);
+    await runAndWaitForProcessInstances(
+      page.request,
+      async () => {
+        await skipBehandling.fyllUtSkipBehandling('Hilda', 'Ståles Stål AS');
+        await skipBehandling.assertions.verifiserVedtakFattet();
+      },
+      { timeoutSeconds: 60 }
+    );
     await skipBehandling.assertions.verifiserBehandlingAvsluttet();
 
       console.log('✅ EU/EØS-skip-arbeidsflyt fullført');

@@ -9,7 +9,7 @@ import {ResultatPeriodePage} from '../../pages/behandling/resultat-periode.page'
 import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
-import {runAndWaitForProcessInstances} from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 import {hentSaksnummerFraUrl} from '../../helpers/url-helper';
 import {withFaktureringDatabase} from '../../helpers/pg-db-helper';
 import {AnnulleringPage} from '../../pages/behandling/annullering.page';

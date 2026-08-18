@@ -5,7 +5,7 @@ import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import { TrygdeavtaleUnntaksregistreringPage } from '../../pages/trygdeavtale/trygdeavtale-unntaksregistrering.page';
 import { USER_ID_VALID } from '../../pages/shared/constants';
-import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 
 /**
  * Trygdeavtale - Unntaksregistrering (registrering av unntak fra medlemskap)
@@ -62,11 +62,14 @@ async function opprettSakOgÅpneUnntaksregistrering(page: Page): Promise<void> {
   await opprettSak.velgBehandlingstema('REGISTRERING_UNNTAK');
   await opprettSak.velgAarsak('SØKNAD');
   await opprettSak.leggBehandlingIMine();
-  await opprettSak.klikkOpprettNyBehandling();
-  await opprettSak.assertions.verifiserBehandlingOpprettet();
-
+  await runAndWaitForProcessInstances(
+    page.request,
+    async () => {
+      await opprettSak.klikkOpprettNyBehandling();
+      await opprettSak.assertions.verifiserBehandlingOpprettet();
+    }, { timeoutSeconds: 30 }
+  );
   // OPPRETT_SAK-prosessen må fullføre før oppgavelenken er klikkbar
-  await waitForProcessInstances(page.request, 30);
   await hovedside.åpneBehandling('TRIVIELL KARAFFEL -');
 }
 

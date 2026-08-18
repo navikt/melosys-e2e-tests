@@ -47,13 +47,15 @@ test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
         // Step 1: Create new case
         console.log('📝 Step 1: Creating new case...');
         await hovedside.gotoOgOpprettNySak();
-        await opprettSak.opprettStandardSak(USER_ID_VALID);
-        await opprettSak.assertions.verifiserBehandlingOpprettet();
-
+        await runAndWaitForProcessInstances(
+          page.request,
+          async () => {
+            await opprettSak.opprettStandardSak(USER_ID_VALID);
+            await opprettSak.assertions.verifiserBehandlingOpprettet();
+          }, { timeoutSeconds: 30 }
+        );
         // Step 2: Navigate to behandling
         console.log('📝 Step 2: Opening behandling...');
-        console.log('📝 waitForProcessInstances...');
-        await waitForProcessInstances(page.request, 30);
         await hovedside.goto()
 
         await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).click();

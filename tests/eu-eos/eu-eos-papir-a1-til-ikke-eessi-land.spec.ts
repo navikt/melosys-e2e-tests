@@ -6,7 +6,7 @@ import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page
 import { EuEosBehandlingPage } from '../../pages/behandling/eu-eos-behandling.page';
 import { ArbeidFlereLandBehandlingPage } from '../../pages/behandling/arbeid-flere-land-behandling.page';
 import { USER_ID_VALID, EU_EOS_LAND } from '../../pages/shared/constants';
-import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 import { withDatabase } from '../../helpers/db-helper';
 import { APIRequestContext } from '@playwright/test';
 import {
@@ -327,14 +327,17 @@ test.describe('Papir-A1 til ikke-EESSI-land ved EOS-vedtak', () => {
       EU_EOS_LAND.GRONLAND,
     ]);
 
-    // FO og GL har ingen EESSI-institusjoner — ingen institusjonsdropdown vises
-    await behandling.fyllUtArbeidFlereLandBehandling(
-      'Norge', 'Ståles Stål AS',
-      'Test: Regresjon kun FO og GL',
-      'E2E test scenario 4'
+    // FO og GL har ingen EESSI-institusjoner — ingen institusjonsdropdown vises.
+    // Uten skipFattVedtak fatter utfyllingen vedtaket selv, så hele kallet er handlingen.
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => behandling.fyllUtArbeidFlereLandBehandling(
+        'Norge', 'Ståles Stål AS',
+        'Test: Regresjon kun FO og GL',
+        'E2E test scenario 4'
+      ),
+      { timeoutSeconds: 60 }
     );
-
-    await waitForProcessInstances(page.request, 60);
     await verifiserProsessinstanserEtterVedtak(['FO', 'GL']);
     console.log('✅ Scenario 4: Kun FO/GL — SEND_BREV for begge land verifisert');
   });

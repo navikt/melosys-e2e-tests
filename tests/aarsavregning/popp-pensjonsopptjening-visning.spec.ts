@@ -19,7 +19,7 @@ import {
   POPP_INNTEKT_TYPE,
   POPP_INNTEKT_TYPE_BESKRIVELSE,
 } from '../../pages/shared/constants';
-import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 import { UnleashHelper } from '../../helpers/unleash-helper';
 import { clearPoppSeed, seedPoppInntekt, PoppInntektSeed } from '../../helpers/mock-helper';
 
@@ -72,10 +72,13 @@ async function opprettOgÅpneAutoÅrsavregning(page: Page): Promise<void> {
   await opprettSak.velgBehandlingstema(BEHANDLINGSTEMA.PENSJONIST);
   await opprettSak.velgAarsak(AARSAK.SØKNAD);
   await opprettSak.leggBehandlingIMine();
-  await opprettSak.klikkOpprettNyBehandling();
-  await opprettSak.assertions.verifiserBehandlingOpprettet();
-
-  await waitForProcessInstances(page.request, 30);
+  await runAndWaitForProcessInstances(
+    page.request,
+    async () => {
+      await opprettSak.klikkOpprettNyBehandling();
+      await opprettSak.assertions.verifiserBehandlingOpprettet();
+    }, { timeoutSeconds: 30 }
+  );
   await hovedside.goto();
 
   await hovedside.åpneBehandling(`${BRUKERNAVN} -`);

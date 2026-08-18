@@ -3,7 +3,7 @@ import { AuthHelper } from '../../helpers/auth-helper';
 import { SedHelper } from '../../helpers/sed-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { EuEosUtpekingPage } from '../../pages/behandling/eu-eos-utpeking.page';
-import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, getProcessMarker, waitForNewProcessInstances } from '../../helpers/api-helper';
 import { fetchStoredJournalposter, fetchStoredSedDocuments } from '../../helpers/mock-helper';
 import { BRUKERNAVN_VALID } from '../../pages/shared/constants';
 
@@ -46,6 +46,9 @@ test.describe('EU/EØS - Inngående A003 (Norge utpekt)', () => {
     // === DEL A: Inngående A003 som peker ut Norge oppretter utpeking-behandling ===
     console.log('📝 Del A: Injiserer inngående A003 (Norge utpekt)...');
     const sed = new SedHelper(request);
+    // Markør før sendingen, men ventingen etter assertionen: feiler selve sendingen,
+    // skal testen si «Send A003 feilet» med én gang, ikke bruke 60 s på en timeout.
+    const markør = await getProcessMarker(request);
     const result = await sed.sendSed({
       sedType: 'A003',
       bucType: 'LA_BUC_02',
@@ -54,7 +57,7 @@ test.describe('EU/EØS - Inngående A003 (Norge utpekt)', () => {
       opprettBucIRina: true,
     });
     expect(result.success, `Send A003 feilet: ${result.message}`).toBe(true);
-    await waitForProcessInstances(request, 60);
+    await waitForNewProcessInstances(request, markør, { expectedNew: 1, timeoutSeconds: 60 });
 
     const auth = new AuthHelper(page);
     await auth.login();

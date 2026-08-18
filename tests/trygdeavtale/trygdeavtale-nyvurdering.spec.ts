@@ -5,7 +5,7 @@ import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page
 import { TrygdeavtaleBehandlingPage } from '../../pages/behandling/trygdeavtale-behandling.page';
 import { TrygdeavtaleArbeidsstedPage } from '../../pages/behandling/trygdeavtale-arbeidssted.page';
 import { USER_ID_VALID } from '../../pages/shared/constants';
-import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 
 /**
  * Nyvurdering (NV) på trygdeavtale-sak — forkortet periode erstatter MEDL-periode
@@ -58,10 +58,13 @@ test.describe('Trygdeavtale - Nyvurdering', () => {
     await opprettSak.velgBehandlingstema('YRKESAKTIV');
     await opprettSak.velgAarsak('SØKNAD');
     await opprettSak.leggBehandlingIMine();
-    await opprettSak.klikkOpprettNyBehandling();
-    await opprettSak.assertions.verifiserBehandlingOpprettet();
-
-    await waitForProcessInstances(page.request, 30);
+    await runAndWaitForProcessInstances(
+      page.request,
+      async () => {
+        await opprettSak.klikkOpprettNyBehandling();
+        await opprettSak.assertions.verifiserBehandlingOpprettet();
+      }, { timeoutSeconds: 30 }
+    );
     await hovedside.goto();
     await hovedside.åpneBehandling('TRIVIELL KARAFFEL -');
     await page.waitForLoadState('networkidle');
