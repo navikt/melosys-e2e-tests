@@ -64,7 +64,7 @@ Verification methods for database and UI:
 - `verifiserIngenFeil()` - No errors on page
 - `verifiserBestemmelseIDatabase(fnr, bestemmelse)` - Verify regulation in DB
 - `verifiserArbeidslandIDatabase(fnr, landkode)` - Verify country in DB
-- `verifiserPeriodeIDatabase(fnr, fraOgMed, tilOgMed)` - Verify period in DB
+- `verifiserPeriodeIDatabase(fraOgMed, tilOgMed)` - Verify period in DB
 
 ## Constants
 

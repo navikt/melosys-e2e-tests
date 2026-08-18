@@ -1,10 +1,37 @@
 import { defineConfig, devices } from '@playwright/test';
+import { defineBddConfig } from 'playwright-bdd';
 
 /**
  * Read environment variables from file.
  * https://github.com/motdotla/dotenv
  */
 // require('dotenv').config();
+
+/**
+ * BDD-testgenerering (opt-in ATDD-eksempel — se docs/atdd/README.md).
+ *
+ * Genererer Playwright-testfiler i .features-gen/ fra .feature-filene + step-
+ * definisjonene. Dette er Lag 1 i Farleys fire-lags-modell:
+ *   Lag 1: atdd/features/      (.feature-filer, strukturert tekst på norsk)
+ *   Lag 2: atdd/dsl + atdd/steps  (DSL + bindinger)
+ *   Lag 3: atdd/drivers, pages/, helpers/  (protokolldrivere)
+ *   Lag 4: docker-compose       (system under test)
+ *
+ * NB: defineBddConfig auto-genererer IKKE — genereringen skjer kun via `bddgen`
+ * (kjøres av `npm run test:bdd`). `.features-gen/` er gitignored, så kjør alltid
+ * `npm run test:bdd` (som kjører `npx bddgen` først) og aldri `playwright test
+ * --project=bdd` direkte (kan ellers kjøre utdaterte/manglende genererte filer).
+ *
+ * featuresRoot settes eksplisitt slik at .features-gen/ speiler domene-mappene
+ * direkte (f.eks. .features-gen/trygdeavtale/...) uten et overflødig atdd/features/-
+ * prefiks.
+ */
+const bddTestDir = defineBddConfig({
+  featuresRoot: 'atdd/features',
+  features: 'atdd/features/**/*.feature',
+  steps: ['atdd/steps/*.ts', 'atdd/fixtures.ts'],
+  language: 'no',
+});
 
 /**
  * See https://playwright.dev/docs/test-configuration.
@@ -80,6 +107,30 @@ export default defineConfig({
           // fungerer både lokalt og på CI (mock-oauth2 er publisert på localhost:8082 begge steder).
           args: ['--host-resolver-rules=MAP host.docker.internal 127.0.0.1'],
         }
+      },
+    },
+
+    // BDD-prosjekt — kjører .feature-filene via playwright-bdd (opt-in ATDD-eksempel).
+    // Kjør via: npm run test:bdd  (kjører `npx bddgen` først; kjør ALDRI direkte
+    // uten bddgen — .features-gen/ er gitignored og kan da være utdatert/tomt).
+    // Ikke med i default `npm test` (som er pinnet til --project=chromium).
+    {
+      name: 'bdd',
+      testDir: bddTestDir,
+      // NV-/unntak-scenarioene driver flere behandlinger og venter på iverksetting;
+      // 60s-standarden fra config-toppen holder ikke. One-liner-bindingene har
+      // ingen plass å kalle test.setTimeout(), så vi setter timeout på prosjektnivå
+      // (samme 180s som de tilsvarende .spec.ts-testene bruker).
+      timeout: 180_000,
+      use: {
+        ...devices['Desktop Chrome'],
+        launchOptions: {
+          slowMo: 100,
+          // Speiler chromium-prosjektet: skjema-innlogging redirecter til
+          // host.docker.internal:8082 (mock-oauth2), og Chromium leser ikke
+          // /etc/hosts pålitelig. Uskadelig for de øvrige kallene.
+          args: ['--host-resolver-rules=MAP host.docker.internal 127.0.0.1'],
+        },
       },
     },
 

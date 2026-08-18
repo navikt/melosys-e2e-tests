@@ -537,8 +537,9 @@ describe('Summary Generator', () => {
         tests: [
           createTest({
             title: 'Innvilget trygdeavtale-vedtak',
-            // playwright-bdd emits absolute paths into .features-gen/features/<domain>/…
-            file: '/Users/dev/melosys-e2e-tests/.features-gen/features/trygdeavtale/trygdeavtale-vedtak.feature.spec.js'
+            // playwright-bdd emits absolute paths into .features-gen/<domain>/…
+            // (featuresRoot = atdd/features strips the mirrored segment)
+            file: '/Users/dev/melosys-e2e-tests/.features-gen/trygdeavtale/trygdeavtale-vedtak.feature.spec.js'
           }),
         ]
       };
@@ -588,7 +589,7 @@ describe('Summary Generator', () => {
           createTest({
             title: 'Innvilget trygdeavtale-vedtak',
             status: 'failed',
-            file: '/Users/dev/melosys-e2e-tests/.features-gen/features/trygdeavtale/trygdeavtale-vedtak.feature.spec.js',
+            file: '/Users/dev/melosys-e2e-tests/.features-gen/trygdeavtale/trygdeavtale-vedtak.feature.spec.js',
             error: 'Forventet AVSLUTTET, fikk UNDER_BEHANDLING'
           }),
         ]
@@ -950,6 +951,49 @@ describe('Summary Generator', () => {
       const result = generateMarkdownSummary(data);
 
       assert(!result.includes('Unleash Toggle Overrides'));
+    });
+
+  });
+
+  describe('BDD-only Run', () => {
+
+    test('should render BDD banner when bddRun is true', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [createTest({ status: 'passed' })],
+        bddRun: true
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      assert(result.includes('## 🥒 BDD-only Run'));
+      assert(result.includes('--project=bdd'));
+    });
+
+    test('should omit BDD banner when bddRun is not set', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [createTest({ status: 'passed' })]
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      assert(!result.includes('BDD-only Run'));
+    });
+
+    test('should omit BDD banner when bddRun is false', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [createTest({ status: 'passed' })],
+        bddRun: false
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      assert(!result.includes('BDD-only Run'));
     });
 
   });

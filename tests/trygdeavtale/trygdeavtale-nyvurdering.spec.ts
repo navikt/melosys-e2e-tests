@@ -91,10 +91,14 @@ test.describe('Trygdeavtale - Nyvurdering', () => {
     console.log(`📝 Del C: Forkorter perioden på Inngang-steget (TOM → ${NV_FORKORTET_TIL})...`);
     // Inngang: felter prefilled fra forrige behandling — endre kun TOM
     await behandling.endreInngangTilOgMedOgFortsett(NV_FORKORTET_TIL);
-    // Virksomhet: arbeidsgiver pre-valgt fra forrige behandling
-    await behandling.klikkBekreftOgFortsett();
-    // Bestemmelse og vurdering: innvilgelse + AUS_ART9_3 pre-valgt
-    await behandling.klikkBekreftOgFortsett();
+    // Virksomhet + Bestemmelse: arbeidsgiver/innvilgelse/bestemmelse SKAL være
+    // forhåndsvalgt fra forrige behandling, men Aareg-mocken og vurderingen re-hentes
+    // asynkront ved NV, så pre-valget racer av og til (uavkrysset radio → «Bekreft og
+    // fortsett» deaktivert i 30s → feil). Velg derfor eksplisitt — idempotent (check()/
+    // selectOption er no-op når verdien allerede er valgt) og venter samtidig på at
+    // feltene er rendret. (Samme herding som ATDD-driveren, jf. docs/atdd/README.md.)
+    await behandling.velgArbeidsgiverOgFortsett('Ståles Stål AS'); // Virksomhet
+    await behandling.innvilgeOgVelgBestemmelse('AUS_ART9_3'); // Bestemmelse og vurdering
     // Familie: ingen medfølgende familiemedlemmer
     await behandling.klikkBekreftOgFortsett();
 

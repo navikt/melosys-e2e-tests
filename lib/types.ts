@@ -44,6 +44,7 @@ export interface TestSummaryData {
   tests: TestData[];
   tags?: Record<string, string>; // Docker image tags used in the test run
   retriesDisabled?: boolean; // When true, flaky tests are treated as failures
+  bddRun?: boolean; // When true, this run executed only the opt-in ATDD/BDD example (--project=bdd)
   unleashOverrides?: {
     forceDisable?: string[]; // Toggles forced OFF for the whole run
     forceEnable?: string[]; // Toggles forced ON for the whole run
