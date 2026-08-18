@@ -335,13 +335,19 @@ async function awaitProcessInstances(
 ): Promise<void> {
   const params = new URLSearchParams({timeoutSeconds: String(timeoutSeconds), ...ekstraParametre});
 
-  try {
+  {
     const response = await request.get(`${PROCESS_INSTANCE_BASE_URL}/await?${params}`, {
       failOnStatusCode: false,
       timeout: (timeoutSeconds + 5) * 1000 // Add 5s buffer
     });
 
     const result = await response.json();
+
+    // Serveren advarer bl.a. om gjenbrukt markør — en venting som ser koordinert ut, men som
+    // instanser fra FØR handlingen kan oppfylle. Serverloggen er usynlig i CI, så den må hit.
+    if (result.warning) {
+      console.log(`   ⚠️  ${result.warning}`);
+    }
 
     if (result.status === 'COMPLETED') {
       if (result.totalInstances > 0) {
@@ -380,15 +386,11 @@ async function awaitProcessInstances(
     // ERROR or other status
     console.log(`   ❌ Process instances: ${result.status} - ${result.message}`);
     throw new Error(`Process instance check failed: ${result.message}`);
-
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('connect')) {
-      console.log(`   ⚠️  Could not connect to API - endpoint may not be available`);
-      return; // Don't fail if endpoint doesn't exist
-    }
-    throw error;
   }
+  // Ingen catch her med vilje. Den forrige svelget alt som inneholdt «connect» — også et api
+  // som døde midt i ventingen — og returnerte som om ventingen var oppfylt. Da asserter testen
+  // videre på en tilstand ingen prosess har produsert: nøyaktig den stille grønnheten
+  // markørkontrakten finnes for å fjerne. Er api-et nede, skal testen si det høyt.
 }
 
 /**

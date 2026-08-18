@@ -29,6 +29,12 @@ import { getProcessMarker, waitForNewProcessInstances } from '../../helpers/api-
  * - POST /internal/e2e/caches/clear - clears caches after DB changes
  */
 test.describe('SED Mottak', () => {
+  // Ventingene her ber serveren om 60–90 s, mens Playwrights test-timeout er 60 s
+  // (playwright.config.ts). Uten dette rekker serveren aldri sin egen timeout: testen drepes
+  // først, og feilen blir «Test timeout of 60000ms exceeded» i stedet for den informative
+  // «only 0 of 1 expected new process instance(s) were registered after <markør>».
+  test.describe.configure({ timeout: 120_000 });
+
   let auth: AuthHelper;
   let sedHelper: SedHelper;
   let hovedside: HovedsidePage;
@@ -571,7 +577,19 @@ test.describe('SED Mottak via melosys-eessi @eessi', () => {
     console.log('📝 Waiting for processing...');
     await waitForNewProcessInstances(request, markør, { expectedNew: 1, timeoutSeconds: 90 });
 
-    console.log('✅ A009 via eessi processed');
+    // Ventingen alene er ikke en test. Det var nettopp «venter, asserter ingenting» som holdt
+    // denne grønn i månedsvis foran en brutt flyt. Samme DB-assert som den direkte A009-testen:
+    // A009 skal ha produsert en behandling på utstasjoneringstemaet, med MOTTAK_SED og
+    // REGISTRERING_UNNTAK_NY_SAK FERDIG og ingen feilede prosessinstanser. Forskjellen fra den
+    // direkte veien er at SED-en her har gått gjennom melosys-eessis personidentifisering —
+    // som er det leddet som var brutt.
+    console.log('📝 Verifying A009 routed to REGISTRERING_UNNTAK...');
+    await verifiserSedRutetTilTema({
+      forventetTema: 'REGISTRERING_UNNTAK_NORSK_TRYGD_UTSTASJONERING',
+      rutingProsess: 'REGISTRERING_UNNTAK_NY_SAK',
+    });
+
+    console.log('✅ A009 via eessi processed + rutet til REGISTRERING_UNNTAK');
   });
 
   test('skal sammenligne direkte vs eessi-flow @comparison', async ({ request }) => {

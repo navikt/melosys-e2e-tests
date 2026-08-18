@@ -1,4 +1,4 @@
-import {APIRequestContext, test as base} from '@playwright/test';
+import {test as base} from '@playwright/test';
 import {DatabaseHelper} from '../helpers/db-helper';
 import {PgDatabaseHelper} from '../helpers/pg-db-helper';
 import {clearMockDataSilent} from '../helpers/mock-helper';
@@ -118,19 +118,6 @@ async function cleanupTestData(page: any, waitForProcesses: boolean = false): Pr
     }
 }
 
-/**
- * Markør-endepunktet finnes bare i melosys-api-images som har den race-frie ventingen.
- * Mangler det, faller fixturen tilbake til den gamle tømmingen i stedet for å velte testen.
- */
-async function hentMarkørEllerNull(request: APIRequestContext): Promise<string | null> {
-    try {
-        return await getProcessMarker(request);
-    } catch (error: any) {
-        console.log(`   ⚠️  Prosessmarkør utilgjengelig, bruker gammel tømming: ${error.message || error}`);
-        return null;
-    }
-}
-
 export const cleanupFixture = base.extend<{ autoCleanup: void }>({
     autoCleanup: [async ({page, request}, use) => {
         // BEFORE test: clean for fresh start
@@ -143,20 +130,20 @@ export const cleanupFixture = base.extend<{ autoCleanup: void }>({
         // lekket før uferdige prosesser videre til neste test. Merk at en prosess som ennå ikke er
         // registrert når tømmingen starter, fortsatt bare dekkes av serverens settling-forsinkelse
         // — markøren hjelper ikke der, siden en tømming per definisjon ikke vet hva den venter på.
-        const markør = await hentMarkørEllerNull(page.request);
+        //
+        // Ingen fallback hvis markøren ikke kan hentes. Et api uten endepunktet skal stoppe suiten,
+        // ikke la hver test tømme med den racy kontrakten og late som alt er i orden — og en
+        // catch her ville også svelget et api som nettopp har dødt.
+        const markør = await getProcessMarker(page.request);
 
         // Run the test
         await use();
 
         // AFTER test: wait for processes to complete
         try {
-            if (markør) {
-                // expectedNew: 0 — testen kan ha startet null prosesser (f.eks. rene søketester),
-                // men alt som er registrert må være ferdig før vi rydder.
-                await waitForNewProcessInstances(page.request, markør, {expectedNew: 0, timeoutSeconds: 30});
-            } else {
-                await waitForProcessInstances(page.request, 30);
-            }
+            // expectedNew: 0 — en tømming vet per definisjon ikke hvor mange prosesser testen
+            // startet, men alt som er registrert etter markøren må være ferdig før vi rydder.
+            await waitForNewProcessInstances(page.request, markør, {expectedNew: 0, timeoutSeconds: 30});
         } catch (error: any) {
             const errorMessage = error.message || String(error);
             console.log(`   ⚠️  Process instance check failed: ${errorMessage}`);

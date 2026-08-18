@@ -14,6 +14,10 @@ import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 import {expect} from '@playwright/test';
 
 test.describe('Komplett saksflyt - Utenfor avtaleland (§2-8a)', () => {
+  // Ventingen under ber serveren om 60 s, som ikke er igjen av Playwrights 60 s testbudsjett
+  // etter UI-flyten. Uten dette drepes testen før serveren rekker å si HVA den ventet på.
+  test.describe.configure({ timeout: 120_000 });
+
     test('skal fullføre komplett saksflyt med § 2-8 første ledd bokstav a (arbeidstaker)', async ({page, request}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);

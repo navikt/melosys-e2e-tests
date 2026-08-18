@@ -22,6 +22,10 @@ import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
  * Merk: I motsetning til FTRL, har Trygdeavtale IKKE en egen vedtaksside med tekstfelter.
  */
 test.describe('Trygdeavtale - Komplett arbeidsflyt', () => {
+  // Ventingen under ber serveren om 60 s, som ikke er igjen av Playwrights 60 s testbudsjett
+  // etter UI-flyten. Uten dette drepes testen før serveren rekker å si HVA den ventet på.
+  test.describe.configure({ timeout: 120_000 });
+
   test('skal fullføre trygdeavtale-arbeidsflyt med vedtak', async ({ page }) => {
     // Oppsett
     const auth = new AuthHelper(page);
