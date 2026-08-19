@@ -5,7 +5,7 @@ import { HovedsidePage } from '../../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import { EuEosBehandlingPage } from '../../../pages/behandling/eu-eos-behandling.page';
 import { AnmodningUnntakPage } from '../../../pages/eu-eos/unntak/anmodning-unntak.page';
-import { waitForProcessInstances } from '../../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../../helpers/api-helper';
 import { UnleashHelper } from '../../../helpers/unleash-helper';
 import { fetchStoredSedDocuments, findNewNavFormatSed } from '../../../helpers/mock-helper';
 import {
@@ -56,11 +56,12 @@ test.describe('EU/EØS Utsendt arbeidstaker - Anmodning om unntak', () => {
 
     await opprettSak.velgAarsak(AARSAK.SØKNAD);
     await opprettSak.leggBehandlingIMine();
-    await opprettSak.klikkOpprettNyBehandling();
-
     // Vent på prosessinstanser og last siden på nytt
-    console.log('Steg 2: Venter på prosessinstanser');
-    await waitForProcessInstances(page.request, 30);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => opprettSak.klikkOpprettNyBehandling(),
+      { timeoutSeconds: 30 }
+    );
     await hovedside.goto();
 
     // Naviger til behandling

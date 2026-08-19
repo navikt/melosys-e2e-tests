@@ -10,7 +10,7 @@ import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
 import {TestPeriods} from '../../helpers/date-helper';
-import {waitForProcessInstances} from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 import {expect} from '@playwright/test';
 
 /**
@@ -25,6 +25,10 @@ import {expect} from '@playwright/test';
  * - 4 betingede lovvalgsspørsmål (§ 2-8a har 3): det ekstra er "Er søker student ...".
  */
 test.describe('Komplett saksflyt - Utenfor avtaleland (§2-8b student)', () => {
+  // Ventingen under ber serveren om 60 s, som ikke er igjen av Playwrights 60 s testbudsjett
+  // etter UI-flyten. Uten dette drepes testen før serveren rekker å si HVA den ventet på.
+  test.describe.configure({ timeout: 120_000 });
+
     test('skal fullføre komplett saksflyt med § 2-8 første ledd bokstav b (student)', async ({page, request}) => {
         // Setup: Authentication
         const auth = new AuthHelper(page);
@@ -91,11 +95,12 @@ test.describe('Komplett saksflyt - Utenfor avtaleland (§2-8b student)', () => {
 
         // Step 8: Fatt vedtak
         console.log('📝 Step 8: Making decision...');
-        await vedtak.klikkFattVedtak();
-
         // Step 9: Hard sluttilstand - vent på iverksetting + verifiser DB end-state
-        console.log('📝 Step 9: Waiting for iverksetting + verifying DB end-state...');
-        await waitForProcessInstances(page.request, 60);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => vedtak.klikkFattVedtak(),
+          { timeoutSeconds: 60 }
+        );
         await vedtak.assertions.verifiserBehandlingAvsluttet({
             behandlingId,
             forventetResultatType: 'MEDLEM_I_FOLKETRYGDEN',

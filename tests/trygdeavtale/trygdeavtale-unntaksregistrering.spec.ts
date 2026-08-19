@@ -5,7 +5,7 @@ import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import { TrygdeavtaleUnntaksregistreringPage } from '../../pages/trygdeavtale/trygdeavtale-unntaksregistrering.page';
 import { USER_ID_VALID } from '../../pages/shared/constants';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 
 /**
  * Trygdeavtale - Unntaksregistrering (registrering av unntak fra medlemskap)
@@ -62,11 +62,14 @@ async function opprettSakOgÅpneUnntaksregistrering(page: Page): Promise<void> {
   await opprettSak.velgBehandlingstema('REGISTRERING_UNNTAK');
   await opprettSak.velgAarsak('SØKNAD');
   await opprettSak.leggBehandlingIMine();
-  await opprettSak.klikkOpprettNyBehandling();
-  await opprettSak.assertions.verifiserBehandlingOpprettet();
-
+  await runAndWaitForProcessInstances(
+    page.request,
+    async () => {
+      await opprettSak.klikkOpprettNyBehandling();
+      await opprettSak.assertions.verifiserBehandlingOpprettet();
+    }, { timeoutSeconds: 30 }
+  );
   // OPPRETT_SAK-prosessen må fullføre før oppgavelenken er klikkbar
-  await waitForProcessInstances(page.request, 30);
   await hovedside.åpneBehandling('TRIVIELL KARAFFEL -');
 }
 
@@ -86,10 +89,11 @@ test.describe('Trygdeavtale - Unntaksregistrering', () => {
     await unntak.bekreftInngangOgFortsett();
 
     await unntak.godkjennMedBestemmelse(BESTEMMELSE);
-    await unntak.bekreftOgAvslutt();
-
-    console.log('📝 Venter på REGISTRERE_UNNTAK_FRA_MEDLEMSKAP (kaster ved feilede prosesser)...');
-    await waitForProcessInstances(page.request, 60);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => unntak.bekreftOgAvslutt(),
+      { timeoutSeconds: 60 }
+    );
 
     const medlPeriodeId = await unntak.assertions.verifiserGodkjentUnntakIDatabase({
       fom: FRA,
@@ -123,10 +127,11 @@ test.describe('Trygdeavtale - Unntaksregistrering', () => {
     await unntak.bekreftInngangOgFortsett();
 
     await unntak.ikkeGodkjenn();
-    await unntak.bekreftOgAvslutt();
-
-    console.log('📝 Venter på REGISTRERE_UNNTAK_FRA_MEDLEMSKAP (kaster ved feilede prosesser)...');
-    await waitForProcessInstances(page.request, 60);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => unntak.bekreftOgAvslutt(),
+      { timeoutSeconds: 60 }
+    );
 
     await unntak.assertions.verifiserIkkeGodkjentUnntakIDatabase({ land: LAND });
 

@@ -11,7 +11,7 @@ import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {FORRIGE_AAR, USER_ID_VALID} from '../../pages/shared/constants';
 import {UnleashHelper} from '../../helpers/unleash-helper';
-import {AdminApiHelper, waitForProcessInstances} from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, AdminApiHelper, waitForProcessInstances } from '../../helpers/api-helper';
 import {fetchOppgaver, fetchOppgaveV2} from '../../helpers/mock-helper';
 import {publishSkattehendelse} from '../../helpers/skattehendelse-helper';
 import {TestPeriods, TestPeriodsISO} from '../../helpers/date-helper';
@@ -59,10 +59,13 @@ async function opprettVedtattIkkeSkattepliktigSak(
 
     console.log('📝 Oppretter sak...');
     await hovedside.gotoOgOpprettNySak();
-    await opprettSak.opprettStandardSak(USER_ID_VALID);
-    await opprettSak.assertions.verifiserBehandlingOpprettet();
-
-    await waitForProcessInstances(page.request, 30);
+    await runAndWaitForProcessInstances(
+      page.request,
+      async () => {
+        await opprettSak.opprettStandardSak(USER_ID_VALID);
+        await opprettSak.assertions.verifiserBehandlingOpprettet();
+      }, { timeoutSeconds: 30 }
+    );
     await hovedside.goto();
     await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).click();
 
@@ -94,8 +97,11 @@ async function opprettVedtattIkkeSkattepliktigSak(
     await trygdeavgift.klikkBekreftOgFortsett();
 
     console.log('📝 Fatter vedtak...');
-    await vedtak.klikkFattVedtak();
-    await waitForProcessInstances(page.request, 30);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => vedtak.klikkFattVedtak(),
+      { timeoutSeconds: 30 }
+    );
 }
 
 /**
@@ -273,8 +279,11 @@ test.describe('Årsavregningsoppgave — skatteår i beskrivelse (MELOSYS-8123)'
 
         console.log('📝 Oppretter ny vurdering...');
         await hovedside.klikkOpprettNySak();
-        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD'),
+          { timeoutSeconds: 30 }
+        );
 
         await hovedside.goto();
         await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).first().click();
@@ -300,8 +309,11 @@ test.describe('Årsavregningsoppgave — skatteår i beskrivelse (MELOSYS-8123)'
         await trygdeavgift.klikkBekreftOgFortsett();
 
         console.log('📝 Fatter vedtak for ny vurdering...');
-        await vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING'),
+          { timeoutSeconds: 30 }
+        );
 
         const oppgaveId = await verifiserAarsavregningsoppgaveMedSkatteaar(request, FORRIGE_AAR);
         await verifiserNokkelordPaaOppgave(request, oppgaveId, FORRIGE_AAR);

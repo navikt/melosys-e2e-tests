@@ -11,7 +11,7 @@ import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {FORRIGE_AAR, USER_ID_VALID} from '../../pages/shared/constants';
 import {UnleashHelper} from '../../helpers/unleash-helper';
-import {AdminApiHelper, waitForProcessInstances} from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, AdminApiHelper, waitForProcessInstances } from '../../helpers/api-helper';
 import {publishSkattehendelse} from '../../helpers/skattehendelse-helper';
 import {TestPeriods, TestPeriodsISO} from '../../helpers/date-helper';
 import {withDatabase} from '../../helpers/db-helper';
@@ -68,10 +68,13 @@ async function opprettVedtattIkkeSkattepliktigSak(page: Page): Promise<void> {
 
     console.log('📝 Oppretter sak...');
     await hovedside.gotoOgOpprettNySak();
-    await opprettSak.opprettStandardSak(USER_ID_VALID);
-    await opprettSak.assertions.verifiserBehandlingOpprettet();
-
-    await waitForProcessInstances(page.request, 30);
+    await runAndWaitForProcessInstances(
+      page.request,
+      async () => {
+        await opprettSak.opprettStandardSak(USER_ID_VALID);
+        await opprettSak.assertions.verifiserBehandlingOpprettet();
+      }, { timeoutSeconds: 30 }
+    );
     await hovedside.goto();
     // åpneBehandling laster saksoversikten på nytt med retry (finnBehandlingslenke) — robust mot
     // async-lasting-racen der lenken ikke er synlig enda. Foretrekkes framfor direkte getByRole-klikk.
@@ -105,8 +108,11 @@ async function opprettVedtattIkkeSkattepliktigSak(page: Page): Promise<void> {
     await trygdeavgift.klikkBekreftOgFortsett();
 
     console.log('📝 Fatter vedtak...');
-    await vedtak.klikkFattVedtak();
-    await waitForProcessInstances(page.request, 30);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => vedtak.klikkFattVedtak(),
+      { timeoutSeconds: 30 }
+    );
 }
 
 /**

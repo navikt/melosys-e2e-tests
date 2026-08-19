@@ -3,7 +3,7 @@ import { AuthHelper } from '../../helpers/auth-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { JournalforingPage } from '../../pages/journalforing/journalforing.page';
 import { ArbeidFlereLandBehandlingPage } from '../../pages/behandling/arbeid-flere-land-behandling.page';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 import { createJournalforingOppgaver, fetchStoredSedDocuments, findNewNavFormatSed } from '../../helpers/mock-helper';
 
 /**
@@ -68,9 +68,11 @@ test.describe('EU/EØS SED A008 - Videresend søknad', () => {
     await journalforing.fyllSoknadsperiode('01.01.2024', '31.12.2025');
     await journalforing.velgLand('Norge');
     await journalforing.velgLand('Sverige');
-    await journalforing.journalførDokument();
-
-    await waitForProcessInstances(page.request, 30);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => journalforing.journalførDokument(),
+      { timeoutSeconds: 30 }
+    );
 
     // === STEG 4: Åpne behandlingen ===
     const sakKort = page.getByText('TRIVIELL KARAFFEL - 30056928150');

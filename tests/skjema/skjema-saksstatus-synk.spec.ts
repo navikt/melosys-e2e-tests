@@ -4,7 +4,7 @@ import { withDatabase } from '../../helpers/db-helper';
 import { withPgDatabase } from '../../helpers/pg-db-helper';
 import { SkjemaAuthHelper } from '../../helpers/skjema-auth-helper';
 import { AuthHelper } from '../../helpers/auth-helper';
-import { AdminApiHelper, waitForProcessInstances, clearApiCaches } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, AdminApiHelper, clearApiCaches } from '../../helpers/api-helper';
 import { SoknadUtsendtArbeidstakerPage } from '../../pages/skjema/soknad-utsendt-arbeidstaker.page';
 import { SoknadArbeidsgiverPage } from '../../pages/skjema/soknad-arbeidsgiver.page';
 import { SkjemaMottakAssertions } from '../../pages/skjema/skjema-mottak.assertions';
@@ -140,9 +140,11 @@ async function fattVedtakSomSaksbehandler(
     expect(forrigeSteg, `nådde ikke vedtakssteget «${vedtakssteg}» innen fristen`).toBe(vedtakssteg);
 
     // Vedtakssteget — mottaker-SED er forhåndsutfylt for den skjema-opprettede saken.
-    await behandling.fattVedtak();
-
-    await waitForProcessInstances(request, 30);
+    await runAndWaitForProcessInstances(
+      request,
+      () => behandling.fattVedtak(),
+      { timeoutSeconds: 30 }
+    );
 
     // Vedtaket skal ha avsluttet lovvalgssaken: fagsak → LOVVALG_AVKLART (mapper til AVSLUTTET).
     const fagsak = await withDatabase((db) =>

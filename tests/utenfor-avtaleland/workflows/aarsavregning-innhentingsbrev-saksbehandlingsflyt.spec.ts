@@ -19,7 +19,7 @@ import {
     USER_ID_VALID,
 } from '../../../pages/shared/constants';
 import {UnleashHelper} from '../../../helpers/unleash-helper';
-import {waitForProcessInstances} from '../../../helpers/api-helper';
+import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../../helpers/api-helper';
 import {TestPeriods} from '../../../helpers/date-helper';
 import {withDatabase} from '../../../helpers/db-helper';
 import {withFaktureringDatabase} from '../../../helpers/pg-db-helper';
@@ -88,10 +88,13 @@ async function opprettVedtattSakInneværendeÅr(page: Page): Promise<void> {
 
     console.log('📝 Oppretter sak (inneværende år)...');
     await hovedside.gotoOgOpprettNySak();
-    await opprettSak.opprettStandardSak(USER_ID_VALID);
-    await opprettSak.assertions.verifiserBehandlingOpprettet();
-
-    await waitForProcessInstances(page.request, 30);
+    await runAndWaitForProcessInstances(
+      page.request,
+      async () => {
+        await opprettSak.opprettStandardSak(USER_ID_VALID);
+        await opprettSak.assertions.verifiserBehandlingOpprettet();
+      }, { timeoutSeconds: 30 }
+    );
     await hovedside.goto();
     await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).click();
 
@@ -123,8 +126,11 @@ async function opprettVedtattSakInneværendeÅr(page: Page): Promise<void> {
     await trygdeavgift.klikkBekreftOgFortsett();
 
     console.log('📝 Fatter førstegangsvedtak...');
-    await vedtak.klikkFattVedtak();
-    await waitForProcessInstances(page.request, 30);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => vedtak.klikkFattVedtak(),
+      { timeoutSeconds: 30 }
+    );
 }
 
 /**
@@ -213,8 +219,11 @@ test.describe('Automatisk innhentingsbrev ved årsavregning i saksbehandlingsfly
 
         console.log('📝 Oppretter ny vurdering...');
         await hovedside.klikkOpprettNySak();
-        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD'),
+          { timeoutSeconds: 30 }
+        );
 
         await hovedside.goto();
         await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).first().click();
@@ -240,8 +249,11 @@ test.describe('Automatisk innhentingsbrev ved årsavregning i saksbehandlingsfly
         await trygdeavgift.klikkBekreftOgFortsett();
 
         console.log('📝 Fatter vedtak for ny vurdering...');
-        await vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => vedtak.fattVedtakForNyVurdering('FEIL_I_BEHANDLING'),
+          { timeoutSeconds: 30 }
+        );
 
         // «brevet skal gjelde for inntektsåret X» — NV endret perioden til kun FORRIGE_AAR, så den
         // auto-opprettede årsavregningen (og brevet) gjelder FORRIGE_AAR.
@@ -271,11 +283,14 @@ test.describe('Automatisk innhentingsbrev ved årsavregning i saksbehandlingsfly
         await opprettSak.velgBehandlingstype(BEHANDLINGSTYPE.ÅRSAVREGNING);
         await opprettSak.velgAarsak(AARSAK.SØKNAD);
         await opprettSak.leggBehandlingIMine();
-        await opprettSak.klikkOpprettNyBehandling();
-        await opprettSak.assertions.verifiserBehandlingOpprettet();
-
+        await runAndWaitForProcessInstances(
+          page.request,
+          async () => {
+            await opprettSak.klikkOpprettNyBehandling();
+            await opprettSak.assertions.verifiserBehandlingOpprettet();
+          }, { timeoutSeconds: 30 }
+        );
         // La opprettelses-prosessinstansene bli ferdige før vi sjekker fravær av brev.
-        await waitForProcessInstances(page.request, 30);
 
         // «Så skal Melosys ikke sende brevet "Innhenting av inntektsopplysninger"»
         console.log('🔍 Verifiserer at ingen innhentingsbrev ble sendt...');
