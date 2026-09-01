@@ -167,6 +167,12 @@ export class HovedsidePage extends BasePage {
     await link.click();
   }
 
+  async åpneBehandlingMedId(behandlingId: number | string): Promise<void> {
+    const link = this.page.locator(`a[href*="behandlingID=${behandlingId}"]`).first();
+    await link.waitFor({ state: 'visible', timeout: 45_000 });
+    await link.click();
+  }
+
   /**
    * Wait for a behandling link to appear in the saksoversikt and return it.
    * Use for assertions (e.g., that an auto-created årsavregning shows up) where

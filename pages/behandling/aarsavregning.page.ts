@@ -117,6 +117,35 @@ export class AarsavregningPage extends BasePage {
     console.log(`✅ Selected år = ${år}`);
   }
 
+  async velgÅrOgVentPåOpprettelseOgBeregning(år: string): Promise<void> {
+    const opprettelse = this.page.waitForResponse(
+      response =>
+        response.url().includes('/aarsavregning') &&
+        response.request().method() === 'POST',
+      { timeout: 30_000 }
+    );
+    const beregning = this.page.waitForResponse(
+      response =>
+        response.url().includes('/trygdeavgift/beregning') &&
+        response.request().method() === 'PUT',
+      { timeout: 30_000 }
+    );
+    await this.velgÅr(år);
+    const opprettelseResponse = await opprettelse;
+    if (opprettelseResponse.status() >= 400) {
+      throw new Error(
+        `Opprettelse av årsavregning feilet: ${opprettelseResponse.status()} ${await opprettelseResponse.text()}`
+      );
+    }
+
+    const beregningResponse = await beregning;
+    if (beregningResponse.status() >= 400) {
+      throw new Error(
+        `Årsavregningsberegning feilet: ${beregningResponse.status()} ${await beregningResponse.text()}`
+      );
+    }
+  }
+
   /**
    * Radiogruppe for inngangsspørsmålet om innbetalt trygdeavgift.
    * Etiketten varierer med toggle `melosys.arsavregning.eos_pensjonist`:

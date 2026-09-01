@@ -78,6 +78,35 @@ export class ResultatPeriodePage extends BasePage {
     console.log(`✅ Selected resultat for periode ${periodeNr}: ${resultat}`);
   }
 
+  private datofelt(periodeNr: number, type: 'Fra og med' | 'Til og med') {
+    return this.page.getByLabel(`${type} periode ${periodeNr}`).getByRole('textbox');
+  }
+
+  async registrerDelvisOpphør(
+    innvilgetTom: string,
+    opphørtFom: string,
+    opphørtTom: string,
+    trygdedekning: string
+  ): Promise<void> {
+    await this.datofelt(1, 'Til og med').fill(innvilgetTom);
+    await this.datofelt(1, 'Til og med').press('Tab');
+
+    await this.page.getByRole('button', { name: 'Legg til periode' }).click();
+    await this.datofelt(2, 'Fra og med').fill(opphørtFom);
+    await this.datofelt(2, 'Til og med').fill(opphørtTom);
+    await this.page.getByLabel('Trygdedekning periode 2').selectOption(trygdedekning);
+
+    const lagretOpphørtPeriode = this.page.waitForResponse(
+      response =>
+        response.url().includes('/medlemskapsperioder') &&
+        response.request().method() === 'POST' &&
+        response.status() < 400,
+      { timeout: 30_000 }
+    );
+    await this.page.getByLabel('Resultat periode 2').selectOption('OPPHØRT');
+    await lagretOpphørtPeriode;
+  }
+
   /**
    * Select result for all periods on the page
    *

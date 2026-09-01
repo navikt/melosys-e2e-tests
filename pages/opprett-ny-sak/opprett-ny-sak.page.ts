@@ -68,6 +68,10 @@ export class OpprettNySakPage extends BasePage {
     name: 'EU/EØS-land - Trygdeavgift'
   });
 
+  private readonly utenforAvtalelandHeading = this.page.getByRole('heading', {
+    name: /Utenfor avtaleland/
+  });
+
   private readonly aarsavregningOption = this.page.getByRole('radio', {
     name: 'Årsavregning',
   });
@@ -374,6 +378,16 @@ export class OpprettNySakPage extends BasePage {
     await this.velgEksisterendeSak(saksnummer);
     await this.velgNyVurdering();
     await this.velgAarsak(aarsak);
+    await this.leggBehandlingIMine();
+    await this.klikkOpprettNyBehandling();
+  }
+
+  async opprettAarsavregningPåEksisterendeSak(fnr: string, saksnummer: string): Promise<void> {
+    await this.fyllInnBrukerID(fnr);
+    await this.velgEksisterendeSak(saksnummer);
+    await this.utenforAvtalelandHeading.click();
+    await this.velgAarsavregningBehandling();
+    await this.velgAarsak(AARSAK.SØKNAD);
     await this.leggBehandlingIMine();
     await this.klikkOpprettNyBehandling();
   }

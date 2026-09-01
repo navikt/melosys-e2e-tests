@@ -508,7 +508,9 @@ export class TrygdeavgiftPage extends BasePage {
 
     // Create response promise BEFORE action
     const responsePromise = this.page.waitForResponse(
-      response => isTrygdeavgiftBeregningResponse(response),
+      response =>
+        response.url().includes('/trygdeavgift/beregning') &&
+        response.request().method() === 'PUT',
       { timeout: 30000 }
     );
 
@@ -517,7 +519,12 @@ export class TrygdeavgiftPage extends BasePage {
     await field.press('Tab');
 
     // Wait for API
-    await responsePromise;
+    const response = await responsePromise;
+    if (response.status() >= 400) {
+      throw new Error(
+        `Trygdeavgiftsberegning feilet: ${response.status()} ${await response.text()}`
+      );
+    }
     console.log(`✅ Filled bruttoinntekt [${indeks}] = ${beløp} and API completed`);
   }
 
