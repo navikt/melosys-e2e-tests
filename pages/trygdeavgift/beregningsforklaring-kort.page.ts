@@ -21,10 +21,9 @@ export type Inntektsgruppe = 'SAMLET' | 'HELSEDEL' | 'PENSJONSDEL' | 'MISJONAER'
 export class BeregningsforklaringKortPage extends BasePage {
   readonly assertions: BeregningsforklaringKortAssertions;
 
-  // Bevisst uten .first(): årsavregningen rendrer to slike kort — ett for tidligere grunnlag
-  // (tidligereGrunnlag.tsx) og ett for det gjeldende — og melosys-web bruker samme felt-id i
-  // begge. Med .first() ville POM-en der stilltiende assertert mot fjorårets tall. Strict
-  // mode-bruddet er signalet om at kallstedet må gi POM-en et scope først.
+  // Usikret lokator: i dag rendres nøyaktig ett slikt kort i alle tilstander POM-en når, så
+  // ingen test kan skille denne formen fra .first(). Skulle en side få to kort, er strict
+  // mode-bruddet en bedre beskjed enn et stille valg av det første.
   private readonly kort = this.page.locator(
     '[aria-label="Beregningsforklaring for trygdeavgift"]',
   );

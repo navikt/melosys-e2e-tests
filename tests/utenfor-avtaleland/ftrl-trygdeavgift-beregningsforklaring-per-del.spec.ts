@@ -54,18 +54,13 @@ import { isTrygdeavgiftBeregningResponse } from '../../pages/shared/trygdeavgift
  */
 
 /**
- * Perioden starter 01.11. Er den datoen passert, innvilger Perioder-steget pensjonsdelen
- * først fra dagens dato, og året med særregel krymper. Målt mot beregningstjenesten ved å
- * flytte startdatoen framover (2027-tallene testen asserterer på er uendret i alle radene):
+ * Perioden må starte i framtiden. Er 01.11 passert, innvilger Perioder-steget pensjonsdelen
+ * først fra dagens dato, året med særregel krymper, og taket det måles mot krymper med det.
+ * Vi skyver derfor scenarioet ett år fram fra 1. november.
  *
- *   01.11  PENSJONSDEL 25 %-regel, tak 25 087  → testen passerer
- *   15.11  PENSJONSDEL 25 %-regel, tak 13 337  → testen passerer
- *   01.12  begge deler 25 %-regel, tak     87  → testen passerer
- *   10.12  SAMLET MINSTEBELØP, tak null        → testen ryker
- *
- * Selve bruddet inntreffer altså først rundt 10. desember, ikke i november. Vi skyver
- * likevel fra 1. november: taket er da nede i 87 kroner, én avrunding fra minstebeløps-
- * grenen, og et scenario som holder på marginen er ikke verdt å stå i.
+ * Grensen er satt på marginen, ikke på det siste målepunktet som passerte: taket faller
+ * raskt gjennom november (25 087 kr ved 01.11, 13 337 kr ved 15.11, 87 kr ved 01.12), og et
+ * scenario som balanserer noen kroner over minstebeløpsgrensen er ikke verdt å stå i.
  */
 const IDAG = new Date();
 const ÅR_MED_SÆRREGEL = IDAG.getFullYear() + (IDAG.getMonth() >= 10 ? 1 : 0);
@@ -184,6 +179,8 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
           'Sender melosys-api fortsatt beregningsforklaringer, og traff scenarioet riktig år?',
       })
       .toBeGreaterThan(0);
+    // .at(-1): flere autolagringer kan ha rukket å svare, og det ferskeste svaret er det som
+    // svarer til skjemaet slik det står nå — altså det kortet nedenfor rendres fra.
     const treff = beregningssvar.filter(forklaringFor);
     const beregning = treff.at(-1);
     const ordinærForklaring = forklaringFor(beregning);
@@ -288,8 +285,9 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
         // testen henger til 180s-timeouten uten å peke på interceptet.
         console.error(`⚠️  Kunne ikke stripe ordinaerAvgiftPerDel: ${error}`);
         await route.continue().catch(() => {
-          // Ruten kan allerede være håndtert eller siden lukket; da kaster continue() også,
-          // og et unntak her ville henge forespørselen fram til testens timeout.
+          // Fallbacken er selv usikret, for den kan kaste hvis ruten allerede er håndtert
+          // eller siden er lukket. Den opprinnelige feilen er logget over; det er kun
+          // oppryddingen som svelges her.
         });
       }
     });
