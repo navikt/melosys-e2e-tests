@@ -57,7 +57,7 @@ export class BeregningsforklaringKortAssertions {
     );
 
     const ordinaerAvgift = await this.lesOrdinaerAvgift(steg);
-    const deler = await this.lesDeler(steg);
+    const deler = await this.lesDeler(steg, avgiftstak);
     const merknad = (
       await steg.locator('.beregningsforklaring-kort-merknad').innerText()
     ).replace(/\s+/g, ' ').trim();
@@ -74,9 +74,9 @@ export class BeregningsforklaringKortAssertions {
    * - hver del ligger under taket (og raden viser «≤», ikke «>»)
    * - summen av delene er nøyaktig totalen som vises rett over («Sum ordinær avgift»)
    * - merknaden forklarer at taket måles pr. del. Stegets fire merknadsgrener er gjensidig
- *   utelukkende og kun én rendres, så dette utelukker samtidig grenen som påsto «Ordinær
- *   avgift … ≤ 25 %-tak …» — den påstanden asserteres negativt i verifiserMerknadUtenDelbeloep,
- *   der den faktisk kan inntreffe
+   *   utelukkende og kun én rendres, så dette utelukker samtidig grenen som påsto «Ordinær
+   *   avgift … ≤ 25 %-tak …» — den påstanden asserteres negativt i
+   *   verifiserMerknadUtenDelbeloep, der den faktisk kan inntreffe
    *
    * Returnerer de leste tallene slik at kalleren kan logge dem.
    */
@@ -155,7 +155,10 @@ export class BeregningsforklaringKortAssertions {
     return lesBeloep(await enkelRad.first().locator('.beregningsforklaring-kort-rad-verdi').innerText());
   }
 
-  private async lesDeler(steg: Locator): Promise<Array<{ navn: string; beloep: number }>> {
+  private async lesDeler(
+    steg: Locator,
+    avgiftstak: number,
+  ): Promise<Array<{ navn: string; beloep: number }>> {
     const seksjon = steg.locator('.beregningsforklaring-kort-underseksjon', {
       hasText: 'Hver avgiftsdel målt mot taket',
     });
@@ -168,14 +171,21 @@ export class BeregningsforklaringKortAssertions {
       const rad = rader.nth(i);
       const verdi = await rad.locator('.beregningsforklaring-kort-rad-verdi').innerText();
       // Raden er «<delbeløp> ≤ <tak>»: delbeløpet står i <strong>, taket til høyre for tegnet.
-      // Tegnet regnes ut pr. rad i melosys-web, så vi utleder det tegnet tallene tilsier og
-      // krever nøyaktig det — en klasse som godtar begge tegn ville passert uansett render.
       const beloep = lesBeloep(await rad.locator('strong').innerText());
-      const tak = lesBeloep(verdi.split(/[≤>]/).pop() ?? '');
+
+      // Taket i raden måles mot taket fra formel-linja over, ikke mot seg selv. Uten den
+      // sammenligningen kunne parsingen under være vilkårlig gal uten at noe oppdaget det.
+      expect(
+        lesBeloep(verdi.split(/[≤>]/).pop() ?? ''),
+        'Delraden skal måle mot samme tak som formelen over steget',
+      ).toBe(avgiftstak);
+
+      // Tegnet regnes ut pr. rad i melosys-web. Vi krever nøyaktig det tegnet tallene
+      // tilsier — en tegnklasse som godtar begge ville passert uansett render.
       expect(
         verdi,
-        `Delraden viser ${beloep} og ${tak}, men tegnet mellom dem stemmer ikke med tallene`,
-      ).toContain(beloep > tak ? '>' : '≤');
+        `Delraden viser ${beloep} mot tak ${avgiftstak}, men tegnet stemmer ikke med tallene`,
+      ).toContain(beloep > avgiftstak ? '>' : '≤');
       deler.push({
         navn: (await rad.locator('p').first().innerText()).trim(),
         beloep,

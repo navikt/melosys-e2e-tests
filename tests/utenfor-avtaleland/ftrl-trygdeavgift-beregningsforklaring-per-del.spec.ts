@@ -54,12 +54,18 @@ import { isTrygdeavgiftBeregningResponse } from '../../pages/shared/trygdeavgift
  */
 
 /**
- * Perioden starter 01.11 og må starte i FRAMTIDEN: er startdatoen passert, innvilger
- * Perioder-steget pensjonsdelen først fra dagens dato, og året med særregel krymper.
- * Verifisert mot beregningstjenesten ved å flytte startdatoen framover: 15.11 gir tak
- * 13 337 i stedet for 25 087, 01.12 begrenser begge deler, og fra ca. 10.12 faller året
- * under minstebeløpet — da finnes ikke PENSJONSDEL-forklaringen testen ser etter.
- * Fra november skyver vi derfor hele scenarioet ett år fram.
+ * Perioden starter 01.11. Er den datoen passert, innvilger Perioder-steget pensjonsdelen
+ * først fra dagens dato, og året med særregel krymper. Målt mot beregningstjenesten ved å
+ * flytte startdatoen framover (2027-tallene testen asserterer på er uendret i alle radene):
+ *
+ *   01.11  PENSJONSDEL 25 %-regel, tak 25 087  → testen passerer
+ *   15.11  PENSJONSDEL 25 %-regel, tak 13 337  → testen passerer
+ *   01.12  begge deler 25 %-regel, tak     87  → testen passerer
+ *   10.12  SAMLET MINSTEBELØP, tak null        → testen ryker
+ *
+ * Selve bruddet inntreffer altså først rundt 10. desember, ikke i november. Vi skyver
+ * likevel fra 1. november: taket er da nede i 87 kroner, én avrunding fra minstebeløps-
+ * grenen, og et scenario som holder på marginen er ikke verdt å stå i.
  */
 const IDAG = new Date();
 const ÅR_MED_SÆRREGEL = IDAG.getFullYear() + (IDAG.getMonth() >= 10 ? 1 : 0);
@@ -147,8 +153,7 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
 
     // Fanger opp beregningssvaret slik melosys-api faktisk serialiserer det, så testen
     // skiller mellom «web rendrer ikke feltet» og «api/beregning sender det ikke».
-    // Forklaringen persisteres ikke i melosys-api, så den finnes bare i PUT-svaret —
-    // og skjemaet lagrer debouncet, så vi tar det SISTE svaret, ikke det første.
+    // Forklaringen persisteres ikke i melosys-api, så den finnes bare i PUT-svaret.
     const beregningssvar: any[] = [];
     page.on('response', (response) => {
       if (isTrygdeavgiftBeregningResponse(response) && response.request().method() === 'PUT') {
@@ -165,12 +170,23 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
     // fyllInnBruttoinntektMedApiVent kvitterer på et hvilket som helst 200-svar. Det første
     // svaret som lander kan være fra tilstanden før inntekten ble fylt inn, og har da ingen
     // forklaring for ÅR_MED_ORDINÆR. Rekkefølgen i lista er dessuten json()-rekkefølge.
+    //
+    // Meldingen hører hjemme her, ikke i en toBeDefined() etterpå: når pollen først har
+    // returnert, ER forklaringen per konstruksjon til stede, og en slik assertion kunne
+    // aldri feilet — den ville bare flyttet diagnostikken bort fra stedet som faktisk ryker.
     const forklaringFor = (svar: any) =>
       (svar?.beregningsforklaringer ?? []).find((f: any) => f.aar === ÅR_MED_ORDINÆR);
     await expect
-      .poll(() => beregningssvar.filter(forklaringFor).length, { timeout: 15000 })
+      .poll(() => beregningssvar.filter(forklaringFor).length, {
+        timeout: 15000,
+        message:
+          `Ingen av beregningssvarene inneholdt en forklaring for ${ÅR_MED_ORDINÆR}. ` +
+          'Sender melosys-api fortsatt beregningsforklaringer, og traff scenarioet riktig år?',
+      })
       .toBeGreaterThan(0);
-    const beregning = beregningssvar.filter(forklaringFor).at(-1);
+    const treff = beregningssvar.filter(forklaringFor);
+    const beregning = treff.at(-1);
+    const ordinærForklaring = forklaringFor(beregning);
 
     // --- Kontrakten fra melosys-trygdeavgift-beregning, gjennom melosys-api ---
     console.log(
@@ -186,13 +202,6 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
           })),
         ),
     );
-    const ordinærForklaring = (beregning.beregningsforklaringer ?? []).find(
-      (f: any) => f.aar === ÅR_MED_ORDINÆR,
-    );
-    expect(
-      ordinærForklaring,
-      `Fant ingen beregningsforklaring for ${ÅR_MED_ORDINÆR} i svaret`,
-    ).toBeDefined();
     expect(ordinærForklaring.valgtRegel).toBe('ORDINÆR');
     expect(ordinærForklaring.maksimalAvgift25Prosent).toBe(forventetTak);
 
@@ -278,7 +287,10 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
         // Uten dette slipper unntaket ut av handleren, forespørselen blir aldri fullført, og
         // testen henger til 180s-timeouten uten å peke på interceptet.
         console.error(`⚠️  Kunne ikke stripe ordinaerAvgiftPerDel: ${error}`);
-        await route.continue();
+        await route.continue().catch(() => {
+          // Ruten kan allerede være håndtert eller siden lukket; da kaster continue() også,
+          // og et unntak her ville henge forespørselen fram til testens timeout.
+        });
       }
     });
 

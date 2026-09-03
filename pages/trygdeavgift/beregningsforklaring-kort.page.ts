@@ -21,12 +21,13 @@ export type Inntektsgruppe = 'SAMLET' | 'HELSEDEL' | 'PENSJONSDEL' | 'MISJONAER'
 export class BeregningsforklaringKortPage extends BasePage {
   readonly assertions: BeregningsforklaringKortAssertions;
 
-  // .first(): beregningsforklaringKort.tsx regner eksplisitt med flere kort på samme side
-  // (årsavregningens beregnetTrygdeavgiftDetaljer). Trygdeavgiftssteget har bare ett, men uten
-  // .first() ville POM-en kastet strict mode-brudd om den gjenbrukes der.
-  private readonly kort = this.page
-    .locator('[aria-label="Beregningsforklaring for trygdeavgift"]')
-    .first();
+  // Bevisst uten .first(): årsavregningen rendrer to slike kort — ett for tidligere grunnlag
+  // (tidligereGrunnlag.tsx) og ett for det gjeldende — og melosys-web bruker samme felt-id i
+  // begge. Med .first() ville POM-en der stilltiende assertert mot fjorårets tall. Strict
+  // mode-bruddet er signalet om at kallstedet må gi POM-en et scope først.
+  private readonly kort = this.page.locator(
+    '[aria-label="Beregningsforklaring for trygdeavgift"]',
+  );
 
   constructor(page: Page) {
     super(page);
