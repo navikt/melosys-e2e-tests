@@ -12,11 +12,6 @@ export type Inntektsgruppe = 'SAMLET' | 'HELSEDEL' | 'PENSJONSDEL' | 'MISJONAER'
  * når minst én inntektsgruppe traff en særregel (25 %-regelen eller minstebeløpet) —
  * se forklaringerSomSkalVises i melosys-web. Er kortet synlig, inneholder det ett felt
  * per år+inntektsgruppe, med id `beregningsforklaring-kort-<år>-<inntektsgruppe>`.
- *
- * @example
- * const kort = new BeregningsforklaringKortPage(page);
- * await kort.aapneKort();
- * await kort.assertions.verifiserDelerMaaltMotTaket(2027);
  */
 export class BeregningsforklaringKortPage extends BasePage {
   readonly assertions: BeregningsforklaringKortAssertions;
@@ -33,7 +28,6 @@ export class BeregningsforklaringKortPage extends BasePage {
     this.assertions = new BeregningsforklaringKortAssertions(page, this);
   }
 
-  /** Selve ExpansionCard-en. */
   locator(): Locator {
     return this.kort;
   }

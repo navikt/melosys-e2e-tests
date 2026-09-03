@@ -5,7 +5,7 @@ import type { BeregningsforklaringKortPage, Inntektsgruppe } from './beregningsf
 export interface Maksgrensesteg {
   /** «Maks avgift = 25 % × … = X» */
   avgiftstak: number;
-  /** «Sum ordinær avgift» — eller «Ordinær avgift» når posteringslinjene mangler. */
+  /** Totalen steget viser. */
   ordinaerAvgift: number;
   /** Radene under «Hver avgiftsdel målt mot taket». Tom liste når backend ikke sendte delbeløp. */
   deler: Array<{ navn: string; beloep: number }>;
@@ -31,7 +31,6 @@ export class BeregningsforklaringKortAssertions {
     await expect(this.kort.locator()).toBeVisible({ timeout: 10000 });
   }
 
-  /** Verifiserer at et felt for år + inntektsgruppe finnes i kortet. */
   async verifiserFeltFinnes(aar: number, inntektsgruppe: Inntektsgruppe): Promise<void> {
     await expect(this.kort.felt(aar, inntektsgruppe)).toBeVisible({ timeout: 10000 });
   }
@@ -66,19 +65,12 @@ export class BeregningsforklaringKortAssertions {
   }
 
   /**
-   * Akseptansekriteriet for MELOSYS-8171: når ORDINÆR er valgt fordi ingen avgiftsdel
-   * alene overstiger taket, skal kortet vise nettopp de delbeløpene som ble målt mot taket
-   * — ikke summen av dem, som aldri ble sammenlignet med noe.
+   * Akseptansekriteriet: når ORDINÆR er valgt fordi ingen avgiftsdel alene overstiger taket,
+   * skal kortet vise nettopp de delbeløpene som ble målt mot taket — ikke summen av dem, som
+   * aldri ble sammenlignet med noe.
    *
-   * Asserterer hele invarianten kortet skal holde:
-   * - hver del ligger under taket (og raden viser «≤», ikke «>»)
-   * - summen av delene er nøyaktig totalen som vises rett over («Sum ordinær avgift»)
-   * - merknaden forklarer at taket måles pr. del. Stegets fire merknadsgrener er gjensidig
-   *   utelukkende og kun én rendres, så dette utelukker samtidig grenen som påsto «Ordinær
-   *   avgift … ≤ 25 %-tak …» — den påstanden asserteres negativt i
-   *   verifiserMerknadUtenDelbeloep, der den faktisk kan inntreffe
-   *
-   * Returnerer de leste tallene slik at kalleren kan logge dem.
+   * Steget rendrer én av fire gjensidig utelukkende merknader, så et krav om «måles pr.
+   * del»-merknaden utelukker samtidig grenen som påsto «Ordinær avgift … ≤ 25 %-tak …».
    */
   async verifiserDelerMaaltMotTaket(
     aar: number,

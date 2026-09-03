@@ -31,26 +31,17 @@ import { isTrygdeavgiftBeregningResponse } from '../../pages/shared/trygdeavgift
  * - melosys-api: feltet føres videre til frontend i `beregningsforklaringer`
  * - melosys-web: steg 3 rendrer delbeløpene, og merknaden utledes av tallene som vises
  *
- * Scenario — frivillig helse+pensjon (§ 2-8 a), ikke skattepliktig, 100 000 kr/md:
- *
- * «Betales aga = Ja» er ikke en detalj: da er satsene 6,8 % (helse) og 19,4 % (pensjon),
- * begge under 25 %. Med aga = Nei er pensjonssatsen 26,3 %, og pensjonsdelen alene kan da
- * aldri havne under taket — grenen denne testen dekker er utilgjengelig.
- *
- * Perioden krysser årsskiftet og gir to skatteår i samme behandling. Tallene under er for
- * minstebeløp 99 650 kr — merk at både minstebeløp og satser for et år uten egne rader faller
- * tilbake på nyeste år som finnes, så taket i tabellen endrer seg når neste års satser lander.
- * Testen regner derfor ut taket dynamisk og hardkoder det ikke:
+ * Scenario — frivillig helse+pensjon (§ 2-8 a), ikke skattepliktig, 100 000 kr/md, over en
+ * periode som krysser årsskiftet og gir to skatteår i samme behandling:
  *
  *   | År      | Mnd | Årsinntekt | Tak     | Helsedel | Pensjonsdel | Utfall                               |
  *   |---------|-----|------------|---------|----------|-------------|--------------------------------------|
  *   | i år    |   2 |    200 000 |  25 087 |   13 600 |      38 800 | pensjonsdel begrenset → 25 %-regelen |
  *   | neste   |  12 |  1 200 000 | 275 087 |   81 600 |     232 800 | ingen del begrenset  → ORDINÆR       |
  *
- * Året med særregel er ikke pynt: melosys-web skjuler hele forklaringskortet når ingen
- * inntektsgruppe traff en særregel (forklaringerSomSkalVises). Uten det ville
- * ORDINÆR-forklaringen — og dermed rettingen — aldri vært synlig i nettleseren. Det speiler
- * også innmeldingen, som gjaldt flere skatteforholdsperioder.
+ * Tallene forutsetter minstebeløp 99 650 kr. Både minstebeløp og satser for et år uten egne
+ * rader faller tilbake på nyeste år som finnes, så taket flytter seg når neste års satser
+ * lander — testen regner det ut dynamisk framfor å hardkode det.
  */
 
 /**
@@ -97,9 +88,8 @@ async function gaaTilTrygdeavgiftMedToSkatteaar(page: Page, request: any): Promi
   await opprettSak.assertions.verifiserBehandlingOpprettet();
   await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).click();
 
-  // Perioden krysser årsskiftet FRAMOVER: to skatteår i samme behandling. Den kan ikke gå
-  // bakover — trygdeavgift for tidligere år fastsettes på årsavregning, og steget klipper
-  // da bort fjorårsdelen med et varsel i stedet for å beregne den.
+  // Bakover er ikke et alternativ: trygdeavgift for tidligere år fastsettes på årsavregning,
+  // og steget klipper bort fjorårsdelen med et varsel i stedet for å beregne den.
   const medlemskap = new MedlemskapPage(page);
   await medlemskap.velgPeriode(`01.11.${ÅR_MED_SÆRREGEL}`, `31.12.${ÅR_MED_ORDINÆR}`);
   await medlemskap.velgFlereLandIkkeKjentHvilke();
@@ -147,8 +137,8 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
     const trygdeavgift = await gaaTilTrygdeavgiftMedToSkatteaar(page, request);
 
     // Fanger opp beregningssvaret slik melosys-api faktisk serialiserer det, så testen
-    // skiller mellom «web rendrer ikke feltet» og «api/beregning sender det ikke».
-    // Forklaringen persisteres ikke i melosys-api, så den finnes bare i PUT-svaret.
+    // skiller «web rendrer ikke feltet» fra «api/beregning sender det ikke». Forklaringen
+    // persisteres ikke, så den finnes kun i PUT-svaret.
     const beregningssvar: any[] = [];
     page.on('response', (response) => {
       if (isTrygdeavgiftBeregningResponse(response) && response.request().method() === 'PUT') {
@@ -162,13 +152,9 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
     await ventPaaRoligNettverk(page);
 
     // Poll på INNHOLDET, ikke på antall svar: skjemaet lagrer debouncet, og
-    // fyllInnBruttoinntektMedApiVent kvitterer på et hvilket som helst 200-svar. Det første
+    // fyllInnBruttoinntektMedApiVent løser seg på hvilket som helst 200-svar. Det første
     // svaret som lander kan være fra tilstanden før inntekten ble fylt inn, og har da ingen
     // forklaring for ÅR_MED_ORDINÆR. Rekkefølgen i lista er dessuten json()-rekkefølge.
-    //
-    // Meldingen hører hjemme her, ikke i en toBeDefined() etterpå: når pollen først har
-    // returnert, ER forklaringen per konstruksjon til stede, og en slik assertion kunne
-    // aldri feilet — den ville bare flyttet diagnostikken bort fra stedet som faktisk ryker.
     const forklaringFor = (svar: any) =>
       (svar?.beregningsforklaringer ?? []).find((f: any) => f.aar === ÅR_MED_ORDINÆR);
     await expect
@@ -185,7 +171,6 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
     const beregning = treff.at(-1);
     const ordinærForklaring = forklaringFor(beregning);
 
-    // --- Kontrakten fra melosys-trygdeavgift-beregning, gjennom melosys-api ---
     console.log(
       'Forklaringer i svaret: ' +
         JSON.stringify(
@@ -217,7 +202,8 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
     for (const del of deler) {
       expect(del.ordinaerAvgift).toBeLessThanOrEqual(ordinærForklaring.maksimalAvgift25Prosent);
     }
-    // Pinner siste commit i #447: totalen utledes fra delene, ikke floores uavhengig av dem.
+    // floor(helse) + floor(pensjon) kan bli 1 kr lavere enn floor(helse + pensjon), så
+    // totalen må utledes fra delene og ikke rundes ned uavhengig av dem.
     expect(
       deler.reduce((sum: number, del: any) => sum + del.ordinaerAvgift, 0),
       'ordinaerAvgift skal være summen av delene, ikke en uavhengig avrunding',
@@ -232,7 +218,6 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
       `${ÅR_MED_SÆRREGEL} skal treffe 25 %-regelen, ellers skjuler melosys-web kortet`,
     ).toBe(true);
 
-    // --- Det saksbehandleren ser i nettleseren ---
     await trygdeavgift.assertions.verifiserTrygdeavgiftBeregnet();
 
     const kort = new BeregningsforklaringKortPage(page);
@@ -242,7 +227,6 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
 
     const steg = await kort.assertions.verifiserDelerMaaltMotTaket(ÅR_MED_ORDINÆR);
 
-    // Kortet skal vise nøyaktig de tallene backend sendte.
     expect(steg.avgiftstak).toBe(ordinærForklaring.maksimalAvgift25Prosent);
     expect(steg.ordinaerAvgift).toBe(ordinærForklaring.ordinaerAvgift);
     expect(steg.deler.map((del) => del.beloep)).toEqual(
@@ -258,7 +242,7 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
 
   /**
    * Motprøven: samme sak, men `ordinaerAvgiftPerDel` strippes ut av svaret før nettleseren
-   * ser det — altså nøyaktig det melosys-web fikk før MELOSYS-8171.
+   * ser det — altså nøyaktig det melosys-web fikk før feltet ble innført.
    *
    * Uten denne testen kunne testen over ikke skille «melosys-web utleder merknaden av
    * tallene» fra «melosys-web gjentar en hardkodet ulikhet som tilfeldigvis stemte». Det er
@@ -281,13 +265,11 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
         }
         await route.fulfill({ response, json });
       } catch (error) {
-        // Uten dette slipper unntaket ut av handleren, forespørselen blir aldri fullført, og
-        // testen henger til 180s-timeouten uten å peke på interceptet.
+        // Et unntak som slipper ut herfra ville latt forespørselen stå ufullført til testens
+        // timeout, uten spor tilbake til interceptet.
         console.error(`⚠️  Kunne ikke stripe ordinaerAvgiftPerDel: ${error}`);
         await route.continue().catch(() => {
-          // Fallbacken er selv usikret, for den kan kaste hvis ruten allerede er håndtert
-          // eller siden er lukket. Den opprinnelige feilen er logget over; det er kun
-          // oppryddingen som svelges her.
+          // Kun oppryddingen svelges; feilen over er allerede logget.
         });
       }
     });
