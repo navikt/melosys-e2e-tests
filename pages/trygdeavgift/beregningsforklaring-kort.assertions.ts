@@ -73,7 +73,10 @@ export class BeregningsforklaringKortAssertions {
    * Asserterer hele invarianten kortet skal holde:
    * - hver del ligger under taket (og raden viser «≤», ikke «>»)
    * - summen av delene er nøyaktig totalen som vises rett over («Sum ordinær avgift»)
-   * - merknaden forklarer at taket måles pr. del, i stedet for å påstå at totalen er under taket
+   * - merknaden forklarer at taket måles pr. del. Stegets fire merknadsgrener er gjensidig
+ *   utelukkende og kun én rendres, så dette utelukker samtidig grenen som påsto «Ordinær
+ *   avgift … ≤ 25 %-tak …» — den påstanden asserteres negativt i verifiserMerknadUtenDelbeloep,
+ *   der den faktisk kan inntreffe
    *
    * Returnerer de leste tallene slik at kalleren kan logge dem.
    */
@@ -101,26 +104,19 @@ export class BeregningsforklaringKortAssertions {
       'Totalen kortet viser skal være summen av delene som står rett under',
     ).toBe(steg.ordinaerAvgift);
 
+    // Uten dette er akseptansekriteriet tomt: ligger summen under taket er det ingen
+    // selvmotsigelse å avverge, og alle assertionene over ville passert uten å bevise noe.
+    expect(
+      sumDeler,
+      'Feilklassen forutsetter at summen av delene overstiger taket',
+    ).toBeGreaterThan(steg.avgiftstak);
+
     expect(
       steg.merknad,
       'Merknaden skal forklare at taket måles pr. del',
     ).toMatch(/Hver avgiftsdel måles mot taket for seg, og ingen av dem overstiger/);
 
     return steg;
-  }
-
-  /**
-   * Verifiserer at kortet ikke påstår at totalen ble målt mot taket når den ikke ble det.
-   * Dette er selvmotsigelsen fag meldte inn: «Ordinær avgift 339 600 kr ≤ 25 %-tak 275 087 kr».
-   */
-  async verifiserIngenSelvmotsigendeSammenligning(aar: number): Promise<void> {
-    const steg = await this.lesMaksgrensesteg(aar, 'SAMLET');
-    if (steg.ordinaerAvgift <= steg.avgiftstak) return;
-
-    expect(
-      steg.merknad,
-      `Kortet påstår at ${steg.ordinaerAvgift} ≤ ${steg.avgiftstak}, som ikke stemmer`,
-    ).not.toMatch(/Ordinær avgift .*≤ 25 %-tak/);
   }
 
   /**
@@ -171,10 +167,15 @@ export class BeregningsforklaringKortAssertions {
     for (let i = 0; i < antall; i++) {
       const rad = rader.nth(i);
       const verdi = await rad.locator('.beregningsforklaring-kort-rad-verdi').innerText();
-      // Raden er «<delbeløp> ≤ <tak>» — delbeløpet står i <strong>, og sammenligningstegnet
-      // regnes ut pr. rad i melosys-web. Asserter tegnet her, så teksten ikke kan motsi tallene.
+      // Raden er «<delbeløp> ≤ <tak>»: delbeløpet står i <strong>, taket til høyre for tegnet.
+      // Tegnet regnes ut pr. rad i melosys-web, så vi utleder det tegnet tallene tilsier og
+      // krever nøyaktig det — en klasse som godtar begge tegn ville passert uansett render.
       const beloep = lesBeloep(await rad.locator('strong').innerText());
-      expect(verdi, 'Delraden skal vise sammenligningen mot taket').toMatch(/[≤>]/);
+      const tak = lesBeloep(verdi.split(/[≤>]/).pop() ?? '');
+      expect(
+        verdi,
+        `Delraden viser ${beloep} og ${tak}, men tegnet mellom dem stemmer ikke med tallene`,
+      ).toContain(beloep > tak ? '>' : '≤');
       deler.push({
         navn: (await rad.locator('p').first().innerText()).trim(),
         beloep,

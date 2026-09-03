@@ -21,9 +21,12 @@ export type Inntektsgruppe = 'SAMLET' | 'HELSEDEL' | 'PENSJONSDEL' | 'MISJONAER'
 export class BeregningsforklaringKortPage extends BasePage {
   readonly assertions: BeregningsforklaringKortAssertions;
 
-  private readonly kort = this.page.locator(
-    '[aria-label="Beregningsforklaring for trygdeavgift"]',
-  );
+  // .first(): beregningsforklaringKort.tsx regner eksplisitt med flere kort på samme side
+  // (årsavregningens beregnetTrygdeavgiftDetaljer). Trygdeavgiftssteget har bare ett, men uten
+  // .first() ville POM-en kastet strict mode-brudd om den gjenbrukes der.
+  private readonly kort = this.page
+    .locator('[aria-label="Beregningsforklaring for trygdeavgift"]')
+    .first();
 
   constructor(page: Page) {
     super(page);
