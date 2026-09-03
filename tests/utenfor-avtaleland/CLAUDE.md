@@ -96,6 +96,37 @@ Forklaringstekster vises i `div.forklaringstekster` under tabellen.
 
 Minstebeløp for 2026: **99 650 kr** (se `V6.0__minstebeloep.sql` i melosys-trygdeavgift-beregning).
 
+### Taket måles pr. avgiftsdel — ikke på summen
+
+For frivillig medlemskap måles helsedelen og pensjonsdelen hver for seg mot **ett** felles tak.
+En del begrenses kun hvis den *alene* overstiger det, så summen kan godt ligge over taket uten
+at noen begrensning inntreffer. To ting følger av det når du skriver tester:
+
+- **`Betales aga?` bestemmer om grenen i det hele tatt er nåbar.** Med aga = Nei er
+  pensjonssatsen 26,3 % (2026) — over 25 % — og pensjonsdelen blir da alltid begrenset.
+  Med aga = Ja er satsene 6,8 % / 19,4 %, begge under 25 %, og «ingen del begrenset» er mulig.
+  Satsene ligger i `trygdeavgift-beregning.frivillig_medlemskap_sats` i postgres. Det er aga
+  som avgjør, ikke MED/UTEN-varianten av dekningen: tilleggssatsene (sykepenger,
+  yrkesskadetrygd) er 0 når aga betales, så MED og UTEN gir samme beløp da.
+- **`ordinaerAvgiftPerDel` fylles KUN når ingen del ble begrenset** (`ingenDelErBegrenset` i
+  `BeregningService`). Treffer minst én del taket, splittes svaret i én forklaring pr. del og
+  lista er tom.
+
+### Forklaringskortet vises kun når en særregel slo ut
+
+`forklaringerSomSkalVises` i melosys-web skjuler hele «Beregningsforklaring»-kortet med mindre
+minst én inntektsgruppe traff 25 %-regelen eller minstebeløpet — alt eller ingenting pr. kort.
+En ren ORDINÆR-sak gir altså ikke noe kort i det hele tatt.
+
+For å se en ORDINÆR-forklaring i nettleseren trenger du derfor et **annet** år eller en annen
+inntektsgruppe i samme behandling som treffer en særregel. Perioden må da krysse årsskiftet
+**framover** (f.eks. 01.11.i år – 31.12.neste år): tidligere år klippes bort av
+trygdeavgiftssteget med varselet «skal fastsettes på årsavregning».
+
+Merk også at Perioder-steget som standard innvilger pensjonsdelen først fra *dagens dato* når
+perioden er påbegynt — en periode som starter i fortiden gir derfor kortere pensjonsdel enn
+helsedel, og andre beløp enn en ren framtidig periode.
+
 ## Testfiler
 
 | Fil | Dekker |
@@ -109,6 +140,7 @@ Minstebeløp for 2026: **99 650 kr** (se `V6.0__minstebeloep.sql` i melosys-tryg
 | `ftrl-yrkesaktiv-2-2-forstegang.spec.ts` | § 2-2 yrkesaktiv, ren førstegangsbehandling (OPPRETT_FAKTURASERIE) |
 | `ftrl-manglende-innbetaling-opphor.spec.ts` | Manglende innbetaling → opphør av frivillig medlemskap |
 | `ftrl-trygdeavgift-25-prosent-regel.spec.ts` | 25%-regelen: sats-symboler og forklaringstekster |
+| `ftrl-trygdeavgift-beregningsforklaring-per-del.spec.ts` | MELOSYS-8171: ordinær avgift pr. avgiftsdel i beregningsforklaringen (trygdeavgift-beregning → api → web) |
 | `klage/ftrl-klage.spec.ts` | Klagebehandling på FTRL-sak |
 
 Discovery-/valideringsnotater for lovvalg og trygdeavgift ligger under `docs/`.
