@@ -23,9 +23,20 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - name: Delete old workflow runs
+        env:
+          GH_TOKEN: ${{ github.token }}
+          # Passed via env, never interpolated into the script: an unquoted
+          # ${{ inputs.… }} in a run block is command injection into a job that
+          # holds actions: write.
+          DAYS_TO_KEEP: ${{ inputs.days_to_keep || '30' }}
         run: |
-          # Set retention period (default 30 days, or from manual input)
-          DAYS_TO_KEEP=${{ inputs.days_to_keep || '30' }}
+          # A blank or non-numeric value would make `date -d "$DAYS_TO_KEEP days ago"`
+          # resolve to yesterday and silently delete every run in the repo.
+          if ! [[ "$DAYS_TO_KEEP" =~ ^[0-9]+$ ]] || [ "$DAYS_TO_KEEP" -lt 1 ]; then
+            echo "❌ Invalid days_to_keep: '$DAYS_TO_KEEP' (expected a whole number >= 1)"
+            exit 1
+          fi
+
           echo "🗑️  Deleting workflow runs older than $DAYS_TO_KEEP days..."
 
           # Calculate the cutoff date
@@ -36,7 +47,7 @@ jobs:
           REPO="${{ github.repository }}"
 
           # List all workflows
-          WORKFLOWS=$(gh api repos/$REPO/actions/workflows --jq '.workflows[].id')
+          WORKFLOWS=$(gh api --paginate repos/$REPO/actions/workflows --jq '.workflows[].id')
 
           for WORKFLOW_ID in $WORKFLOWS; do
             echo ""
@@ -71,13 +82,13 @@ jobs:
 
           echo ""
           echo "✅ Cleanup complete!"
-        env:
-          GH_TOKEN: ${{ github.token }}
 
       - name: Summary
+        env:
+          DAYS_TO_KEEP: ${{ inputs.days_to_keep || '30' }}
         run: |
           echo "## 🗑️ Workflow Cleanup Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Deleted workflow runs older than **${{ inputs.days_to_keep || '30' }}** days" >> $GITHUB_STEP_SUMMARY
+          echo "Deleted workflow runs older than **$DAYS_TO_KEEP** days" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ Cleanup completed successfully" >> $GITHUB_STEP_SUMMARY
