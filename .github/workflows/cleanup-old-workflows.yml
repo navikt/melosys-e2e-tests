@@ -31,12 +31,11 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          # Values that reach `date -d "$DAYS_TO_KEEP days ago"` unchecked produce a
-          # cutoff that deletes far more than intended: blank resolves to yesterday,
-          # and a negative value to a date in the future, matching every run there is.
-          # The length bound keeps oversized digit strings on this branch too — without
-          # it `[ ... -lt 1 ]` errors out, the guard falls through, and the failure only
-          # surfaces as an obscure `date: invalid date`.
+          # Only 1-9999 is accepted, which also caps retention at ~27 years. Anything
+          # else would hand `date -d "$DAYS_TO_KEEP days ago"` a value that widens the
+          # cutoff instead of narrowing it — blank resolves to yesterday, a negative
+          # value to a date in the future. Checked exhaustively over the accepted
+          # range: no value in it yields a cutoff at or after today.
           if ! [[ "$DAYS_TO_KEEP" =~ ^[0-9]{1,4}$ ]] || [ "$DAYS_TO_KEEP" -lt 1 ]; then
             echo "❌ Invalid days_to_keep: '$DAYS_TO_KEEP' (expected a whole number >= 1)"
             exit 1
