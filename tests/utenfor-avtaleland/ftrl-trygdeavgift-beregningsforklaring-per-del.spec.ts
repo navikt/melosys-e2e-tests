@@ -1,4 +1,4 @@
-import { Page, expect } from '@playwright/test';
+import { APIRequestContext, Page, expect } from '@playwright/test';
 import { test } from '../../fixtures';
 import { AuthHelper } from '../../helpers/auth-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
@@ -47,11 +47,8 @@ import { isTrygdeavgiftBeregningResponse } from '../../pages/shared/trygdeavgift
 /**
  * Perioden må starte i framtiden. Er 01.11 passert, innvilger Perioder-steget pensjonsdelen
  * først fra dagens dato, året med særregel krymper, og taket det måles mot krymper med det.
- * Vi skyver derfor scenarioet ett år fram fra 1. november.
- *
- * Grensen er satt på marginen, ikke på det siste målepunktet som passerte: taket faller
- * raskt gjennom november (25 087 kr ved 01.11, 13 337 kr ved 15.11, 87 kr ved 01.12), og et
- * scenario som balanserer noen kroner over minstebeløpsgrensen er ikke verdt å stå i.
+ * Taket faller mot null gjennom november (25 087 kr ved 01.11, 87 kr ved 01.12), så
+ * scenarioet skyves ett år fram allerede fra 1. november og ikke senere.
  */
 const IDAG = new Date();
 const ÅR_MED_SÆRREGEL = IDAG.getFullYear() + (IDAG.getMonth() >= 10 ? 1 : 0);
@@ -59,11 +56,11 @@ const ÅR_MED_ORDINÆR = ÅR_MED_SÆRREGEL + 1;
 const MÅNEDSINNTEKT = 100000;
 
 /**
- * Samme mønster som resten av repoet (se TrygdeavgiftPage.ventPåSideLastet): networkidle skal
- * la testen gå videre, ikke velte den. Uten guard arver kallet 30s-standarden og kaster på en
- * enkelt etterslepende autolagring, med en feilmelding som ikke peker på det testen sjekker.
+ * Samme mønster som TrygdeavgiftPage.ventPåSideLastet: networkidle skal la testen gå videre,
+ * ikke feile den. Uten timeout og catch arver kallet 30s-standarden og kaster på en enkelt
+ * etterslepende autolagring, med en feilmelding som ikke peker på det testen sjekker.
  */
-async function ventPaaRoligNettverk(page: Page): Promise<void> {
+async function settleNetwork(page: Page): Promise<void> {
   await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {
     console.log('⚠️  Nettverket ble ikke rolig innen 5s (fortsetter)');
   });
@@ -73,7 +70,7 @@ async function ventPaaRoligNettverk(page: Page): Promise<void> {
  * Fører saken fram til trygdeavgiftssteget med scenarioet over, og lar bruttoinntekten stå
  * ufylt — den fylles av testen selv, som da kan lytte på beregningssvaret først.
  */
-async function gaaTilTrygdeavgiftMedToSkatteaar(page: Page, request: any): Promise<TrygdeavgiftPage> {
+async function gåTilTrygdeavgiftMedToSkatteår(page: Page, request: APIRequestContext): Promise<TrygdeavgiftPage> {
   const unleash = new UnleashHelper(request);
   await unleash.enableFeature('melosys.trygdeavgift.25-prosentregel');
   await unleash.enableFeature('melosys.trygdeavgift.vis_beregningsforklaring');
@@ -128,17 +125,17 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
   }) => {
     test.setTimeout(180000);
 
-    // Taket og delbeløpene regnes ut på forhånd, slik at testen sier hva den forventer
-    // før den ser svaret — og feiler hvis G-justering flytter minstebeløpet under oss.
+    // Taket regnes ut på forhånd, så testen sier hva den forventer før den ser svaret,
+    // og feiler hvis en G-justering har flyttet minstebeløpet etter at testen ble skrevet.
     const minstebeløp = await hentMinstebeløp(request, ÅR_MED_ORDINÆR);
     const årsinntekt = MÅNEDSINNTEKT * 12;
     const forventetTak = Math.floor(0.25 * (årsinntekt - minstebeløp));
 
-    const trygdeavgift = await gaaTilTrygdeavgiftMedToSkatteaar(page, request);
+    const trygdeavgift = await gåTilTrygdeavgiftMedToSkatteår(page, request);
 
-    // Fanger opp beregningssvaret slik melosys-api faktisk serialiserer det, så testen
-    // skiller «web rendrer ikke feltet» fra «api/beregning sender det ikke». Forklaringen
-    // persisteres ikke, så den finnes kun i PUT-svaret.
+    // Fanger opp beregningssvaret slik melosys-api serialiserer det, så en feil viser om
+    // feltet mangler i api-svaret eller bare i visningen. Forklaringen lagres ikke, så den
+    // finnes kun i PUT-svaret.
     const beregningssvar: any[] = [];
     page.on('response', (response) => {
       if (isTrygdeavgiftBeregningResponse(response) && response.request().method() === 'PUT') {
@@ -149,12 +146,12 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
       }
     });
     await trygdeavgift.fyllInnBruttoinntektMedApiVent(String(MÅNEDSINNTEKT));
-    await ventPaaRoligNettverk(page);
+    await settleNetwork(page);
 
-    // Poll på INNHOLDET, ikke på antall svar: skjemaet lagrer debouncet, og
+    // Poll på innholdet, ikke på antall svar: skjemaet lagrer debouncet, og
     // fyllInnBruttoinntektMedApiVent løser seg på hvilket som helst 200-svar. Det første
-    // svaret som lander kan være fra tilstanden før inntekten ble fylt inn, og har da ingen
-    // forklaring for ÅR_MED_ORDINÆR. Rekkefølgen i lista er dessuten json()-rekkefølge.
+    // svaret kan være fra før inntekten ble fylt inn, og har da ingen forklaring for
+    // ÅR_MED_ORDINÆR. Lista er dessuten i json()-rekkefølge, ikke svar-rekkefølge.
     const forklaringFor = (svar: any) =>
       (svar?.beregningsforklaringer ?? []).find((f: any) => f.aar === ÅR_MED_ORDINÆR);
     await expect
@@ -165,8 +162,7 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
           'Sender melosys-api fortsatt beregningsforklaringer, og traff scenarioet riktig år?',
       })
       .toBeGreaterThan(0);
-    // .at(-1): flere autolagringer kan ha rukket å svare, og det ferskeste svaret er det som
-    // svarer til skjemaet slik det står nå — altså det kortet nedenfor rendres fra.
+    // Flere autolagringer kan ha rukket å svare; det siste svaret er det kortet rendres fra.
     const treff = beregningssvar.filter(forklaringFor);
     const beregning = treff.at(-1);
     const ordinærForklaring = forklaringFor(beregning);
@@ -193,8 +189,8 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
       'melosys-api skal føre ordinaerAvgiftPerDel videre fra beregningstjenesten',
     ).toEqual(['HELSEDEL', 'PENSJONSDEL']);
 
-    // Selve feilklassen: summen overstiger taket, men ingen del gjør det. Uten dette
-    // holder scenarioet ikke lenger, og resten av testen ville passert uten å bevise noe.
+    // Scenarioet må ha sum over taket uten at noen del er over det. Ellers finnes ikke
+    // feilen fag meldte inn i dette settet, og resten av testen beviser ingenting.
     expect(
       ordinærForklaring.ordinaerAvgift,
       'Scenarioet forutsetter at summen av delene overstiger taket',
@@ -241,13 +237,10 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
   });
 
   /**
-   * Motprøven: samme sak, men `ordinaerAvgiftPerDel` strippes ut av svaret før nettleseren
-   * ser det — altså nøyaktig det melosys-web fikk før feltet ble innført.
-   *
-   * Uten denne testen kunne testen over ikke skille «melosys-web utleder merknaden av
-   * tallene» fra «melosys-web gjentar en hardkodet ulikhet som tilfeldigvis stemte». Det er
-   * denne responsen som ga kortet fag meldte inn: totalen overstiger taket, og kortet
-   * påsto likevel «Ordinær avgift … ≤ 25 %-tak … → ordinær beregning brukes».
+   * Motprøve: samme sak, men `ordinaerAvgiftPerDel` fjernes fra svaret før nettleseren ser
+   * det, slik svaret var før feltet fantes. Da skal kortet si at delbeløpene mangler. Før
+   * rettingen viste det i stedet «Ordinær avgift … ≤ 25 %-tak … → ordinær beregning brukes»,
+   * en fast tekst som ikke var regnet ut fra tallene. Det var dette kortet fag meldte inn.
    */
   test('påstår ikke at totalen er under taket når delbeløpene mangler i svaret', async ({
     page,
@@ -265,18 +258,18 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
         }
         await route.fulfill({ response, json });
       } catch (error) {
-        // Et unntak som slipper ut herfra ville latt forespørselen stå ufullført til testens
-        // timeout, uten spor tilbake til interceptet.
+        // Et unntak herfra lar forespørselen henge til testens timeout, uten spor tilbake
+        // til denne route-en.
         console.error(`⚠️  Kunne ikke stripe ordinaerAvgiftPerDel: ${error}`);
         await route.continue().catch(() => {
-          // Kun oppryddingen svelges; feilen over er allerede logget.
+          // Feilen over er allerede logget.
         });
       }
     });
 
-    const trygdeavgift = await gaaTilTrygdeavgiftMedToSkatteaar(page, request);
+    const trygdeavgift = await gåTilTrygdeavgiftMedToSkatteår(page, request);
     await trygdeavgift.fyllInnBruttoinntektMedApiVent(String(MÅNEDSINNTEKT));
-    await ventPaaRoligNettverk(page);
+    await settleNetwork(page);
     await trygdeavgift.assertions.verifiserTrygdeavgiftBeregnet();
 
     const kort = new BeregningsforklaringKortPage(page);
