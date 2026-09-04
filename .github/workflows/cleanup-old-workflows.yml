@@ -47,7 +47,7 @@ jobs:
             echo "📝 Workflow: $WORKFLOW_NAME"
 
             # Get old workflow runs
-            RUN_IDS=$(gh api \
+            RUN_IDS=$(gh api --paginate \
               "repos/$REPO/actions/workflows/$WORKFLOW_ID/runs?created=<$CUTOFF_DATE&per_page=100" \
               --jq '.workflow_runs[].id')
 
