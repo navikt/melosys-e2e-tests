@@ -21,18 +21,23 @@ permissions:
 jobs:
   cleanup:
     runs-on: ubuntu-latest
+    # Resolved once for the whole job: both steps report the same number, and an
+    # unquoted ${{ inputs.… }} inside a run block would be command injection into
+    # a job that holds actions: write.
+    env:
+      DAYS_TO_KEEP: ${{ inputs.days_to_keep || '30' }}
     steps:
       - name: Delete old workflow runs
         env:
           GH_TOKEN: ${{ github.token }}
-          # Passed via env, never interpolated into the script: an unquoted
-          # ${{ inputs.… }} in a run block is command injection into a job that
-          # holds actions: write.
-          DAYS_TO_KEEP: ${{ inputs.days_to_keep || '30' }}
         run: |
-          # A blank or non-numeric value would make `date -d "$DAYS_TO_KEEP days ago"`
-          # resolve to yesterday and silently delete every run in the repo.
-          if ! [[ "$DAYS_TO_KEEP" =~ ^[0-9]+$ ]] || [ "$DAYS_TO_KEEP" -lt 1 ]; then
+          # Values that reach `date -d "$DAYS_TO_KEEP days ago"` unchecked produce a
+          # cutoff that deletes far more than intended: blank resolves to yesterday,
+          # and a negative value to a date in the future, matching every run there is.
+          # The length bound keeps oversized digit strings on this branch too — without
+          # it `[ ... -lt 1 ]` errors out, the guard falls through, and the failure only
+          # surfaces as an obscure `date: invalid date`.
+          if ! [[ "$DAYS_TO_KEEP" =~ ^[0-9]{1,4}$ ]] || [ "$DAYS_TO_KEEP" -lt 1 ]; then
             echo "❌ Invalid days_to_keep: '$DAYS_TO_KEEP' (expected a whole number >= 1)"
             exit 1
           fi
@@ -84,8 +89,6 @@ jobs:
           echo "✅ Cleanup complete!"
 
       - name: Summary
-        env:
-          DAYS_TO_KEEP: ${{ inputs.days_to_keep || '30' }}
         run: |
           echo "## 🗑️ Workflow Cleanup Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
