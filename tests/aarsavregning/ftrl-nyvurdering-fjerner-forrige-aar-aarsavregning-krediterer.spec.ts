@@ -23,8 +23,8 @@ import {FaktureringHelper} from '../../helpers/fakturering-helper';
  *
  * Scenario (akseptansekriterium 1 i storyen):
  *  1. Toggle `melosys.faktureringskomponenten.ikke-tidligere-perioder` AV.
- *  2. Førstegangsbehandling FTRL yrkesaktiv med medlemskapsperiode 01.12.<fjor> – 31.12.<i år>,
- *     ikke-skattepliktig → fakturaserie opprettes, også for desember i fjor.
+ *  2. Førstegangsbehandling FTRL yrkesaktiv med medlemskapsperiode 01.10.<fjor> – 31.12.<i år>,
+ *     ikke-skattepliktig → fakturaserie opprettes, også for fjerde kvartal i fjor.
  *  3. Toggle PÅ.
  *  4. Ny vurdering som avkorter perioden til 01.01.<i år> – 31.12.<i år>. Fjoråret faller bort.
  *  5. Melosys oppretter automatisk årsavregning for fjoråret (OppretteÅrsavregningVedEndring).
@@ -38,17 +38,30 @@ import {FaktureringHelper} from '../../helpers/fakturering-helper';
  * var fjernet, slik at vedtaksbrev («BeregnetAvgiftBelop finnes ikke») og fakturasteget
  * («tilFaktureringBeloep er ikke satt») feilet.
  *
- * STATUS: Skrevet mot melosys-api-branchen 8006-aarsavregning-endelig-avgift-null (PR #3440).
- * Ikke kjørt lokalt ennå (stacken var ikke oppe) — forventes RØD mot main/latest til PR-en er
- * merget, og må verifiseres i CI mot feature-image før den regnes som grønn.
+ * STATUS: melosys-api PR #3440 er merget (b293b850, 2026-09-04). Testen ble merget uten å ha
+ * kjørt i E2E-CI, og feilet deretter i alle kjøringer på ett punkt som ikke har med 8006 å gjøre:
+ * Perioder-steget i den nye vurderingen arver vurderingsperiodene fra førstegangsbehandlingen,
+ * så periode 1 blir stående med fom i fjoråret og trigger «Utenfor søknadsperioden». Avkortingen
+ * gjøres nå eksplisitt i testen (settFraOgMedForPeriode).
  */
 
 const TOGGLE_IKKE_TIDLIGERE_PERIODER = 'melosys.faktureringskomponenten.ikke-tidligere-perioder';
 const INNEVÆRENDE_AAR = new Date().getFullYear();
 
-/** Periode over to år: desember i fjor til og med hele inneværende år (som i Jira-testtilfellet). */
+/**
+ * Periode over to år: fjerde kvartal i fjor til og med hele inneværende år.
+ *
+ * Jira-eksempelet bruker 01.12., men fjoråret må faktureres for MINST 100 kr for at
+ * krediteringen skal bli sendt i det hele tatt: `SendFakturaÅrsavregning` sender bare faktura
+ * når `abs(tilFaktureringBeloep) >= ÅrsavregningKonstanter.MINIMUM_BELØP_FAKTURERING` (100 kr),
+ * og terskelen gjelder også kreditnotaer. Desember alene ga 87 kr (én måned à 87 kr/mnd), altså
+ * under grensen — da logger api-et «Belop til fakturering er mindre enn 100 kr ... faktura sendes
+ * ikke» og BEHANDLINGSRESULTAT.FAKTURASERIE_REFERANSE forblir tom. Hele Q4 gir 3 × 87 = 261 kr.
+ * Integrasjonstesten som fulgte med 8006-fiksen løser det samme på sin måte (1000 kr/md).
+ * IKKE kort ned denne perioden uten å sjekke at fjoråret fortsatt fakturerer ≥ 100 kr.
+ */
 const PERIODE_FØRSTEGANG = {
-    start: `01.12.${FORRIGE_AAR}`,
+    start: `01.10.${FORRIGE_AAR}`,
     end: `31.12.${INNEVÆRENDE_AAR}`,
 };
 
@@ -178,7 +191,12 @@ test.describe('Årsavregning når ny vurdering fjerner fjoråret (MELOSYS-8006)'
             faktureringHelper.totalBelop(førstegangSerie, FORRIGE_AAR)
         );
         console.log(`📌 Fakturert for ${FORRIGE_AAR} i førstegangsbehandlingen: ${fakturertForrigeAar} kr`);
-        expect(fakturertForrigeAar, `Førstegangsbehandlingen skal ha fakturert avgift for ${FORRIGE_AAR}`).toBeGreaterThan(0);
+        // >= 100: under minimumsbeløpet sender ikke api-et kreditnota i det hele tatt, og
+        // kreditnota-assertionene nedenfor ville feilet på en måte som skjuler hvorfor.
+        expect(
+            fakturertForrigeAar,
+            `Førstegangsbehandlingen må fakturere minst 100 kr for ${FORRIGE_AAR}, ellers sendes ingen kreditnota`
+        ).toBeGreaterThanOrEqual(100);
 
         // Fakturaene må være BESTILT for at avregning/kreditering skal ta dem med
         await withFaktureringDatabase(async (db) => {
@@ -212,7 +230,14 @@ test.describe('Årsavregning når ny vurdering fjerner fjoråret (MELOSYS-8006)'
         await lovvalg.svarJaPaaSpørsmålIGruppe('Har søker nær tilknytning til');
         await lovvalg.klikkBekreftOgFortsett();
 
-        // Resultat og trygdeavgift er replikert fra førstegangen (avkortet til inneværende år)
+        // Perioder-steget arver vurderingsperiodene fra førstegangsbehandlingen — de er
+        // IKKE avkortet automatisk av den nye medlemskapsperioden. Periode 1 ligger igjen
+        // med fom 01.12.<i fjor>, altså før den nye søknadsperioden, og melosys-web flagger
+        // «Utenfor søknadsperioden» slik at «Bekreft og fortsett» blir stående deaktivert.
+        // Det er saksbehandler som avkorter perioden, og det er nettopp den avkortingen
+        // som gjør at fjoråret faller bort i denne testen.
+        await resultatPeriode.ventPåSideLastet();
+        await resultatPeriode.settFraOgMedForPeriode(1, periodeNV.start);
         await resultatPeriode.klikkBekreftOgFortsett();
         await trygdeavgift.klikkBekreftOgFortsett();
 
@@ -244,6 +269,13 @@ test.describe('Årsavregning når ny vurdering fjerner fjoråret (MELOSYS-8006)'
                 `tilFakturering=${radVedOpprettelse.TIL_FAKTURERING_BELOEP}, valg=${radVedOpprettelse.ENDELIG_AVGIFT_VALG}`
         );
         expect(Number(radVedOpprettelse.AAR)).toBe(FORRIGE_AAR);
+        // not.toBeNull() FØR Number(): Number(null) === 0, så en ren toBe(0) er grønn også mot
+        // den ubotede feilen i MELOSYS-8006 (beløpene ble stående null). Null er nettopp
+        // feiltilstanden testen skal fange, så den må sjekkes eksplisitt.
+        expect(
+            radVedOpprettelse.BEREGNET_AVGIFT_BELOP,
+            'Endelig avgift skal være satt (ikke null) når året er fjernet'
+        ).not.toBeNull();
         expect(Number(radVedOpprettelse.BEREGNET_AVGIFT_BELOP), 'Endelig avgift skal være 0 når året er fjernet').toBe(0);
         expect(radVedOpprettelse.MANUELT_AVGIFT_BELOEP, 'Ingen manuell avgift').toBeNull();
         expect(radVedOpprettelse.ENDELIG_AVGIFT_VALG).toBe('OPPLYSNINGER_ENDRET');
@@ -251,6 +283,10 @@ test.describe('Årsavregning når ny vurdering fjerner fjoråret (MELOSYS-8006)'
             Number(radVedOpprettelse.TIDLIGERE_FAKTURERT_BELOEP),
             'Tidligere fakturert skal være det førstegangsbehandlingen fakturerte for fjoråret'
         ).toBeCloseTo(fakturertForrigeAar, 0);
+        expect(
+            radVedOpprettelse.TIL_FAKTURERING_BELOEP,
+            'Beløp til fakturering skal være satt (ikke null)'
+        ).not.toBeNull();
         expect(
             Number(radVedOpprettelse.TIL_FAKTURERING_BELOEP),
             'Beløp til fakturering skal være full kreditering (minus tidligere fakturert)'
@@ -289,7 +325,9 @@ test.describe('Årsavregning når ny vurdering fjerner fjoråret (MELOSYS-8006)'
         });
 
         const radEtterVedtak = await hentAarsavregningRad(aarsavregningBehandlingId);
+        expect(radEtterVedtak.BEREGNET_AVGIFT_BELOP).not.toBeNull();
         expect(Number(radEtterVedtak.BEREGNET_AVGIFT_BELOP)).toBe(0);
+        expect(radEtterVedtak.TIL_FAKTURERING_BELOEP).not.toBeNull();
         expect(Number(radEtterVedtak.TIL_FAKTURERING_BELOEP)).toBeCloseTo(-fakturertForrigeAar, 0);
 
         // Kreditnota: årsavregningen har egen fakturaserie med negativt beløp lik det fakturerte
@@ -300,15 +338,32 @@ test.describe('Årsavregning når ny vurdering fjerner fjoråret (MELOSYS-8006)'
         const kreditBeløp = faktureringHelper.avrundBelop(faktureringHelper.totalBelop(kreditSerie));
         expect(kreditBeløp, `Kreditnota skal tilsvare hele beløpet fakturert for ${FORRIGE_AAR}`).toBeCloseTo(-fakturertForrigeAar, 0);
 
-        // Netto for fjoråret på tvers av førstegangskjeden og årsavregningen skal være 0
+        // Netto for fjoråret: det førstegangskjeden fakturerte for fjoråret, motregnet kreditnotaen.
+        //
+        // Kreditnotaen kan IKKE filtreres på fjoråret. `SendFakturaÅrsavregning.finnStartDato/
+        // finnSluttDato` datostempler avregningsfakturaen med trygdeavgiftsperiodene til
+        // behandlingen — og i akkurat dette scenariet har årsavregningen per definisjon ingen
+        // avgiftspliktig periode for fjoråret, så den arver den nye vurderingens perioder i
+        // inneværende år. Kreditnotaen for <i fjor> får derfor datoer i <i år>. Et årsfiltrert
+        // oppslag ville ikke sett krediteringen i det hele tatt og gitt et falskt «netto ≠ 0».
         const nyVurderingFakturaserieRef = await getFakturaserieReferanse(nyVurderingBehandlingId);
         const kjede = await faktureringHelper.hentSammenslåttKjede(
-            [førstegangFakturaserieRef!, nyVurderingFakturaserieRef, aarsavregningFakturaserieRef!].filter(
+            [førstegangFakturaserieRef!, nyVurderingFakturaserieRef].filter(
                 (ref): ref is string => !!ref
             )
         );
-        const nettoForrigeAar = faktureringHelper.avrundBelop(faktureringHelper.totalBelopKjede(kjede, FORRIGE_AAR));
-        console.log(`📌 Netto fakturert for ${FORRIGE_AAR} etter årsavregning: ${nettoForrigeAar} kr`);
+        const fakturertForrigeAarEtterNV = faktureringHelper.avrundBelop(
+            faktureringHelper.totalBelopKjede(kjede, FORRIGE_AAR)
+        );
+        const nettoForrigeAar = faktureringHelper.avrundBelop(fakturertForrigeAarEtterNV + kreditBeløp);
+        console.log(
+            `📌 Fakturert for ${FORRIGE_AAR} i saksbehandlingskjeden: ${fakturertForrigeAarEtterNV} kr, ` +
+                `kreditnota: ${kreditBeløp} kr → netto: ${nettoForrigeAar} kr`
+        );
+        expect(
+            fakturertForrigeAarEtterNV,
+            `Saksbehandlingskjeden skal fortsatt vise det som ble fakturert for ${FORRIGE_AAR}`
+        ).toBeCloseTo(fakturertForrigeAar, 0);
         expect(nettoForrigeAar, `Netto for ${FORRIGE_AAR} skal være 0 etter kreditering`).toBe(0);
     });
 });
