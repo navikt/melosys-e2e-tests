@@ -11,7 +11,7 @@ on:
       days_to_keep:
         description: 'Number of days to keep workflow runs'
         required: false
-        default: '7'
+        default: '30'
         type: string
 
 permissions:
@@ -24,8 +24,8 @@ jobs:
     steps:
       - name: Delete old workflow runs
         run: |
-          # Set retention period (default 7 days, or from manual input)
-          DAYS_TO_KEEP=${{ inputs.days_to_keep || '7' }}
+          # Set retention period (default 30 days, or from manual input)
+          DAYS_TO_KEEP=${{ inputs.days_to_keep || '30' }}
           echo "🗑️  Deleting workflow runs older than $DAYS_TO_KEEP days..."
 
           # Calculate the cutoff date
@@ -78,6 +78,6 @@ jobs:
         run: |
           echo "## 🗑️ Workflow Cleanup Summary" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Deleted workflow runs older than **${{ inputs.days_to_keep || '7' }}** days" >> $GITHUB_STEP_SUMMARY
+          echo "Deleted workflow runs older than **${{ inputs.days_to_keep || '30' }}** days" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
           echo "✅ Cleanup completed successfully" >> $GITHUB_STEP_SUMMARY
