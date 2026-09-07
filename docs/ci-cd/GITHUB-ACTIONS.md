@@ -785,4 +785,4 @@ melosys-docker-compose/
 - **Fixtures Guide**: `docs/guides/FIXTURES.md` - Automatic cleanup and Docker log checking
 - **Helpers Guide**: `docs/guides/HELPERS.md` - Test helper utilities
 - **Troubleshooting Guide**: `docs/guides/TROUBLESHOOTING.md` - Common issues and solutions
-- **POMs**: see `CLAUDE.md` § Page Object Model (POM) Pattern
+- **POMs**: see `CLAUDE.MD` § Page Object Model (POM) Pattern
