@@ -186,4 +186,4 @@ npm run test:ui tests/trygdeavtale
 
 - [POM Migration Plan](../../docs/pom/MIGRATION-PLAN.md)
 - [POM Quick Start](../../docs/pom/QUICK-START.md)
-- [Main CLAUDE.md](../../CLAUDE.md)
+- [Main CLAUDE.MD](../../CLAUDE.MD)
