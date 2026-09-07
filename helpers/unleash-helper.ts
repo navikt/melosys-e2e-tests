@@ -366,13 +366,16 @@ export class UnleashHelper {
       },
       { name: 'melosys.send_popp_hendelse', enabled: true },
       { name: 'melosys.oppgave_nokkelord', enabled: true },
+      // 25 %-regelen er på i produksjon. Tester som trenger ordinær sats må slå den av selv;
+      // uten standardverdi arvet testene tilstanden fra forrige test som rørte den.
+      { name: 'melosys.trygdeavgift.25-prosentregel', enabled: true },
     ];
 
     // Per-run overrides via env vars (comma-separated toggle names).
     // Lets a whole test run pin specific toggles without code changes, e.g.
     //   UNLEASH_FORCE_DISABLE=melosys.trygdeavgift.25-prosentregel
     // Overrides are applied on top of the defaults above and also apply to
-    // toggles that are not part of the default list (like the 25-prosentregel).
+    // toggles that are not part of the default list.
     const parseList = (value?: string): string[] =>
       (value || '').split(',').map(s => s.trim()).filter(Boolean);
     const forceEnable = parseList(process.env.UNLEASH_FORCE_ENABLE);

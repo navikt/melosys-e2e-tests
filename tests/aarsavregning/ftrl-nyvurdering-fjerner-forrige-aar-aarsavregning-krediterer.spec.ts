@@ -46,19 +46,26 @@ import {FaktureringHelper} from '../../helpers/fakturering-helper';
  */
 
 const TOGGLE_IKKE_TIDLIGERE_PERIODER = 'melosys.faktureringskomponenten.ikke-tidligere-perioder';
+/**
+ * 25 %-regelen er PÅ som standard (unleash-helper). Med den på blir avgiften 25 % av inntekten over
+ * minstebeløpet (99 650 kr), og med 100 000 kr i inntekt gir det bare 87 kr — det var derfor
+ * desember alene havnet under 100-kronersgrensen for kreditnota. Scenariokartet (gruppe B)
+ * forutsetter ordinær sats, i størrelsesorden 2 900 kr per måned, så testen slår regelen av.
+ */
+const TOGGLE_25_PROSENT_REGEL = 'melosys.trygdeavgift.25-prosentregel';
 const INNEVÆRENDE_AAR = new Date().getFullYear();
 
 /**
  * Periode over to år: fjerde kvartal i fjor til og med hele inneværende år.
  *
- * Jira-eksempelet bruker 01.12., men fjoråret må faktureres for MINST 100 kr for at
- * krediteringen skal bli sendt i det hele tatt: `SendFakturaÅrsavregning` sender bare faktura
- * når `abs(tilFaktureringBeloep) >= ÅrsavregningKonstanter.MINIMUM_BELØP_FAKTURERING` (100 kr),
- * og terskelen gjelder også kreditnotaer. Desember alene ga 87 kr (én måned à 87 kr/mnd), altså
- * under grensen — da logger api-et «Belop til fakturering er mindre enn 100 kr ... faktura sendes
- * ikke» og BEHANDLINGSRESULTAT.FAKTURASERIE_REFERANSE forblir tom. Hele Q4 gir 3 × 87 = 261 kr.
- * Integrasjonstesten som fulgte med 8006-fiksen løser det samme på sin måte (1000 kr/md).
- * IKKE kort ned denne perioden uten å sjekke at fjoråret fortsatt fakturerer ≥ 100 kr.
+ * Jira-eksempelet bruker 01.12. Fjoråret må faktureres for MINST 100 kr for at krediteringen skal
+ * bli sendt i det hele tatt: `SendFakturaÅrsavregning` sender bare faktura når
+ * `abs(tilFaktureringBeloep) >= ÅrsavregningKonstanter.MINIMUM_BELØP_FAKTURERING` (100 kr), og
+ * terskelen gjelder også kreditnotaer. Under grensen logger api-et «Belop til fakturering er mindre
+ * enn 100 kr ... faktura sendes ikke» og BEHANDLINGSRESULTAT.FAKTURASERIE_REFERANSE forblir tom.
+ * Med 25 %-regelen av (se TOGGLE_25_PROSENT_REGEL) er desember alene godt over grensen; fjerde
+ * kvartal beholdes som margin, og assertionen på ≥ 100 kr fanger det om satsene eller togglene
+ * endrer seg. Integrasjonstesten som fulgte med 8006-fiksen løser det samme med 1000 kr/md.
  */
 const PERIODE_FØRSTEGANG = {
     start: `01.10.${FORRIGE_AAR}`,
@@ -136,6 +143,7 @@ test.describe('Årsavregning når ny vurdering fjerner fjoråret (MELOSYS-8006)'
         // Togglen må være AV: forrige-års-UI-et i trygdeavgiftssteget krever det, og
         // faktureringskomponenten avviser fakturaserier med perioder i tidligere år når den er PÅ.
         await unleash.disableFeature(TOGGLE_IKKE_TIDLIGERE_PERIODER);
+        await unleash.disableFeature(TOGGLE_25_PROSENT_REGEL);
         await auth.login();
 
         console.log('📝 Oppretter FTRL-sak (yrkesaktiv)...');
