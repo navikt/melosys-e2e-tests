@@ -41,19 +41,27 @@ export class RegistreringUnntaksperiodeAssertions {
    * @param periode - Forventet periode i ISO-format
    * @param forventetStatus - 400 for en periode som bryter regelsettet, 204 for en gyldig
    */
+  /**
+   * @param fraIndeks - Første kall som teller. Avgrenser vinduet til én del av testen, slik at
+   *                    et identisk kall fra en tidligere del ikke kan oppfylle assertionen.
+   *                    Lista sendes levende og snittes inne i pollingen; et `slice()` på
+   *                    kallstedet ville frosset en kopi, og et kall som kommer etterpå
+   *                    ville aldri blitt sett.
+   */
   async verifiserKontrollForPeriode(
     kall: UnntaksperiodeKontrollKall[],
     periode: { fom: string; tom: string },
-    forventetStatus: number
+    forventetStatus: number,
+    fraIndeks = 0
   ): Promise<void> {
     const forventetBody = `{"periodeFom":"${periode.fom}","periodeTom":"${periode.tom}"}`;
     // Kallet er sendt av en useEffect som kan fyre etter at feltet er synlig, og svaret kommer
     // enda senere. Et øyeblikksbilde av listen ville lest `status: undefined` på en treg maskin.
     await expect
-      .poll(() => kall.filter(k => k.body === forventetBody).map(k => k.status), {
+      .poll(() => kall.slice(fraIndeks).filter(k => k.body === forventetBody).map(k => k.status), {
         timeout: 20000,
         message: `Kontrollen skal svare ${forventetStatus} på perioden ${periode.fom} – ${periode.tom}. ` +
-          `Observerte kall: ${JSON.stringify(kall)}`
+          `Kall fra og med indeks ${fraIndeks}: ${JSON.stringify(kall.slice(fraIndeks))}`
       })
       .toContain(forventetStatus);
     console.log(`✅ Kontroll ${periode.fom} – ${periode.tom} → ${forventetStatus}`);
@@ -90,10 +98,15 @@ export class RegistreringUnntaksperiodeAssertions {
    * En periode over 24 måneder er en forventet 400 med feilkoder; det er 5xx som er feilen.
    *
    * Ubesvarte kall avvises særskilt: uten den sjekken ville et kall som ennå ikke har svart
-   * telle som «ingen serverfeil», og en 500 som kom for sent gå upåaktet hen.
+   * telle som «ingen serverfeil», og en 500 som kom for sent gå upåaktet hen. Kall nettleseren
+   * melder som avbrutt er unntatt — de kan aldri få svar.
    */
   verifiserIngenServerfeil(kall: UnntaksperiodeKontrollKall[]): void {
-    const ubesvarte = kall.filter(k => k.status === undefined);
+    // Chromium melder `requestfailed` også for kall som fikk svar, når frontenden forkaster
+    // responsen etter neste tastetrykk — målt: 8 av 9 kall, alle med status. Flagget brukes
+    // derfor kun til å unnta kall som aldri får svar fra ubesvart-sjekken.
+    const avbrutte = kall.filter(k => k.feilet).length;
+    const ubesvarte = kall.filter(k => k.status === undefined && !k.feilet);
     expect(
       ubesvarte.map(k => k.body),
       'Alle kontrollkall skal være besvart før statusene vurderes'
@@ -103,7 +116,7 @@ export class RegistreringUnntaksperiodeAssertions {
       serverfeil.map(k => `${k.status}: ${k.body}`),
       'Kontrollen skal aldri gi 5xx — en tastefeil er en klientfeil'
     ).toEqual([]);
-    console.log(`✅ Ingen serverfeil i ${kall.length} kontrollkall`);
+    console.log(`✅ Ingen serverfeil i ${kall.length} kontrollkall (${avbrutte} meldt avbrutt av nettleseren)`);
   }
 
   /**

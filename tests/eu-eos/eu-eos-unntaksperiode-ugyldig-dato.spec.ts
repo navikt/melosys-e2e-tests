@@ -4,7 +4,7 @@ import { SedHelper } from '../../helpers/sed-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { RegistreringUnntaksperiodePage } from '../../pages/eu-eos/registrering-unntaksperiode.page';
 import { EuEosUtpekingPage } from '../../pages/behandling/eu-eos-utpeking.page';
-import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
+import { getProcessMarker, runAndWaitForProcessInstances, waitForNewProcessInstances } from '../../helpers/api-helper';
 import { formatDateISO, formatDateNorwegian, getDateMonthsFromNow } from '../../helpers/date-helper';
 import { BRUKERNAVN_VALID } from '../../pages/shared/constants';
 
@@ -33,20 +33,20 @@ test.describe('EU/EØS - Registrering av unntaksperiode (ugyldig dato mens saksb
 
     console.log('📝 Del A: Injiserer inngående A009 (DE) med periode på 2 år og 1 dag');
     const sed = new SedHelper(request);
-    const result = await runAndWaitForProcessInstances(
-      request,
-      () => sed.sendSed({
-        sedType: 'A009',
-        bucType: 'LA_BUC_02',
-        landkode: 'DE',
-        avsenderId: 'DE:DRV',
-        lovvalgsland: 'DE',
-        periodeFom: formatDateISO(fom),
-        periodeTom: formatDateISO(sedTom),
-      }),
-      { timeoutSeconds: 60 }
-    );
+    // Markøren tas før innsendingen, men resultatet sjekkes før ventingen: en mislykket
+    // innsending starter ingen prosesser, og skal gi SED-feilmeldingen, ikke en timeout.
+    const markørEtterSed = await getProcessMarker(request);
+    const result = await sed.sendSed({
+      sedType: 'A009',
+      bucType: 'LA_BUC_02',
+      landkode: 'DE',
+      avsenderId: 'DE:DRV',
+      lovvalgsland: 'DE',
+      periodeFom: formatDateISO(fom),
+      periodeTom: formatDateISO(sedTom),
+    });
     expect(result.success, `Send A009 feilet: ${result.message}`).toBe(true);
+    await waitForNewProcessInstances(request, markørEtterSed, { timeoutSeconds: 60 });
 
     const auth = new AuthHelper(page);
     await auth.login();
@@ -72,7 +72,7 @@ test.describe('EU/EØS - Registrering av unntaksperiode (ugyldig dato mens saksb
 
     const nyTomNorsk = formatDateNorwegian(nyTom);
     const antallFørTyping = kontrollkall.length;
-    await unntak.skrivSluttdatoTegnForTegn(nyTomNorsk, kontrollkall);
+    await unntak.skrivSluttdatoTegnForTegn(nyTomNorsk, kontrollkall, formatDateISO(nyTom));
 
     unntak.assertions.verifiserUgyldigeTastetrykkStoppet(kontrollkall.length - antallFørTyping, nyTomNorsk);
     unntak.assertions.verifiserIngenUgyldigDatoSendt(kontrollkall);
@@ -84,13 +84,14 @@ test.describe('EU/EØS - Registrering av unntaksperiode (ugyldig dato mens saksb
 
     console.log('📝 Del D: Setter gyldig periode på 12 måneder og lagrer');
     // Siste tastetrykk i del B ga den ferdige datoen, altså samme body som del D venter på.
-    // Uten dette snittet ville assertionen under bli oppfylt av del B og ikke kunne feile.
+    // Uten dette vinduet ville assertionen under bli oppfylt av del B og ikke kunne feile.
     const antallFørDelD = kontrollkall.length;
     await unntak.settPeriode(formatDateNorwegian(fom), nyTomNorsk);
     await unntak.assertions.verifiserKontrollForPeriode(
-      kontrollkall.slice(antallFørDelD),
+      kontrollkall,
       { fom: formatDateISO(fom), tom: formatDateISO(nyTom) },
-      204
+      204,
+      antallFørDelD
     );
     await runAndWaitForProcessInstances(request, () => unntak.lagre(), { timeoutSeconds: 90 });
 

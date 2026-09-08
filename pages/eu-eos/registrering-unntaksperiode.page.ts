@@ -7,6 +7,11 @@ export interface UnntaksperiodeKontrollKall {
   url: string;
   body: string;
   status?: number;
+  /**
+   * Nettleseren meldte `requestfailed`. Skjer også for kall som fikk svar, når frontenden
+   * forkaster responsen — bruk feltet kun til å unnta kall fra ubesvart-sjekken.
+   */
+  feilet?: boolean;
 }
 
 /**
@@ -48,12 +53,12 @@ export class RegistreringUnntaksperiodePage extends BasePage {
   hentBehandlingID(): number {
     const id = new URL(this.page.url()).searchParams.get('behandlingID');
     expect(id, `Fant ikke behandlingID i URL: ${this.page.url()}`).not.toBeNull();
-    const behandlingID = Number(id);
     expect(
-      Number.isInteger(behandlingID),
-      `behandlingID i URL-en er ikke et heltall: «${id}». Uten denne sjekken bindes NaN inn i SQL-en.`
+      /^\d+$/.test(id ?? ''),
+      `behandlingID i URL-en er ikke et positivt heltall: «${id}». En tom verdi ville blitt Number('') = 0 ` +
+      `og bundet 0 inn i SQL-en, der feilen først dukker opp som en manglende lovvalgsperiode.`
     ).toBe(true);
-    return behandlingID;
+    return Number(id);
   }
 
   /** Valget åpner Startdato/Sluttdato og forhåndsutfyller dem med SED-perioden. */
@@ -83,6 +88,11 @@ export class RegistreringUnntaksperiodePage extends BasePage {
       kall.push(kallet);
     });
 
+    this.page.on('requestfailed', (request: Request) => {
+      const kallet = perRequest.get(request);
+      if (kallet) kallet.feilet = true;
+    });
+
     this.page.on('response', (response: Response) => {
       const request = response.request();
       if (request.method() !== 'POST' || !erKontrollkall(response.url())) return;
@@ -104,16 +114,33 @@ export class RegistreringUnntaksperiodePage extends BasePage {
    * frontenden forsøker å formatere og sende til kontrollen. Feltet blurres
    * bevisst ikke — det er tilstanden under skriving som testes.
    */
-  async skrivSluttdatoTegnForTegn(dato: string, kall: UnntaksperiodeKontrollKall[]): Promise<void> {
+  /**
+   * @param forventetSisteTom - Sluttdatoen på ISO-form. Siste tastetrykk gir en komplett dato,
+   *                            så testen venter på nettopp det kallet i stedet for på klokka.
+   *                            En ren «ingen ubesvarte kall»-polling er oppfylt allerede før
+   *                            siste request er sendt.
+   */
+  async skrivSluttdatoTegnForTegn(
+    dato: string,
+    kall: UnntaksperiodeKontrollKall[],
+    forventetSisteTom: string
+  ): Promise<void> {
+    const sisteKall = this.page.waitForResponse(
+      response => response.request().method() === 'POST' &&
+                  /\/kontroll\/\d+\/unntaksperiode(\?|$)/.test(response.url()) &&
+                  (response.request().postData() ?? '').includes(`"periodeTom":"${forventetSisteTom}"`),
+      { timeout: 30000 }
+    );
+
     await this.sluttdatoFelt.click();
     await this.sluttdatoFelt.fill('');
     await this.sluttdatoFelt.pressSequentially(dato, { delay: 120 });
+    await sisteKall;
 
     // Et ubesvart kall teller som «ingen serverfeil» i assertionene, så ventingen må kreve
-    // svar på alle kallene, ikke bare la det gå en stund.
-    await this.page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+    // svar på alle kallene, ikke bare på det siste.
     await expect
-      .poll(() => kall.filter(k => k.status === undefined).length, {
+      .poll(() => kall.filter(k => k.status === undefined && !k.feilet).length, {
         timeout: 15000,
         message: 'Alle kontrollkall fra skrivingen skal være besvart før de inspiseres'
       })
