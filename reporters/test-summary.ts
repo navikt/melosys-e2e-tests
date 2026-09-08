@@ -109,6 +109,9 @@ class TestSummaryReporter implements Reporter {
     // Check if retries were disabled (set by workflow when disable_retries input is true)
     const retriesDisabled = process.env.RETRIES_DISABLED === 'true';
 
+    // Check if this was a BDD-only run (set by workflow when run_bdd input is true)
+    const bddRun = process.env.RUN_BDD === 'true';
+
     // Calculate actual CI status (excluding known-error tests from failure count)
     // When retries are disabled, flaky tests count as failures
     const failed = tests.filter(t => t.finalStatus === 'failed').length;
@@ -165,6 +168,7 @@ class TestSummaryReporter implements Reporter {
       tests: testData,
       tags: Object.keys(tags).length > 0 ? tags : undefined,
       retriesDisabled: retriesDisabled || undefined,
+      bddRun: bddRun || undefined,
       unleashOverrides: hasOverrides
         ? {
             forceDisable: forceDisable.length > 0 ? forceDisable : undefined,

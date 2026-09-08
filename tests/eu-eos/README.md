@@ -342,4 +342,4 @@ npm run test:ui tests/eu-eos
 
 - [POM Migreringsplan](../../docs/pom/MIGRATION-PLAN.md)
 - [POM Hurtigstart](../../docs/pom/QUICK-START.md)
-- [Hoved CLAUDE.md](../../CLAUDE.md)
+- [Hoved CLAUDE.MD](../../CLAUDE.MD)

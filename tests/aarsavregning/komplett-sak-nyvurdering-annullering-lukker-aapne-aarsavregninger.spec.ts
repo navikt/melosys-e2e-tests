@@ -10,7 +10,8 @@ import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
 import {getYearFromDate, TestPeriods} from '../../helpers/date-helper';
-import {waitForProcessInstances} from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
+import {hentSaksnummerFraUrl} from '../../helpers/url-helper';
 import {withFaktureringDatabase} from '../../helpers/pg-db-helper';
 import {getFakturaserieReferanse, withDatabase} from '../../helpers/db-helper';
 import {FaktureringHelper} from '../../helpers/fakturering-helper';
@@ -75,7 +76,11 @@ test.describe('Komplett saksflyt - Nyvurdering annullering lukker åpne årsavre
 
         // Hent behandlingId fra URL
         const opprinneligBehandlingId = new URL(page.url()).searchParams.get('behandlingID');
-        console.log(`OpprinneligBehandlingId: ${opprinneligBehandlingId}`);
+        // Saksnummeret brukes i steg 10 for å velge NØYAKTIG denne saken ved nyvurdering –
+        // uten det bommer valget hvis en tidligere, feilet kjøring har lekket en sak på
+        // samme bruker. Formatet er «MEL-<n>» eller et rent tall.
+        const saksnummer = hentSaksnummerFraUrl(page.url());
+        console.log(`OpprinneligBehandlingId: ${opprinneligBehandlingId}, saksnummer: ${saksnummer}`);
 
         // Step 5: Lovvalg - 2-8 a med alle vilkar
         console.log('Step 5: Answering lovvalg questions...');
@@ -100,12 +105,9 @@ test.describe('Komplett saksflyt - Nyvurdering annullering lukker åpne årsavre
 
         // Step 8: Vedtak
         console.log('Step 8: Making decision...');
-        await vedtak.klikkFattVedtak();
+        await runAndWaitForProcessInstances(page.request, () => vedtak.klikkFattVedtak());
 
         // Step 9: Wait for processes and set faktura to BESTILT
-        console.log('Step 9: Waiting for processes and updating faktura...');
-        await waitForProcessInstances(page.request, 30);
-
         await withFaktureringDatabase(async (db) => {
             const updated = await db.execute("UPDATE faktura SET status = 'BESTILT'");
             console.log(`Updated ${updated} faktura rows to BESTILT`);
@@ -114,8 +116,10 @@ test.describe('Komplett saksflyt - Nyvurdering annullering lukker åpne årsavre
         // Step 10: Opprett ny vurdering
         console.log('Step 10: Creating nyvurdering...');
         await hovedside.klikkOpprettNySak();
-        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+            page.request,
+            () => opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD', saksnummer)
+        );
 
         // Step 11: Åpne ny behandling
         console.log('Step 11: Opening new behandling...');
@@ -128,8 +132,7 @@ test.describe('Komplett saksflyt - Nyvurdering annullering lukker åpne årsavre
 
         // Step 12: Annuller saken
         console.log('Step 12: Annullering...');
-        await annullering.annullerSak();
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(page.request, () => annullering.annullerSak());
 
         console.log('✅ Workflow completed successfully!');
 
@@ -169,16 +172,23 @@ test.describe('Komplett saksflyt - Nyvurdering annullering lukker åpne årsavre
 
         const opprinneligFakturaserieReferanse = await getFakturaserieReferanse(opprinneligBehandlingId);
 
-        if (opprinneligFakturaserieReferanse === undefined) {
+        if (!opprinneligFakturaserieReferanse) {
             throw new Error(`Fakturaserie referanse er ikke satt for opprinnelig behandling ${opprinneligBehandlingId}`);
         }
 
         const faktureringHelper = new FaktureringHelper(request);
-        const opprinneligKjede = await faktureringHelper.hentFakturaserieKjede(opprinneligFakturaserieReferanse);
+        const avregningsÅr = getYearFromDate(period.end)
+        // Beholdt som defense-in-depth: markør-ventingen over dekker prosessinstansen,
+        // mens pollingen i tillegg dekker forsinkelse mot faktureringskomponenten
+        // (se FaktureringHelper.ventPåKjedeSum).
+        const opprinneligKjede = await faktureringHelper.ventPåKjedeSum(
+            [opprinneligFakturaserieReferanse],
+            0,
+            {aar: avregningsÅr}
+        );
 
         opprinneligKjede.forEach(s => faktureringHelper.loggFakturaserie(s));
 
-        const avregningsÅr = getYearFromDate(period.end)
         const sum = faktureringHelper.avrundBelop(faktureringHelper.totalBelopKjede(opprinneligKjede, avregningsÅr));
 
         console.log(`Sum kjede for ${avregningsÅr}: ${sum} kr`);

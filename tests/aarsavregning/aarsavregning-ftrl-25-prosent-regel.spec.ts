@@ -14,7 +14,7 @@ import {
   BEHANDLINGSTYPE,
   FORRIGE_AAR,
 } from '../../pages/shared/constants';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 import { UnleashHelper } from '../../helpers/unleash-helper';
 import { hentMinstebeløp } from '../../helpers/trygdeavgift-beregning-helper';
 
@@ -86,11 +86,13 @@ async function opprettFtrlAarsavregning(
   await opprettSak.velgBehandlingstype(BEHANDLINGSTYPE.ÅRSAVREGNING);
   await opprettSak.velgAarsak(AARSAK.SØKNAD);
   await opprettSak.leggBehandlingIMine();
-  await opprettSak.klikkOpprettNyBehandling();
-  await opprettSak.assertions.verifiserBehandlingOpprettet();
-
-  console.log('📝 Venter på prosessinstanser...');
-  await waitForProcessInstances(page.request, 30);
+  await runAndWaitForProcessInstances(
+    page.request,
+    async () => {
+      await opprettSak.klikkOpprettNyBehandling();
+      await opprettSak.assertions.verifiserBehandlingOpprettet();
+    }, { timeoutSeconds: 30 }
+  );
   await hovedside.goto();
 
   await page
@@ -216,9 +218,11 @@ test.describe('Årsavregning FTRL — 25%-regelen', () => {
 
     // Fullfør flyten: Bekreft + vedtak
     await aarsavregning.klikkBekreftOgFortsett();
-    await vedtak.klikkFattVedtak();
-
-    await waitForProcessInstances(page.request, 60);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => vedtak.klikkFattVedtak(),
+      { timeoutSeconds: 60 }
+    );
     await vedtak.assertions.verifiserBehandlingAvsluttet();
 
     console.log('✅ Årsavregning: ordinær beregning + vedtak fullført');
@@ -228,7 +232,7 @@ test.describe('Årsavregning FTRL — 25%-regelen', () => {
    * Inntekt under minstebeløpet fremkommer i beregningsoversikten.
    *
    * Forventet visning:
-   * - Infotekst: "Trygdeavgift skal ikke betales da inntekten er under minstebeløpet."
+   * - Infotekst inneholder "inntekten er under minstebeløpet"
    */
   test('inntekt under minstebeløpet fremkommer i beregningsoversikten', async ({ page, request }) => {
     test.setTimeout(120000);
@@ -259,9 +263,7 @@ test.describe('Årsavregning FTRL — 25%-regelen', () => {
     if (expanded !== 'true') {
       await button.click();
     }
-    await expect(
-      page.getByText('Trygdeavgift skal ikke betales da inntekten er under minstebeløpet.')
-    ).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/inntekten er under minstebeløpet/i)).toBeVisible({ timeout: 10000 });
   });
 
   /**

@@ -11,7 +11,7 @@ import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {ManglendeInnbetalingPage} from '../../pages/behandling/manglende-innbetaling.page';
 import {USER_ID_VALID, TIMEOUT_LONG} from '../../pages/shared/constants';
 import {TestPeriods} from '../../helpers/date-helper';
-import {waitForProcessInstances} from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
 import {getFakturaserieReferanse, withDatabase} from '../../helpers/db-helper';
 import {FaktureringHelper} from '../../helpers/fakturering-helper';
 
@@ -112,8 +112,11 @@ test.describe('FTRL manglende innbetaling - opphør av frivillig medlemskap § 2
         await trygdeavgift.klikkBekreftOgFortsett();
 
         console.log('📝 Steg 8: Fatter vedtak (frivillig medlemskap innvilget)...');
-        await vedtak.klikkFattVedtak();
-        await waitForProcessInstances(page.request, 60);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => vedtak.klikkFattVedtak(),
+          { timeoutSeconds: 60 }
+        );
 
         // === DEL 2: Faktura BESTILT + simuler manglende innbetaling ===
 
@@ -202,8 +205,11 @@ test.describe('FTRL manglende innbetaling - opphør av frivillig medlemskap § 2
         await manglendeInnbetaling.fyllInnBegrunnelseFritekstMedAutolagring(begrunnelseTekst);
 
         console.log('📝 Steg 14: Fatter opphørsvedtak...');
-        await vedtak.klikkFattVedtak();
-        await waitForProcessInstances(page.request, 60);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => vedtak.klikkFattVedtak(),
+          { timeoutSeconds: 60 }
+        );
 
         // MELOSYS-8141: autolagringen skal aldri feile, heller ikke mount-kallet uten fritekst
         expect(fritekstResponser.length, 'Minst ett autolagringskall (/resultat/fritekst) i opphørsflyten')

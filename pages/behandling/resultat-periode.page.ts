@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import { expect, Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 
 /**
@@ -91,6 +91,32 @@ export class ResultatPeriodePage extends BasePage {
       await dropdowns[i].selectOption(resultat);
       console.log(`✅ Selected resultat for periode ${i + 1}: ${resultat}`);
     }
+  }
+
+  /**
+   * Sett «Fra og med»-datoen på en enkelt vurderingsperiode.
+   *
+   * Perioder-steget arver vurderingsperiodene fra forrige behandling. Ved en ny
+   * vurdering som *forkorter* søknadsperioden (f.eks. 01.12.<i fjor>–31.12.<i år>
+   * → 01.01.<i år>–31.12.<i år>) blir den arvede periode 1 liggende igjen med
+   * fom-dato før den nye søknadsperioden. Yup-valideringen
+   * (`erInnenforSoknadsperioden` i melosys-web sin vurderingPerioderSchema)
+   * flagger da «Utenfor søknadsperioden», og «Bekreft og fortsett» blir stående
+   * deaktivert. Saksbehandler må avkorte perioden manuelt — dette er den
+   * handlingen.
+   *
+   * @param periodeNr - Periodenummer (1-basert), som i aria-label-en
+   * @param dato - Dato på formatet DD.MM.ÅÅÅÅ
+   */
+  async settFraOgMedForPeriode(periodeNr: number, dato: string): Promise<void> {
+    const felt = this.page.locator(`[aria-label="Fra og med periode ${periodeNr}"] input`);
+    await felt.waitFor({ state: 'visible', timeout: 10000 });
+    await felt.fill(dato);
+    // Datovelgeren propagerer verdien via onChange/blur — uten blur rekker ikke
+    // yup-valideringen å kjøre på nytt før vi sjekker knappen.
+    await felt.blur();
+    await expect(felt).toHaveValue(dato);
+    console.log(`✅ Satte «Fra og med» for periode ${periodeNr} til ${dato}`);
   }
 
   /**

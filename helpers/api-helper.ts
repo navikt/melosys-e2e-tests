@@ -220,11 +220,103 @@ export class AdminApiHelper {
    */
 }
 
+const PROCESS_INSTANCE_BASE_URL = 'http://localhost:8080/internal/e2e/process-instances';
+
+/**
+ * Hent en markør (servertid) FØR handlingen som starter en prosess.
+ *
+ * Markøren er nøkkelen til race-fri venting: sendes den til `waitForNewProcessInstances`,
+ * teller kun prosessinstanser registrert etter den — forrige stegs arbeid kan ikke oppfylle
+ * ventingen.
+ *
+ * Bruk helst `runAndWaitForProcessInstances`, som gjør dette for deg.
+ */
+export async function getProcessMarker(request: APIRequestContext): Promise<string> {
+  const response = await request.get(`${PROCESS_INSTANCE_BASE_URL}/marker`, {
+    failOnStatusCode: false,
+    timeout: 10_000
+  });
+
+  if (!response.ok()) {
+    throw new Error(
+      `Kunne ikke hente prosessmarkør (HTTP ${response.status()}). melosys-api-imaget må ha ` +
+      `/internal/e2e/process-instances/marker (navikt/melosys-api#3436) — kjører du et eldre image?`
+    );
+  }
+
+  const {marker} = await response.json();
+  if (typeof marker !== 'string' || marker.length === 0) {
+    // Uten dette ville en tom respons gitt `after=undefined`, som serveren avviser med 400
+    // FØRST etter at handlingen er kjørt — altså en langt mer forvirrende feilmelding.
+    throw new Error(`Prosessmarkør-endepunktet svarte uten markør: ${JSON.stringify(marker)}`);
+  }
+  return marker;
+}
+
+/**
+ * Vent på at prosessene som ble startet ETTER markøren er ferdige.
+ *
+ * I motsetning til `waitForProcessInstances` kan denne ikke svare COMPLETED på forrige stegs
+ * arbeid: serveren krever at minst `expectedNew` prosessinstanser registrert etter markøren
+ * finnes, og at alle er FERDIG.
+ *
+ * @param markør - fra `getProcessMarker`, hentet FØR handlingen
+ * @param expectedNew - antall nye prosessinstanser handlingen starter (default 1).
+ *                      0 betyr ren tømming: «alt som er registrert etter markøren skal være
+ *                      ferdig», uten å kreve at noe nytt finnes. Brukes av cleanup-fixturen.
+ */
+export async function waitForNewProcessInstances(
+  request: APIRequestContext,
+  markør: string,
+  options: { expectedNew?: number; timeoutSeconds?: number } = {}
+): Promise<void> {
+  const {expectedNew = 1, timeoutSeconds = 30} = options;
+
+  return await awaitProcessInstances(request, timeoutSeconds, {
+    after: markør,
+    expectedNew: String(expectedNew)
+  });
+}
+
+/**
+ * Hent markør → kjør handlingen → vent på prosessene handlingen startet.
+ *
+ * Dette er den anbefalte formen. Den er umulig å bruke feil, fordi markøren alltid tas før
+ * handlingen:
+ *
+ * ```typescript
+ * await runAndWaitForProcessInstances(page.request, () => vedtak.klikkFattVedtak());
+ * ```
+ *
+ * Returverdien fra handlingen sendes videre, så den kan brukes rundt handlinger som gir data.
+ */
+export async function runAndWaitForProcessInstances<T>(
+  request: APIRequestContext,
+  handling: () => Promise<T>,
+  options: { expectedNew?: number; timeoutSeconds?: number } = {}
+): Promise<T> {
+  const markør = await getProcessMarker(request);
+  const resultat = await handling();
+  await waitForNewProcessInstances(request, markør, options);
+  return resultat;
+}
+
 /**
  * Wait for all process instances to complete
  *
  * This calls the melosys-api test endpoint that monitors async process instances.
  * It ensures all background processes complete before we clean up the database.
+ *
+ * ⚠️ Uten markør kan endepunktet svare COMPLETED på arbeid fra FORRIGE steg — det ser bare
+ * på alt som er registrert de siste 60 sekundene. For venting rundt en konkret handling,
+ * bruk `runAndWaitForProcessInstances`.
+ *
+ * De gjenværende kallstedene på denne formen står IGJEN MED VILJE. De venter ikke på én
+ * bestemt handling, men på at etterslep skal roe seg — «lukk auto-prosesser (oppgave, brev)
+ * før DB-asserten», eller «ikke la cleanup-fixturen treffe aktive prosesser». Det finnes
+ * ingen enkelthandling å ta markør rundt, og en markør med expectedNew=0 ville ikke hjulpet:
+ * den venter heller ikke på at prosessen rekker å bli registrert. Skal de bli race-frie,
+ * må de vite hvor mange prosesser de faktisk venter på — en egen jobb, ikke en omskriving.
  *
  * Returns:
  * - COMPLETED: All processes finished successfully
@@ -233,13 +325,29 @@ export class AdminApiHelper {
  * - ERROR: Unexpected error occurred
  */
 export async function waitForProcessInstances(request: APIRequestContext, timeoutSeconds: number = 30): Promise<void> {
-  try {
-    const response = await request.get('http://localhost:8080/internal/e2e/process-instances/await', {
+  return await awaitProcessInstances(request, timeoutSeconds);
+}
+
+async function awaitProcessInstances(
+  request: APIRequestContext,
+  timeoutSeconds: number,
+  ekstraParametre: Record<string, string> = {}
+): Promise<void> {
+  const params = new URLSearchParams({timeoutSeconds: String(timeoutSeconds), ...ekstraParametre});
+
+  {
+    const response = await request.get(`${PROCESS_INSTANCE_BASE_URL}/await?${params}`, {
       failOnStatusCode: false,
       timeout: (timeoutSeconds + 5) * 1000 // Add 5s buffer
     });
 
     const result = await response.json();
+
+    // Serveren advarer bl.a. om gjenbrukt markør — en venting som ser koordinert ut, men som
+    // instanser fra FØR handlingen kan oppfylle. Serverloggen er usynlig i CI, så den må hit.
+    if (result.warning) {
+      console.log(`   ⚠️  ${result.warning}`);
+    }
 
     if (result.status === 'COMPLETED') {
       if (result.totalInstances > 0) {
@@ -278,15 +386,11 @@ export async function waitForProcessInstances(request: APIRequestContext, timeou
     // ERROR or other status
     console.log(`   ❌ Process instances: ${result.status} - ${result.message}`);
     throw new Error(`Process instance check failed: ${result.message}`);
-
-  } catch (error: unknown) {
-    const errorMessage = error instanceof Error ? error.message : String(error);
-    if (errorMessage.includes('ECONNREFUSED') || errorMessage.includes('connect')) {
-      console.log(`   ⚠️  Could not connect to API - endpoint may not be available`);
-      return; // Don't fail if endpoint doesn't exist
-    }
-    throw error;
   }
+  // Ingen catch her med vilje. Den forrige svelget alt som inneholdt «connect» — også et api
+  // som døde midt i ventingen — og returnerte som om ventingen var oppfylt. Da asserter testen
+  // videre på en tilstand ingen prosess har produsert: nøyaktig den stille grønnheten
+  // markørkontrakten finnes for å fjerne. Er api-et nede, skal testen si det høyt.
 }
 
 /**
