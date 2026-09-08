@@ -41,9 +41,8 @@ export class RegistreringUnntaksperiodeAssertions {
    * @param periode - Forventet periode i ISO-format
    * @param forventetStatus - 400 for en periode som bryter regelsettet, 204 for en gyldig
    * @param fraIndeks - Første kall som teller, slik at et identisk kall fra en tidligere del
-   *                    ikke kan oppfylle assertionen. Lista sendes levende og snittes inne i
-   *                    pollingen; et `slice()` på kallstedet ville frosset en kopi, og et kall
-   *                    som kom etterpå ville aldri blitt sett.
+   *                    ikke kan oppfylle assertionen. Send lista levende — den snittes inne i
+   *                    pollingen, som ellers ville lukket over en frosset kopi.
    */
   async verifiserKontrollForPeriode(
     kall: UnntaksperiodeKontrollKall[],
@@ -74,10 +73,9 @@ export class RegistreringUnntaksperiodeAssertions {
   }
 
   /**
-   * Færre kontrollkall enn tastetrykk viser at guarden stopper noe. Den garanterte
-   * stoppen er det ledende «0», som aldri kan parses; de øvrige mellomtilstandene
-   * avhenger av måned og år. Assertionen som faktisk pinner feilen er
-   * `verifiserIngenUgyldigDatoSendt` — denne er et supplerende signal, ikke beviset.
+   * Supplerende signal, ikke beviset: `verifiserIngenUgyldigDatoSendt` pinner feilen.
+   * Bare det ledende «0» er garantert stoppet; de øvrige mellomtilstandene avhenger av
+   * måned og år.
    */
   verifiserUgyldigeTastetrykkStoppet(antallSendt: number, dato: string): void {
     expect(
@@ -94,13 +92,9 @@ export class RegistreringUnntaksperiodeAssertions {
   /**
    * En periode over 24 måneder er en forventet 400 med feilkoder; det er 5xx som er feilen.
    *
-   * 5xx-sjekken dekker alle kall. Ubesvart-sjekken dekker bare kall nettleseren ikke har
-   * meldt som avbrutt — målt er det 1 av 9 — så den fanger en sen 500 kun der.
+   * 5xx-sjekken dekker alle kall. Ubesvart-sjekken dekker bare kall uten `feilet`, målt 1 av 9.
    */
   verifiserIngenServerfeil(kall: UnntaksperiodeKontrollKall[]): void {
-    // Chromium melder `requestfailed` også for kall som fikk svar, når frontenden forkaster
-    // responsen etter neste tastetrykk — målt: 8 av 9 kall, alle med status. Flagget brukes
-    // derfor kun til å unnta kall som aldri får svar fra ubesvart-sjekken.
     const avbrutte = kall.filter(k => k.feilet).length;
     const ubesvarte = kall.filter(k => k.status === undefined && !k.feilet);
     expect(

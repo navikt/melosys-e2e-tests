@@ -75,9 +75,8 @@ export class RegistreringUnntaksperiodePage extends BasePage {
    */
   overvåkKontrollkall(): UnntaksperiodeKontrollKall[] {
     const kall: UnntaksperiodeKontrollKall[] = [];
-    // Flere tastetrykk gir samme body («05», «05.» og «05.0» parses til samme dato), så
-    // responsen må knyttes til Request-objektet. Matching på body ville tilordnet statusen
-    // til et vilkårlig av de identiske kallene.
+    // «05», «05.» og «05.0» parses til samme dato, så flere kall har identisk body. Matching
+    // på body ville derfor tilordnet statusen til et vilkårlig av dem.
     const perRequest = new Map<Request, UnntaksperiodeKontrollKall>();
     const erKontrollkall = (url: string) => /\/kontroll\/\d+\/unntaksperiode(\?|$)/.test(url);
 
@@ -114,10 +113,8 @@ export class RegistreringUnntaksperiodePage extends BasePage {
    * å formatere og sende til kontrollen. Feltet blurres bevisst ikke — det er tilstanden
    * under skriving som testes.
    *
-   * @param forventetSisteTom - Sluttdatoen på ISO-form. Siste tastetrykk gir en komplett dato,
-   *                            så testen venter på nettopp det kallet i stedet for på klokka.
-   *                            En ren «ingen ubesvarte kall»-polling er oppfylt allerede før
-   *                            siste request er sendt.
+   * @param forventetSisteTom - Sluttdatoen på ISO-form. Ventingen må være kausal: «ingen
+   *                            ubesvarte kall» er oppfylt allerede før siste request er sendt.
    */
   async skrivSluttdatoTegnForTegn(
     dato: string,
@@ -136,8 +133,7 @@ export class RegistreringUnntaksperiodePage extends BasePage {
     await this.sluttdatoFelt.pressSequentially(dato, { delay: 120 });
     await sisteKall;
 
-    // Et ubesvart kall teller som «ingen serverfeil» i assertionene, så ventingen må kreve
-    // svar på alle kallene, ikke bare på det siste.
+    // Ikke bare det siste kallet: et ubesvart kall slipper unna 5xx-sjekken.
     await expect
       .poll(() => kall.filter(k => k.status === undefined && !k.feilet).length, {
         timeout: 15000,
