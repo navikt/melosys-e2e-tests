@@ -25,12 +25,9 @@ export class RegistreringUnntaksperiodePage extends BasePage {
   readonly assertions: RegistreringUnntaksperiodeAssertions;
 
   private readonly heading = this.page.getByRole('heading', { name: 'Registrering av unntaksperioder' });
-  private readonly godkjennRadio = this.page.getByRole('radio', { name: 'Godkjenn unntaksperiode' });
   private readonly endrePeriodeRadio = this.page.getByRole('radio', { name: 'Godkjenn, men endre periode' });
-  private readonly ikkeGodkjennRadio = this.page.getByRole('radio', { name: 'Ikke godkjenn' });
   private readonly startdatoFelt = this.page.getByRole('textbox', { name: 'Startdato' });
   private readonly sluttdatoFelt = this.page.getByRole('textbox', { name: 'Sluttdato' });
-  private readonly begrunnelseSelect = this.page.getByRole('combobox', { name: 'Begrunnelse for endret periode' });
   private readonly lagreButton = this.page.getByRole('button', { name: 'Lagre' });
 
   constructor(page: Page) {
@@ -121,13 +118,6 @@ export class RegistreringUnntaksperiodePage extends BasePage {
     console.log(`✅ Satte periode ${startdato} – ${sluttdato}`);
   }
 
-  /** PERIODE_FEILREGISTRERT er forhåndsvalgt, så dette trengs bare for andre begrunnelser. */
-  async velgBegrunnelse(term: string): Promise<void> {
-    await this.begrunnelseSelect.waitFor({ state: 'visible', timeout: 15000 });
-    await this.selectByVisibleText(this.begrunnelseSelect, term);
-    console.log(`✅ Valgte begrunnelse «${term}»`);
-  }
-
   async lagre(): Promise<void> {
     await expect(this.lagreButton).toBeEnabled({ timeout: 30000 });
     const responsePromise = this.page.waitForResponse(
@@ -141,10 +131,4 @@ export class RegistreringUnntaksperiodePage extends BasePage {
     expect(response.status(), 'Godkjenning av unntaksperioden skal gå gjennom').toBeLessThan(300);
     console.log(`✅ Lagret registrering av unntaksperiode → ${response.status()}`);
   }
-
-  get godkjennUnntaksperiodeRadio() { return this.godkjennRadio; }
-  get ikkeGodkjennUnntaksperiodeRadio() { return this.ikkeGodkjennRadio; }
-  get lagreKnapp() { return this.lagreButton; }
-  get sluttdato() { return this.sluttdatoFelt; }
-  get startdato() { return this.startdatoFelt; }
 }

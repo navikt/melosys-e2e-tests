@@ -97,15 +97,20 @@ export class RegistreringUnntaksperiodeAssertions {
   /**
    * Perioden saksbehandler registrerte skal ha overstyrt perioden fra SED-en.
    *
+   * LOVVALG_PERIODE.BEH_RESULTAT_ID peker på BEHANDLINGSRESULTAT, som er nøklet
+   * på BEHANDLING_ID — behandlingID kan derfor brukes direkte.
+   *
    * @param fom - Forventet startdato på formatet dd.MM.yyyy
    * @param tom - Forventet sluttdato på formatet dd.MM.yyyy
    */
-  async verifiserEndretPeriodeLagret(fom: string, tom: string): Promise<void> {
+  async verifiserEndretPeriodeLagret(behandlingID: number, fom: string, tom: string): Promise<void> {
     await withDatabase(async (db) => {
       const periode = await db.queryOne<{ FOM: string; TOM: string }>(
         `SELECT TO_CHAR(FOM_DATO, 'DD.MM.YYYY') AS FOM, TO_CHAR(TOM_DATO, 'DD.MM.YYYY') AS TOM
-         FROM LOVVALG_PERIODE ORDER BY ID DESC FETCH FIRST 1 ROWS ONLY`, {});
-      expect(periode, 'Forventet en lovvalgsperiode').not.toBeNull();
+         FROM LOVVALG_PERIODE
+         WHERE BEH_RESULTAT_ID = :behandlingID
+         ORDER BY ID DESC FETCH FIRST 1 ROWS ONLY`, { behandlingID });
+      expect(periode, `Forventet en lovvalgsperiode for behandling ${behandlingID}`).not.toBeNull();
       expect(periode!.FOM, 'Startdato skal være den saksbehandler registrerte').toBe(fom);
       expect(periode!.TOM, 'Sluttdato skal være datoen saksbehandler registrerte, ikke datoen fra SED-en').toBe(tom);
       console.log(`✅ Endret periode lagret: ${periode!.FOM} – ${periode!.TOM}`);

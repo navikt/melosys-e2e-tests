@@ -76,7 +76,8 @@ test.describe('EU/EØS - Registrering av unntaksperiode (ugyldig dato mens saksb
     unntak.assertions.verifiserIngenServerfeil(kontrollkall);
 
     console.log('📝 Del C: Verifiserer at melosys-api svarer 400 på ugyldig datostreng');
-    await unntak.assertions.verifiserApiAvviserUgyldigDato(request, unntak.hentBehandlingID());
+    const behandlingID = unntak.hentBehandlingID();
+    await unntak.assertions.verifiserApiAvviserUgyldigDato(request, behandlingID);
 
     console.log('📝 Del D: Setter gyldig periode på 12 måneder og lagrer');
     await unntak.settPeriode(formatDateNorwegian(fom), nyTomNorsk);
@@ -93,7 +94,7 @@ test.describe('EU/EØS - Registrering av unntaksperiode (ugyldig dato mens saksb
       lovvalgsland: 'DE',
       medlLovvalgsland: 'DEU',
     });
-    await unntak.assertions.verifiserEndretPeriodeLagret(formatDateNorwegian(fom), nyTomNorsk);
+    await unntak.assertions.verifiserEndretPeriodeLagret(behandlingID, formatDateNorwegian(fom), nyTomNorsk);
 
     console.log('✅ Ingen kontrollkall med «Invalid date», ingen serverfeil');
   });
