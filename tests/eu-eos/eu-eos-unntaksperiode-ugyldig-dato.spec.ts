@@ -15,7 +15,7 @@ import { BRUKERNAVN_VALID } from '../../pages/shared/constants';
  * unntaksperiode-kontrollen eller gi 5xx, og en ugyldig datostreng skal avvises
  * som klientfeil.
  */
-test.describe('EU/EØS - Registrering av unntaksperiode (ugyldig dato i live-kontrollen)', () => {
+test.describe('EU/EØS - Registrering av unntaksperiode (ugyldig dato mens saksbehandler skriver)', () => {
   test('skal ikke sende «Invalid date» eller få 500 når sluttdato skrives tegn for tegn', async ({ page, request }) => {
     test.setTimeout(300000);
 
@@ -31,7 +31,7 @@ test.describe('EU/EØS - Registrering av unntaksperiode (ugyldig dato i live-kon
     // kjører. Uten det kan alle mellomtilstandene være parsebare, og testen måler ingenting.
     nyTom.setDate(5);
 
-    console.log('📝 Del A: Injiserer inngående A009 (DE) med periode på 2 år + 1 dag...');
+    console.log('📝 Del A: Injiserer inngående A009 (DE) med periode på 2 år og 1 dag');
     const sed = new SedHelper(request);
     const result = await sed.sendSed({
       sedType: 'A009',
@@ -56,7 +56,7 @@ test.describe('EU/EØS - Registrering av unntaksperiode (ugyldig dato i live-kon
 
     await unntak.assertions.verifiserRegisterkontrolltreff('Periodelengde er mer enn 24 måneder');
 
-    console.log('📝 Del B: Skriver ny sluttdato tegn for tegn...');
+    console.log('📝 Del B: Skriver ny sluttdato tegn for tegn');
     const kontrollkall = unntak.overvåkKontrollkall();
 
     // Forhåndsutfyllingen med SED-perioden trigger første kontroll, som skal avvise den.
@@ -75,10 +75,10 @@ test.describe('EU/EØS - Registrering av unntaksperiode (ugyldig dato i live-kon
     unntak.assertions.verifiserIngenUgyldigDatoSendt(kontrollkall);
     unntak.assertions.verifiserIngenServerfeil(kontrollkall);
 
-    console.log('📝 Del C: Verifiserer at melosys-api svarer 400 på ugyldig datostreng...');
+    console.log('📝 Del C: Verifiserer at melosys-api svarer 400 på ugyldig datostreng');
     await unntak.assertions.verifiserApiAvviserUgyldigDato(request, unntak.hentBehandlingID());
 
-    console.log('📝 Del D: Setter gyldig periode (12 md) og lagrer...');
+    console.log('📝 Del D: Setter gyldig periode på 12 måneder og lagrer');
     await unntak.settPeriode(formatDateNorwegian(fom), nyTomNorsk);
     unntak.assertions.verifiserKontrollForPeriode(
       kontrollkall,
@@ -95,6 +95,6 @@ test.describe('EU/EØS - Registrering av unntaksperiode (ugyldig dato i live-kon
     });
     await unntak.assertions.verifiserEndretPeriodeLagret(formatDateNorwegian(fom), nyTomNorsk);
 
-    console.log('✅ Ugyldig dato i live-kontrollen gir verken «Invalid date»-payload eller 500');
+    console.log('✅ Ingen kontrollkall med «Invalid date», ingen serverfeil');
   });
 });

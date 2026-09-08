@@ -50,20 +50,20 @@ export class RegistreringUnntaksperiodeAssertions {
     const treff = kall.filter(k => k.body === forventetBody);
     expect(
       treff.length,
-      `Forventet minst ett live-kontrollkall med ${forventetBody}. Observerte kall: ${JSON.stringify(kall)}`
+      `Forventet minst ett kontrollkall med ${forventetBody}. Observerte kall: ${JSON.stringify(kall)}`
     ).toBeGreaterThan(0);
     expect(
       treff.map(k => k.status),
-      `Live-kontrollen skal svare ${forventetStatus} på perioden ${periode.fom} – ${periode.tom}`
+      `Kontrollen skal svare ${forventetStatus} på perioden ${periode.fom} – ${periode.tom}`
     ).toContain(forventetStatus);
-    console.log(`✅ Live-kontroll ${periode.fom} – ${periode.tom} → ${forventetStatus}`);
+    console.log(`✅ Kontroll ${periode.fom} – ${periode.tom} → ${forventetStatus}`);
   }
 
   verifiserIngenUgyldigDatoSendt(kall: UnntaksperiodeKontrollKall[]): void {
     const ugyldige = kall.filter(k => k.body.includes('Invalid date'));
     expect(
       ugyldige.map(k => k.body),
-      'melosys-web skal ikke sende sentinelstrengen «Invalid date» til unntaksperiode-kontrollen'
+      'melosys-web skal ikke sende den ugyldige verdien «Invalid date» til unntaksperiode-kontrollen'
     ).toEqual([]);
     console.log(`✅ Ingen av ${kall.length} kontrollkall inneholdt «Invalid date»`);
   }
@@ -75,7 +75,7 @@ export class RegistreringUnntaksperiodeAssertions {
   verifiserUgyldigeTastetrykkStoppet(antallSendt: number, dato: string): void {
     expect(
       antallSendt,
-      'Live-kontrollen skal ha blitt kalt mens datoen ble skrevet (ellers tester vi ingenting)'
+      'Kontrollen skal ha blitt kalt mens datoen ble skrevet, ellers måler ikke testen noe'
     ).toBeGreaterThan(0);
     expect(
       antallSendt,
@@ -89,7 +89,7 @@ export class RegistreringUnntaksperiodeAssertions {
     const serverfeil = kall.filter(k => (k.status ?? 0) >= 500);
     expect(
       serverfeil.map(k => `${k.status}: ${k.body}`),
-      'Live-kontrollen skal aldri gi 5xx — en tastefeil er en klientfeil'
+      'Kontrollen skal aldri gi 5xx — en tastefeil er en klientfeil'
     ).toEqual([]);
     console.log(`✅ Ingen serverfeil i ${kall.length} kontrollkall`);
   }
@@ -107,7 +107,7 @@ export class RegistreringUnntaksperiodeAssertions {
          FROM LOVVALG_PERIODE ORDER BY ID DESC FETCH FIRST 1 ROWS ONLY`, {});
       expect(periode, 'Forventet en lovvalgsperiode').not.toBeNull();
       expect(periode!.FOM, 'Startdato skal være den saksbehandler registrerte').toBe(fom);
-      expect(periode!.TOM, 'Sluttdato skal være den ENDREDE (forkortede) datoen, ikke SED-ens').toBe(tom);
+      expect(periode!.TOM, 'Sluttdato skal være datoen saksbehandler registrerte, ikke datoen fra SED-en').toBe(tom);
       console.log(`✅ Endret periode lagret: ${periode!.FOM} – ${periode!.TOM}`);
     });
   }
@@ -133,7 +133,7 @@ export class RegistreringUnntaksperiodeAssertions {
       response.status(),
       `Ugyldig dato skal gi 400 (klientfeil), ikke ${response.status()}. Body: ${body}`
     ).toBe(400);
-    expect(body, 'Responsen skal ikke lekke Jackson-/klassedetaljer').not.toContain('Invalid date');
+    expect(body, 'Responsen skal ikke gjengi den ugyldige inputverdien').not.toContain('Invalid date');
     expect(body, 'Responsen skal ikke lekke interne klassenavn').not.toContain('no.nav.melosys');
     expect(JSON.parse(body).message).toBe('Ugyldig format på forespørselen');
 
