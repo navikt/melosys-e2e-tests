@@ -2,10 +2,7 @@ import { Page, Request, Response, expect } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 import { RegistreringUnntaksperiodeAssertions } from './registrering-unntaksperiode.assertions';
 
-/**
- * Én observert POST mot live-kontrollen
- * (`POST /api/kontroll/{behandlingID}/unntaksperiode`).
- */
+/** Én observert POST mot `/api/kontroll/{behandlingID}/unntaksperiode`. */
 export interface UnntaksperiodeKontrollKall {
   url: string;
   body: string;
@@ -16,26 +13,13 @@ export interface UnntaksperiodeKontrollKall {
  * Page Object for «Registrering av unntaksperioder» (EU/EØS,
  * behandlingstema REGISTRERING_UNNTAK_NORSK_TRYGD_*).
  *
- * Siden vises når en inngående A009/A010 IKKE kan registreres automatisk, dvs.
- * når registerkontrollen (UfmKontroll) har gitt minst ett treff — f.eks.
- * PERIODEN_OVER_24_MD. Da opprettes en oppgave i stedet for automatisk
- * godkjenning (BestemBehandlingsmåteSed), og saksbehandler må ta stilling til
- * unntaksperioden i UI-et:
+ * Skjermen vises bare når registerkontrollen (UfmKontroll) har gitt minst ett
+ * treff på en inngående A009/A010. Uten treff registreres unntaket automatisk,
+ * og ingen av metodene her har noe å feste seg i.
  *
- *   ( ) Godkjenn unntaksperiode        ← deaktivert så lenge det finnes kontrollfeil
- *   ( ) Godkjenn, men endre periode    ← åpner Startdato/Sluttdato + begrunnelse
- *   ( ) Ikke godkjenn
- *
- * Datofeltene er «live»: hvert tastetrykk trigger en
- * `POST /api/kontroll/{behandlingID}/unntaksperiode` (saksopplysninger.jsx:88-96),
- * som er kjernen i «Invalid date»-feilen denne POM-en brukes til å vokte.
- *
- * @example
- * const unntak = new RegistreringUnntaksperiodePage(page);
- * await unntak.ventPåSiden();
- * await unntak.velgGodkjennMenEndrePeriode();
- * const kall = unntak.overvåkKontrollkall();
- * await unntak.skrivSluttdatoTegnForTegn('31.12.2027');
+ * Datofeltene kontrolleres fortløpende: hvert tastetrykk kan gi en
+ * `POST /api/kontroll/{behandlingID}/unntaksperiode` (melosys-web,
+ * `saksopplysninger.jsx`).
  */
 export class RegistreringUnntaksperiodePage extends BasePage {
   readonly assertions: RegistreringUnntaksperiodeAssertions;
@@ -55,8 +39,8 @@ export class RegistreringUnntaksperiodePage extends BasePage {
   }
 
   /**
-   * Vent til registreringssiden er lastet. Ved mount kjører frontenden én
-   * kontroll på SED-perioden, så vi venter også på at nettverket roer seg.
+   * Ved mount kjører frontenden én kontroll på SED-perioden, så vi venter også
+   * på at nettverket roer seg.
    */
   async ventPåSiden(): Promise<void> {
     await this.heading.waitFor({ state: 'visible', timeout: 60000 });
@@ -64,18 +48,13 @@ export class RegistreringUnntaksperiodePage extends BasePage {
     console.log('✅ «Registrering av unntaksperioder» er åpen');
   }
 
-  /**
-   * behandlingID fra URL-en (`?behandlingID=123`).
-   */
   hentBehandlingID(): number {
     const id = new URL(this.page.url()).searchParams.get('behandlingID');
     expect(id, `Fant ikke behandlingID i URL: ${this.page.url()}`).not.toBeNull();
     return Number(id);
   }
 
-  /**
-   * Velg «Godkjenn, men endre periode», som åpner Startdato/Sluttdato-feltene.
-   */
+  /** Valget åpner Startdato/Sluttdato og forhåndsutfyller dem med SED-perioden. */
   async velgGodkjennMenEndrePeriode(): Promise<void> {
     await this.endrePeriodeRadio.waitFor({ state: 'visible', timeout: 30000 });
     await this.endrePeriodeRadio.check();
@@ -84,11 +63,8 @@ export class RegistreringUnntaksperiodePage extends BasePage {
   }
 
   /**
-   * Start overvåking av live-kontrollkallene. Returnerer en liste som fylles
-   * fortløpende med request-body og responsstatus for hver
-   * `POST /api/kontroll/{behandlingID}/unntaksperiode`.
-   *
-   * Må kalles FØR man skriver i datofeltene.
+   * Må kalles før man skriver i datofeltene: listen fylles fra request- og
+   * response-hendelser, og kall som skjer før dette punktet er tapt.
    */
   overvåkKontrollkall(): UnntaksperiodeKontrollKall[] {
     const kall: UnntaksperiodeKontrollKall[] = [];
@@ -116,25 +92,20 @@ export class RegistreringUnntaksperiodePage extends BasePage {
   }
 
   /**
-   * Skriv en dato tegn for tegn i Sluttdato-feltet — slik en saksbehandler
-   * gjør. Hvert tastetrykk gir en halvferdig verdi ("3", "31", "31.", …) som
-   * frontenden forsøker å formatere og sende til live-kontrollen.
-   *
-   * Feltet blurres bevisst IKKE her: poenget er tilstanden mens man skriver.
+   * Hvert tastetrykk gir en halvferdig verdi («3», «31», «31.», …) som
+   * frontenden forsøker å formatere og sende til kontrollen. Feltet blurres
+   * bevisst ikke — det er tilstanden under skriving som testes.
    */
   async skrivSluttdatoTegnForTegn(dato: string): Promise<void> {
     await this.sluttdatoFelt.click();
     await this.sluttdatoFelt.fill('');
     await this.sluttdatoFelt.pressSequentially(dato, { delay: 120 });
-    // La de siste kallene rekke å bli sendt/besvart før vi inspiserer dem.
+    // La de siste kallene rekke å bli sendt og besvart før de inspiseres.
     await this.page.waitForTimeout(1500);
     console.log(`✅ Skrev sluttdato «${dato}» tegn for tegn`);
   }
 
-  /**
-   * Sett en gyldig periode og fullfør skrivingen (blur), slik at frontenden
-   * formaterer verdiene og kjører en siste kontroll.
-   */
+  /** Tab fullfører skrivingen, slik at frontenden formaterer og kjører en siste kontroll. */
   async settPeriode(startdato: string, sluttdato: string): Promise<void> {
     await this.startdatoFelt.click();
     await this.startdatoFelt.fill('');
@@ -150,20 +121,13 @@ export class RegistreringUnntaksperiodePage extends BasePage {
     console.log(`✅ Satte periode ${startdato} – ${sluttdato}`);
   }
 
-  /**
-   * Velg begrunnelse for endret periode (verdien i nedtrekkslisten).
-   * Default er PERIODE_FEILREGISTRERT, som allerede er forhåndsvalgt.
-   */
+  /** PERIODE_FEILREGISTRERT er forhåndsvalgt, så dette trengs bare for andre begrunnelser. */
   async velgBegrunnelse(term: string): Promise<void> {
     await this.begrunnelseSelect.waitFor({ state: 'visible', timeout: 15000 });
     await this.selectByVisibleText(this.begrunnelseSelect, term);
     console.log(`✅ Valgte begrunnelse «${term}»`);
   }
 
-  /**
-   * Lagre registreringen. Venter på det kritiske godkjenningskallet
-   * (`POST /saksflyt/unntaksperioder/{id}/godkjenn`).
-   */
   async lagre(): Promise<void> {
     await expect(this.lagreButton).toBeEnabled({ timeout: 30000 });
     const responsePromise = this.page.waitForResponse(
@@ -178,7 +142,6 @@ export class RegistreringUnntaksperiodePage extends BasePage {
     console.log(`✅ Lagret registrering av unntaksperiode → ${response.status()}`);
   }
 
-  // Eksponert for assertions/tester som trenger å sjekke tilstanden på feltene.
   get godkjennUnntaksperiodeRadio() { return this.godkjennRadio; }
   get ikkeGodkjennUnntaksperiodeRadio() { return this.ikkeGodkjennRadio; }
   get lagreKnapp() { return this.lagreButton; }
