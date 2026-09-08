@@ -90,7 +90,7 @@ Når 25%-regelen er aktiv, viser sats-kolonnen symboler i stedet for tall:
 | Symbol | Beregningstype | Betyr |
 |---|---|---|
 | `*` | `TJUEFEM_PROSENT_REGEL` | Avgiften begrenses av 25%-regelen |
-| `**` | `MINSTEBELOEP` | Inntekten er under minstebeløpet |
+| `**` | `MINSTEBELOEP` | Inntekten er under minstebeløpet i perioden som er angitt |
 | Tall | `ORDINAER` / null | Ordinær sats |
 
 Forklaringstekster vises i `div.forklaringstekster` under tabellen.
