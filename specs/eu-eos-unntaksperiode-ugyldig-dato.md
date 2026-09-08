@@ -103,7 +103,7 @@ SED-periode på nøyaktig `fom + 2 år + 1 dag`. Treffet lagres som kontrollresu
 | Og registerkontrollen har gitt treff | `verifiserRegisterkontrolltreff('Periodelengde er mer enn 24 måneder')` — treffpanelet «Treff ved automatisk kontroll» |
 | Når … velger «Godkjenn, men endre periode» | `velgGodkjennMenEndrePeriode()`. Forhåndsutfyllingen trigger første kontroll, som asserteres til 400 på SED-perioden |
 | Og skriver ny sluttdato tegn for tegn | `skrivSluttdatoTegnForTegn('05.MM.YYYY')` — `pressSequentially`, ingen blur. Dag `05` sikrer at minst ett tastetrykk («0») er uparsebart uansett årstid |
-| Så skal halvskrevne datoer ikke sendes | `verifiserUgyldigeTastetrykkStoppet(antallSendt, dato)` — færre kontrollkall enn tastetrykk — og `verifiserIngenUgyldigDatoSendt`, som avviser enhver request-body med `Invalid date` |
+| Så skal halvskrevne datoer ikke sendes | `verifiserIngenUgyldigDatoSendt` avviser enhver request-body med `Invalid date`, og pinner feilen. `verifiserUgyldigeTastetrykkStoppet(antallSendt, dato)` supplerer med at færre kontrollkall enn tastetrykk sendes |
 | Og kontrollen skal aldri svare 5xx | `verifiserIngenServerfeil(kall)` over alle observerte kontrollkall |
 | Og en ugyldig dato skal avvises som klientfeil | `verifiserApiAvviserUgyldigDato` — direkte `POST` med `{"periodeTom":"Invalid date"}` gir 400, `message = "Ugyldig format på forespørselen"`, uten `Invalid date` eller `no.nav.melosys` i responsen |
 | Når … gyldig forkortet periode og lagrer | `settPeriode(fom, fom + 12 md)`, kontroll asserteres til 204, deretter `lagre()`, som venter på `POST /saksflyt/unntaksperioder/{id}/godkjenn` |
@@ -112,7 +112,8 @@ SED-periode på nøyaktig `fom + 2 år + 1 dag`. Treffet lagres som kontrollresu
 ### Akseptansekriterier → vern
 
 1. **Ingen feilmelding ved skriving:** ingen request-body med `Invalid date`, og ingen 5xx i
-   noen av kontrollkallene.
+   noen av kontrollkallene. Alle kall må være besvart før statusene vurderes, ellers ville et
+   kall uten svar telle som «ingen serverfeil».
 2. **Ingen systemfeil i logg:** testen kjører uten `@expect-docker-errors`, så
    docker-log-fixturen feiler hvis melosys-api logger ERROR. Direktekallet i del C treffer
    INFO-stien (`HttpMessageNotReadableException` → 400), ikke ERROR-stien.

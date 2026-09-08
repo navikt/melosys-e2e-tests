@@ -41,21 +41,21 @@ export class RegistreringUnntaksperiodeAssertions {
    * @param periode - Forventet periode i ISO-format
    * @param forventetStatus - 400 for en periode som bryter regelsettet, 204 for en gyldig
    */
-  verifiserKontrollForPeriode(
+  async verifiserKontrollForPeriode(
     kall: UnntaksperiodeKontrollKall[],
     periode: { fom: string; tom: string },
     forventetStatus: number
-  ): void {
+  ): Promise<void> {
     const forventetBody = `{"periodeFom":"${periode.fom}","periodeTom":"${periode.tom}"}`;
-    const treff = kall.filter(k => k.body === forventetBody);
-    expect(
-      treff.length,
-      `Forventet minst ett kontrollkall med ${forventetBody}. Observerte kall: ${JSON.stringify(kall)}`
-    ).toBeGreaterThan(0);
-    expect(
-      treff.map(k => k.status),
-      `Kontrollen skal svare ${forventetStatus} på perioden ${periode.fom} – ${periode.tom}`
-    ).toContain(forventetStatus);
+    // Kallet er sendt av en useEffect som kan fyre etter at feltet er synlig, og svaret kommer
+    // enda senere. Et øyeblikksbilde av listen ville lest `status: undefined` på en treg maskin.
+    await expect
+      .poll(() => kall.filter(k => k.body === forventetBody).map(k => k.status), {
+        timeout: 20000,
+        message: `Kontrollen skal svare ${forventetStatus} på perioden ${periode.fom} – ${periode.tom}. ` +
+          `Observerte kall: ${JSON.stringify(kall)}`
+      })
+      .toContain(forventetStatus);
     console.log(`✅ Kontroll ${periode.fom} – ${periode.tom} → ${forventetStatus}`);
   }
 
@@ -69,8 +69,10 @@ export class RegistreringUnntaksperiodeAssertions {
   }
 
   /**
-   * Færre kontrollkall enn tastetrykk er det positive beviset: minst ett tastetrykk
-   * i datoen gir en uparsebar verdi («0», «05.0») som skal stoppes i frontend.
+   * Færre kontrollkall enn tastetrykk viser at guarden stopper noe. Den garanterte
+   * stoppen er det ledende «0», som aldri kan parses; de øvrige mellomtilstandene
+   * avhenger av måned og år. Assertionen som faktisk pinner feilen er
+   * `verifiserIngenUgyldigDatoSendt` — denne er et supplerende signal, ikke beviset.
    */
   verifiserUgyldigeTastetrykkStoppet(antallSendt: number, dato: string): void {
     expect(
@@ -84,9 +86,19 @@ export class RegistreringUnntaksperiodeAssertions {
     console.log(`✅ ${dato.length - antallSendt} av ${dato.length} tastetrykk stoppet i frontend (ugyldig dato)`);
   }
 
-  /** En periode over 24 måneder er en forventet 400 med feilkoder; det er 5xx som er feilen. */
+  /**
+   * En periode over 24 måneder er en forventet 400 med feilkoder; det er 5xx som er feilen.
+   *
+   * Ubesvarte kall avvises særskilt: uten den sjekken ville et kall som ennå ikke har svart
+   * telle som «ingen serverfeil», og en 500 som kom for sent gå upåaktet hen.
+   */
   verifiserIngenServerfeil(kall: UnntaksperiodeKontrollKall[]): void {
-    const serverfeil = kall.filter(k => (k.status ?? 0) >= 500);
+    const ubesvarte = kall.filter(k => k.status === undefined);
+    expect(
+      ubesvarte.map(k => k.body),
+      'Alle kontrollkall skal være besvart før statusene vurderes'
+    ).toEqual([]);
+    const serverfeil = kall.filter(k => k.status! >= 500);
     expect(
       serverfeil.map(k => `${k.status}: ${k.body}`),
       'Kontrollen skal aldri gi 5xx — en tastefeil er en klientfeil'
@@ -120,8 +132,16 @@ export class RegistreringUnntaksperiodeAssertions {
   /**
    * Kalles direkte mot melosys-api fordi frontenden ikke sender slike verdier:
    * en ugyldig datostreng skal gi 400 med sanert melding, ikke 500 med stacktrace.
+   *
+   * Deserialiseringen feiler før tilgangskontrollen, så svaret er det samme for enhver
+   * behandlingID. Behandlingen i testen brukes likevel, slik at kallet er realistisk.
    */
   async verifiserApiAvviserUgyldigDato(request: APIRequestContext, behandlingID: number): Promise<void> {
+    expect(
+      process.env.LOCAL_AUTH_TOKEN,
+      'LOCAL_AUTH_TOKEN mangler. Uten den svarer endepunktet 401, og feilen ser ut som en api-feil.'
+    ).toBeTruthy();
+
     const response = await request.post(
       `${API_BASE_URL}/kontroll/${behandlingID}/unntaksperiode`,
       {

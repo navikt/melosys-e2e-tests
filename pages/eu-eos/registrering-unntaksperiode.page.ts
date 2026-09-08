@@ -48,7 +48,12 @@ export class RegistreringUnntaksperiodePage extends BasePage {
   hentBehandlingID(): number {
     const id = new URL(this.page.url()).searchParams.get('behandlingID');
     expect(id, `Fant ikke behandlingID i URL: ${this.page.url()}`).not.toBeNull();
-    return Number(id);
+    const behandlingID = Number(id);
+    expect(
+      Number.isInteger(behandlingID),
+      `behandlingID i URL-en er ikke et heltall: «${id}». Uten denne sjekken bindes NaN inn i SQL-en.`
+    ).toBe(true);
+    return behandlingID;
   }
 
   /** Valget åpner Startdato/Sluttdato og forhåndsutfyller dem med SED-perioden. */
@@ -65,20 +70,26 @@ export class RegistreringUnntaksperiodePage extends BasePage {
    */
   overvåkKontrollkall(): UnntaksperiodeKontrollKall[] {
     const kall: UnntaksperiodeKontrollKall[] = [];
+    // Flere tastetrykk gir samme body («05», «05.» og «05.0» parses til samme dato), så
+    // responsen må knyttes til Request-objektet. Matching på body ville tilordnet statusen
+    // til et vilkårlig av de identiske kallene.
+    const perRequest = new Map<Request, UnntaksperiodeKontrollKall>();
     const erKontrollkall = (url: string) => /\/kontroll\/\d+\/unntaksperiode(\?|$)/.test(url);
 
     this.page.on('request', (request: Request) => {
-      if (request.method() === 'POST' && erKontrollkall(request.url())) {
-        kall.push({ url: request.url(), body: request.postData() ?? '' });
-      }
+      if (request.method() !== 'POST' || !erKontrollkall(request.url())) return;
+      const kallet: UnntaksperiodeKontrollKall = { url: request.url(), body: request.postData() ?? '' };
+      perRequest.set(request, kallet);
+      kall.push(kallet);
     });
 
     this.page.on('response', (response: Response) => {
-      if (response.request().method() !== 'POST' || !erKontrollkall(response.url())) return;
-      const body = response.request().postData() ?? '';
-      const treff = kall.find(k => k.status === undefined && k.body === body);
-      if (treff) {
-        treff.status = response.status();
+      const request = response.request();
+      if (request.method() !== 'POST' || !erKontrollkall(response.url())) return;
+      const body = request.postData() ?? '';
+      const kallet = perRequest.get(request);
+      if (kallet) {
+        kallet.status = response.status();
       } else {
         kall.push({ url: response.url(), body, status: response.status() });
       }
@@ -93,12 +104,20 @@ export class RegistreringUnntaksperiodePage extends BasePage {
    * frontenden forsøker å formatere og sende til kontrollen. Feltet blurres
    * bevisst ikke — det er tilstanden under skriving som testes.
    */
-  async skrivSluttdatoTegnForTegn(dato: string): Promise<void> {
+  async skrivSluttdatoTegnForTegn(dato: string, kall: UnntaksperiodeKontrollKall[]): Promise<void> {
     await this.sluttdatoFelt.click();
     await this.sluttdatoFelt.fill('');
     await this.sluttdatoFelt.pressSequentially(dato, { delay: 120 });
-    // La de siste kallene rekke å bli sendt og besvart før de inspiseres.
-    await this.page.waitForTimeout(1500);
+
+    // Et ubesvart kall teller som «ingen serverfeil» i assertionene, så ventingen må kreve
+    // svar på alle kallene, ikke bare la det gå en stund.
+    await this.page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {});
+    await expect
+      .poll(() => kall.filter(k => k.status === undefined).length, {
+        timeout: 15000,
+        message: 'Alle kontrollkall fra skrivingen skal være besvart før de inspiseres'
+      })
+      .toBe(0);
     console.log(`✅ Skrev sluttdato «${dato}» tegn for tegn`);
   }
 
