@@ -76,10 +76,11 @@ await trygdeavgift.fyllInnBruttoinntektMedApiVent('8000');
 |---|---|---|
 | `melosys.trygdeavgift.25-prosentregel` | melosys-trygdeavgift-beregning | Aktiverer 25%-regel og minstebeløp-beregning |
 
-Aktiver med `UnleashHelper`:
+Togglen er PÅ som standard (se `resetToDefaults` i `helpers/unleash-helper.ts`). Tester som
+forventer ordinær sats må slå den av selv:
 ```typescript
 const unleash = new UnleashHelper(request);
-await unleash.enableFeature('melosys.trygdeavgift.25-prosentregel');
+await unleash.disableFeature('melosys.trygdeavgift.25-prosentregel');
 ```
 
 ## 25%-regelen og minstebeløp
@@ -89,7 +90,7 @@ Når 25%-regelen er aktiv, viser sats-kolonnen symboler i stedet for tall:
 | Symbol | Beregningstype | Betyr |
 |---|---|---|
 | `*` | `TJUEFEM_PROSENT_REGEL` | Avgiften begrenses av 25%-regelen |
-| `**` | `MINSTEBELOEP` | Inntekten er under minstebeløpet |
+| `**` | `MINSTEBELOEP` | Inntekten er under minstebeløpet i perioden som er angitt |
 | Tall | `ORDINAER` / null | Ordinær sats |
 
 Forklaringstekster vises i `div.forklaringstekster` under tabellen.

@@ -32,6 +32,11 @@ on:
         required: false
         type: boolean
         default: false
+      run_bdd:
+        description: 'Run ONLY the opt-in ATDD/BDD example (atdd/features/ → --project=bdd) instead of chromium'
+        required: false
+        type: boolean
+        default: false
       unleash_force_disable:
         description: 'Comma-separated Unleash toggles to force OFF for the whole run (e.g. melosys.trygdeavgift.25-prosentregel)'
         required: false
@@ -821,7 +826,20 @@ jobs:
           # Using an array instead of string + eval ensures arguments with
           # spaces or special characters (e.g. "EØS Medlemskap Lovvalg")
           # are passed correctly to Playwright as a single --grep value.
+          # Default: chromium only. repository_dispatch (image-published) runs
+          # never set run_bdd, so the automatic CI stays chromium-only.
           PLAYWRIGHT_ARGS=(test --project=chromium)
+
+          # Opt-in: run ONLY the ATDD/BDD example against the same running stack.
+          # While BDD is being stabilised we deliberately do NOT also run chromium,
+          # so an unrelated flaky chromium test can't sink the BDD experiment.
+          # bddgen is mandatory (.features-gen is gitignored) and fails loudly on
+          # missing/duplicate step defs.
+          if [ "${{ inputs.run_bdd }}" = "true" ]; then
+            echo "🥒 Running ONLY the opt-in ATDD/BDD example (--project=bdd)"
+            npx bddgen
+            PLAYWRIGHT_ARGS=(test --project=bdd)
+          fi
 
           # Add test filter if specified
           if [ -n "$TEST_GREP" ]; then
@@ -895,6 +913,7 @@ jobs:
           TEST_GREP: ${{ inputs.test_grep }}
           RETRIES_DISABLED: ${{ inputs.disable_retries == true }}
           RECORD_API: ${{ inputs.record_api == true && 'true' || '' }}
+          RUN_BDD: ${{ inputs.run_bdd == true && 'true' || '' }}
           UNLEASH_FORCE_DISABLE: ${{ inputs.unleash_force_disable }}
           UNLEASH_FORCE_ENABLE: ${{ inputs.unleash_force_enable }}
 

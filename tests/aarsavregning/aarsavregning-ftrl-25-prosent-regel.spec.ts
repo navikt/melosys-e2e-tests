@@ -232,7 +232,7 @@ test.describe('Årsavregning FTRL — 25%-regelen', () => {
    * Inntekt under minstebeløpet fremkommer i beregningsoversikten.
    *
    * Forventet visning:
-   * - Infotekst: "Trygdeavgift skal ikke betales da inntekten er under minstebeløpet."
+   * - Infotekst inneholder "inntekten er under minstebeløpet"
    */
   test('inntekt under minstebeløpet fremkommer i beregningsoversikten', async ({ page, request }) => {
     test.setTimeout(120000);
@@ -263,9 +263,7 @@ test.describe('Årsavregning FTRL — 25%-regelen', () => {
     if (expanded !== 'true') {
       await button.click();
     }
-    await expect(
-      page.getByText('Trygdeavgift skal ikke betales da inntekten er under minstebeløpet.')
-    ).toBeVisible({ timeout: 10000 });
+    await expect(page.getByText(/inntekten er under minstebeløpet/i)).toBeVisible({ timeout: 10000 });
   });
 
   /**

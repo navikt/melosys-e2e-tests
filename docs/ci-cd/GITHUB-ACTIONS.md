@@ -45,6 +45,7 @@ For debugging race conditions or running specific tests multiple times, use the 
 | `test_grep` | Filter tests by pattern (name, file, or tag) | `` (all tests) |
 | `repeat_each` | Run each test N times | `1` |
 | `disable_retries` | Disable test retries (for accurate race condition detection) | `false` |
+| `run_bdd` | Run ONLY the opt-in ATDD/BDD example (`--project=bdd`) instead of chromium | `false` |
 
 ### Using GitHub CLI (`gh`)
 
@@ -784,4 +785,4 @@ melosys-docker-compose/
 - **Fixtures Guide**: `docs/guides/FIXTURES.md` - Automatic cleanup and Docker log checking
 - **Helpers Guide**: `docs/guides/HELPERS.md` - Test helper utilities
 - **Troubleshooting Guide**: `docs/guides/TROUBLESHOOTING.md` - Common issues and solutions
-- **POMs**: see `CLAUDE.md` § Page Object Model (POM) Pattern
+- **POMs**: see `CLAUDE.MD` § Page Object Model (POM) Pattern
