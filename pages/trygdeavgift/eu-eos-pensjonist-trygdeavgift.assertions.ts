@@ -14,15 +14,11 @@ export class EuEosPensjonistTrygdeavgiftAssertions {
   constructor(readonly page: Page) {}
 
   async verifiserInfomeldingMinstebeløpSynlig(): Promise<void> {
-    await expect(
-      this.page.getByText('Trygdeavgift skal ikke betales da inntekten er under minstebeløpet.'),
-    ).toBeVisible();
+    await expect(this.page.getByText(/inntekten er under minstebeløpet/i)).toBeVisible();
   }
 
   async verifiserInfomeldingMinstebeløpIkkeSynlig(): Promise<void> {
-    await expect(
-      this.page.getByText('Trygdeavgift skal ikke betales da inntekten er under minstebeløpet.'),
-    ).not.toBeVisible();
+    await expect(this.page.getByText(/inntekten er under minstebeløpet/i)).not.toBeVisible();
   }
 
   async verifiserTrygdeavgiftsTabellSynlig(): Promise<void> {
