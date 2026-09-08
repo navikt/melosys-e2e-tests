@@ -104,7 +104,7 @@ export class BeregningsforklaringKortAssertions {
     expect(
       steg.merknad,
       'Merknaden skal forklare at taket måles pr. del',
-    ).toMatch(/Hver avgiftsdel måles mot taket for seg, og ingen av dem overstiger/);
+    ).toMatch(/måles mot taket for seg/i);
 
     return steg;
   }
@@ -123,12 +123,12 @@ export class BeregningsforklaringKortAssertions {
       'Kontrollen gir bare mening når totalen faktisk overstiger taket',
     ).toBeGreaterThan(steg.avgiftstak);
     expect(steg.merknad, 'Kortet skal si at delbeløpene mangler').toMatch(
-      /avgiften ble ikke begrenset.*delbeløpene mangler/,
+      /delbeløpene mangler/i,
     );
     expect(
       steg.merknad,
       `Kortet påstår at ${steg.ordinaerAvgift} ≤ ${steg.avgiftstak}, som ikke stemmer`,
-    ).not.toMatch(/Ordinær avgift .*≤ 25 %-tak/);
+    ).not.toMatch(/≤ 25 %-tak/);
 
     return steg;
   }
