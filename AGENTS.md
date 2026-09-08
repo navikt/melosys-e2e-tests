@@ -575,6 +575,36 @@ await assertErrors(page, ["Feltet er påkrevd"]);
 await assertErrors(page, [/påkrevd/i, "Ugyldig format"]);
 ```
 
+### Text Assertions: Verify Behavior, Not Exact Wording Of Messages
+
+**Rule of thumb:** e2e tests should verify *behavior* (the correct state/message appears
+under the correct business condition), not the *exact wording* of UI. The exact wording is
+already locked down by unit tests, which live next to the component.
+
+```typescript
+// ❌ Avoid: exact full-sentence match in e2e
+await expect(
+  page.getByText('Trygdeavgift skal ikke betales da inntekten er under minstebeløpet i perioden som er angitt.')
+).toBeVisible();
+
+// ✅ Prefer: distinctive substring/regex that survives copy edits
+await expect(page.getByText(/inntekten er under minstebeløpet/i)).toBeVisible();
+```
+
+**Why this matters:** a pure copy-editing change (rewording an alert, adding a clarifying
+phrase) should not force edits across multiple e2e spec files and POM assertion files in
+this repo (and possibly in `melosys-web` too). If it does, the test is over-specified.
+This project's e2e suite is expensive to run: reserve exact-string
+assertions for unit tests (`melosys-web`'s vitest suite), and use e2e only to test behavior (e.g. right message/state renders).
+
+**When exact match of text is still be appropriate in e2e:**
+- Very short, stable labels/button text unlikely to be reworded (e.g. `'Lagre'`, `'Avbryt'`).
+- Verifying a specific enum/code value (e.g. `beregningsregel: 'MINSTEBELØP'`) rather than free text.
+
+**When to prefer a substring/regex:**
+- Any full sentence, alert message, or paragraph of user-facing text.
+- Anything a UX review might reword without changing behavior.
+
 ### Creating New POMs
 
 **Quick Guide:**
