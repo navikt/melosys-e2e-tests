@@ -42,6 +42,10 @@ import { isTrygdeavgiftBeregningResponse } from '../../pages/shared/trygdeavgift
  * Tallene forutsetter minstebeløp 99 650 kr. Både minstebeløp og satser for et år uten egne
  * rader faller tilbake på nyeste år som finnes, så taket flytter seg når neste års satser
  * lander — testen regner det ut dynamisk framfor å hardkode det.
+ *
+ * Satsen har ingen tilsvarende vakt: pensjonsdelen (19,4 % × 1 200 000 = 232 800) må holde seg
+ * under taket. Fra rundt 22,9 % vipper året over i 25 %-regelen, og testen blir rød uten at noe
+ * er regressert.
  */
 
 /**
@@ -161,7 +165,8 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
           'Sender melosys-api fortsatt beregningsforklaringer, og traff scenarioet riktig år?',
       })
       .toBeGreaterThan(0);
-    // Flere autolagringer kan ha rukket å svare; det siste svaret er det kortet rendres fra.
+    // I dag svarer bare én autolagring. Kommer det flere, er rekkefølgen her json()-oppløsning
+    // og ikke nødvendigvis den nettleseren rendret fra.
     const treff = beregningssvar.filter(forklaringFor);
     const beregning = treff.at(-1);
     const ordinærForklaring = forklaringFor(beregning);

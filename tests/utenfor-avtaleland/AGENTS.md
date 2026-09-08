@@ -42,8 +42,9 @@ Trygdedekning og bestemmelse MÅ være kompatible:
 
 ### Perioder
 
-- Perioder MÅ inkludere **inneværende år** — ellers viser Trygdeavgift-steget
-  kun "skal fastsettes på årsavregning"-melding uten inputfelt.
+- Perioder kan ikke ligge i **tidligere år** — da viser Trygdeavgift-steget kun
+  "skal fastsettes på årsavregning"-melding uten inputfelt. Inneværende og framtidige
+  år fungerer begge.
 - Bruk `TestPeriods.currentYearPeriod` / `TestPeriods.standardPeriod` fra `helpers/date-helper.ts`.
 
 ### Lovvalg § 2-8 første ledd a
@@ -69,6 +70,8 @@ await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
 await trygdeavgift.velgBetalesAga(false);  // Må settes FØR bruttoinntekt
 await trygdeavgift.fyllInnBruttoinntektMedApiVent('8000');
 ```
+
+Svaret velger satsene, ikke bare om feltet er utfylt — se «Taket måles pr. avgiftsdel».
 
 ## Feature toggles
 
@@ -111,7 +114,7 @@ at noen begrensning inntreffer. To ting følger av det når du skriver tester:
   yrkesskadetrygd) er 0 når aga betales, så MED og UTEN gir samme beløp da.
 - **`ordinaerAvgiftPerDel` fylles bare når ingen del ble begrenset** (`ingenDelErBegrenset` i
   `BeregningService`). Treffer minst én del taket, splittes svaret i én forklaring pr. del og
-  lista er tom.
+  lista er tom. Den er også tom i minstebeløps-grenen.
 
 ### Forklaringskortet vises kun når en særregel slo ut
 

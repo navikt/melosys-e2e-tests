@@ -69,8 +69,9 @@ export class BeregningsforklaringKortAssertions {
    * skal kortet vise nettopp de delbeløpene som ble målt mot taket — ikke summen av dem, som
    * aldri ble sammenlignet med noe.
    *
-   * Steget rendrer én av fire gjensidig utelukkende merknader, så et krav om «måles pr.
-   * del»-merknaden utelukker samtidig grenen som påsto «Ordinær avgift … ≤ 25 %-tak …».
+   * maksgrenseMerknad i melosys-web rendrer én av åtte gjensidig utelukkende merknader, så et
+   * krav om «måles pr. del»-merknaden utelukker samtidig grenen som påsto «Ordinær avgift …
+   * ≤ 25 %-tak …».
    */
   async verifiserDelerMaaltMotTaket(
     aar: number,
