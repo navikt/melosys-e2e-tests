@@ -26,7 +26,7 @@ export class BeregningsforklaringKortAssertions {
     private readonly kort: BeregningsforklaringKortPage,
   ) {}
 
-  /** Verifiserer at kortet i det hele tatt rendres (krever at en særregel slo ut). */
+  /** Verifiserer at kortet rendres. Krever at en særregel slo ut. */
   async verifiserKortSynlig(): Promise<void> {
     await expect(this.kort.locator()).toBeVisible({ timeout: 10000 });
   }
@@ -96,11 +96,9 @@ export class BeregningsforklaringKortAssertions {
       'Totalen kortet viser skal være summen av delene som står rett under',
     ).toBe(steg.ordinaerAvgift);
 
-    // Uten dette er akseptansekriteriet tomt: ligger summen under taket er det ingen
-    // selvmotsigelse å avverge, og alle assertionene over ville passert uten å bevise noe.
     expect(
       sumDeler,
-      'Feilklassen forutsetter at summen av delene overstiger taket',
+      'Scenarioet forutsetter at summen av delene overstiger taket',
     ).toBeGreaterThan(steg.avgiftstak);
 
     expect(
@@ -112,9 +110,9 @@ export class BeregningsforklaringKortAssertions {
   }
 
   /**
-   * Kontrollen for svar UTEN delbeløp (eldre melosys-api, eller en gren som ikke fyller lista).
-   * Da har kortet ingen tall å begrunne utfallet med, og skal si nettopp det — ikke gjenta
-   * påstanden fag meldte inn, at en total som overstiger taket likevel er under det.
+   * Kontrollen for svar uten delbeløp (melosys-api før feltet fantes, eller en gren som ikke
+   * fyller lista). Da har kortet ingen tall å begrunne utfallet med og skal si nettopp det,
+   * ikke påstå at en total over taket likevel er under det.
    */
   async verifiserMerknadUtenDelbeloep(aar: number): Promise<Maksgrensesteg> {
     const steg = await this.lesMaksgrensesteg(aar, 'SAMLET');
@@ -165,15 +163,15 @@ export class BeregningsforklaringKortAssertions {
       // Raden er «<delbeløp> ≤ <tak>»: delbeløpet står i <strong>, taket til høyre for tegnet.
       const beloep = lesBeloep(await rad.locator('strong').innerText());
 
-      // Taket i raden måles mot taket fra formel-linja over, ikke mot seg selv. Uten den
-      // sammenligningen kunne parsingen under være vilkårlig gal uten at noe oppdaget det.
+      // Måles mot taket fra formel-linja over steget, ikke mot raden selv — en gal parsing av
+      // raden ville ellers bekrefte seg selv.
       expect(
         lesBeloep(verdi.split(/[≤>]/).pop() ?? ''),
         'Delraden skal måle mot samme tak som formelen over steget',
       ).toBe(avgiftstak);
 
-      // Tegnet regnes ut pr. rad i melosys-web. Vi krever nøyaktig det tegnet tallene
-      // tilsier — en tegnklasse som godtar begge ville passert uansett render.
+      // Tegnet regnes ut pr. rad i melosys-web, så raden må vise nøyaktig det tegnet tallene
+      // tilsier.
       expect(
         verdi,
         `Delraden viser ${beloep} mot tak ${avgiftstak}, men tegnet stemmer ikke med tallene`,
