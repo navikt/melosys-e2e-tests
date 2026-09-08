@@ -26,8 +26,8 @@ import { isTrygdeavgiftBeregningResponse } from '../../pages/shared/trygdeavgift
  * av delene, som aldri ble sammenlignet med taket. Avgiftsbeløpene var hele tiden riktige.
  *
  * Rettingen går gjennom tre repoer, og denne testen dekker alle tre i én kjøring:
- * - melosys-trygdeavgift-beregning #447: nytt felt `ordinaerAvgiftPerDel`, og totalen
- *   utledes fra delene (ellers kunne floor(sum) bli 1 kr høyere enn summen av floor(del))
+ * - melosys-trygdeavgift-beregning: nytt felt `ordinaerAvgiftPerDel`, og totalen utledes
+ *   fra delene
  * - melosys-api: feltet føres videre til frontend i `beregningsforklaringer`
  * - melosys-web: steg 3 rendrer delbeløpene, og merknaden utledes av tallene som vises
  *
@@ -56,9 +56,9 @@ const ÅR_MED_ORDINÆR = ÅR_MED_SÆRREGEL + 1;
 const MÅNEDSINNTEKT = 100000;
 
 /**
- * Samme mønster som TrygdeavgiftPage.ventPåSideLastet: networkidle skal la testen gå videre,
- * ikke feile den. Uten timeout og catch arver kallet 30s-standarden og kaster på en enkelt
- * etterslepende autolagring, med en feilmelding som ikke peker på det testen sjekker.
+ * networkidle skal la testen gå videre, ikke feile den — samme mønster som
+ * TrygdeavgiftPage.ventPåSideLastet. Uten timeout og catch arver kallet 30s-standarden og
+ * kaster på én etterslepende autolagring, med en feilmelding som peker et annet sted enn feilen.
  */
 async function settleNetwork(page: Page): Promise<void> {
   await page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {
@@ -85,7 +85,7 @@ async function gåTilTrygdeavgiftMedToSkatteår(page: Page, request: APIRequestC
   await opprettSak.assertions.verifiserBehandlingOpprettet();
   await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).click();
 
-  // Bakover er ikke et alternativ: trygdeavgift for tidligere år fastsettes på årsavregning,
+  // Perioden kan ikke gå bakover: trygdeavgift for tidligere år fastsettes på årsavregning,
   // og steget klipper bort fjorårsdelen med et varsel i stedet for å beregne den.
   const medlemskap = new MedlemskapPage(page);
   await medlemskap.velgPeriode(`01.11.${ÅR_MED_SÆRREGEL}`, `31.12.${ÅR_MED_ORDINÆR}`);
@@ -111,8 +111,8 @@ async function gåTilTrygdeavgiftMedToSkatteår(page: Page, request: APIRequestC
   await trygdeavgift.ventPåSideLastet();
   await trygdeavgift.velgSkattepliktig(false);
   await trygdeavgift.velgInntektskilde('INNTEKT_FRA_UTLANDET');
-  // Ja gir satsene 6,8 % / 19,4 %; med Nei er pensjonssatsen 26,3 % og pensjonsdelen
-  // kan aldri komme under taket — da finnes ikke grenen testen skal dekke.
+  // Ja gir satsene 6,8 % / 19,4 %. Med Nei er pensjonssatsen 26,3 %, pensjonsdelen blir alltid
+  // begrenset, og grenen testen skal dekke finnes ikke.
   await trygdeavgift.velgBetalesAga(true);
   return trygdeavgift;
 }
@@ -125,8 +125,8 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
   }) => {
     test.setTimeout(180000);
 
-    // Taket regnes ut på forhånd, så testen sier hva den forventer før den ser svaret,
-    // og feiler hvis en G-justering har flyttet minstebeløpet etter at testen ble skrevet.
+    // Taket regnes ut før svaret leses, så en G-justering av minstebeløpet gir en feil på
+    // denne linja og ikke et uforklarlig avvik lenger nede.
     const minstebeløp = await hentMinstebeløp(request, ÅR_MED_ORDINÆR);
     const årsinntekt = MÅNEDSINNTEKT * 12;
     const forventetTak = Math.floor(0.25 * (årsinntekt - minstebeløp));
@@ -149,9 +149,8 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
     await settleNetwork(page);
 
     // Poll på innholdet, ikke på antall svar: skjemaet lagrer debouncet, og
-    // fyllInnBruttoinntektMedApiVent løser seg på hvilket som helst 200-svar. Det første
-    // svaret kan være fra før inntekten ble fylt inn, og har da ingen forklaring for
-    // ÅR_MED_ORDINÆR. Lista er dessuten i json()-rekkefølge, ikke svar-rekkefølge.
+    // fyllInnBruttoinntektMedApiVent løser seg på hvilket som helst 200-svar — det første kan
+    // være fra før inntekten ble fylt inn. Lista er i json()-rekkefølge, ikke svar-rekkefølge.
     const forklaringFor = (svar: any) =>
       (svar?.beregningsforklaringer ?? []).find((f: any) => f.aar === ÅR_MED_ORDINÆR);
     await expect
@@ -189,8 +188,7 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
       'melosys-api skal føre ordinaerAvgiftPerDel videre fra beregningstjenesten',
     ).toEqual(['HELSEDEL', 'PENSJONSDEL']);
 
-    // Scenarioet må ha sum over taket uten at noen del er over det. Ellers finnes ikke
-    // feilen fag meldte inn i dette settet, og resten av testen beviser ingenting.
+    // Uten sum over taket og alle deler under det finnes ikke feilen fag meldte inn.
     expect(
       ordinærForklaring.ordinaerAvgift,
       'Scenarioet forutsetter at summen av delene overstiger taket',
@@ -205,8 +203,6 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
       'ordinaerAvgift skal være summen av delene, ikke en uavhengig avrunding',
     ).toBe(ordinærForklaring.ordinaerAvgift);
 
-    // Kortet rendres kun når en særregel slo ut et sted i settet, så året med 25 %-regel er
-    // en forutsetning for at ORDINÆR-forklaringen i det hele tatt er synlig i nettleseren.
     expect(
       (beregning.beregningsforklaringer ?? []).some(
         (f: any) => f.aar === ÅR_MED_SÆRREGEL && f.valgtRegel === 'TJUEFEM_PROSENT_REGEL',
@@ -240,7 +236,7 @@ test.describe('Beregningsforklaring — ordinær avgift pr. avgiftsdel', () => {
    * Motprøve: samme sak, men `ordinaerAvgiftPerDel` fjernes fra svaret før nettleseren ser
    * det, slik svaret var før feltet fantes. Da skal kortet si at delbeløpene mangler. Før
    * rettingen viste det i stedet «Ordinær avgift … ≤ 25 %-tak … → ordinær beregning brukes»,
-   * en fast tekst som ikke var regnet ut fra tallene. Det var dette kortet fag meldte inn.
+   * en fast tekst som ikke var regnet ut fra tallene.
    */
   test('påstår ikke at totalen er under taket når delbeløpene mangler i svaret', async ({
     page,

@@ -8,7 +8,7 @@ export type Inntektsgruppe = 'SAMLET' | 'HELSEDEL' | 'PENSJONSDEL' | 'MISJONAER'
 /**
  * Page Object for «Beregningsforklaring»-kortet i trygdeavgiftssteget.
  *
- * Kortet er en ExpansionCard som er lukket by default, og som melosys-web kun rendrer
+ * Kortet er en ExpansionCard som starter lukket, og som melosys-web kun rendrer
  * når minst én inntektsgruppe traff en særregel (25 %-regelen eller minstebeløpet) —
  * se forklaringerSomSkalVises i melosys-web. Er kortet synlig, inneholder det ett felt
  * per år+inntektsgruppe, med id `beregningsforklaring-kort-<år>-<inntektsgruppe>`.
@@ -16,9 +16,8 @@ export type Inntektsgruppe = 'SAMLET' | 'HELSEDEL' | 'PENSJONSDEL' | 'MISJONAER'
 export class BeregningsforklaringKortPage extends BasePage {
   readonly assertions: BeregningsforklaringKortAssertions;
 
-  // Usikret lokator: i dag rendres nøyaktig ett slikt kort i alle tilstander POM-en når, så
-  // ingen test kan skille denne formen fra .first(). Skulle en side få to kort, er strict
-  // mode-bruddet en bedre beskjed enn et stille valg av det første.
+  // Ingen .first(): får siden to slike kort, sier strict mode-bruddet fra i stedet for at
+  // POM-en stille velger det første.
   private readonly kort = this.page.locator(
     '[aria-label="Beregningsforklaring for trygdeavgift"]',
   );
@@ -37,7 +36,7 @@ export class BeregningsforklaringKortPage extends BasePage {
     return this.kort.locator(`#beregningsforklaring-kort-${aar}-${inntektsgruppe}`);
   }
 
-  /** Åpner kortet hvis det er lukket. Kaster hvis kortet ikke rendres i det hele tatt. */
+  /** Åpner kortet hvis det er lukket. Kaster hvis kortet ikke rendres. */
   async aapneKort(): Promise<void> {
     await this.kort.waitFor({ state: 'visible', timeout: 10000 });
     const knapp = this.kort.locator('button').first();
