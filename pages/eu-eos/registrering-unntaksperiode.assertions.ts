@@ -40,13 +40,10 @@ export class RegistreringUnntaksperiodeAssertions {
    *
    * @param periode - Forventet periode i ISO-format
    * @param forventetStatus - 400 for en periode som bryter regelsettet, 204 for en gyldig
-   */
-  /**
-   * @param fraIndeks - Første kall som teller. Avgrenser vinduet til én del av testen, slik at
-   *                    et identisk kall fra en tidligere del ikke kan oppfylle assertionen.
-   *                    Lista sendes levende og snittes inne i pollingen; et `slice()` på
-   *                    kallstedet ville frosset en kopi, og et kall som kommer etterpå
-   *                    ville aldri blitt sett.
+   * @param fraIndeks - Første kall som teller, slik at et identisk kall fra en tidligere del
+   *                    ikke kan oppfylle assertionen. Lista sendes levende og snittes inne i
+   *                    pollingen; et `slice()` på kallstedet ville frosset en kopi, og et kall
+   *                    som kom etterpå ville aldri blitt sett.
    */
   async verifiserKontrollForPeriode(
     kall: UnntaksperiodeKontrollKall[],
@@ -97,9 +94,8 @@ export class RegistreringUnntaksperiodeAssertions {
   /**
    * En periode over 24 måneder er en forventet 400 med feilkoder; det er 5xx som er feilen.
    *
-   * Ubesvarte kall avvises særskilt: uten den sjekken ville et kall som ennå ikke har svart
-   * telle som «ingen serverfeil», og en 500 som kom for sent gå upåaktet hen. Kall nettleseren
-   * melder som avbrutt er unntatt — de kan aldri få svar.
+   * 5xx-sjekken dekker alle kall. Ubesvart-sjekken dekker bare kall nettleseren ikke har
+   * meldt som avbrutt — målt er det 1 av 9 — så den fanger en sen 500 kun der.
    */
   verifiserIngenServerfeil(kall: UnntaksperiodeKontrollKall[]): void {
     // Chromium melder `requestfailed` også for kall som fikk svar, når frontenden forkaster

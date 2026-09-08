@@ -35,7 +35,7 @@ test.describe('EU/EØS - Registrering av unntaksperiode (ugyldig dato mens saksb
     const sed = new SedHelper(request);
     // Markøren tas før innsendingen, men resultatet sjekkes før ventingen: en mislykket
     // innsending starter ingen prosesser, og skal gi SED-feilmeldingen, ikke en timeout.
-    const markørEtterSed = await getProcessMarker(request);
+    const markørFørSed = await getProcessMarker(request);
     const result = await sed.sendSed({
       sedType: 'A009',
       bucType: 'LA_BUC_02',
@@ -46,7 +46,7 @@ test.describe('EU/EØS - Registrering av unntaksperiode (ugyldig dato mens saksb
       periodeTom: formatDateISO(sedTom),
     });
     expect(result.success, `Send A009 feilet: ${result.message}`).toBe(true);
-    await waitForNewProcessInstances(request, markørEtterSed, { timeoutSeconds: 60 });
+    await waitForNewProcessInstances(request, markørFørSed, { timeoutSeconds: 60 });
 
     const auth = new AuthHelper(page);
     await auth.login();

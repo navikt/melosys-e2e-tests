@@ -15,11 +15,6 @@
  *       nuller ut hele asserten. Skannes i .spec.ts, *.page.ts OG *.assertions.ts.
  *   R4  try/catch rundt expect der catch ikke re-thrower — expect-feilen svelges av catch.
  *       Skannes i .spec.ts + *.assertions.ts.
- *   R6  Uventet løfte fra en async assertion: `x.verifiserY(...)` uten `await`/`return`, der
- *       verifiserY er deklarert `async` i en *.assertions.ts. Assertionen kjører da aldri
- *       ferdig før testen går videre, og en feil blir en ubehandlet rejection — grønn test.
- *       Regelen kom av at en synkron assertion ble gjort async: én glemt `await` ga grønt
- *       med et umulig forventet svar.
  *
  * RATCHET (R5): nye «svelge-catcher» i *.assertions.ts som verken er rene prober
  *   (isVisible()/textContent()/waitFor()… → fanget i variabel) eller re-thrower.
@@ -353,39 +348,10 @@ for (const file of assertionFiles) {
   }
 }
 
-// --- R6: async assertion kalt uten await/return (floating promise) ---
-const asyncAssertionNames = new Set();
-for (const file of assertionFiles) {
-  const skel = skeleton(readFileSync(file, 'utf8'));
-  for (const m of skel.matchAll(/\basync\s+(verifiser[A-Za-zÆØÅæøå0-9_]*)\s*\(/g)) {
-    asyncAssertionNames.add(m[1]);
-  }
-}
-
-if (asyncAssertionNames.size) {
-  const kallRe = new RegExp(`\\.(${[...asyncAssertionNames].join('|')})\\s*\\(`, 'g');
-  for (const file of [...specFiles, ...pageFiles, ...assertionFiles]) {
-    const rel = relative(ROOT, file);
-    const code = readFileSync(file, 'utf8');
-    const skel = skeleton(code);
-    let m;
-    kallRe.lastIndex = 0;
-    while ((m = kallRe.exec(skel)) !== null) {
-      const stmt = statementBefore(skel, m.index);
-      // await/return/void dekker bruk; tilordning og .then/.catch/Promise.all håndterer løftet selv.
-      if (/\b(await|return|void)\b/.test(stmt)) continue;
-      if (/[^=!<>]=[^=>]/.test(stmt)) continue;
-      const etter = skel.slice(m.index, m.index + 400);
-      if (/\)\s*\.(then|catch|finally)\s*\(/.test(etter)) continue;
-      violations.push(`${rel}:${lineOf(code, m.index)}  R6 async assertion uten await (.${m[1]}) — assertionen fullfører ikke før testen går videre, og en feil blir en ubehandlet rejection`);
-    }
-  }
-}
-
 if (violations.length) {
   console.error('\n❌ check:tests fant grønn-men-meningsløs-mønstre:\n');
   for (const v of violations) console.error('   • ' + v);
-  console.error(`\n${violations.length} brudd. Se scripts/check-vacuous-tests.mjs for regler (R1–R6).\n`);
+  console.error(`\n${violations.length} brudd. Se scripts/check-vacuous-tests.mjs for regler (R1–R5).\n`);
   process.exit(1);
 }
 

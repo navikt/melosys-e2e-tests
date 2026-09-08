@@ -54,8 +54,8 @@ export class RegistreringUnntaksperiodePage extends BasePage {
     const id = new URL(this.page.url()).searchParams.get('behandlingID');
     expect(id, `Fant ikke behandlingID i URL: ${this.page.url()}`).not.toBeNull();
     expect(
-      /^\d+$/.test(id ?? ''),
-      `behandlingID i URL-en er ikke et positivt heltall: «${id}». En tom verdi ville blitt Number('') = 0 ` +
+      /^[1-9]\d*$/.test(id ?? ''),
+      `behandlingID i URL-en er ikke et positivt heltall: «${id}». Både en tom verdi og «0» ville blitt 0 ` +
       `og bundet 0 inn i SQL-en, der feilen først dukker opp som en manglende lovvalgsperiode.`
     ).toBe(true);
     return Number(id);
@@ -110,11 +110,10 @@ export class RegistreringUnntaksperiodePage extends BasePage {
   }
 
   /**
-   * Hvert tastetrykk gir en halvferdig verdi («3», «31», «31.», …) som
-   * frontenden forsøker å formatere og sende til kontrollen. Feltet blurres
-   * bevisst ikke — det er tilstanden under skriving som testes.
-   */
-  /**
+   * Hvert tastetrykk gir en halvferdig verdi («3», «31», «31.», …) som frontenden forsøker
+   * å formatere og sende til kontrollen. Feltet blurres bevisst ikke — det er tilstanden
+   * under skriving som testes.
+   *
    * @param forventetSisteTom - Sluttdatoen på ISO-form. Siste tastetrykk gir en komplett dato,
    *                            så testen venter på nettopp det kallet i stedet for på klokka.
    *                            En ren «ingen ubesvarte kall»-polling er oppfylt allerede før
