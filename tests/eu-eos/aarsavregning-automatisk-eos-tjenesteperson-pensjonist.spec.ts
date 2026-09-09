@@ -19,6 +19,7 @@ import { TestPeriods } from '../../helpers/date-helper';
 import { waitForProcessInstances } from '../../helpers/api-helper';
 import { UnleashHelper } from '../../helpers/unleash-helper';
 import { withDatabase } from '../../helpers/db-helper';
+import { hentSaksnummerFraUrl } from '../../helpers/url-helper';
 import { verifiserAarsavregningBehandling } from '../../pages/behandling/aarsavregning.assertions';
 import { setupPensjonistUtenGrunnlagMedAutoAarsavregning } from '../aarsavregning/pensjonist-aarsavregning-setup';
 
@@ -34,9 +35,12 @@ import { setupPensjonistUtenGrunnlagMedAutoAarsavregning } from '../aarsavregnin
  * brev). Frem til hver sakstypes egen årsavregningsflyt er ferdigstilt vises en blokkerende
  * melding i årsavregningsflyten.
  *
- * STATUS (2026-07-02): Begge scenarier GRØNNE lokalt mot feature-branchene (melosys-api:
- * 8163-arsavregning-eos-tjenesteperson @ c6f477f91a, melosys-web:
- * feature/8163-arsavregning-eos-melding @ 08b6efbdb). Tidligere routing-bug i melosys-web
+ * STATUS (2026-09-09): Begge scenarier GRØNNE lokalt mot feature-branchene (melosys-api:
+ * 8163-arsavregning-eos-tjenesteperson, melosys-web: feature/8163-arsavregning-eos-melding
+ * @ e8222dcc3, master merget inn). Ingen av de to peer-PR-ene er merget ennå, så testen er
+ * IKKE grønn mot master-images — CI kjører mot latest, der testid-en
+ * `aarsavregning-ikke-stottet-sakstype` ikke finnes. Vent med e2e-PR til peer-PR-ene lander.
+ * Tidligere routing-bug i melosys-web
  * (`src/url/url.ts` `skalViseIngenFlyt()` rutet tjenesteperson-årsavregning ubetinget til
  * IngenFlytBehandling-fallbacken) er fikset. UI-atferd oppdatert etter Figma-mockup 2026-07-02:
  * «Bekreft og fortsett»-knappen VISES nå men er `disabled` i ustøttet årsavregningsflyt (tidligere
@@ -69,25 +73,24 @@ async function hentInnhentingsbrev(): Promise<BrevRad | undefined> {
 
 /**
  * Binder brev-«Så»-linjene i scenario A: poller PROSESSINSTANS til en fersk brev-prosessinstans
- * for innhentingsbrevet finnes, og verifiserer at den er FERDIG og adressert til forventet
+ * for innhentingsbrevet står som FERDIG, og verifiserer at den er adressert til forventet
  * mottaker. Periode-innholdet (lovvalgsperiode vs. medlemskapsperiode) asserteres IKKE eksakt her
  * — InnhentingAvInntektsopplysningerMapper-gapet (se speken) gjør at DATA kan inneholde feil
  * periodetype til mapper-fiksen lander. Brevmal-treffet + FERDIG-status er det bærende.
  */
 async function verifiserInnhentingsbrevSendt(mottakerIdentifikatorer: string[]): Promise<void> {
+  // Statusen må inn i selve pollen: raden dukker opp i PROSESSINSTANS med STATUS=OPPRETTET og
+  // går til FERDIG først når brevet er produsert og distribuert. Poller vi bare på at raden
+  // finnes, treffer en etterfølgende hard assertion på FERDIG det åpne vinduet og feiler.
   await expect
-    .poll(async () => (await hentInnhentingsbrev()) !== undefined, {
-      message: `Venter på brev-prosessinstans for ${BREVMAL_INNHENTING}`,
+    .poll(async () => (await hentInnhentingsbrev())?.STATUS, {
+      message: `Venter på FERDIG brev-prosessinstans for ${BREVMAL_INNHENTING}`,
       timeout: 30_000,
     })
-    .toBe(true);
+    .toBe('FERDIG');
 
   const brev = (await hentInnhentingsbrev())!;
   console.log(`🔍 Innhentingsbrev: prosess=${brev.PROSESS_TYPE}, status=${brev.STATUS}`);
-
-  expect(brev.STATUS, 'Innhentingsbrevet skal være produsert og distribuert (FERDIG)').toBe(
-    'FERDIG'
-  );
 
   const dataHarMottaker = mottakerIdentifikatorer.some((id) => (brev.DATA || '').includes(id));
   expect(
@@ -197,10 +200,7 @@ test.describe('Automatisk årsavregning for EU/EØS tjenesteperson og pensjonist
     // Saksnummeret trengs for å navigere presist til årsavregningens Vurdering-steg senere
     // (hovedside.åpneBehandling(/Årsavregning/) landet i praksis på et sidepanel som «Fullmektig»
     // i stedet for selve vurderingssteget — åpneAarsavregningForSaksnummer treffer riktig lenke).
-    const saksnummer = new URL(page.url()).pathname.match(/\b(MEL-\d+)\b/)?.[1];
-    if (!saksnummer) {
-      throw new Error(`Fant ikke saksnummer i URL-en: ${page.url()}`);
-    }
+    const saksnummer = hentSaksnummerFraUrl(page.url());
 
     console.log('Step 4: Medlemskap - Bekreft og fortsett...');
     await behandling.klikkBekreftOgFortsett();
@@ -261,9 +261,10 @@ test.describe('Automatisk årsavregning for EU/EØS tjenesteperson og pensjonist
 
     // Simulerer pre-prod-tilstand: i dette testmiljøet er melosys.arsavregning.eos_pensjonist
     // normalt PÅ (default-state, se helpers/unleash-helper.ts) fordi pensjonist-årsavregningsflyten
-    // allerede er langt på vei bygget. Blokkerende melding + brev-fravær er allerede dekket av
-    // aarsavregning-innhentingsbrev-saksbehandlingsflyt.spec.ts scenario 4 — denne testen legger
-    // KUN til blokkerings-assertionen som MELOSYS-8163 introduserer.
+    // allerede er langt på vei bygget. Brev-fraværet er dekket fra før av scenario 4 i
+    // aarsavregning-innhentingsbrev-saksbehandlingsflyt.spec.ts, som kun kaller
+    // verifiserIngenInnhentingsbrev(). Den blokkerende meldingen asserteres ingen andre steder —
+    // det er den MELOSYS-8163 introduserer, og den denne testen legger til.
     await unleash.disableFeature('melosys.arsavregning.eos_pensjonist');
     await auth.login();
 
