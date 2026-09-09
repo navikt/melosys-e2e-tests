@@ -35,11 +35,13 @@ import { setupPensjonistUtenGrunnlagMedAutoAarsavregning } from '../aarsavregnin
  * brev). Frem til hver sakstypes egen årsavregningsflyt er ferdigstilt vises en blokkerende
  * melding i årsavregningsflyten.
  *
- * STATUS (2026-09-09): Begge scenarier er grønne lokalt mot feature-branchene (melosys-api:
- * 8163-arsavregning-eos-tjenesteperson, melosys-web: feature/8163-arsavregning-eos-melding
- * @ e8222dcc3, master merget inn). Ingen av de to peer-PR-ene er merget ennå. CI kjører mot
- * latest, der testid-en `aarsavregning-ikke-stottet-sakstype` ikke finnes, så testen er rød
- * der til peer-PR-ene lander. Vent med e2e-PR til da.
+ * STATUS (2026-09-09): Begge scenarier er grønne i CI, run 34375780858, kjørt med
+ * `disable_retries` mot feature-images
+ * `melosys-api:8163-arsavregning-eos-tjenesteperson-017c8b2b19` og
+ * `melosys-web:8163-arsavregning-eos-melding-4a968fb39`. Peer-PR-ene melosys-web #3108 og
+ * melosys-api #3410 er fortsatt åpne drafts. Mot latest-images er testen rød, siden testid-en
+ * `aarsavregning-ikke-stottet-sakstype` ikke finnes på master i melosys-web før #3108 lander.
+ * Merge-rekkefølge: web, så api, så denne.
  * Tidligere routing-bug i melosys-web
  * (`src/url/url.ts` `skalViseIngenFlyt()` rutet tjenesteperson-årsavregning ubetinget til
  * IngenFlytBehandling-fallbacken) er fikset. UI-atferd oppdatert etter Figma-mockup 2026-07-02:

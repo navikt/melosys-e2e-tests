@@ -1,12 +1,13 @@
 ---
 jira: MELOSYS-8163
 epic: MELOSYS-7080 — Støtte til endringer i medlemskap og trygdeavgift for tidligere år
-status: implemented   # grønt lokalt mot feature-branchene; ikke verifisert mot master
-# Sist verifisert 2026-09-09: 2/2 grønt lokalt mot melosys-api 8163-arsavregning-eos-tjenesteperson
-# og melosys-web feature/8163-arsavregning-eos-melding (master merget inn, e8222dcc3).
-# CI-kjøringen som tidligere ga status=verified (run 28525067636, 2026-07-01) er utdatert:
-# peer-repoene har flyttet seg siden. Blir verified igjen når web- og api-PR-ene er merget
-# og suiten er grønn mot master-images.
+status: verified   # 2/2 grønt i CI (run 34375780858, 2026-09-09), kjørt med disable_retries
+# Kjørt mot feature-images: melosys-api:8163-arsavregning-eos-tjenesteperson-017c8b2b19
+# og melosys-web:8163-arsavregning-eos-melding-4a968fb39, begge bygget med Build and Push Image.
+# Ingen av passeringene kom av et nytt forsøk etter feil — kjøringen slo av retries.
+# Merk at peer-PR-ene (melosys-web #3108, melosys-api #3410) fortsatt er åpne drafts. Mot
+# latest-images er testen rød, siden testid-en aarsavregning-ikke-stottet-sakstype ikke
+# finnes på master i melosys-web før #3108 lander.
 test: tests/eu-eos/aarsavregning-automatisk-eos-tjenesteperson-pensjonist.spec.ts
 toggles: {}            # default-state generelt; toggle-overstyring for blokkerings-scenariene er testmekanikk (se binding)
 tags: [årsavregning, brev, innhenting, eu-eos, tjenesteperson, pensjonist, lovvalg, saksbehandlingsflyt]
