@@ -69,6 +69,27 @@ export class DatabaseHelper {
   }
 
   /**
+   * Execute a DML statement (UPDATE/INSERT/DELETE) with autoCommit.
+   *
+   * NB: `query()` committer IKKE (oracledb default) — endringer der rulles tilbake når
+   * tilkoblingen lukkes. Bruk denne for testoppsett som skal være synlig for melosys-api.
+   * @returns antall berørte rader
+   */
+  async execute(sql: string, binds: any = {}): Promise<number> {
+    if (!this.connection) {
+      throw new Error('Database not connected. Call connect() first.');
+    }
+
+    try {
+      const result = await this.connection.execute(sql, binds, { autoCommit: true });
+      return result.rowsAffected ?? 0;
+    } catch (error) {
+      console.error('❌ Execute failed:', error);
+      throw error;
+    }
+  }
+
+  /**
    * Clean all data tables except lookup tables and PROSESS_STEG
    * Excludes: tables ending with _TYPE, _TEMA, _STATUS, and PROSESS_STEG
    * @param silent - If true, suppress console output

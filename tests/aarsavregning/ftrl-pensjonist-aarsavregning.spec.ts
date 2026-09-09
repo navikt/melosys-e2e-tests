@@ -6,7 +6,7 @@ import { MedlemskapPage } from '../../pages/behandling/medlemskap.page';
 import { LovvalgPage } from '../../pages/behandling/lovvalg.page';
 import { VedtakPage } from '../../pages/vedtak/vedtak.page';
 import { USER_ID_VALID, SAKSTYPER, SAKSTEMA, BEHANDLINGSTEMA, AARSAK, FORRIGE_AAR } from '../../pages/shared/constants';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
 import { verifiserAarsavregningBehandling } from '../../pages/behandling/aarsavregning.assertions';
 
 /**
@@ -44,12 +44,14 @@ test.describe('FTRL Pensjonist - Automatisk årsavregning', () => {
     await opprettSak.velgBehandlingstema(BEHANDLINGSTEMA.PENSJONIST);
     await opprettSak.velgAarsak(AARSAK.SØKNAD);
     await opprettSak.leggBehandlingIMine();
-    await opprettSak.klikkOpprettNyBehandling();
-    await opprettSak.assertions.verifiserBehandlingOpprettet();
-
+    await runAndWaitForProcessInstances(
+      page.request,
+      async () => {
+        await opprettSak.klikkOpprettNyBehandling();
+        await opprettSak.assertions.verifiserBehandlingOpprettet();
+      }, { timeoutSeconds: 30 }
+    );
     // Vent på at asynkrone prosessinstanser fra saksopprettelsen er ferdige
-    console.log('Venter på prosessinstanser etter saksopprettelse...');
-    await waitForProcessInstances(page.request, 30);
     await hovedside.goto();
 
     // Step 2: Open behandling
@@ -79,13 +81,15 @@ test.describe('FTRL Pensjonist - Automatisk årsavregning', () => {
 
     // Step 5: Vedtak
     console.log('Step 5: Fatting vedtak...');
-    await vedtak.klikkFattVedtak();
-
     // Step 6: Verifiser at årsavregning er automatisk opprettet
     // Lenken dukker opp i saksoversikten når den asynkrone auto-opprettelsen er ferdig;
     // ventPåBehandlingslenke laster saksoversikten på nytt til lenken er synlig.
     console.log('Step 6: Verifying årsavregning was auto-created...');
-    await waitForProcessInstances(page.request, 60);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => vedtak.klikkFattVedtak(),
+      { timeoutSeconds: 60 }
+    );
     await hovedside.goto();
 
     const aarsavregningLink = await hovedside.ventPåBehandlingslenke(

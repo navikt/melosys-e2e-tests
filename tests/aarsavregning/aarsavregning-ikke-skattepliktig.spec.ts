@@ -11,7 +11,7 @@ import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
 import {UnleashHelper} from "../../helpers/unleash-helper";
-import {AdminApiHelper, waitForProcessInstances} from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances, AdminApiHelper, waitForProcessInstances } from '../../helpers/api-helper';
 import {expect} from "@playwright/test";
 import {withDatabase} from '../../helpers/db-helper';
 import {verifiserAarsavregningBehandling} from '../../pages/behandling/aarsavregning.assertions';
@@ -19,6 +19,13 @@ import {verifiserAarsavregningBehandling} from '../../pages/behandling/aarsavreg
 
 test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
     test('skal opprette årsavregning for ikke-skattepliktig bruker', async ({page, request}) => {
+        // Full saksflyt → fatt vedtak → async ikke-skattepliktig-jobb → polling +
+        // ~15s Unleash toggle-bekreftelser ligger legitimt nær 60s. På en lastet
+        // CI-runner tipper den over default-timeouten (både grønn baseline-kjøring
+        // og denne lå på 60-62s). Scoped 120s — samme mønster som nyvurdering-
+        // skattestatus-testene (#305) — uten å røre global timeout.
+        test.setTimeout(120000);
+
         // Setup: Authentication
         const auth = new AuthHelper(page);
         const unleash = new UnleashHelper(request);
@@ -40,13 +47,15 @@ test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
         // Step 1: Create new case
         console.log('📝 Step 1: Creating new case...');
         await hovedside.gotoOgOpprettNySak();
-        await opprettSak.opprettStandardSak(USER_ID_VALID);
-        await opprettSak.assertions.verifiserBehandlingOpprettet();
-
+        await runAndWaitForProcessInstances(
+          page.request,
+          async () => {
+            await opprettSak.opprettStandardSak(USER_ID_VALID);
+            await opprettSak.assertions.verifiserBehandlingOpprettet();
+          }, { timeoutSeconds: 30 }
+        );
         // Step 2: Navigate to behandling
         console.log('📝 Step 2: Opening behandling...');
-        console.log('📝 waitForProcessInstances...');
-        await waitForProcessInstances(page.request, 30);
         await hovedside.goto()
 
         await page.getByRole('link', {name: 'TRIVIELL KARAFFEL -'}).click();
@@ -86,10 +95,11 @@ test.describe('Årsavregning - Ikke-skattepliktige saker', () => {
 
         // Step 8: Fatt vedtak (without filling text fields)
         console.log('📝 Step 8: Making decision...');
-        await vedtak.klikkFattVedtak();
-
-        console.log('📝 Step 9: Wait for process instances after first vedtak...');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => vedtak.klikkFattVedtak(),
+          { timeoutSeconds: 30 }
+        );
 
         // Re-enable toggle for årsavregning job (was disabled at start of test)
         await unleash.enableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');

@@ -4,7 +4,7 @@ import {HovedsidePage} from '../../pages/hovedside.page';
 import {OpprettNySakPage} from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import {EuEosBehandlingPage} from '../../pages/behandling/eu-eos-behandling.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
-import {waitForProcessInstances} from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 import {withDatabase} from '../../helpers/db-helper';
 import {
     fetchStoredSedDocuments, findNewNavFormatSed,
@@ -49,9 +49,11 @@ test.describe('EU/EØS 12.1 - Iverksetting mottaker-kjede (UTSENDT_ARBEIDSTAKER)
         await behandling.velgLand('Danmark');
         await opprettSak.velgAarsak('SØKNAD');
         await opprettSak.leggBehandlingIMine();
-        await opprettSak.klikkOpprettNyBehandling();
-
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => opprettSak.klikkOpprettNyBehandling(),
+          { timeoutSeconds: 30 }
+        );
         await hovedside.goto();
         // Robust mot async saksoversikt-lasting (reload-retry) i stedet for rå link-klikk
         await hovedside.åpneBehandling('TRIVIELL KARAFFEL -');
@@ -72,10 +74,11 @@ test.describe('EU/EØS 12.1 - Iverksetting mottaker-kjede (UTSENDT_ARBEIDSTAKER)
         const docsBefore = await fetchStoredSedDocuments(request, 'A009');
         const jpBefore = await fetchStoredJournalposter(request);
 
-        await behandling.fattVedtak();
-
-        console.log('📝 Venter på iverksetting (kaster ved feilede prosessinstanser)...');
-        await waitForProcessInstances(page.request, 60);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => behandling.fattVedtak(),
+          { timeoutSeconds: 60 }
+        );
 
         // === 1. A009 lovvalgsvedtak-SED (LA_BUC_04) sendt til EESSI-mottaker ===
         const sed = await findNewNavFormatSed(request, 'A009', docsBefore);

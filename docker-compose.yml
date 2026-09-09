@@ -357,13 +357,11 @@ services:
       - mock-oauth2-server
       - faktureringskomponenten
       - melosys-trygdeavtale
-    environment:
-      # Load the local environment configuration
-      ENVIRONMENT_NAME: local
-      # Nginx proxy configuration - these are used in the nginx template
-      APP_URL_MELOSYS: http://melosys-api.melosys.docker-internal:8080
-      APP_URL_FAKTURERINGSKOMPONENTEN: http://faktureringskomponenten.melosys.docker-internal:8084
-      APP_URL_TRYGDEAVTALE: http://melosys-trygdeavtale.melosys.docker-internal:8088
+    volumes:
+      # Etter melosys-web PR #3142 inneholder imaget ikke lenger nginx-config eller env-config.js.
+      # I Nais mountes disse fra en ConfigMap (nais/runtime-config.yaml). Lokalt mounter vi dem manuelt.
+      - ./melosys-web/default.conf:/etc/nginx/conf.d/default.conf:ro
+      - ./melosys-web/env-config.js:/etc/nginx/conf.d/env-config.js:ro
 
   postgres_felleskodeverk:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:latest

@@ -14,7 +14,7 @@ import {
   SAKSTYPER,
   USER_ID_VALID,
 } from '../../pages/shared/constants';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 import { UnleashHelper } from '../../helpers/unleash-helper';
 import { hentMinstebeløp } from '../../helpers/trygdeavgift-beregning-helper';
 
@@ -49,9 +49,11 @@ async function opprettEøsPensjonistTrygdeavgiftSak(page: Page, request: APIRequ
   await opprettSak.velgBehandlingstema(BEHANDLINGSTEMA.PENSJONIST);
   await opprettSak.velgAarsak(AARSAK.SØKNAD);
   await opprettSak.leggBehandlingIMine();
-  await opprettSak.klikkOpprettNyBehandling();
-
-  await waitForProcessInstances(page.request, 30);
+  await runAndWaitForProcessInstances(
+    page.request,
+    () => opprettSak.klikkOpprettNyBehandling(),
+    { timeoutSeconds: 30 }
+  );
   await hovedside.goto();
   await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).click();
   await page.waitForLoadState('networkidle');

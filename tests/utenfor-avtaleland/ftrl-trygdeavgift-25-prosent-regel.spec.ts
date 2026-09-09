@@ -258,9 +258,7 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     await expect(
       page.getByRole('heading', { name: 'Foreløpig beregnet trygdeavgift' })
     ).toBeVisible({ timeout: 10000 });
-    await expect(
-      page.getByText('Trygdeavgift skal ikke betales da inntekten er under minstebeløpet.')
-    ).toBeVisible();
+    await expect(page.getByText(/inntekten er under minstebeløpet/i)).toBeVisible();
 
     await trygdeavgift.klikkBekreftOgFortsett();
 

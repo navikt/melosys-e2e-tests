@@ -1,6 +1,6 @@
 import { expect, test } from '../../fixtures';
 import { AuthHelper } from '../../helpers/auth-helper';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 import { withDatabase } from '../../helpers/db-helper';
 import { setupPensjonistUtenGrunnlagMedAutoAarsavregning } from './pensjonist-aarsavregning-setup';
 
@@ -209,10 +209,11 @@ test.describe('EU/EØS Trygdeavgift - Pensjonist årsavregning uten grunnlag', (
       page.getByText('Beløpet er under minstegrensen for fakturering/refusjon (100 kr).')
     ).toBeVisible();
 
-    await vedtak.klikkFattVedtak();
-
-    console.log('📝 Venter på iverksetting av årsavregningsvedtaket...');
-    await waitForProcessInstances(page.request, 60);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => vedtak.klikkFattVedtak(),
+      { timeoutSeconds: 60 }
+    );
 
     await verifiserAarsavregningIDatabase(behandlingId, {
       endeligAvgiftValg: 'OPPLYSNINGER_ENDRET',
@@ -273,10 +274,11 @@ test.describe('EU/EØS Trygdeavgift - Pensjonist årsavregning uten grunnlag', (
     await vedtak.fyllInnBegrunnelse(
       'E2E: Endelig trygdeavgift er lagt inn manuelt (4750 kr) for å verifisere MANUELL_ENDELIG_AVGIFT-flyten.'
     );
-    await vedtak.klikkFattVedtak();
-
-    console.log('📝 Venter på iverksetting av årsavregningsvedtaket...');
-    await waitForProcessInstances(page.request, 60);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => vedtak.klikkFattVedtak(),
+      { timeoutSeconds: 60 }
+    );
 
     await verifiserAarsavregningIDatabase(behandlingId, {
       endeligAvgiftValg: 'MANUELL_ENDELIG_AVGIFT',

@@ -42,8 +42,9 @@ Trygdedekning og bestemmelse MÅ være kompatible:
 
 ### Perioder
 
-- Perioder MÅ inkludere **inneværende år** — ellers viser Trygdeavgift-steget
-  kun "skal fastsettes på årsavregning"-melding uten inputfelt.
+- Perioder kan ikke ligge i **tidligere år** — da viser Trygdeavgift-steget kun
+  "skal fastsettes på årsavregning"-melding uten inputfelt. Inneværende og framtidige
+  år fungerer begge.
 - Bruk `TestPeriods.currentYearPeriod` / `TestPeriods.standardPeriod` fra `helpers/date-helper.ts`.
 
 ### Lovvalg § 2-8 første ledd a
@@ -70,16 +71,19 @@ await trygdeavgift.velgBetalesAga(false);  // Må settes FØR bruttoinntekt
 await trygdeavgift.fyllInnBruttoinntektMedApiVent('8000');
 ```
 
+Svaret velger satsene, ikke bare om feltet er utfylt — se «Taket måles pr. avgiftsdel».
+
 ## Feature toggles
 
 | Toggle | Tjeneste | Effekt |
 |---|---|---|
 | `melosys.trygdeavgift.25-prosentregel` | melosys-trygdeavgift-beregning | Aktiverer 25%-regel og minstebeløp-beregning |
 
-Aktiver med `UnleashHelper`:
+Togglen er PÅ som standard (se `resetToDefaults` i `helpers/unleash-helper.ts`). Tester som
+forventer ordinær sats må slå den av selv:
 ```typescript
 const unleash = new UnleashHelper(request);
-await unleash.enableFeature('melosys.trygdeavgift.25-prosentregel');
+await unleash.disableFeature('melosys.trygdeavgift.25-prosentregel');
 ```
 
 ## 25%-regelen og minstebeløp
@@ -89,12 +93,43 @@ Når 25%-regelen er aktiv, viser sats-kolonnen symboler i stedet for tall:
 | Symbol | Beregningstype | Betyr |
 |---|---|---|
 | `*` | `TJUEFEM_PROSENT_REGEL` | Avgiften begrenses av 25%-regelen |
-| `**` | `MINSTEBELOEP` | Inntekten er under minstebeløpet |
+| `**` | `MINSTEBELOEP` | Inntekten er under minstebeløpet i perioden som er angitt |
 | Tall | `ORDINAER` / null | Ordinær sats |
 
 Forklaringstekster vises i `div.forklaringstekster` under tabellen.
 
 Minstebeløp for 2026: **99 650 kr** (se `V6.0__minstebeloep.sql` i melosys-trygdeavgift-beregning).
+
+### Taket måles pr. avgiftsdel — ikke på summen
+
+For frivillig medlemskap måles helsedelen og pensjonsdelen hver for seg mot **ett** felles tak.
+En del begrenses kun hvis den *alene* overstiger det, så summen kan godt ligge over taket uten
+at noen begrensning inntreffer. To ting følger av det når du skriver tester:
+
+- **`Betales aga?` avgjør om grenen kan oppstå.** Med aga = Nei er pensjonssatsen 26,3 %
+  (2026) — over 25 % — og pensjonsdelen blir da alltid begrenset.
+  Med aga = Ja er satsene 6,8 % / 19,4 %, begge under 25 %, og «ingen del begrenset» er mulig.
+  Satsene ligger i `trygdeavgift-beregning.frivillig_medlemskap_sats` i postgres. Det er aga
+  som avgjør, ikke MED/UTEN-varianten av dekningen: tilleggssatsene (sykepenger,
+  yrkesskadetrygd) er 0 når aga betales, så MED og UTEN gir samme beløp da.
+- **`ordinaerAvgiftPerDel` fylles bare når ingen del ble begrenset** (`ingenDelErBegrenset` i
+  `BeregningService`). Treffer minst én del taket, splittes svaret i én forklaring pr. del og
+  lista er tom. Den er også tom i minstebeløps-grenen.
+
+### Forklaringskortet vises kun når en særregel slo ut
+
+`forklaringerSomSkalVises` i melosys-web skjuler hele «Beregningsforklaring»-kortet med mindre
+minst én inntektsgruppe traff 25 %-regelen eller minstebeløpet — alt eller ingenting pr. kort.
+En ren ORDINÆR-sak gir altså ikke noe kort.
+
+For å se en ORDINÆR-forklaring i nettleseren trenger du derfor et **annet** år eller en annen
+inntektsgruppe i samme behandling som treffer en særregel. Perioden må da krysse årsskiftet
+**framover** (f.eks. 01.11.i år – 31.12.neste år): tidligere år klippes bort av
+trygdeavgiftssteget med varselet «skal fastsettes på årsavregning».
+
+Er perioden påbegynt, innvilger Perioder-steget som standard pensjonsdelen først fra *dagens
+dato*. En periode som starter i fortiden gir derfor kortere pensjonsdel enn helsedel, og andre
+beløp enn en ren framtidig periode.
 
 ## Testfiler
 
@@ -109,6 +144,7 @@ Minstebeløp for 2026: **99 650 kr** (se `V6.0__minstebeloep.sql` i melosys-tryg
 | `ftrl-yrkesaktiv-2-2-forstegang.spec.ts` | § 2-2 yrkesaktiv, ren førstegangsbehandling (OPPRETT_FAKTURASERIE) |
 | `ftrl-manglende-innbetaling-opphor.spec.ts` | Manglende innbetaling → opphør av frivillig medlemskap |
 | `ftrl-trygdeavgift-25-prosent-regel.spec.ts` | 25%-regelen: sats-symboler og forklaringstekster |
+| `ftrl-trygdeavgift-beregningsforklaring-per-del.spec.ts` | MELOSYS-8171: ordinær avgift pr. avgiftsdel i beregningsforklaringen (trygdeavgift-beregning → api → web) |
 | `klage/ftrl-klage.spec.ts` | Klagebehandling på FTRL-sak |
 
 Discovery-/valideringsnotater for lovvalg og trygdeavgift ligger under `docs/`.

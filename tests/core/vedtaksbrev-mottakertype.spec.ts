@@ -24,7 +24,7 @@ import {
   BESTEMMELSER,
 } from '../../pages/shared/constants';
 import { TestPeriods } from '../../helpers/date-helper';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 
 /**
  * Vedtaksbrev-innhold per mottakertype (dokgen) — P3-dekningshull.
@@ -110,9 +110,11 @@ test.describe('Vedtaksbrev-innhold per mottakertype', () => {
     const ftrlBehandlingId = new URL(page.url()).searchParams.get('behandlingID');
     expect(ftrlBehandlingId, 'behandlingID skal finnes i URL').not.toBeNull();
 
-    await vedtak.klikkFattVedtak();
-    console.log('📝 Venter på iverksetting (FTRL)...');
-    await waitForProcessInstances(page.request, 60);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => vedtak.klikkFattVedtak(),
+      { timeoutSeconds: 60 }
+    );
     await vedtak.assertions.verifiserBehandlingAvsluttet({
       behandlingId: ftrlBehandlingId,
       forventetResultatType: 'MEDLEM_I_FOLKETRYGDEN',
@@ -152,10 +154,11 @@ test.describe('Vedtaksbrev-innhold per mottakertype', () => {
     await trygdeavtaleBehandling.fyllUtPeriodeOgLand('01.01.2024', '01.01.2026', ARBEIDSLAND.AUSTRALIA);
     await trygdeavtaleBehandling.velgArbeidsgiverOgFortsett('Ståles Stål AS');
     await trygdeavtaleBehandling.innvilgeOgVelgBestemmelse(BESTEMMELSER.AUS_ART9_3);
-    await arbeidssted.fyllUtArbeidsstedOgFattVedtak('Test');
-
-    console.log('📝 Venter på iverksetting (trygdeavtale)...');
-    await waitForProcessInstances(page.request, 60);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => arbeidssted.fyllUtArbeidsstedOgFattVedtak('Test'),
+      { timeoutSeconds: 60 }
+    );
     await trygdeavtaleBehandling.assertions.verifiserBehandlingAvsluttet({
       behandlingId: trygdeavtaleBehandlingId,
       forventetIverksettProsess: 'IVERKSETT_VEDTAK_TRYGDEAVTALE',

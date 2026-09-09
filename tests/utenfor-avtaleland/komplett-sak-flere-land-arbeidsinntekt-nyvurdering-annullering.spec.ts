@@ -9,7 +9,8 @@ import {ResultatPeriodePage} from '../../pages/behandling/resultat-periode.page'
 import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
-import {waitForProcessInstances} from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
+import {hentSaksnummerFraUrl} from '../../helpers/url-helper';
 import {withFaktureringDatabase} from '../../helpers/pg-db-helper';
 import {AnnulleringPage} from '../../pages/behandling/annullering.page';
 import {getFakturaserieReferanse} from '../../helpers/db-helper';
@@ -85,9 +86,16 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og nyvurdering
         await resultatPeriode.ventPåSideLastet();
         await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
 
-        // Hent behandlingId fra URL
+        // Hent behandlingId og saksnummer fra URL. Saksnummeret brukes til å åpne
+        // årsavregningen scoped til NETTOPP denne saken (se steg 10) – hvis en tidligere
+        // (feilet) kjøring har lekket en avsluttet årsavregning for samme år i en annen sak,
+        // ville et løst «Årsavregning»-lokator ellers matche to lenker og gi strict-mode-feil.
         const opprinneligBehandlingId = new URL(page.url()).searchParams.get('behandlingID');
-        console.log(`OpprinneligBehandlingId: ${opprinneligBehandlingId}`);
+        // Saksnummeret brukes til å scope oppslagene under til NØYAKTIG denne saken – uten
+        // det bommer valget hvis en tidligere, feilet kjøring har lekket en sak på samme
+        // bruker. Formatvariantene håndteres av hentSaksnummerFraUrl.
+        const saksnummer = hentSaksnummerFraUrl(page.url());
+        console.log(`OpprinneligBehandlingId: ${opprinneligBehandlingId}, saksnummer: ${saksnummer}`);
 
         // Step 7: Trygdeavgift - Ikke-skattepliktig med arbeidsinntekt fra Norge
         console.log('Step 7: Filling trygdeavgift...');
@@ -97,19 +105,18 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og nyvurdering
         await trygdeavgift.fyllInnBruttoinntektMedApiVent('100000');
         await trygdeavgift.klikkBekreftOgFortsett();
 
-        // Step 8: Vedtak
+        // Step 8-9: Vedtak + vent på prosessene vedtaket starter
         console.log('Step 8: Making decision...');
-        await vedtak.klikkFattVedtak();
-
-        // Step 9: Vent på prosesser
-        console.log('Step 9: Waiting for processes...');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(page.request, () => vedtak.klikkFattVedtak());
 
         // Step 10: Søk opp bruker og åpne årsavregningsbehandling
         console.log('Step 10: Opening årsavregning behandling...');
         await hovedside.goto();
         await hovedside.søkEtterBruker(USER_ID_VALID);
-        await page.getByRole('link', {name: 'Yrkesaktiv - Årsavregning'}).getByRole('button').click();
+        // Scoped til denne sakens saksnummer (åpneAarsavregningForSaksnummer asserter
+        // nøyaktig én treff) slik at en evt. lekket årsavregning fra en tidligere kjøring
+        // ikke gir strict-mode-brudd på et retry-forsøk.
+        await hovedside.åpneAarsavregningForSaksnummer(saksnummer);
 
         // Step 11: Fyll ut årsavregning
         console.log('Step 11: Filling årsavregning...');
@@ -125,9 +132,7 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og nyvurdering
 
         // Step 12: Fatt vedtak for årsavregning
         console.log('Step 12: Making årsavregning decision...');
-        await vedtak.klikkFattVedtak();
-
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(page.request, () => vedtak.klikkFattVedtak());
         console.log('✅ Årsavregning vedtak completed');
 
         await withFaktureringDatabase(async (db) => {
@@ -138,8 +143,10 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og nyvurdering
         // Step 13: Opprett ny vurdering
         console.log('Step 13: Creating nyvurdering...');
         await hovedside.klikkOpprettNySak();
-        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+            page.request,
+            () => opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD', saksnummer)
+        );
 
         // Step 14: Åpne ny behandling
         console.log('Step 14: Opening new behandling...');
@@ -152,8 +159,9 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og nyvurdering
 
         // Step 15: Annuller saken
         console.log('Step 15: Annullering...');
-        await annullering.annullerSak();
-        await waitForProcessInstances(page.request, 30);
+        // Markøren tas før klikket, så ventingen ikke kan svare COMPLETED på forrige stegs
+        // prosessinstanser — annulleringens egen ANNULLER_SAK er den vi faktisk venter på.
+        await runAndWaitForProcessInstances(page.request, () => annullering.annullerSak());
 
         console.log('✅ Workflow completed successfully!');
 
@@ -163,12 +171,18 @@ test.describe('Komplett saksflyt - Flere land med pensjon-dekning og nyvurdering
         const opprinneligFakturaserieReferanse = await getFakturaserieReferanse(opprinneligBehandlingId);
         const arsavregningFakturaserieRef = await getFakturaserieReferanse(arsavregningBehandlingId);
 
-        if (opprinneligFakturaserieReferanse === undefined || arsavregningFakturaserieRef === undefined) {
+        if (!opprinneligFakturaserieReferanse || !arsavregningFakturaserieRef) {
             throw new Error(`Fakturaserie referanse er ikke satt. Opprinnelig: ${opprinneligFakturaserieReferanse} (behandlingId: ${opprinneligBehandlingId}), Årsavregning: ${arsavregningFakturaserieRef} (behandlingId: ${arsavregningBehandlingId})`);
         }
 
         const faktureringHelper = new FaktureringHelper(request);
-        const alleSerier = await faktureringHelper.hentSammenslåttKjede(opprinneligFakturaserieReferanse, arsavregningFakturaserieRef);
+        // Beholdt som defense-in-depth: markør-ventingen over dekker annulleringens egen
+        // prosessinstans, mens denne pollingen i tillegg dekker forsinkelse mot
+        // faktureringskomponenten (se FaktureringHelper.ventPåKjedeSum).
+        const alleSerier = await faktureringHelper.ventPåKjedeSum(
+            [opprinneligFakturaserieReferanse, arsavregningFakturaserieRef],
+            0
+        );
 
         alleSerier.forEach(s => faktureringHelper.loggFakturaserie(s));
 

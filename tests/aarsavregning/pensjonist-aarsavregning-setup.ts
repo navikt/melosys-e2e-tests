@@ -1,5 +1,6 @@
 import { Page } from '@playwright/test';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
+import { hentSaksnummerFraUrl } from '../../helpers/url-helper';
 import { AarsavregningPage } from '../../pages/behandling/aarsavregning.page';
 import { EuEosPensjonistBehandlingPage } from '../../pages/behandling/eu-eos-pensjonist-behandling.page';
 import { HovedsidePage } from '../../pages/hovedside.page';
@@ -27,24 +28,6 @@ export const PENSJONIST_AARSAVREGNING_TEST_DATA = {
   inntektskilde: 'PENSJON',
 } as const;
 
-function hentSaksnummerFraUrl(url: string): string {
-  // Saksnummer er enten «MEL-<n>» (EU/EØS-flyten, f.eks.
-  // /melosys/EU_EOS/pensjonist/MEL-40/) eller et rent tall (FTRL-flyten,
-  // f.eks. /FTRL/saksbehandling/2024000001). MEL- prioriteres siden det er
-  // entydig og aldri kan forveksles med fødselsnummeret (11 siffer). Det rene
-  // tallet ankres derfor på «saksbehandling/» for å unngå å plukke opp fnr.
-  const pathname = new URL(url).pathname;
-  const saksnummer =
-    pathname.match(/\b(MEL-\d+)\b/)?.[1] ??
-    pathname.match(/saksbehandling\/(\d{10,})/)?.[1];
-
-  if (!saksnummer) {
-    throw new Error(`Fant ikke saksnummer i URL-en: ${url}`);
-  }
-
-  return decodeURIComponent(saksnummer);
-}
-
 /**
  * Opprett en EØS-pensjonist førstegangsbehandling, åpne den fra hovedsiden og
  * returner saksnummeret. Felles startblokk for begge setup-variantene under.
@@ -62,11 +45,13 @@ async function opprettOgÅpnePensjonistSak(
   await opprettSak.velgBehandlingstema(BEHANDLINGSTEMA.PENSJONIST);
   await opprettSak.velgAarsak(AARSAK.SØKNAD);
   await opprettSak.leggBehandlingIMine();
-  await opprettSak.klikkOpprettNyBehandling();
-  await opprettSak.assertions.verifiserBehandlingOpprettet();
-
-  console.log('📝 Venter på prosessinstanser etter opprettelse av pensjonistbehandling...');
-  await waitForProcessInstances(page.request, 30);
+  await runAndWaitForProcessInstances(
+    page.request,
+    async () => {
+      await opprettSak.klikkOpprettNyBehandling();
+      await opprettSak.assertions.verifiserBehandlingOpprettet();
+    }, { timeoutSeconds: 30 }
+  );
   await hovedside.goto();
   await hovedside.åpneSak(BRUKERNAVN_VALID);
   return hentSaksnummerFraUrl(page.url());
@@ -99,10 +84,11 @@ export async function setupPensjonistMedAarsavregning(
   await trygdeavgift.klikkBekreftOgFortsett();
 
   await pensjonistBehandling.assertions.verifiserBekreftOgSendSynlig();
-  await pensjonistBehandling.klikkBekreftOgSend();
-
-  console.log('📝 Venter på prosessinstanser etter innsending av pensjonistbehandling...');
-  await waitForProcessInstances(page.request, 60);
+  await runAndWaitForProcessInstances(
+    page.request,
+    () => pensjonistBehandling.klikkBekreftOgSend(),
+    { timeoutSeconds: 60 }
+  );
   await hovedside.goto();
 
   await hovedside.klikkOpprettNySak();
@@ -110,11 +96,13 @@ export async function setupPensjonistMedAarsavregning(
   await opprettSak.velgPensjonistAarsavregning();
   await opprettSak.velgAarsak(AARSAK.SØKNAD);
   await opprettSak.leggBehandlingIMine();
-  await opprettSak.klikkOpprettNyBehandling();
-  await opprettSak.assertions.verifiserBehandlingOpprettet();
-
-  console.log('📝 Venter på prosessinstanser etter opprettelse av årsavregning...');
-  await waitForProcessInstances(page.request, 30);
+  await runAndWaitForProcessInstances(
+    page.request,
+    async () => {
+      await opprettSak.klikkOpprettNyBehandling();
+      await opprettSak.assertions.verifiserBehandlingOpprettet();
+    }, { timeoutSeconds: 30 }
+  );
   await hovedside.goto();
   await hovedside.åpneAarsavregningForSaksnummer(saksnummer);
 
@@ -158,10 +146,11 @@ export async function setupPensjonistUtenGrunnlagMedAutoAarsavregning(
   await trygdeavgift.klikkBekreftOgFortsett();
 
   await pensjonistBehandling.assertions.verifiserBekreftOgSendSynlig();
-  await pensjonistBehandling.klikkBekreftOgSend();
-
-  console.log('📝 Venter på prosessinstanser (inkl. auto-opprettet årsavregning)...');
-  await waitForProcessInstances(page.request, 60);
+  await runAndWaitForProcessInstances(
+    page.request,
+    () => pensjonistBehandling.klikkBekreftOgSend(),
+    { timeoutSeconds: 60 }
+  );
   await hovedside.goto();
   await hovedside.åpneAarsavregningForSaksnummer(saksnummer);
 

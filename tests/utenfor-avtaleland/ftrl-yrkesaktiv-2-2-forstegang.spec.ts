@@ -10,7 +10,7 @@ import {TrygdeavgiftPage} from '../../pages/trygdeavgift/trygdeavgift.page';
 import {VedtakPage} from '../../pages/vedtak/vedtak.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
 import {TestPeriods, TestPeriodsISO} from '../../helpers/date-helper';
-import {waitForProcessInstances} from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 import {getFakturaserieReferanse, withDatabase} from '../../helpers/db-helper';
 import {FaktureringHelper} from '../../helpers/fakturering-helper';
 
@@ -107,11 +107,12 @@ test.describe('FTRL § 2-2 yrkesaktiv - førstegangsbehandling', () => {
 
         // Step 8: Fatt vedtak
         console.log('📝 Step 8: Making decision...');
-        await vedtak.klikkFattVedtak();
-
         // Step 9: Wait for iverksetting (throws on FAILED process instances)
-        console.log('📝 Step 9: Waiting for iverksetting...');
-        await waitForProcessInstances(page.request, 60);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => vedtak.klikkFattVedtak(),
+          { timeoutSeconds: 60 }
+        );
 
         // === DB: behandling AVSLUTTET + behandlingsresultat + prosessinstanser ===
         await withDatabase(async (db) => {

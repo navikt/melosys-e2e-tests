@@ -4,7 +4,7 @@ import {HovedsidePage} from '../../pages/hovedside.page';
 import {OpprettNySakPage} from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import {EuEosBehandlingPage} from '../../pages/behandling/eu-eos-behandling.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
-import {waitForProcessInstances} from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 
 /**
  * Komplett EU/EØS arbeidsflyt test
@@ -49,11 +49,12 @@ test.describe('EU/EØS - Komplett arbeidsflyt', () => {
         await behandling.velgLand('Danmark');
         await opprettSak.velgAarsak('SØKNAD');
         await opprettSak.leggBehandlingIMine();
-        await opprettSak.klikkOpprettNyBehandling();
-
         // Vent på prosessinstanser og last siden på nytt
-        console.log('📝 Venter på prosessinstanser...');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => opprettSak.klikkOpprettNyBehandling(),
+          { timeoutSeconds: 30 }
+        );
         await hovedside.goto();
 
         // Naviger til behandling
