@@ -355,7 +355,7 @@ export class UnleashHelper {
       { name: 'melosys.arsavregning.uten.flyt', enabled: false },
       { name: 'melosys.arsavregning.eos_pensjonist', enabled: true },
       // Tester som simulerer pre-prod-tilstand slår denne av. Uten standardverdi her ble
-      // togglen liggende AV for resten av kjøringen — og videre til neste lokale kjøring,
+      // togglen liggende av for resten av kjøringen — og videre til neste lokale kjøring,
       // siden Unleash-tilstanden lever i postgres-containeren.
       { name: 'melosys.arsavregning.eos_tjenesteperson', enabled: true },
       { name: 'melosys.pensjonist', enabled: true },

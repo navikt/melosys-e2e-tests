@@ -35,11 +35,11 @@ import { setupPensjonistUtenGrunnlagMedAutoAarsavregning } from '../aarsavregnin
  * brev). Frem til hver sakstypes egen årsavregningsflyt er ferdigstilt vises en blokkerende
  * melding i årsavregningsflyten.
  *
- * STATUS (2026-09-09): Begge scenarier GRØNNE lokalt mot feature-branchene (melosys-api:
+ * STATUS (2026-09-09): Begge scenarier er grønne lokalt mot feature-branchene (melosys-api:
  * 8163-arsavregning-eos-tjenesteperson, melosys-web: feature/8163-arsavregning-eos-melding
- * @ e8222dcc3, master merget inn). Ingen av de to peer-PR-ene er merget ennå, så testen er
- * IKKE grønn mot master-images — CI kjører mot latest, der testid-en
- * `aarsavregning-ikke-stottet-sakstype` ikke finnes. Vent med e2e-PR til peer-PR-ene lander.
+ * @ e8222dcc3, master merget inn). Ingen av de to peer-PR-ene er merget ennå. CI kjører mot
+ * latest, der testid-en `aarsavregning-ikke-stottet-sakstype` ikke finnes, så testen er rød
+ * der til peer-PR-ene lander. Vent med e2e-PR til da.
  * Tidligere routing-bug i melosys-web
  * (`src/url/url.ts` `skalViseIngenFlyt()` rutet tjenesteperson-årsavregning ubetinget til
  * IngenFlytBehandling-fallbacken) er fikset. UI-atferd oppdatert etter Figma-mockup 2026-07-02:
@@ -73,15 +73,16 @@ async function hentInnhentingsbrev(): Promise<BrevRad | undefined> {
 
 /**
  * Binder brev-«Så»-linjene i scenario A: poller PROSESSINSTANS til en fersk brev-prosessinstans
- * for innhentingsbrevet står som FERDIG, og verifiserer at den er adressert til forventet
+ * for innhentingsbrevet står som `FERDIG`, og verifiserer at den er adressert til forventet
  * mottaker. Periode-innholdet (lovvalgsperiode vs. medlemskapsperiode) asserteres IKKE eksakt her
  * — InnhentingAvInntektsopplysningerMapper-gapet (se speken) gjør at DATA kan inneholde feil
  * periodetype til mapper-fiksen lander. Brevmal-treffet + FERDIG-status er det bærende.
  */
 async function verifiserInnhentingsbrevSendt(mottakerIdentifikatorer: string[]): Promise<void> {
-  // Statusen må inn i selve pollen: raden dukker opp i PROSESSINSTANS med STATUS=OPPRETTET og
-  // går til FERDIG først når brevet er produsert og distribuert. Poller vi bare på at raden
-  // finnes, treffer en etterfølgende hard assertion på FERDIG det åpne vinduet og feiler.
+  // Raden dukker opp i PROSESSINSTANS med status `OPPRETTET` og går til `FERDIG` først når
+  // brevet er produsert og distribuert. Poller vi bare på at raden finnes, sjekkes statusen
+  // utenfor pollen og uten nytt forsøk — en rad sett i `OPPRETTET` feiler da testen med én
+  // gang, i stedet for å vente på at brevet blir ferdig. Derfor ligger statusen i predikatet.
   await expect
     .poll(async () => (await hentInnhentingsbrev())?.STATUS, {
       message: `Venter på FERDIG brev-prosessinstans for ${BREVMAL_INNHENTING}`,
