@@ -99,12 +99,19 @@ export class ResultatPeriodePage extends BasePage {
     const lagretOpphørtPeriode = this.page.waitForResponse(
       response =>
         response.url().includes('/medlemskapsperioder') &&
-        response.request().method() === 'POST' &&
-        response.status() < 400,
+        response.request().method() === 'POST',
       { timeout: 30_000 }
-    );
+    ).catch(() => null);
     await this.page.getByLabel('Resultat periode 2').selectOption('OPPHØRT');
-    await lagretOpphørtPeriode;
+    const response = await lagretOpphørtPeriode;
+    if (!response) {
+      throw new Error('Lagring av opphørt medlemskapsperiode ga ingen respons innen 30000ms');
+    }
+    if (response.status() >= 400) {
+      throw new Error(
+        `Lagring av opphørt medlemskapsperiode feilet: ${response.status()} ${await response.text()}`
+      );
+    }
   }
 
   /**

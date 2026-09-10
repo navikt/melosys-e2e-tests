@@ -82,9 +82,12 @@ export class ManglendeInnbetalingPage extends BasePage {
         response.url().endsWith('/innbetalingsstatus') &&
         response.request().method() === 'POST',
       { timeout: 15_000 }
-    );
+    ).catch(() => null);
     await this.delerAvPeriodenRadio.check();
     const response = await lagret;
+    if (!response) {
+      throw new Error('Lagring av innbetalingsstatus ga ingen respons innen 15000ms');
+    }
     if (response.status() >= 400) {
       throw new Error(`Lagring av innbetalingsstatus feilet: ${response.status()} ${await response.text()}`);
     }

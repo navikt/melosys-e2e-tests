@@ -120,7 +120,7 @@ export class HovedsidePage extends BasePage {
   }
 
   /**
-   * Locate a behandling link in the saksoversikt, reloading if it is not there yet.
+   * Wait for a behandling link in the saksoversikt, reloading if it is not there yet.
    *
    * The saksoversikt rows are fetched via an async API call AFTER the page's
    * DOMContentLoaded (BasePage.goto only awaits 'domcontentloaded'), so the row
@@ -130,11 +130,15 @@ export class HovedsidePage extends BasePage {
    * saksoversikt and retries until the time budget is spent. Reloading is safe
    * here because the hovedside is a normal page, not the client-side step wizard.
    *
-   * @param navn - Accessible name (substring) or RegExp identifying the link
+   * @param link - Locator identifying the link
+   * @param beskrivelse - Description used in timeout errors
    * @param timeout - Total budget across reloads in ms (default 45000)
    */
-  private async finnBehandlingslenke(navn: string | RegExp, timeout: number): Promise<Locator> {
-    const link = this.page.getByRole('link', { name: navn }).first();
+  private async ventPåLenkeMedReload(
+    link: Locator,
+    beskrivelse: string,
+    timeout: number
+  ): Promise<Locator> {
     const deadline = Date.now() + timeout;
     for (let forsøk = 1; ; forsøk++) {
       try {
@@ -143,7 +147,7 @@ export class HovedsidePage extends BasePage {
       } catch {
         if (Date.now() >= deadline) {
           throw new Error(
-            `Fant ikke behandlingslenke "${navn}" i saksoversikten innen ${timeout}ms`
+            `Fant ikke behandlingslenke "${beskrivelse}" i saksoversikten innen ${timeout}ms`
           );
         }
         console.log(
@@ -153,6 +157,12 @@ export class HovedsidePage extends BasePage {
         await this.page.waitForLoadState('domcontentloaded');
       }
     }
+  }
+
+  /** Locate a behandling link by accessible name. */
+  private async finnBehandlingslenke(navn: string | RegExp, timeout: number): Promise<Locator> {
+    const link = this.page.getByRole('link', { name: navn }).first();
+    return this.ventPåLenkeMedReload(link, String(navn), timeout);
   }
 
   /**
@@ -167,9 +177,13 @@ export class HovedsidePage extends BasePage {
     await link.click();
   }
 
-  async åpneBehandlingMedId(behandlingId: number | string): Promise<void> {
-    const link = this.page.locator(`a[href*="behandlingID=${behandlingId}"]`).first();
-    await link.waitFor({ state: 'visible', timeout: 45_000 });
+  async åpneBehandlingMedId(behandlingId: number | string, timeout = 45000): Promise<void> {
+    const link = this.page
+      .locator(
+        `a[href*="behandlingID=${behandlingId}&"], a[href$="behandlingID=${behandlingId}"]`
+      )
+      .first();
+    await this.ventPåLenkeMedReload(link, `behandlingID=${behandlingId}`, timeout);
     await link.click();
   }
 

@@ -509,10 +509,11 @@ export class TrygdeavgiftPage extends BasePage {
     // Create response promise BEFORE action
     const responsePromise = this.page.waitForResponse(
       response =>
-        response.url().includes('/trygdeavgift/beregning') &&
+        (response.url().includes('/trygdeavgift/beregning') ||
+          response.url().includes('/trygdeavgift/eos-pensjonist/beregning')) &&
         response.request().method() === 'PUT',
       { timeout: 30000 }
-    );
+    ).catch(() => null);
 
     // Fill and blur to trigger API
     await field.fill(beløp);
@@ -520,6 +521,9 @@ export class TrygdeavgiftPage extends BasePage {
 
     // Wait for API
     const response = await responsePromise;
+    if (!response) {
+      throw new Error('Trygdeavgiftsberegning ga ingen respons innen 30000ms');
+    }
     if (response.status() >= 400) {
       throw new Error(
         `Trygdeavgiftsberegning feilet: ${response.status()} ${await response.text()}`
