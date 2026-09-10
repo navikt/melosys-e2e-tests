@@ -9,8 +9,21 @@
 //
 // Klassen ble lappet tre ganger på tre steder før den ble talt opp: taint
 // forplanter seg gjennom lokale tilordninger (INPUT_ENV=$INPUT_ENVIRONMENT),
-// så en øyeblikkelig lesing finner bare det stedet man ser på. Denne sjekken
-// følger taint til fikspunkt og ser hele tilstandsrommet.
+// så en øyeblikkelig lesing finner bare det stedet man ser på.
+//
+// HVA DEN IKKE ER: et bevis. Sjekken er et rekkverk mot at de fire feilene vi
+// faktisk gjorde kommer tilbake, ikke en fullstendig analyse. En review skrev en
+// workflow med sju fiendtlige konstruksjoner for å slippe forbi; sjekken fanger
+// tre av dem. Kjente hull, målt:
+//   * heredoc-kropp (`cat <<EOF` … `EOF`) leses ikke som skriving;
+//   * `run: echo "$X"` på én linje (inline skalar) fanges ikke;
+//   * taint følges ikke gjennom `read -ra`, arrays, `${!indirekte}`, eller en
+//     variabel skrevet til $GITHUB_ENV i ett steg og lest i et annet (selve
+//     skrivingen fanges, lesingen i neste steg ikke);
+//   * «log-injection-ok» er en påstand sjekken ikke kan etterprøve — bare de to
+//     valideringene under pinnes, og bare på at teksten finnes, ikke på at den
+//     stopper kjøringen.
+// Bruk den som en tripwire. Den erstatter ikke å lese diffen.
 //
 // To lovlige måter å skrive en slik verdi til loggen:
 //   1. log_payload "Ledetekst:" "$VERDI"          (fjerner linjeskift)
@@ -22,10 +35,17 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 const DIR = '.github/workflows';
-const UNTRUSTED = /\$\{\{\s*(inputs\.\w+|github\.event\.client_payload\.\w+|github\.event\.action)\s*\}\}/;
+// Verdien utenfra kan stå hvor som helst i uttrykket: «${{ inputs.x }}», men også
+// «${{ inputs.x || '30' }}» eller «${{ fromJSON(inputs.x).y }}». Å kreve et bart
+// uttrykk er nettopp det som skjulte cleanup-old-workflows.yml i tre runder.
+const UNTRUSTED = /\$\{\{[^}]*\b(inputs\.\w+|github\.event\.client_payload\.\w+|github\.event\.action)\b[^}]*\}\}/;
 const ENV_ASSIGN = /^\s{2,}([A-Za-z_][A-Za-z0-9_]*):\s*(\$\{\{.*\}\}.*)$/;
+// env: { NAVN: "${{ … }}" } er samme deklarasjon i flow-form. Uten denne leses
+// linja som et run:-skript, og sjekken melder feil på en helt lovlig env-blokk.
+const ENV_FLOW = /^\s*env:\s*\{(.*)\}\s*$/;
+const ENV_FLOW_PAIR = /([A-Za-z_][A-Za-z0-9_]*)\s*:\s*("[^"]*"|'[^']*'|[^,}]+)/g;
 const SHELL_ASSIGN = /^\s*(?:export\s+)?([A-Za-z_][A-Za-z0-9_]*)=(.*)$/;
-const LOG_LINE = /^(echo|printf|\[[^\]]*\]\s*&&\s*(echo|printf))\b/;
+const LOG_LINE = /(^|[;&|]\s*)(echo|printf|tee|cat)\b/;
 const SAFE = [/log_payload\s/, /\|\s*tr\s+'\\n\\r'/];
 const ALLOW = /#\s*log-injection-ok:/;
 
@@ -39,6 +59,12 @@ for (const fil of readdirSync(DIR).filter((f) => f.endsWith('.yml') || f.endsWit
   for (const linje of linjer) {
     const m = ENV_ASSIGN.exec(linje);
     if (m && UNTRUSTED.test(m[2])) smittet.add(m[1]);
+    const flow = ENV_FLOW.exec(linje);
+    if (flow) {
+      for (const par of flow[1].matchAll(ENV_FLOW_PAIR)) {
+        if (UNTRUSTED.test(par[2])) smittet.add(par[1]);
+      }
+    }
   }
 
   // 2. Taint gjennom lokale tilordninger, til fikspunkt.
@@ -75,7 +101,7 @@ for (const fil of readdirSync(DIR).filter((f) => f.endsWith('.yml') || f.endsWit
   //    den valideringen — ellers består sjekken mens merkelappene er blitt usanne.
   const KREVER = [
     { marker: /log-injection-ok: tag-verdiene er validert/, kilde: /\[\[ "\$tag_value" =~ \^\[A-Za-z0-9_\]/ },
-    { marker: /log-injection-ok: validert som tall/, kilde: /=~ \^\[0-9\]\+\$/ },
+    { marker: /log-injection-ok: validert som tall/, kilde: /=~ \^\[0-9\]/ },
   ];
   for (const { marker, kilde } of KREVER) {
     const paastand = linjer.findIndex((l) => marker.test(l));
@@ -94,12 +120,15 @@ for (const fil of readdirSync(DIR).filter((f) => f.endsWith('.yml') || f.endsWit
     if (ALLOW.test(s)) return;
 
     // Verdi utenfra rett i et run:-skript er alltid feil — også utenom loggen.
-    if (UNTRUSTED.test(s) && !ENV_ASSIGN.test(linje) && !/^\s*(if:|#)/.test(s)) {
+    if (UNTRUSTED.test(s) && !ENV_ASSIGN.test(linje) && !ENV_FLOW.test(linje) && !/^\s*(if:|#)/.test(s)) {
       funn.push(`${fil}:${nr}: verdi utenfra interpolert rett i run: — les den fra env: i stedet\n    ${s.slice(0, 110)}`);
       return;
     }
     if (!LOG_LINE.test(s)) return;
-    if (/GITHUB_(OUTPUT|ENV|STEP_SUMMARY)/.test(s)) return;
+    // $GITHUB_STEP_SUMMARY er markdown, ikke kommandoer. $GITHUB_ENV og
+    // $GITHUB_OUTPUT er derimot verre sinks enn loggen — et linjeskift der setter
+    // en vilkårlig variabel — så de skal IKKE unntas.
+    if (/GITHUB_STEP_SUMMARY/.test(s)) return;
     if (SAFE.some((re) => re.test(s))) return;
     const brukt = [...smittet].filter((navn) => new RegExp(`\\$\\{?${navn}\\b`).test(s));
     if (brukt.length > 0) {

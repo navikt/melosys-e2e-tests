@@ -88,7 +88,8 @@ jobs:
         run: npm ci
 
       # Tillitsgate: fail-fast på grønn-men-meningsløs-mønstre FØR docker-stacken startes.
-      # Ren node, sekunder. Speiler test-quality.yml (som kun trigges på PR for tests/pages/scripts).
+      # Ren node, sekunder. Speiler test-quality.yml (som trigges på PR for
+      # tests/pages/scripts og for .github/workflows).
       - name: Verifiser test-kvalitet (check:tests)
         run: npm run check:tests
 
@@ -444,17 +445,17 @@ jobs:
             fi
           done
 
-          echo "melosys_api_tag=$MELOSYS_API_TAG" >> $GITHUB_OUTPUT
-          echo "faktureringskomponenten_tag=$FAKTURERINGSKOMPONENTEN_TAG" >> $GITHUB_OUTPUT
-          echo "melosys_web_tag=$MELOSYS_WEB_TAG" >> $GITHUB_OUTPUT
-          echo "melosys_trygdeavgift_tag=$MELOSYS_TRYGDEAVGIFT_TAG" >> $GITHUB_OUTPUT
-          echo "melosys_trygdeavtale_tag=$MELOSYS_TRYGDEAVTALE_TAG" >> $GITHUB_OUTPUT
-          echo "melosys_inngangsvilkar_tag=$MELOSYS_INNGANGSVILKAR_TAG" >> $GITHUB_OUTPUT
-          echo "melosys_eessi_tag=$MELOSYS_EESSI_TAG" >> $GITHUB_OUTPUT
-          echo "melosys_mock_tag=$MELOSYS_MOCK_TAG" >> $GITHUB_OUTPUT
-          echo "melosys_dokgen_tag=$MELOSYS_DOKGEN_TAG" >> $GITHUB_OUTPUT
-          echo "melosys_skjema_api_tag=$MELOSYS_SKJEMA_API_TAG" >> $GITHUB_OUTPUT
-          echo "melosys_skjema_web_tag=$MELOSYS_SKJEMA_WEB_TAG" >> $GITHUB_OUTPUT
+          echo "melosys_api_tag=$MELOSYS_API_TAG" >> $GITHUB_OUTPUT  # log-injection-ok: tag-verdiene er validert over
+          echo "faktureringskomponenten_tag=$FAKTURERINGSKOMPONENTEN_TAG" >> $GITHUB_OUTPUT  # log-injection-ok: tag-verdiene er validert over
+          echo "melosys_web_tag=$MELOSYS_WEB_TAG" >> $GITHUB_OUTPUT  # log-injection-ok: tag-verdiene er validert over
+          echo "melosys_trygdeavgift_tag=$MELOSYS_TRYGDEAVGIFT_TAG" >> $GITHUB_OUTPUT  # log-injection-ok: tag-verdiene er validert over
+          echo "melosys_trygdeavtale_tag=$MELOSYS_TRYGDEAVTALE_TAG" >> $GITHUB_OUTPUT  # log-injection-ok: tag-verdiene er validert over
+          echo "melosys_inngangsvilkar_tag=$MELOSYS_INNGANGSVILKAR_TAG" >> $GITHUB_OUTPUT  # log-injection-ok: tag-verdiene er validert over
+          echo "melosys_eessi_tag=$MELOSYS_EESSI_TAG" >> $GITHUB_OUTPUT  # log-injection-ok: tag-verdiene er validert over
+          echo "melosys_mock_tag=$MELOSYS_MOCK_TAG" >> $GITHUB_OUTPUT  # log-injection-ok: tag-verdiene er validert over
+          echo "melosys_dokgen_tag=$MELOSYS_DOKGEN_TAG" >> $GITHUB_OUTPUT  # log-injection-ok: tag-verdiene er validert over
+          echo "melosys_skjema_api_tag=$MELOSYS_SKJEMA_API_TAG" >> $GITHUB_OUTPUT  # log-injection-ok: tag-verdiene er validert over
+          echo "melosys_skjema_web_tag=$MELOSYS_SKJEMA_WEB_TAG" >> $GITHUB_OUTPUT  # log-injection-ok: tag-verdiene er validert over
 
           echo ""
           echo "📋 Docker Image Tags (non-latest only):"
@@ -542,7 +543,7 @@ jobs:
         # nevner «skjema». Da settes COMPOSE_PROFILES=skjema (aktiverer profiled-tjenestene) for
         # alle påfølgende `docker compose`-kall. Ellers hoppes pull/start/vent/oppvarming over.
         run: |
-          if [ -z "$INPUT_TEST_GREP" ] || printf '%s' "$INPUT_TEST_GREP" | grep -qi skjema; then
+          if [ -z "$INPUT_TEST_GREP" ] || printf '%s' "$INPUT_TEST_GREP" | grep -qi skjema; then  # log-injection-ok: printf-utdata går inn i grep, ikke til loggen
             echo "🧩 Skjema-tester i scope → starter skjema-stack + oppvarming"
             echo "SKJEMA_IN_SCOPE=true" >> "$GITHUB_ENV"
             echo "COMPOSE_PROFILES=skjema" >> "$GITHUB_ENV"

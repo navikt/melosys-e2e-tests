@@ -37,15 +37,15 @@ jobs:
           # value to a date in the future. Checked exhaustively over the accepted
           # range: no value in it yields a cutoff at or after today.
           if ! [[ "$DAYS_TO_KEEP" =~ ^[0-9]{1,4}$ ]] || [ "$DAYS_TO_KEEP" -lt 1 ]; then
-            echo "❌ Invalid days_to_keep: '$DAYS_TO_KEEP' (expected a whole number >= 1)"
+            echo "❌ Invalid days_to_keep: $(printf '%q' "$DAYS_TO_KEEP") (expected a whole number >= 1)"  # log-injection-ok: %q kan ikke gi et rått linjeskift
             exit 1
           fi
 
-          echo "🗑️  Deleting workflow runs older than $DAYS_TO_KEEP days..."
+          echo "🗑️  Deleting workflow runs older than $DAYS_TO_KEEP days..."  # log-injection-ok: validert som tall over
 
           # Calculate the cutoff date
           CUTOFF_DATE=$(date -u -d "$DAYS_TO_KEEP days ago" +%Y-%m-%d)
-          echo "📅 Cutoff date: $CUTOFF_DATE"
+          echo "📅 Cutoff date: $CUTOFF_DATE"  # log-injection-ok: date-utdata fra en validert dagverdi
 
           # Get the repository owner and name
           REPO="${{ github.repository }}"
