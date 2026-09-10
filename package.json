@@ -13,14 +13,14 @@
     "check:tests": "node scripts/check-vacuous-tests.mjs",
     "test:record": "RECORD_API=true playwright test --project=chromium",
     "replay": "ts-node scripts/replay-api-calls.ts",
-
     "generate-summary": "ts-node scripts/generate-summary-from-json.ts",
     "codegen": "playwright codegen http://localhost:3000/melosys/",
     "show-report": "playwright show-report",
     "show-trace": "playwright show-trace",
     "open-videos": "open test-results/*/video.webm || explorer test-results\\*\\video.webm",
     "open-screenshots": "open test-results/*/*.png || explorer test-results\\*\\*.png",
-    "clean-results": "rm -rf test-results/ playwright-report/"
+    "clean-results": "rm -rf test-results/ playwright-report/",
+    "check:workflow": "node scripts/check-workflow-log-injection.mjs"
   },
   "keywords": [
     "playwright",

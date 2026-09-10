@@ -92,6 +92,11 @@ jobs:
       - name: Verifiser test-kvalitet (check:tests)
         run: npm run check:tests
 
+      # Samme tillitsgate for workflowene selv: verdier utenfra skal ikke kunne
+      # skrive workflow-kommandoer i jobbloggen. Ren node, under ett sekund.
+      - name: Verifiser workflow-logging (check:workflow)
+        run: npm run check:workflow
+
       - name: Get Playwright version
         id: playwright-version
         run: echo "version=$(npm list @playwright/test --depth=0 --json | jq -r '.dependencies["@playwright/test"].version')" >> $GITHUB_OUTPUT
@@ -145,7 +150,8 @@ jobs:
           INPUT_UNLEASH_FORCE_DISABLE: ${{ inputs.unleash_force_disable }}
           INPUT_UNLEASH_FORCE_ENABLE: ${{ inputs.unleash_force_enable }}
         run: |
-          # Payload-verdier i loggen får linjeskiftene fjernet. En workflow-kommando
+          # Verdier utenfra (payload og workflow_dispatch-input) får linjeskiftene
+          # fjernet før de logges. En workflow-kommando
           # leses bare når den står først på linja, og verdien står alltid etter en
           # ledetekst — så uten linjeskift kan den ikke bli ::error:: (forfalsket
           # annotasjon) eller ::add-mask:: (skjuler tekst i resten av jobbloggen).
@@ -239,7 +245,7 @@ jobs:
 
             # Check if input contains service:tag format (has colon)
             if [[ "$INPUT_ENV" == *":"* ]]; then
-              echo "🏷️  Parsing multi-service tag format: $INPUT_ENV"
+              log_payload "🏷️  Parsing multi-service tag format:" "$INPUT_ENV"
               # Split by comma and process each service:tag pair
               IFS=',' read -ra PAIRS <<< "$INPUT_ENV"
               for pair in "${PAIRS[@]}"; do
@@ -291,7 +297,7 @@ jobs:
               done
             else
               # Simple format: just a tag for melosys-api (backwards compatible)
-              echo "🏷️  Using tag for melosys-api: $INPUT_ENV"
+              log_payload "🏷️  Using tag for melosys-api:" "$INPUT_ENV"
               echo "🏷️  Using tag for other services: latest"
               MELOSYS_API_TAG="$INPUT_ENV"
             fi
@@ -453,17 +459,17 @@ jobs:
           echo ""
           echo "📋 Docker Image Tags (non-latest only):"
           NON_LATEST_FOUND=false
-          [ "$MELOSYS_API_TAG" != "latest" ] && echo "  melosys-api: $MELOSYS_API_TAG" && NON_LATEST_FOUND=true || true
-          [ "$MELOSYS_WEB_TAG" != "latest" ] && echo "  melosys-web: $MELOSYS_WEB_TAG" && NON_LATEST_FOUND=true || true
-          [ "$FAKTURERINGSKOMPONENTEN_TAG" != "latest" ] && echo "  faktureringskomponenten: $FAKTURERINGSKOMPONENTEN_TAG" && NON_LATEST_FOUND=true || true
-          [ "$MELOSYS_TRYGDEAVGIFT_TAG" != "latest" ] && echo "  melosys-trygdeavgift-beregning: $MELOSYS_TRYGDEAVGIFT_TAG" && NON_LATEST_FOUND=true || true
-          [ "$MELOSYS_TRYGDEAVTALE_TAG" != "latest" ] && echo "  melosys-trygdeavtale: $MELOSYS_TRYGDEAVTALE_TAG" && NON_LATEST_FOUND=true || true
-          [ "$MELOSYS_INNGANGSVILKAR_TAG" != "latest" ] && echo "  melosys-inngangsvilkar: $MELOSYS_INNGANGSVILKAR_TAG" && NON_LATEST_FOUND=true || true
-          [ "$MELOSYS_EESSI_TAG" != "latest" ] && echo "  melosys-eessi: $MELOSYS_EESSI_TAG" && NON_LATEST_FOUND=true || true
-          [ "$MELOSYS_MOCK_TAG" != "latest" ] && echo "  melosys-mock: $MELOSYS_MOCK_TAG" && NON_LATEST_FOUND=true || true
-          [ "$MELOSYS_DOKGEN_TAG" != "latest" ] && echo "  melosys-dokgen: $MELOSYS_DOKGEN_TAG" && NON_LATEST_FOUND=true || true
-          [ "$MELOSYS_SKJEMA_API_TAG" != "latest" ] && echo "  melosys-skjema-api: $MELOSYS_SKJEMA_API_TAG" && NON_LATEST_FOUND=true || true
-          [ "$MELOSYS_SKJEMA_WEB_TAG" != "latest" ] && echo "  melosys-skjema-web: $MELOSYS_SKJEMA_WEB_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_API_TAG" != "latest" ] && echo "  melosys-api: $MELOSYS_API_TAG" && NON_LATEST_FOUND=true || true  # log-injection-ok: tag-verdiene er validert over
+          [ "$MELOSYS_WEB_TAG" != "latest" ] && echo "  melosys-web: $MELOSYS_WEB_TAG" && NON_LATEST_FOUND=true || true  # log-injection-ok: tag-verdiene er validert over
+          [ "$FAKTURERINGSKOMPONENTEN_TAG" != "latest" ] && echo "  faktureringskomponenten: $FAKTURERINGSKOMPONENTEN_TAG" && NON_LATEST_FOUND=true || true  # log-injection-ok: tag-verdiene er validert over
+          [ "$MELOSYS_TRYGDEAVGIFT_TAG" != "latest" ] && echo "  melosys-trygdeavgift-beregning: $MELOSYS_TRYGDEAVGIFT_TAG" && NON_LATEST_FOUND=true || true  # log-injection-ok: tag-verdiene er validert over
+          [ "$MELOSYS_TRYGDEAVTALE_TAG" != "latest" ] && echo "  melosys-trygdeavtale: $MELOSYS_TRYGDEAVTALE_TAG" && NON_LATEST_FOUND=true || true  # log-injection-ok: tag-verdiene er validert over
+          [ "$MELOSYS_INNGANGSVILKAR_TAG" != "latest" ] && echo "  melosys-inngangsvilkar: $MELOSYS_INNGANGSVILKAR_TAG" && NON_LATEST_FOUND=true || true  # log-injection-ok: tag-verdiene er validert over
+          [ "$MELOSYS_EESSI_TAG" != "latest" ] && echo "  melosys-eessi: $MELOSYS_EESSI_TAG" && NON_LATEST_FOUND=true || true  # log-injection-ok: tag-verdiene er validert over
+          [ "$MELOSYS_MOCK_TAG" != "latest" ] && echo "  melosys-mock: $MELOSYS_MOCK_TAG" && NON_LATEST_FOUND=true || true  # log-injection-ok: tag-verdiene er validert over
+          [ "$MELOSYS_DOKGEN_TAG" != "latest" ] && echo "  melosys-dokgen: $MELOSYS_DOKGEN_TAG" && NON_LATEST_FOUND=true || true  # log-injection-ok: tag-verdiene er validert over
+          [ "$MELOSYS_SKJEMA_API_TAG" != "latest" ] && echo "  melosys-skjema-api: $MELOSYS_SKJEMA_API_TAG" && NON_LATEST_FOUND=true || true  # log-injection-ok: tag-verdiene er validert over
+          [ "$MELOSYS_SKJEMA_WEB_TAG" != "latest" ] && echo "  melosys-skjema-web: $MELOSYS_SKJEMA_WEB_TAG" && NON_LATEST_FOUND=true || true  # log-injection-ok: tag-verdiene er validert over
           [ "$NON_LATEST_FOUND" = false ] && echo "  (all services using latest)" || true
 
 
@@ -1008,7 +1014,7 @@ jobs:
           # so an unrelated flaky chromium test can't sink the BDD experiment.
           # bddgen is mandatory (.features-gen is gitignored) and fails loudly on
           # missing/duplicate step defs.
-          if [ "${{ inputs.run_bdd }}" = "true" ]; then
+          if [ "$RUN_BDD" = "true" ]; then
             echo "🥒 Running ONLY the opt-in ATDD/BDD example (--project=bdd)"
             npx bddgen
             PLAYWRIGHT_ARGS=(test --project=bdd)
@@ -1016,18 +1022,18 @@ jobs:
 
           # Add test filter if specified
           if [ -n "$TEST_GREP" ]; then
-            echo "🔍 Filtering tests with pattern: $TEST_GREP"
+            printf '🔍 Filtering tests with pattern: %s\n' "$(printf '%s' "$TEST_GREP" | tr '\n\r' '  ')"
             PLAYWRIGHT_ARGS+=(--grep "$TEST_GREP")
           fi
 
           # Add repeat count if specified (for race condition testing)
-          if [ "${{ inputs.repeat_each }}" -gt 1 ]; then
-            echo "🔄 Running each test ${{ inputs.repeat_each }} times"
-            PLAYWRIGHT_ARGS+=(--repeat-each "${{ inputs.repeat_each }}")
+          if [ "$REPEAT_EACH" -gt 1 ] 2>/dev/null; then
+            printf '🔄 Running each test %s times\n' "$(printf '%s' "$REPEAT_EACH" | tr '\n\r' '  ')"
+            PLAYWRIGHT_ARGS+=(--repeat-each "$REPEAT_EACH")
           fi
 
           # Disable retries if specified (for accurate race condition detection)
-          if [ "${{ inputs.disable_retries }}" = "true" ]; then
+          if [ "$RETRIES_DISABLED" = "true" ]; then
             echo "🚫 Retries disabled"
             PLAYWRIGHT_ARGS+=(--retries 0)
           fi
@@ -1084,6 +1090,7 @@ jobs:
         env:
           CI: true
           TEST_GREP: ${{ inputs.test_grep }}
+          REPEAT_EACH: ${{ inputs.repeat_each }}
           RETRIES_DISABLED: ${{ inputs.disable_retries == true }}
           RECORD_API: ${{ inputs.record_api == true && 'true' || '' }}
           RUN_BDD: ${{ inputs.run_bdd == true && 'true' || '' }}
@@ -1280,6 +1287,7 @@ jobs:
           PAYLOAD_COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
           PAYLOAD_COMMIT_MESSAGE: ${{ github.event.client_payload.commit_message }}
           PAYLOAD_ACTOR: ${{ github.event.client_payload.actor }}
+          COLLECT_COVERAGE: ${{ inputs.collect_coverage }}
         run: |
           echo "## 🎭 Playwright Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -1530,7 +1538,7 @@ jobs:
           fi
 
           # Add E2E coverage summary if coverage collection was enabled
-          if [ "${{ inputs.collect_coverage }}" = "true" ]; then
+          if [ "$COLLECT_COVERAGE" = "true" ]; then
             echo "" >> $GITHUB_STEP_SUMMARY
             echo "## 📊 E2E Coverage per Module" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
@@ -1877,7 +1885,7 @@ jobs:
           SLACK_DELIMITER="SLACK_EOF_$(openssl rand -hex 16)"
           {
             echo "SLACK_MESSAGE<<${SLACK_DELIMITER}"
-            printf '%b' "$MESSAGE"
+            printf '%b' "$MESSAGE"  # log-injection-ok: går inn i heredocen med tilfeldig skilletegn, ikke til loggen
             echo
             echo "${SLACK_DELIMITER}"
           } >> "$GITHUB_OUTPUT"

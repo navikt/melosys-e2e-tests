@@ -2,9 +2,11 @@
 
 ## Directory Layout After Download
 
-`trigger-context.json` is written before the stack starts, so the `test-summary`
-artifact exists even for runs that died before any test ran — in those runs it is
-the only file in it.
+`trigger-context.json` is written in the "Determine image tags from trigger
+source" step, before the stack starts. Runs that fail after that point but before
+any test ran still produce a `test-summary` artifact, with this as the only file
+in it. Runs that fail earlier — checkout, npm install, registry login — produce no
+artifact at all.
 
 ```
 /tmp/gh-artifacts/

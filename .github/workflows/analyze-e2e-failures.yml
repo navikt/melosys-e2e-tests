@@ -32,14 +32,28 @@ jobs:
 
       - name: Determine run ID
         id: run-id
+        # run_id leses fra env: og valideres som tall. En input med linjeskift kunne
+        # ellers starte en logglinje med «::» og bli lest som en workflow-kommando,
+        # og en med mellomrom kunne kjøre kommandoer der ID-en brukes usitert.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_RUN_ID: ${{ inputs.run_id }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            RUN_ID="${{ inputs.run_id }}"
-            echo "🔍 Manually triggered - analyzing run: $RUN_ID"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            RUN_ID="$INPUT_RUN_ID"
+            LEDETEKST="🔍 Manually triggered - analyzing run:"
           else
-            RUN_ID="${{ github.event.workflow_run.id }}"
-            echo "🔔 Auto-triggered - analyzing run: $RUN_ID"
+            RUN_ID="$WORKFLOW_RUN_ID"
+            LEDETEKST="🔔 Auto-triggered - analyzing run:"
           fi
+
+          if ! [[ "$RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::run_id må være et tall, var: $(printf '%q' "$RUN_ID")"  # log-injection-ok: %q kan ikke gi et rått linjeskift
+            exit 1
+          fi
+
+          echo "$LEDETEKST $RUN_ID"  # log-injection-ok: validert som tall over
           echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
 
       - name: Download test artifacts
@@ -136,7 +150,7 @@ jobs:
           # Fetch annotations from the workflow run jobs
           RUN_ID="${{ steps.run-id.outputs.run_id }}"
 
-          echo "📋 Fetching annotations from run $RUN_ID..."
+          echo "📋 Fetching annotations from run $RUN_ID..."  # log-injection-ok: validert som tall i «Determine run ID»
 
           # Get all job IDs for this run
           JOB_IDS=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}/jobs" --jq '.jobs[].id')

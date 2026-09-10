@@ -9,12 +9,16 @@ on:
       - 'tests/**'
       - 'pages/**'
       - 'scripts/check-vacuous-tests.mjs'
+      - '.github/workflows/**'
+      - 'scripts/check-workflow-log-injection.mjs'
   push:
     branches: [main]
     paths:
       - 'tests/**'
       - 'pages/**'
       - 'scripts/check-vacuous-tests.mjs'
+      - '.github/workflows/**'
+      - 'scripts/check-workflow-log-injection.mjs'
 
 permissions:
   contents: read
@@ -29,3 +33,6 @@ jobs:
           node-version: 20
       - name: Sjekk for expect(true) og svelge-catcher
         run: npm run check:tests
+
+      - name: Sjekk workflow-logging for verdier utenfra
+        run: npm run check:workflow
