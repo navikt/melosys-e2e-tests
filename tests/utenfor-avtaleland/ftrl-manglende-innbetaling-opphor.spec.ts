@@ -31,7 +31,7 @@ import {FaktureringHelper} from '../../helpers/fakturering-helper';
  *     → behandling AVSLUTTET, resultat OPPHØRT, fagsak OPPHØRT, fakturaserie KANSELLERT
  *
  * Flyt og DB-fasit verifisert live 2026-06-11 (sak MEL-40, behandling 54→55), se
- * .claude/worker-briefs/gap-ftrl-manglende-innbetaling-opphor.progress.md.
+ * melosys-kode-wiki/archive/melosys-e2e-tests/2026-06-worker-briefs/gap-ftrl-manglende-innbetaling-opphor.progress.md.
  *
  * Forutsetninger i stacken (begge compose-filene):
  *   - faktureringskomponenten: NAIS_CLUSTER_NAME=dev-gcp (åpner admin-endepunktene)

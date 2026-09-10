@@ -715,7 +715,7 @@ For each test:
 **Deliverables:**
 1. Remove old `tests/` directory (or archive to `test-to-keep-but-not-to-run/`)
 2. Add ESLint rule preventing bindings from importing `pages/` directly (must go through DSL)
-3. Update `CLAUDE.md` to describe the four-layer architecture
+3. Update `AGENTS.md` to describe the four-layer architecture
 4. Add architectural diagram to `README.md`
 5. Add unit tests for `DslContext` and `Params`
 

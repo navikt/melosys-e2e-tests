@@ -745,5 +745,5 @@ find test-results -name "trace.zip" -type f | head -1 | xargs npx playwright sho
 - **Fixtures Guide**: `docs/guides/FIXTURES.md` - Automatic cleanup and monitoring
 - **Helpers Guide**: `docs/guides/HELPERS.md` - FormHelper, DatabaseHelper, etc.
 - **GitHub Actions Guide**: `docs/ci-cd/GITHUB-ACTIONS.md` - CI/CD setup
-- **POMs**: see `CLAUDE.MD` § Page Object Model (POM) Pattern
+- **POMs**: see `AGENTS.md` § Page Object Model (POM) Pattern
 - **Main README**: `README.md` - Complete project documentation

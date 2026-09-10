@@ -537,4 +537,4 @@ Show coverage only for changed files in PRs:
 - **Why build melosys-api from source?** JaCoCo needs `.class` files, Docker image only has JAR
 - **Why TCP server instead of file output?** Can dump without restarting melosys-api
 - **Why show 0% modules?** Highlights gaps, shows which modules E2E tests ignore
-- **Can we use this locally?** Yes! See CLAUDE.MD for local setup instructions
+- **Can we use this locally?** Yes! See AGENTS.md for local setup instructions
