@@ -2,11 +2,16 @@
 
 ## Directory Layout After Download
 
+`trigger-context.json` is written before the stack starts, so the `test-summary`
+artifact exists even for runs that died before any test ran — in those runs it is
+the only file in it.
+
 ```
 /tmp/gh-artifacts/
 ├── test-summary/
 │   ├── test-summary.md          # Human-readable summary
-│   └── test-summary.json        # Machine-readable results
+│   ├── test-summary.json        # Machine-readable results
+│   └── trigger-context.json     # Who/what triggered the run (written before the tests)
 └── playwright-results/
     ├── playwright-report/
     │   ├── index.html           # Interactive HTML report

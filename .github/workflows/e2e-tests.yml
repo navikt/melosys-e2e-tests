@@ -290,6 +290,25 @@ jobs:
             fi
           fi
 
+          # Tag-verdiene kommer fra payloaden eller fra environment-inputen, og
+          # brukes senere usitert i `docker pull …:${{ steps.image-tags.outputs.* }}`
+          # og i $GITHUB_ENV. En verdi med linjeskift kan skrive egne steg-outputs,
+          # og en med mellomrom og `;` kan kjøre kommandoer på runneren. Slipp bare
+          # gjennom det som faktisk er en lovlig docker-tag.
+          for tag_var in MELOSYS_API_TAG FAKTURERINGSKOMPONENTEN_TAG MELOSYS_WEB_TAG \
+                         MELOSYS_TRYGDEAVGIFT_TAG MELOSYS_TRYGDEAVTALE_TAG \
+                         MELOSYS_INNGANGSVILKAR_TAG MELOSYS_EESSI_TAG MELOSYS_MOCK_TAG \
+                         MELOSYS_DOKGEN_TAG MELOSYS_SKJEMA_API_TAG MELOSYS_SKJEMA_WEB_TAG; do
+            tag_value="${!tag_var}"
+            # [[ =~ ]] matcher hele strengen. `grep` ville matchet linje for linje,
+            # og en tag som «tag1\nmelosys_web_tag=EVIL» ville sluppet gjennom på
+            # første linje — nettopp tilfellet regelen skal stoppe.
+            if ! [[ "$tag_value" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]]; then
+              echo "::error::Ugyldig docker-tag for $tag_var: $(printf '%q' "$tag_value")"
+              exit 1
+            fi
+          done
+
           echo "melosys_api_tag=$MELOSYS_API_TAG" >> $GITHUB_OUTPUT
           echo "faktureringskomponenten_tag=$FAKTURERINGSKOMPONENTEN_TAG" >> $GITHUB_OUTPUT
           echo "melosys_web_tag=$MELOSYS_WEB_TAG" >> $GITHUB_OUTPUT
@@ -433,12 +452,11 @@ jobs:
           fi
 
           echo ""
-          if [ -n "$TRIGGER_JSON" ]; then
-            printf '%s\n' "$TRIGGER_JSON" > "$TRIGGER_CONTEXT_FILE"
+          if [ -n "$TRIGGER_JSON" ] && printf '%s\n' "$TRIGGER_JSON" > "$TRIGGER_CONTEXT_FILE" 2>/dev/null; then
             echo "🧾 Trigger-kontekst skrevet til $TRIGGER_CONTEXT_FILE:"
             printf '%s\n' "$TRIGGER_JSON"
           else
-            echo "⚠️  Klarte ikke bygge trigger-kontekst — kjøringen fortsetter uten den."
+            echo "⚠️  Klarte ikke skrive trigger-kontekst — kjøringen fortsetter uten den."
           fi
 
       - name: Set environment variables for GitHub Actions
@@ -1759,8 +1777,6 @@ jobs:
           PAYLOAD_COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
           PAYLOAD_COMMIT_MESSAGE: ${{ github.event.client_payload.commit_message }}
           PAYLOAD_IMAGE_TAG: ${{ github.event.client_payload.image_tag }}
-          RUN_URL_BASE: ${{ github.repository }}
-          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
 
@@ -1833,7 +1849,7 @@ jobs:
             RESULTS_BLOCK="_Testresultater ikke tilgjengelig (test-summary.json mangler)._"
           fi
 
-          RUN_URL="https://github.com/${RUN_URL_BASE}/actions/runs/${RUN_ID}"
+          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
           COMMIT_URL="https://github.com/navikt/${SOURCE_REPO}/commit/${COMMIT_SHA}"
           REPO_URL="https://github.com/navikt/${SOURCE_REPO}"
 
@@ -1842,13 +1858,18 @@ jobs:
           MESSAGE="${MESSAGE}*Commit:* <${COMMIT_URL}|\`${SHORT_SHA}\`> — ${COMMIT_MSG}\n"
           MESSAGE="${MESSAGE}*Image tag:* \`${IMAGE_TAG}\`\n\n"
           MESSAGE="${MESSAGE}${RESULTS_BLOCK}\n\n"
-          MESSAGE="${MESSAGE}*Workflow run:* <${RUN_URL}|#${RUN_ID}>"
+          MESSAGE="${MESSAGE}*Workflow run:* <${RUN_URL}|#${{ github.run_id }}>"
 
+          # Tilfeldig skilletegn: commit-meldinga står i $MESSAGE, og et fast
+          # skilletegn lar en melding som inneholder både «\n» og skilletegnet
+          # lukke heredocen tidlig og skrive egne steg-outputs — inkludert en ny
+          # SLACK_MESSAGE, som vinner. Da eier avsenderen teksten i #melosys-ci.
+          SLACK_DELIMITER="SLACK_EOF_$(openssl rand -hex 16)"
           {
-            echo 'SLACK_MESSAGE<<SLACK_EOF'
+            echo "SLACK_MESSAGE<<${SLACK_DELIMITER}"
             printf '%b' "$MESSAGE"
             echo
-            echo 'SLACK_EOF'
+            echo "${SLACK_DELIMITER}"
           } >> "$GITHUB_OUTPUT"
 
       - name: Slack Notification

@@ -117,7 +117,7 @@ Always mention:
 
 | Artifact | Contents |
 |----------|----------|
-| `test-summary` | test-summary.md, test-summary.json |
+| `test-summary` | test-summary.md, test-summary.json, trigger-context.json |
 | `playwright-results` | HTML report, traces, videos, screenshots, docker logs |
 | `playwright-videos` | Test execution videos |
 | `playwright-traces` | Playwright trace files for debugging |
