@@ -466,6 +466,24 @@ test.describe('Årsavregning uten år blokkerer ikke automatisk opprettelse (MEL
         );
         expect(fortsatt, 'Den injiserte årsavregningsbehandlingen skal fortsatt finnes').not.toBeNull();
 
+        // Positiv, race-uavhengig kontroll på at gaten faktisk blokkerte. På fiks-api tar
+        // harAktivÅrsavregningForÅr en tidlig retur, så iverksettingen forsøker ALDRI å
+        // opprette en ny årsavregning — ingen OPPRETT_NY_BEHANDLING_AARSAVREGNING-prosess.
+        // På buggy master forsøkes prosessen og feiler. Uten denne asserten hviler skillet
+        // mellom fiks og bug kun på at waitForProcessInstances(60) over kaster på den feilede
+        // prosessen — sårbart for marker-gjenbruk-racet, som kan gi falsk grønt mot buggy kode.
+        const antallOpprettProsesser = await withDatabase(async (db) =>
+            db.queryOne<{N: number}>(
+                `SELECT COUNT(*) AS N FROM PROSESSINSTANS
+                 WHERE PROSESS_TYPE = 'OPPRETT_NY_BEHANDLING_AARSAVREGNING'`,
+                {}
+            )
+        );
+        expect(
+            Number(antallOpprettProsesser!.N),
+            'Gaten skal blokkere før opprettelse: ingen OPPRETT_NY_BEHANDLING_AARSAVREGNING-prosess skal finnes'
+        ).toBe(0);
+
         await waitForProcessInstances(page.request, 30);
         console.log('✅ Eksisterende årsavregning med år hindret ny opprettelse uten misvisende feil.');
     });

@@ -1,7 +1,7 @@
 ---
 jira: MELOSYS-8161
 epic: MELOSYS-7080 — Støtte til endringer i medlemskap og trygdeavgift for tidligere år
-status: verified  # Tidligere kjøringsresultater er dokumentert under Verifiseringshistorikk.
+status: green  # Grønn mot fiks-api (nå i master). Rød-mot-master kun dokumentert for et tidligere oppsett; se Verifiseringshistorikk.
 test: tests/aarsavregning/aarsavregning-uten-aar-blokkerer-ikke.spec.ts
 toggles: {}  # Funksjonsbryteren endres under testen; se teknisk testoppsett.
 tags: [årsavregning, ny-vurdering, tidligere-år, ftrl, auto-opprettelse, regresjon]
@@ -220,4 +220,13 @@ og 28441548657 med `latest` (scenario 2 feilet med feilmeldingen om en annen åp
 
 Testoppsettet ble senere endret til `IVERKSETTER_VEDTAK` og `FASTSATT_TRYGDEAVGIFT`
 for å etterligne en årsavregning under iverksetting. Kjøringene over dokumenterer det tidligere
-oppsettet. De er ikke en bekreftelse på at det nåværende oppsettet er kjørt.
+oppsettet. De er ikke en bekreftelse på at det nåværende oppsettet er kjørt rødt mot master.
+
+Oppdatering 2026-09-10: api-fiksen (PR #3408) er merget til master, så scenario 2 er nå grønt
+også mot latest. En egen rød-mot-master-kjøring for det shippede oppsettet
+(`IVERKSETTER_VEDTAK`/`FASTSATT_TRYGDEAVGIFT`) finnes derfor ikke og er ikke lenger mulig å ta.
+For at scenario 2 faktisk skal skille fiks fra bug — uavhengig av at `waitForProcessInstances`
+kaster på en feilet prosess (marker-gjenbruk-racet kan ellers gi falsk grønt) — er det lagt til
+en positiv assert: ingen `OPPRETT_NY_BEHANDLING_AARSAVREGNING`-prosess skal finnes etter
+iverksettingen, siden gaten tar en tidlig retur på fiks-api. Verifisert grønt lokalt mot
+fiks-api 2026-09-10 (begge scenarier).
