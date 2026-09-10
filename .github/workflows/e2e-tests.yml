@@ -145,15 +145,22 @@ jobs:
           INPUT_UNLEASH_FORCE_DISABLE: ${{ inputs.unleash_force_disable }}
           INPUT_UNLEASH_FORCE_ENABLE: ${{ inputs.unleash_force_enable }}
         run: |
+          # Payload-verdier i loggen får linjeskiftene fjernet. En workflow-kommando
+          # leses bare når den står først på linja, og verdien står alltid etter en
+          # ledetekst — så uten linjeskift kan den ikke bli ::error:: (forfalsket
+          # annotasjon) eller ::add-mask:: (skjuler tekst i resten av jobbloggen).
+          # Enlinjede verdier, altså alle normale, logges ordrett som før.
+          log_payload() { printf '%s %s\n' "$1" "$(printf '%s' "$2" | tr '\n\r' '  ')"; }
+
           if [ "$EVENT_NAME" = "repository_dispatch" ]; then
             # Triggered by another repository pushing an image
             echo "🔔 Triggered by repository_dispatch event"
-            echo "📦 Event type: $EVENT_TYPE"
-            echo "📌 Source repository: $PAYLOAD_REPOSITORY"
-            echo "🏷️  Image tag: $PAYLOAD_IMAGE_TAG"
-            echo "📝 Commit: $PAYLOAD_COMMIT_SHA"
-            echo "💬 Commit message: $PAYLOAD_COMMIT_MESSAGE"
-            echo "👤 Actor: $PAYLOAD_ACTOR"
+            log_payload "📦 Event type:" "$EVENT_TYPE"
+            log_payload "📌 Source repository:" "$PAYLOAD_REPOSITORY"
+            log_payload "🏷️  Image tag:" "$PAYLOAD_IMAGE_TAG"
+            log_payload "📝 Commit:" "$PAYLOAD_COMMIT_SHA"
+            log_payload "💬 Commit message:" "$PAYLOAD_COMMIT_MESSAGE"
+            log_payload "👤 Actor:" "$PAYLOAD_ACTOR"
 
             # Default all services to latest
             MELOSYS_API_TAG="latest"
@@ -290,53 +297,6 @@ jobs:
             fi
           fi
 
-          # Tag-verdiene kommer fra payloaden eller fra environment-inputen, og
-          # brukes senere usitert i `docker pull …:${{ steps.image-tags.outputs.* }}`
-          # og i $GITHUB_ENV. En verdi med linjeskift kan skrive egne steg-outputs,
-          # og en med mellomrom og `;` kan kjøre kommandoer på runneren. Slipp bare
-          # gjennom det som faktisk er en lovlig docker-tag.
-          for tag_var in MELOSYS_API_TAG FAKTURERINGSKOMPONENTEN_TAG MELOSYS_WEB_TAG \
-                         MELOSYS_TRYGDEAVGIFT_TAG MELOSYS_TRYGDEAVTALE_TAG \
-                         MELOSYS_INNGANGSVILKAR_TAG MELOSYS_EESSI_TAG MELOSYS_MOCK_TAG \
-                         MELOSYS_DOKGEN_TAG MELOSYS_SKJEMA_API_TAG MELOSYS_SKJEMA_WEB_TAG; do
-            tag_value="${!tag_var}"
-            # [[ =~ ]] matcher hele strengen. `grep` ville matchet linje for linje,
-            # og en tag som «tag1\nmelosys_web_tag=EVIL» ville sluppet gjennom på
-            # første linje — nettopp tilfellet regelen skal stoppe.
-            if ! [[ "$tag_value" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]]; then
-              echo "::error::Ugyldig docker-tag for $tag_var: $(printf '%q' "$tag_value")"
-              exit 1
-            fi
-          done
-
-          echo "melosys_api_tag=$MELOSYS_API_TAG" >> $GITHUB_OUTPUT
-          echo "faktureringskomponenten_tag=$FAKTURERINGSKOMPONENTEN_TAG" >> $GITHUB_OUTPUT
-          echo "melosys_web_tag=$MELOSYS_WEB_TAG" >> $GITHUB_OUTPUT
-          echo "melosys_trygdeavgift_tag=$MELOSYS_TRYGDEAVGIFT_TAG" >> $GITHUB_OUTPUT
-          echo "melosys_trygdeavtale_tag=$MELOSYS_TRYGDEAVTALE_TAG" >> $GITHUB_OUTPUT
-          echo "melosys_inngangsvilkar_tag=$MELOSYS_INNGANGSVILKAR_TAG" >> $GITHUB_OUTPUT
-          echo "melosys_eessi_tag=$MELOSYS_EESSI_TAG" >> $GITHUB_OUTPUT
-          echo "melosys_mock_tag=$MELOSYS_MOCK_TAG" >> $GITHUB_OUTPUT
-          echo "melosys_dokgen_tag=$MELOSYS_DOKGEN_TAG" >> $GITHUB_OUTPUT
-          echo "melosys_skjema_api_tag=$MELOSYS_SKJEMA_API_TAG" >> $GITHUB_OUTPUT
-          echo "melosys_skjema_web_tag=$MELOSYS_SKJEMA_WEB_TAG" >> $GITHUB_OUTPUT
-
-          echo ""
-          echo "📋 Docker Image Tags (non-latest only):"
-          NON_LATEST_FOUND=false
-          [ "$MELOSYS_API_TAG" != "latest" ] && echo "  melosys-api: $MELOSYS_API_TAG" && NON_LATEST_FOUND=true || true
-          [ "$MELOSYS_WEB_TAG" != "latest" ] && echo "  melosys-web: $MELOSYS_WEB_TAG" && NON_LATEST_FOUND=true || true
-          [ "$FAKTURERINGSKOMPONENTEN_TAG" != "latest" ] && echo "  faktureringskomponenten: $FAKTURERINGSKOMPONENTEN_TAG" && NON_LATEST_FOUND=true || true
-          [ "$MELOSYS_TRYGDEAVGIFT_TAG" != "latest" ] && echo "  melosys-trygdeavgift-beregning: $MELOSYS_TRYGDEAVGIFT_TAG" && NON_LATEST_FOUND=true || true
-          [ "$MELOSYS_TRYGDEAVTALE_TAG" != "latest" ] && echo "  melosys-trygdeavtale: $MELOSYS_TRYGDEAVTALE_TAG" && NON_LATEST_FOUND=true || true
-          [ "$MELOSYS_INNGANGSVILKAR_TAG" != "latest" ] && echo "  melosys-inngangsvilkar: $MELOSYS_INNGANGSVILKAR_TAG" && NON_LATEST_FOUND=true || true
-          [ "$MELOSYS_EESSI_TAG" != "latest" ] && echo "  melosys-eessi: $MELOSYS_EESSI_TAG" && NON_LATEST_FOUND=true || true
-          [ "$MELOSYS_MOCK_TAG" != "latest" ] && echo "  melosys-mock: $MELOSYS_MOCK_TAG" && NON_LATEST_FOUND=true || true
-          [ "$MELOSYS_DOKGEN_TAG" != "latest" ] && echo "  melosys-dokgen: $MELOSYS_DOKGEN_TAG" && NON_LATEST_FOUND=true || true
-          [ "$MELOSYS_SKJEMA_API_TAG" != "latest" ] && echo "  melosys-skjema-api: $MELOSYS_SKJEMA_API_TAG" && NON_LATEST_FOUND=true || true
-          [ "$MELOSYS_SKJEMA_WEB_TAG" != "latest" ] && echo "  melosys-skjema-web: $MELOSYS_SKJEMA_WEB_TAG" && NON_LATEST_FOUND=true || true
-          [ "$NON_LATEST_FOUND" = false ] && echo "  (all services using latest)" || true
-
           # ---- Trigger-kontekst for melosys-console ----
           # Konsollen leser trigger-konteksten fra test-summary-artefakten: runs-API-et
           # eksponerer ikke client_payload, og triggering_actor er PAT-eieren, ikke
@@ -452,12 +412,60 @@ jobs:
           fi
 
           echo ""
-          if [ -n "$TRIGGER_JSON" ] && printf '%s\n' "$TRIGGER_JSON" > "$TRIGGER_CONTEXT_FILE" 2>/dev/null; then
+          if [ -n "$TRIGGER_JSON" ] && printf '%s\n' "$TRIGGER_JSON" > "$TRIGGER_CONTEXT_FILE"; then
             echo "🧾 Trigger-kontekst skrevet til $TRIGGER_CONTEXT_FILE:"
             printf '%s\n' "$TRIGGER_JSON"
           else
             echo "⚠️  Klarte ikke skrive trigger-kontekst — kjøringen fortsetter uten den."
           fi
+
+          # Tag-verdiene kommer fra payloaden eller fra environment-inputen, og
+          # brukes senere usitert i `docker pull …:${{ steps.image-tags.outputs.* }}`
+          # og i $GITHUB_ENV. En verdi med linjeskift kan skrive egne steg-outputs,
+          # og en med mellomrom og `;` kan kjøre kommandoer på runneren. Slipp bare
+          # gjennom det som faktisk er en lovlig docker-tag.
+          for tag_var in MELOSYS_API_TAG FAKTURERINGSKOMPONENTEN_TAG MELOSYS_WEB_TAG \
+                         MELOSYS_TRYGDEAVGIFT_TAG MELOSYS_TRYGDEAVTALE_TAG \
+                         MELOSYS_INNGANGSVILKAR_TAG MELOSYS_EESSI_TAG MELOSYS_MOCK_TAG \
+                         MELOSYS_DOKGEN_TAG MELOSYS_SKJEMA_API_TAG MELOSYS_SKJEMA_WEB_TAG; do
+            tag_value="${!tag_var}"
+            # [[ =~ ]] matcher hele strengen. `grep` ville matchet linje for linje,
+            # og en tag som «tag1\nmelosys_web_tag=EVIL» ville sluppet gjennom på
+            # første linje — nettopp tilfellet regelen skal stoppe.
+            if ! [[ "$tag_value" =~ ^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$ ]]; then
+              echo "::error::Ugyldig docker-tag for $tag_var: $(printf '%q' "$tag_value")"
+              exit 1
+            fi
+          done
+
+          echo "melosys_api_tag=$MELOSYS_API_TAG" >> $GITHUB_OUTPUT
+          echo "faktureringskomponenten_tag=$FAKTURERINGSKOMPONENTEN_TAG" >> $GITHUB_OUTPUT
+          echo "melosys_web_tag=$MELOSYS_WEB_TAG" >> $GITHUB_OUTPUT
+          echo "melosys_trygdeavgift_tag=$MELOSYS_TRYGDEAVGIFT_TAG" >> $GITHUB_OUTPUT
+          echo "melosys_trygdeavtale_tag=$MELOSYS_TRYGDEAVTALE_TAG" >> $GITHUB_OUTPUT
+          echo "melosys_inngangsvilkar_tag=$MELOSYS_INNGANGSVILKAR_TAG" >> $GITHUB_OUTPUT
+          echo "melosys_eessi_tag=$MELOSYS_EESSI_TAG" >> $GITHUB_OUTPUT
+          echo "melosys_mock_tag=$MELOSYS_MOCK_TAG" >> $GITHUB_OUTPUT
+          echo "melosys_dokgen_tag=$MELOSYS_DOKGEN_TAG" >> $GITHUB_OUTPUT
+          echo "melosys_skjema_api_tag=$MELOSYS_SKJEMA_API_TAG" >> $GITHUB_OUTPUT
+          echo "melosys_skjema_web_tag=$MELOSYS_SKJEMA_WEB_TAG" >> $GITHUB_OUTPUT
+
+          echo ""
+          echo "📋 Docker Image Tags (non-latest only):"
+          NON_LATEST_FOUND=false
+          [ "$MELOSYS_API_TAG" != "latest" ] && echo "  melosys-api: $MELOSYS_API_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_WEB_TAG" != "latest" ] && echo "  melosys-web: $MELOSYS_WEB_TAG" && NON_LATEST_FOUND=true || true
+          [ "$FAKTURERINGSKOMPONENTEN_TAG" != "latest" ] && echo "  faktureringskomponenten: $FAKTURERINGSKOMPONENTEN_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_TRYGDEAVGIFT_TAG" != "latest" ] && echo "  melosys-trygdeavgift-beregning: $MELOSYS_TRYGDEAVGIFT_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_TRYGDEAVTALE_TAG" != "latest" ] && echo "  melosys-trygdeavtale: $MELOSYS_TRYGDEAVTALE_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_INNGANGSVILKAR_TAG" != "latest" ] && echo "  melosys-inngangsvilkar: $MELOSYS_INNGANGSVILKAR_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_EESSI_TAG" != "latest" ] && echo "  melosys-eessi: $MELOSYS_EESSI_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_MOCK_TAG" != "latest" ] && echo "  melosys-mock: $MELOSYS_MOCK_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_DOKGEN_TAG" != "latest" ] && echo "  melosys-dokgen: $MELOSYS_DOKGEN_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_SKJEMA_API_TAG" != "latest" ] && echo "  melosys-skjema-api: $MELOSYS_SKJEMA_API_TAG" && NON_LATEST_FOUND=true || true
+          [ "$MELOSYS_SKJEMA_WEB_TAG" != "latest" ] && echo "  melosys-skjema-web: $MELOSYS_SKJEMA_WEB_TAG" && NON_LATEST_FOUND=true || true
+          [ "$NON_LATEST_FOUND" = false ] && echo "  (all services using latest)" || true
+
 
       - name: Set environment variables for GitHub Actions
         run: |
@@ -520,13 +528,15 @@ jobs:
           PASSWORD: ${{ secrets.READER_TOKEN }}
 
       - name: Determine skjema scope
+        env:
+          INPUT_TEST_GREP: ${{ inputs.test_grep }}
         # Skjema-stacken (digital «Utsendt arbeidstaker»-søknad: skjema-api/-web/-web-auth +
         # full-flow-oppvarmingen) er kostbar og trengs bare når skjema-tester faktisk kjører.
         # Den er i scope når det IKKE er filtrert (full suite kjører skjema) ELLER test_grep
         # nevner «skjema». Da settes COMPOSE_PROFILES=skjema (aktiverer profiled-tjenestene) for
         # alle påfølgende `docker compose`-kall. Ellers hoppes pull/start/vent/oppvarming over.
         run: |
-          if [ -z "${{ inputs.test_grep }}" ] || echo "${{ inputs.test_grep }}" | grep -qi skjema; then
+          if [ -z "$INPUT_TEST_GREP" ] || printf '%s' "$INPUT_TEST_GREP" | grep -qi skjema; then
             echo "🧩 Skjema-tester i scope → starter skjema-stack + oppvarming"
             echo "SKJEMA_IN_SCOPE=true" >> "$GITHUB_ENV"
             echo "COMPOSE_PROFILES=skjema" >> "$GITHUB_ENV"
@@ -977,10 +987,10 @@ jobs:
           echo "⏰ Test start time: $TEST_START_TIME"
 
           # Report Unleash toggle overrides for this run (visible confirmation)
-          if [ -n "${{ inputs.unleash_force_disable }}" ] || [ -n "${{ inputs.unleash_force_enable }}" ]; then
+          if [ -n "$UNLEASH_FORCE_DISABLE" ] || [ -n "$UNLEASH_FORCE_ENABLE" ]; then
             echo "🎚️  Unleash overrides for this run:"
-            [ -n "${{ inputs.unleash_force_disable }}" ] && echo "    OFF: ${{ inputs.unleash_force_disable }}"
-            [ -n "${{ inputs.unleash_force_enable }}" ] && echo "    ON:  ${{ inputs.unleash_force_enable }}"
+            [ -n "$UNLEASH_FORCE_DISABLE" ] && printf '    OFF: %s\n' "$(printf '%s' "$UNLEASH_FORCE_DISABLE" | tr '\n\r' '  ')"
+            [ -n "$UNLEASH_FORCE_ENABLE" ] && printf '    ON:  %s\n' "$(printf '%s' "$UNLEASH_FORCE_ENABLE" | tr '\n\r' '  ')"
           else
             echo "🎚️  Unleash overrides: none (defaults apply)"
           fi
