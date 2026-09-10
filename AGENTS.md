@@ -1,6 +1,6 @@
-# CLAUDE.MD
+# AGENTS.md
 
-This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+This file provides guidance to coding agents working in this repository.
 
 ## Project Overview
 
@@ -124,7 +124,7 @@ make dev-eessi
 
 ### Commit Messages:
 - Clear, descriptive messages
-- No Claude footer unless user explicitly requests it
+- No tool-generated footer unless user explicitly requests it
 - Focus on what and why, not how
 
 ### Example Good Flow:
@@ -899,6 +899,8 @@ Key steps:
 - **Known Errors**: `docs/guides/KNOWN-ERRORS.md` - Using @known-error tag for expected failures
 - **GitHub Actions**: `docs/ci-cd/GITHUB-ACTIONS.md` - CI/CD setup and usage
 - **E2E Coverage**: `docs/ci-cd/E2E-COVERAGE.md` - E2E code coverage collection for melosys-api
+- **Spec-drevet testing**: `docs/SPEC-DRIVEN-TESTING.md` - spec-formatet i `specs/`, som testene genereres fra
+- **Arkiverte planer og handovers**: `melosys-kode-wiki/archive/melosys-e2e-tests/` - hører ikke hjemme i dette repoet
 - [Playwright Documentation](https://playwright.dev) - Official Playwright docs
 - [Playwright Best Practices](https://playwright.dev/docs/best-practices)
 - [Trace Viewer Guide](https://playwright.dev/docs/trace-viewer)
