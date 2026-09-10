@@ -122,16 +122,38 @@ jobs:
 
       - name: Determine image tags from trigger source
         id: image-tags
+        # Payload-verdiene leses som miljøvariabler, ikke som ${{ }} rett inn i skriptet:
+        # client_payload kommer fra et fremmed repo, og en commit-melding med ${...} eller
+        # bakoverfnutter ville ellers bli evaluert som shell (script injection).
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          EVENT_TYPE: ${{ github.event.action }}
+          PAYLOAD_REPOSITORY: ${{ github.event.client_payload.repository }}
+          PAYLOAD_IMAGE_TAG: ${{ github.event.client_payload.image_tag }}
+          PAYLOAD_COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
+          PAYLOAD_COMMIT_MESSAGE: ${{ github.event.client_payload.commit_message }}
+          PAYLOAD_ACTOR: ${{ github.event.client_payload.actor }}
+          GITHUB_ACTOR_NAME: ${{ github.actor }}
+          HEAD_BRANCH: ${{ github.ref_name }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+          INPUT_ENVIRONMENT: ${{ inputs.environment }}
+          INPUT_TEST_GREP: ${{ inputs.test_grep }}
+          INPUT_COLLECT_COVERAGE: ${{ inputs.collect_coverage }}
+          INPUT_REPEAT_EACH: ${{ inputs.repeat_each }}
+          INPUT_DISABLE_RETRIES: ${{ inputs.disable_retries }}
+          INPUT_RUN_BDD: ${{ inputs.run_bdd }}
+          INPUT_UNLEASH_FORCE_DISABLE: ${{ inputs.unleash_force_disable }}
+          INPUT_UNLEASH_FORCE_ENABLE: ${{ inputs.unleash_force_enable }}
         run: |
-          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
+          if [ "$EVENT_NAME" = "repository_dispatch" ]; then
             # Triggered by another repository pushing an image
             echo "🔔 Triggered by repository_dispatch event"
-            echo "📦 Event type: ${{ github.event.action }}"
-            echo "📌 Source repository: ${{ github.event.client_payload.repository }}"
-            echo "🏷️  Image tag: ${{ github.event.client_payload.image_tag }}"
-            echo "📝 Commit: ${{ github.event.client_payload.commit_sha }}"
-            echo "💬 Commit message: ${{ github.event.client_payload.commit_message }}"
-            echo "👤 Actor: ${{ github.event.client_payload.actor }}"
+            echo "📦 Event type: $EVENT_TYPE"
+            echo "📌 Source repository: $PAYLOAD_REPOSITORY"
+            echo "🏷️  Image tag: $PAYLOAD_IMAGE_TAG"
+            echo "📝 Commit: $PAYLOAD_COMMIT_SHA"
+            echo "💬 Commit message: $PAYLOAD_COMMIT_MESSAGE"
+            echo "👤 Actor: $PAYLOAD_ACTOR"
 
             # Default all services to latest
             MELOSYS_API_TAG="latest"
@@ -147,53 +169,53 @@ jobs:
             MELOSYS_SKJEMA_WEB_TAG="latest"
 
             # Override with specific tag based on which service triggered
-            if [ "${{ github.event.action }}" = "melosys-api-published" ]; then
-              MELOSYS_API_TAG="${{ github.event.client_payload.image_tag }}"
+            if [ "$EVENT_TYPE" = "melosys-api-published" ]; then
+              MELOSYS_API_TAG="$PAYLOAD_IMAGE_TAG"
             fi
 
-            if [ "${{ github.event.action }}" = "melosys-skjema-api-published" ]; then
-              MELOSYS_SKJEMA_API_TAG="${{ github.event.client_payload.image_tag }}"
+            if [ "$EVENT_TYPE" = "melosys-skjema-api-published" ]; then
+              MELOSYS_SKJEMA_API_TAG="$PAYLOAD_IMAGE_TAG"
             fi
 
-            if [ "${{ github.event.action }}" = "melosys-skjema-web-published" ]; then
-              MELOSYS_SKJEMA_WEB_TAG="${{ github.event.client_payload.image_tag }}"
+            if [ "$EVENT_TYPE" = "melosys-skjema-web-published" ]; then
+              MELOSYS_SKJEMA_WEB_TAG="$PAYLOAD_IMAGE_TAG"
             fi
 
-            if [ "${{ github.event.action }}" = "faktureringskomponenten-published" ]; then
-              FAKTURERINGSKOMPONENTEN_TAG="${{ github.event.client_payload.image_tag }}"
+            if [ "$EVENT_TYPE" = "faktureringskomponenten-published" ]; then
+              FAKTURERINGSKOMPONENTEN_TAG="$PAYLOAD_IMAGE_TAG"
             fi
 
-            if [ "${{ github.event.action }}" = "melosys-web-published" ]; then
-              MELOSYS_WEB_TAG="${{ github.event.client_payload.image_tag }}"
+            if [ "$EVENT_TYPE" = "melosys-web-published" ]; then
+              MELOSYS_WEB_TAG="$PAYLOAD_IMAGE_TAG"
             fi
 
-            if [ "${{ github.event.action }}" = "melosys-trygdeavgift-beregning-published" ]; then
-              MELOSYS_TRYGDEAVGIFT_TAG="${{ github.event.client_payload.image_tag }}"
+            if [ "$EVENT_TYPE" = "melosys-trygdeavgift-beregning-published" ]; then
+              MELOSYS_TRYGDEAVGIFT_TAG="$PAYLOAD_IMAGE_TAG"
             fi
 
-            if [ "${{ github.event.action }}" = "melosys-trygdeavtale-published" ]; then
-              MELOSYS_TRYGDEAVTALE_TAG="${{ github.event.client_payload.image_tag }}"
+            if [ "$EVENT_TYPE" = "melosys-trygdeavtale-published" ]; then
+              MELOSYS_TRYGDEAVTALE_TAG="$PAYLOAD_IMAGE_TAG"
             fi
 
-            if [ "${{ github.event.action }}" = "melosys-inngangsvilkar-published" ]; then
-              MELOSYS_INNGANGSVILKAR_TAG="${{ github.event.client_payload.image_tag }}"
+            if [ "$EVENT_TYPE" = "melosys-inngangsvilkar-published" ]; then
+              MELOSYS_INNGANGSVILKAR_TAG="$PAYLOAD_IMAGE_TAG"
             fi
 
-            if [ "${{ github.event.action }}" = "melosys-eessi-published" ]; then
-              MELOSYS_EESSI_TAG="${{ github.event.client_payload.image_tag }}"
+            if [ "$EVENT_TYPE" = "melosys-eessi-published" ]; then
+              MELOSYS_EESSI_TAG="$PAYLOAD_IMAGE_TAG"
             fi
 
-            if [ "${{ github.event.action }}" = "melosys-mock-published" ]; then
-              MELOSYS_MOCK_TAG="${{ github.event.client_payload.image_tag }}"
+            if [ "$EVENT_TYPE" = "melosys-mock-published" ]; then
+              MELOSYS_MOCK_TAG="$PAYLOAD_IMAGE_TAG"
             fi
 
-            if [ "${{ github.event.action }}" = "melosys-dokgen-published" ]; then
-              MELOSYS_DOKGEN_TAG="${{ github.event.client_payload.image_tag }}"
+            if [ "$EVENT_TYPE" = "melosys-dokgen-published" ]; then
+              MELOSYS_DOKGEN_TAG="$PAYLOAD_IMAGE_TAG"
             fi
           else
             # Manual trigger via workflow_dispatch
             echo "👆 Manually triggered via workflow_dispatch"
-            INPUT_ENV="${{ inputs.environment }}"
+            INPUT_ENV="$INPUT_ENVIRONMENT"
 
             # Default all services to latest
             MELOSYS_API_TAG="latest"
@@ -295,6 +317,129 @@ jobs:
           [ "$MELOSYS_SKJEMA_API_TAG" != "latest" ] && echo "  melosys-skjema-api: $MELOSYS_SKJEMA_API_TAG" && NON_LATEST_FOUND=true || true
           [ "$MELOSYS_SKJEMA_WEB_TAG" != "latest" ] && echo "  melosys-skjema-web: $MELOSYS_SKJEMA_WEB_TAG" && NON_LATEST_FOUND=true || true
           [ "$NON_LATEST_FOUND" = false ] && echo "  (all services using latest)" || true
+
+          # ---- Trigger-kontekst for melosys-console ----
+          # Konsollen leser trigger-konteksten fra test-summary-artefakten: runs-API-et
+          # eksponerer ikke client_payload, og triggering_actor er PAT-eieren, ikke
+          # personen som trigget. Fila skrives her — før docker compose, health checks og
+          # Playwright — slik at den finnes også når kjøringen dør tidlig.
+          #
+          # Den skrives til $RUNNER_TEMP, ikke rett i playwright-report/: Playwrights
+          # html-reporter sletter hele rapportkatalogen ved slutten av kjøringen
+          # (removeFolders i reporters/html.js), så en fil lagt der nå ville vært borte
+          # når artefakten lastes opp. Steget "Copy trigger context into report directory"
+          # legger den på plass igjen rett før opplasting.
+          #
+          # Nøklene i resolvedTags speiler tags-objektet i test-summary.json
+          # (reporters/test-summary.ts) — samme navn, samme verdier.
+          TRIGGER_CONTEXT_FILE="$RUNNER_TEMP/trigger-context.json"
+
+          RESOLVED_TAGS=$(jq -n \
+            --arg melosysApi "$MELOSYS_API_TAG" \
+            --arg melosysWeb "$MELOSYS_WEB_TAG" \
+            --arg faktureringskomponenten "$FAKTURERINGSKOMPONENTEN_TAG" \
+            --arg trygdeavgift "$MELOSYS_TRYGDEAVGIFT_TAG" \
+            --arg trygdeavtale "$MELOSYS_TRYGDEAVTALE_TAG" \
+            --arg inngangsvilkar "$MELOSYS_INNGANGSVILKAR_TAG" \
+            --arg eessi "$MELOSYS_EESSI_TAG" \
+            --arg mock "$MELOSYS_MOCK_TAG" \
+            --arg dokgen "$MELOSYS_DOKGEN_TAG" \
+            '{
+              "melosys-api": $melosysApi,
+              "melosys-web": $melosysWeb,
+              "faktureringskomponenten": $faktureringskomponenten,
+              "melosys-trygdeavgift-beregning": $trygdeavgift,
+              "melosys-trygdeavtale": $trygdeavtale,
+              "melosys-inngangsvilkar": $inngangsvilkar,
+              "melosys-eessi": $eessi,
+              "melosys-mock": $mock,
+              "melosys-dokgen": $dokgen
+            }
+            | with_entries(select(.value != ""))') || RESOLVED_TAGS=""
+
+          # Felles jq-hjelpere: tomme strenger skal bli null, ikke "" eller "null".
+          JQ_HELPERS='
+            def nz: if . == "" then null else . end;
+            def as_bool: if . == "true" then true elif . == "false" then false else null end;
+            def as_num: if . == "" then null else (tonumber? // null) end;
+          '
+
+          if [ -z "$RESOLVED_TAGS" ]; then
+            TRIGGER_JSON=""
+          elif [ "$EVENT_NAME" = "repository_dispatch" ]; then
+            TRIGGER_JSON=$(jq -n \
+              --arg eventType "$EVENT_TYPE" \
+              --arg repository "$PAYLOAD_REPOSITORY" \
+              --arg imageTag "$PAYLOAD_IMAGE_TAG" \
+              --arg commitSha "$PAYLOAD_COMMIT_SHA" \
+              --arg commitMessage "$PAYLOAD_COMMIT_MESSAGE" \
+              --arg actor "$PAYLOAD_ACTOR" \
+              --arg headBranch "$HEAD_BRANCH" \
+              --arg runAttempt "$RUN_ATTEMPT" \
+              --argjson resolvedTags "$RESOLVED_TAGS" \
+              "$JQ_HELPERS"'
+              {
+                schemaVersion: 1,
+                event: "repository_dispatch",
+                eventType: ($eventType | nz),
+                repository: ($repository | nz),
+                imageTag: ($imageTag | nz),
+                commitSha: ($commitSha | nz),
+                commitMessage: ($commitMessage | nz),
+                actor: ($actor | nz),
+                headBranch: ($headBranch | nz),
+                runAttempt: ($runAttempt | as_num),
+                resolvedTags: $resolvedTags,
+                inputs: null
+              }') || TRIGGER_JSON=""
+          else
+            TRIGGER_JSON=$(jq -n \
+              --arg actor "$GITHUB_ACTOR_NAME" \
+              --arg headBranch "$HEAD_BRANCH" \
+              --arg runAttempt "$RUN_ATTEMPT" \
+              --arg environment "$INPUT_ENVIRONMENT" \
+              --arg testGrep "$INPUT_TEST_GREP" \
+              --arg collectCoverage "$INPUT_COLLECT_COVERAGE" \
+              --arg repeatEach "$INPUT_REPEAT_EACH" \
+              --arg disableRetries "$INPUT_DISABLE_RETRIES" \
+              --arg runBdd "$INPUT_RUN_BDD" \
+              --arg unleashForceDisable "$INPUT_UNLEASH_FORCE_DISABLE" \
+              --arg unleashForceEnable "$INPUT_UNLEASH_FORCE_ENABLE" \
+              --argjson resolvedTags "$RESOLVED_TAGS" \
+              "$JQ_HELPERS"'
+              {
+                schemaVersion: 1,
+                event: "workflow_dispatch",
+                eventType: null,
+                repository: null,
+                imageTag: null,
+                commitSha: null,
+                commitMessage: null,
+                actor: ($actor | nz),
+                headBranch: ($headBranch | nz),
+                runAttempt: ($runAttempt | as_num),
+                resolvedTags: $resolvedTags,
+                inputs: {
+                  environment: ($environment | nz),
+                  test_grep: ($testGrep | nz),
+                  collect_coverage: ($collectCoverage | as_bool),
+                  repeat_each: ($repeatEach | as_num),
+                  disable_retries: ($disableRetries | as_bool),
+                  run_bdd: ($runBdd | as_bool),
+                  unleash_force_disable: ($unleashForceDisable | nz),
+                  unleash_force_enable: ($unleashForceEnable | nz)
+                }
+              }') || TRIGGER_JSON=""
+          fi
+
+          echo ""
+          if [ -n "$TRIGGER_JSON" ]; then
+            printf '%s\n' "$TRIGGER_JSON" > "$TRIGGER_CONTEXT_FILE"
+            echo "🧾 Trigger-kontekst skrevet til $TRIGGER_CONTEXT_FILE:"
+            printf '%s\n' "$TRIGGER_JSON"
+          else
+            echo "⚠️  Klarte ikke bygge trigger-kontekst — kjøringen fortsetter uten den."
+          fi
 
       - name: Set environment variables for GitHub Actions
         run: |
@@ -1099,6 +1244,14 @@ jobs:
       - name: Generate test summary
         id: summary
         if: always()
+        # Payload-verdier via env, ikke ${{ }} i skriptet — se «Determine image tags».
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PAYLOAD_REPOSITORY: ${{ github.event.client_payload.repository }}
+          PAYLOAD_IMAGE_TAG: ${{ github.event.client_payload.image_tag }}
+          PAYLOAD_COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
+          PAYLOAD_COMMIT_MESSAGE: ${{ github.event.client_payload.commit_message }}
+          PAYLOAD_ACTOR: ${{ github.event.client_payload.actor }}
         run: |
           echo "## 🎭 Playwright Test Results" >> $GITHUB_STEP_SUMMARY
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -1117,17 +1270,17 @@ jobs:
           esac
 
           # Add trigger information if this was a repository dispatch
-          if [ "${{ github.event_name }}" = "repository_dispatch" ]; then
-            REPO="${{ github.event.client_payload.repository }}"
-            COMMIT_SHA="${{ github.event.client_payload.commit_sha }}"
+          if [ "$EVENT_NAME" = "repository_dispatch" ]; then
+            REPO="$PAYLOAD_REPOSITORY"
+            COMMIT_SHA="$PAYLOAD_COMMIT_SHA"
             COMMIT_URL="https://github.com/navikt/${REPO}/commit/${COMMIT_SHA}"
 
             echo "### 📦 Triggered by: [\`$REPO\`](https://github.com/navikt/$REPO)" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
-            echo "- **Image tag:** \`${{ github.event.client_payload.image_tag }}\`" >> $GITHUB_STEP_SUMMARY
+            echo "- **Image tag:** \`${PAYLOAD_IMAGE_TAG}\`" >> $GITHUB_STEP_SUMMARY
             echo "- **Commit:** [\`${COMMIT_SHA:0:7}\`]($COMMIT_URL)" >> $GITHUB_STEP_SUMMARY
-            echo "- **Message:** ${{ github.event.client_payload.commit_message }}" >> $GITHUB_STEP_SUMMARY
-            echo "- **Actor:** @${{ github.event.client_payload.actor }}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Message:** ${PAYLOAD_COMMIT_MESSAGE}" >> $GITHUB_STEP_SUMMARY
+            echo "- **Actor:** @${PAYLOAD_ACTOR}" >> $GITHUB_STEP_SUMMARY
             echo "" >> $GITHUB_STEP_SUMMARY
           fi
           echo "" >> $GITHUB_STEP_SUMMARY
@@ -1505,6 +1658,19 @@ jobs:
           echo "📋 Per-test docker log files:"
           ls -lh playwright-report/docker-logs-* 2>/dev/null || echo "No per-test log files found"
 
+      - name: Copy trigger context into report directory
+        # Playwrights html-reporter tømmer playwright-report/ ved slutten av kjøringen,
+        # så trigger-konteksten legges på plass her — etter testene, før opplasting.
+        if: always()
+        run: |
+          mkdir -p playwright-report
+          if [ -f "$RUNNER_TEMP/trigger-context.json" ]; then
+            cp "$RUNNER_TEMP/trigger-context.json" playwright-report/trigger-context.json
+            echo "🧾 trigger-context.json kopiert til playwright-report/"
+          else
+            echo "⚠️  Fant ingen trigger-context.json i RUNNER_TEMP"
+          fi
+
       - name: Upload test results and reports
         uses: actions/upload-artifact@v4
         if: failure()
@@ -1523,6 +1689,7 @@ jobs:
           path: |
             playwright-report/test-summary.md
             playwright-report/test-summary.json
+            playwright-report/trigger-context.json
             playwright-report/metrics-summary.md
             playwright-report/metrics-coverage.json
             playwright-report/recordings/
@@ -1584,14 +1751,24 @@ jobs:
 
       - name: Build Slack context
         id: ctx
+        # Payload-verdier via env, ikke ${{ }} i skriptet: en commit-melding med
+        # enkeltfnutt ville ellers bryte ut av tilordningen under.
+        env:
+          PAYLOAD_ACTOR: ${{ github.event.client_payload.actor }}
+          PAYLOAD_REPOSITORY: ${{ github.event.client_payload.repository }}
+          PAYLOAD_COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
+          PAYLOAD_COMMIT_MESSAGE: ${{ github.event.client_payload.commit_message }}
+          PAYLOAD_IMAGE_TAG: ${{ github.event.client_payload.image_tag }}
+          RUN_URL_BASE: ${{ github.repository }}
+          RUN_ID: ${{ github.run_id }}
         run: |
           set -euo pipefail
 
-          ACTOR='${{ github.event.client_payload.actor }}'
-          SOURCE_REPO='${{ github.event.client_payload.repository }}'
-          COMMIT_SHA='${{ github.event.client_payload.commit_sha }}'
-          COMMIT_MSG='${{ github.event.client_payload.commit_message }}'
-          IMAGE_TAG='${{ github.event.client_payload.image_tag }}'
+          ACTOR="$PAYLOAD_ACTOR"
+          SOURCE_REPO="$PAYLOAD_REPOSITORY"
+          COMMIT_SHA="$PAYLOAD_COMMIT_SHA"
+          COMMIT_MSG="$PAYLOAD_COMMIT_MESSAGE"
+          IMAGE_TAG="$PAYLOAD_IMAGE_TAG"
           SHORT_SHA="${COMMIT_SHA:0:7}"
 
           # Mention: Slack-ID (U...) gir ekte ping, handle (rune.lind) gir synlig tekst.
@@ -1656,7 +1833,7 @@ jobs:
             RESULTS_BLOCK="_Testresultater ikke tilgjengelig (test-summary.json mangler)._"
           fi
 
-          RUN_URL="https://github.com/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+          RUN_URL="https://github.com/${RUN_URL_BASE}/actions/runs/${RUN_ID}"
           COMMIT_URL="https://github.com/navikt/${SOURCE_REPO}/commit/${COMMIT_SHA}"
           REPO_URL="https://github.com/navikt/${SOURCE_REPO}"
 
@@ -1665,7 +1842,7 @@ jobs:
           MESSAGE="${MESSAGE}*Commit:* <${COMMIT_URL}|\`${SHORT_SHA}\`> — ${COMMIT_MSG}\n"
           MESSAGE="${MESSAGE}*Image tag:* \`${IMAGE_TAG}\`\n\n"
           MESSAGE="${MESSAGE}${RESULTS_BLOCK}\n\n"
-          MESSAGE="${MESSAGE}*Workflow run:* <${RUN_URL}|#${{ github.run_id }}>"
+          MESSAGE="${MESSAGE}*Workflow run:* <${RUN_URL}|#${RUN_ID}>"
 
           {
             echo 'SLACK_MESSAGE<<SLACK_EOF'
