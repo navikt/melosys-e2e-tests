@@ -55,7 +55,7 @@ test.describe('Årsavregning etter delvis opphør ved manglende innbetaling', ()
       { timeoutSeconds: 30 }
     );
 
-    await page.getByRole('link', { name: 'TRIVIELL KARAFFEL -' }).click();
+    await hovedside.åpneBehandling('TRIVIELL KARAFFEL -');
 
     await medlemskap.velgPeriode(`01.03.${FORRIGE_AAR}`, `01.08.${FORRIGE_AAR}`);
     await medlemskap.velgLand('Afghanistan');
