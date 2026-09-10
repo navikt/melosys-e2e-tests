@@ -134,6 +134,32 @@ export class VedtakPage extends BasePage {
     console.log(`✅ Selected grunn for nytt vedtak: ${grunn}`);
   }
 
+  async bekreftSkjønnsmessigInntektsgrunnlag(): Promise<void> {
+    const checkbox = this.page.getByRole('checkbox', { name: /Inntektsgrunnlaget er skjønnsmessig/ });
+    if (await checkbox.isChecked()) {
+      return;
+    }
+
+    const lagret = this.page.waitForResponse(
+      response =>
+        response.url().endsWith('/aarsavregninger/skjoennsfastsatt') &&
+        response.request().method() === 'POST',
+      { timeout: 15_000 }
+    ).catch(() => null);
+    await checkbox.check();
+    const response = await lagret;
+    if (!response) {
+      throw new Error(
+        'Lagring av skjønnsmessig inntektsgrunnlag ga ingen respons innen 15000ms'
+      );
+    }
+    if (response.status() >= 400) {
+      throw new Error(
+        `Lagring av skjønnsmessig inntektsgrunnlag feilet: ${response.status()} ${await response.text()}`
+      );
+    }
+  }
+
   /**
    * Click "Fatt vedtak" button to submit the decision
    * This completes the workflow

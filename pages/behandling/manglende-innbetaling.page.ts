@@ -31,6 +31,10 @@ export class ManglendeInnbetalingPage extends BasePage {
     name: /Innbetaling mangler for hele medlemskapsperioden/,
   });
 
+  private readonly delerAvPeriodenRadio = this.page.getByRole('radio', {
+    name: /Innbetaling mangler for deler av medlemskapsperioden/,
+  });
+
   private readonly bekreftButton = this.page.getByRole('button', {
     name: 'Bekreft og fortsett',
   });
@@ -64,6 +68,36 @@ export class ManglendeInnbetalingPage extends BasePage {
       console.log(`  ⚠️ networkidle etter radio-valg timet ut (fortsetter): ${e.message}`);
     });
     console.log('✅ Valgt: innbetaling mangler for HELE medlemskapsperioden');
+  }
+
+  async velgInnbetalingManglerDelerAvPerioden(): Promise<void> {
+    if (await this.delerAvPeriodenRadio.isChecked()) {
+      console.log('✅ Innbetaling mangler for DELER av medlemskapsperioden var allerede valgt');
+      return;
+    }
+
+    const lagret = this.page.waitForResponse(
+      response =>
+        response.url().includes('/avklartefakta/') &&
+        response.url().endsWith('/innbetalingsstatus') &&
+        response.request().method() === 'POST',
+      { timeout: 15_000 }
+    ).catch(() => null);
+    await this.delerAvPeriodenRadio.check();
+    const response = await lagret;
+    if (!response) {
+      throw new Error('Lagring av innbetalingsstatus ga ingen respons innen 15000ms');
+    }
+    if (response.status() >= 400) {
+      throw new Error(`Lagring av innbetalingsstatus feilet: ${response.status()} ${await response.text()}`);
+    }
+    console.log('✅ Valgt: innbetaling mangler for DELER av medlemskapsperioden');
+  }
+
+  async bekreftOgGaaTilRevurderingsflyt(): Promise<void> {
+    await this.clickStepButtonWithRetry(this.bekreftButton, {
+      waitForContent: this.page.getByRole('heading', { name: 'Oppgi opplysninger fra søknaden' }),
+    });
   }
 
   /**
