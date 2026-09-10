@@ -34,8 +34,9 @@
 // En verdi som er validert mot en grammatikk uten linjeskift merkes i stedet
 // med «# log-injection-ok: <grunn>» på linja.
 
-import { readFileSync, readdirSync } from 'node:fs';
+import { readFileSync, readdirSync, realpathSync } from 'node:fs';
 import { join } from 'node:path';
+import { fileURLToPath } from 'node:url';
 
 const STANDARD_DIR = '.github/workflows';
 // Verdien utenfra kan stå hvor som helst i uttrykket: «${{ inputs.x }}», men også
@@ -147,7 +148,19 @@ export function finnLoggInjeksjon(dir = STANDARD_DIR) {
 }
 
 // Kjøres den direkte, er den en CLI. Importeres den, er den en funksjon å teste.
-if (import.meta.url === `file://${process.argv[1]}`) {
+// Sammenligningen går på realpath: en ren strengsammenligning mot process.argv[1]
+// slår feil gjennom en symlink, og da gjør skriptet stille ingenting — verste
+// utfallet for en gate.
+function kjoertDirekte() {
+  if (!process.argv[1]) return false;
+  try {
+    return realpathSync(fileURLToPath(import.meta.url)) === realpathSync(process.argv[1]);
+  } catch {
+    return false;
+  }
+}
+
+if (kjoertDirekte()) {
   const funn = finnLoggInjeksjon();
   if (funn.length > 0) {
     console.error('❌ Mulig workflow-kommando-injeksjon i jobbloggen:\n');
