@@ -36,3 +36,10 @@ jobs:
 
       - name: Sjekk workflow-logging for verdier utenfra
         run: npm run check:workflow
+
+      # Uten denne er sjekken over upinnet: en endring i
+      # check-workflow-log-injection.mjs kunne slå av sin egen deteksjon i det
+      # stille. Testene er rene node-builtins, så jobben trenger fortsatt ikke
+      # npm ci — det er derfor test:scripts og ikke test:unit (som krever ts-node).
+      - name: Test sjekkene selv
+        run: npm run test:scripts

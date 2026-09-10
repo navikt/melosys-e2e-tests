@@ -14,15 +14,18 @@
 // HVA DEN IKKE ER: et bevis. Sjekken er et rekkverk mot at de fire feilene vi
 // faktisk gjorde kommer tilbake, ikke en fullstendig analyse. En review skrev en
 // workflow med sju fiendtlige konstruksjoner for å slippe forbi; sjekken fanger
-// tre av dem. Kjente hull, målt:
+// TO av dem. Kjente hull, hver enkelt reprodusert i testen ved siden av:
 //   * heredoc-kropp (`cat <<EOF` … `EOF`) leses ikke som skriving;
 //   * `run: echo "$X"` på én linje (inline skalar) fanges ikke;
-//   * taint følges ikke gjennom `read -ra`, arrays, `${!indirekte}`, eller en
+//   * omdirigering først på linja (`>&2 echo "$X"`) — mønsteret forankres i
+//     linjestart eller etter ;/&&/|, og `>` er ingen av delene;
+//   * taint følges ikke gjennom `read -ra`, arrays, `${!indirekte}`,
+//     funksjonsparametere (`logg() { echo "$1"; }`), `${{ format(…) }}`, eller en
 //     variabel skrevet til $GITHUB_ENV i ett steg og lest i et annet (selve
 //     skrivingen fanges, lesingen i neste steg ikke);
 //   * «log-injection-ok» er en påstand sjekken ikke kan etterprøve — bare de to
-//     valideringene under pinnes, og bare på at teksten finnes, ikke på at den
-//     stopper kjøringen.
+//     valideringene under pinnes, og bare på at et ANKRET mønster finnes, ikke på
+//     at det stopper kjøringen.
 // Bruk den som en tripwire. Den erstatter ikke å lese diffen.
 //
 // To lovlige måter å skrive en slik verdi til loggen:
@@ -34,7 +37,7 @@
 import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
-const DIR = '.github/workflows';
+const STANDARD_DIR = '.github/workflows';
 // Verdien utenfra kan stå hvor som helst i uttrykket: «${{ inputs.x }}», men også
 // «${{ inputs.x || '30' }}» eller «${{ fromJSON(inputs.x).y }}». Å kreve et bart
 // uttrykk er nettopp det som skjulte cleanup-old-workflows.yml i tre runder.
@@ -49,10 +52,11 @@ const LOG_LINE = /(^|[;&|]\s*)(echo|printf|tee|cat)\b/;
 const SAFE = [/log_payload\s/, /\|\s*tr\s+'\\n\\r'/];
 const ALLOW = /#\s*log-injection-ok:/;
 
-let funn = [];
+export function finnLoggInjeksjon(dir = STANDARD_DIR) {
+  const funn = [];
 
-for (const fil of readdirSync(DIR).filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'))) {
-  const linjer = readFileSync(join(DIR, fil), 'utf-8').split('\n');
+  for (const fil of readdirSync(dir).filter((f) => f.endsWith('.yml') || f.endsWith('.yaml'))) {
+  const linjer = readFileSync(join(dir, fil), 'utf-8').split('\n');
 
   // 1. env:-navn som får verdi utenfra.
   const smittet = new Set();
@@ -100,8 +104,10 @@ for (const fil of readdirSync(DIR).filter((f) => f.endsWith('.yml') || f.endsWit
   //    grunnen holder. Der grunnen er en validering ANDRE steder i filen, pinnes
   //    den valideringen — ellers består sjekken mens merkelappene er blitt usanne.
   const KREVER = [
-    { marker: /log-injection-ok: tag-verdiene er validert/, kilde: /\[\[ "\$tag_value" =~ \^\[A-Za-z0-9_\]/ },
-    { marker: /log-injection-ok: validert som tall/, kilde: /=~ \^\[0-9\]/ },
+    { marker: /log-injection-ok: tag-verdiene er validert/, kilde: /=~ \^\[A-Za-z0-9_\]\[A-Za-z0-9._-\]\{0,\d+\}\$/ },
+    // Ankrene ER pinnen: «^[0-9]» uten $ og uten kvantor slipper gjennom en
+    // validering som bare sjekker FØRSTE tegn, og da lyver merkelappen igjen.
+    { marker: /log-injection-ok: validert som tall/, kilde: /=~ \^\[0-9\](\+|\{\d+(,\d+)?\})\$/ },
   ];
   for (const { marker, kilde } of KREVER) {
     const paastand = linjer.findIndex((l) => marker.test(l));
@@ -137,11 +143,18 @@ for (const fil of readdirSync(DIR).filter((f) => f.endsWith('.yml') || f.endsWit
   });
 }
 
-if (funn.length > 0) {
-  console.error('❌ Mulig workflow-kommando-injeksjon i jobbloggen:\n');
-  for (const f of funn) console.error('  ' + f + '\n');
-  console.error('Bruk log_payload (eller tr) — eller merk linja med «# log-injection-ok: <grunn>»');
-  console.error('hvis verdien er validert mot en grammatikk uten linjeskift.');
-  process.exit(1);
+  return funn;
 }
-console.log('✅ check:workflow OK — ingen verdier utenfra skrives rått til jobbloggen.');
+
+// Kjøres den direkte, er den en CLI. Importeres den, er den en funksjon å teste.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  const funn = finnLoggInjeksjon();
+  if (funn.length > 0) {
+    console.error('❌ Mulig workflow-kommando-injeksjon i jobbloggen:\n');
+    for (const f of funn) console.error('  ' + f + '\n');
+    console.error('Bruk log_payload (eller tr) — eller merk linja med «# log-injection-ok: <grunn>»');
+    console.error('hvis verdien er validert mot en grammatikk uten linjeskift.');
+    process.exit(1);
+  }
+  console.log('✅ check:workflow OK — ingen verdier utenfra skrives rått til jobbloggen.');
+}

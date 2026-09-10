@@ -8,7 +8,7 @@
     "test:headed": "playwright test --project=chromium --headed",
     "test:debug": "playwright test --project=chromium --debug",
     "test:ui": "playwright test --project=chromium --ui",
-    "test:unit": "node --require ts-node/register --test lib/**/*.test.ts",
+    "test:unit": "node --require ts-node/register --test lib/**/*.test.ts scripts/*.test.mjs",
     "test:bdd": "npx bddgen && playwright test --project=bdd",
     "check:tests": "node scripts/check-vacuous-tests.mjs",
     "test:record": "RECORD_API=true playwright test --project=chromium",
@@ -20,7 +20,8 @@
     "open-videos": "open test-results/*/video.webm || explorer test-results\\*\\video.webm",
     "open-screenshots": "open test-results/*/*.png || explorer test-results\\*\\*.png",
     "clean-results": "rm -rf test-results/ playwright-report/",
-    "check:workflow": "node scripts/check-workflow-log-injection.mjs"
+    "check:workflow": "node scripts/check-workflow-log-injection.mjs",
+    "test:scripts": "node --test scripts/*.test.mjs"
   },
   "keywords": [
     "playwright",
