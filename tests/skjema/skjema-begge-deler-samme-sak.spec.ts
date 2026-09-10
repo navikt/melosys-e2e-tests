@@ -49,6 +49,11 @@ test.describe('skjema-web → melosys-api: begge deler kobles til samme sak', ()
     // deler er SENDT for arbeidstakeren — ellers kan koblingen treffe en gammel arbeidsgiver-del).
     await withPgDatabase('melosys-skjema', (db) => db.cleanDatabase(true));
 
+    // Leak-vakt: Oracle er tømt av cleanup-fixturen før testen. Er det likevel en fagsak her, har
+    // en tidligere innsendingstest lekket en Kafka-melding forbi cleanup (drain manglet) → fail
+    // tidlig og tydelig her i stedet for forvirrende på «kun én fagsak» midt i flyten.
+    expect(await mottak.tellFagsaker(), 'ingen fagsaker ved teststart (Kafka-leak-vakt)').toBe(0);
+
     // ---- 1. Arbeidsgiver sender KUN sin del (context 1) -----------------------------------
     const auth = new SkjemaAuthHelper(page);
     await auth.login('30056928150'); // KARAFFEL

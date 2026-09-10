@@ -7,7 +7,8 @@ import { fetchMedlPeriode } from '../../helpers/mock-helper';
  *
  * Verifiserer DB-utfallet av unntaksregistrering på en trygdeavtale-sak
  * (prosess REGISTRERE_UNNTAK_FRA_MEDLEMSKAP: LAGRE_LOVVALGSPERIODE_MEDL →
- * AVSLUTT_SAK_OG_BEHANDLING) + MEDL-perioden i mock-registeret.
+ * AVSLUTT_SAK_OG_BEHANDLING → SYNK_SKJEMA_SAKSSTATUS) + MEDL-perioden i
+ * mock-registeret.
  *
  * Databasen renses før hver test (cleanup-fixture), så testens sak/behandling
  * er de eneste radene — ingen tidsfilter trengs.
@@ -20,7 +21,7 @@ export class TrygdeavtaleUnntaksregistreringAssertions {
    *  - behandlingen er AVSLUTTET, fagsaken LOVVALG_AVKLART (TRYGDEAVTALE/UNNTAK)
    *  - behandlingsresultat REGISTRERT_UNNTAK / GODKJENT / fastsatt av forventet land
    *  - prosessinstansen REGISTRERE_UNNTAK_FRA_MEDLEMSKAP er FERDIG med
-   *    SIST_FULLFORT_STEG=AVSLUTT_SAK_OG_BEHANDLING, og ingen prosesser FEILET
+   *    SIST_FULLFORT_STEG=SYNK_SKJEMA_SAKSSTATUS, og ingen prosesser FEILET
    *  - lovvalgsperioden er INNVILGET/UNNTATT/UTEN_DEKNING med riktig
    *    bestemmelse og MEDLPERIODE_ID satt (= overført til MEDL)
    *
@@ -154,7 +155,8 @@ export class TrygdeavtaleUnntaksregistreringAssertions {
   /**
    * Felles vakt: nøyaktig én behandling som er AVSLUTTET, prosessen
    * REGISTRERE_UNNTAK_FRA_MEDLEMSKAP FERDIG med sist fullført steg
-   * AVSLUTT_SAK_OG_BEHANDLING, og ingen feilede prosessinstanser.
+   * SYNK_SKJEMA_SAKSSTATUS (siste steg i avslutt-flyten), og ingen
+   * feilede prosessinstanser.
    */
   private async verifiserBehandlingOgProsess(db: DatabaseHelper): Promise<void> {
     const behandlinger = await db.query<{ ID: number; STATUS: string }>(
@@ -179,9 +181,9 @@ export class TrygdeavtaleUnntaksregistreringAssertions {
     );
     expect(prosess, 'Forventet en REGISTRERE_UNNTAK_FRA_MEDLEMSKAP-prosessinstans').not.toBeNull();
     expect(prosess!.STATUS).toBe('FERDIG');
-    expect(prosess!.SIST_FULLFORT_STEG).toBe('AVSLUTT_SAK_OG_BEHANDLING');
+    expect(prosess!.SIST_FULLFORT_STEG).toBe('SYNK_SKJEMA_SAKSSTATUS');
     console.log(
-      '✅ REGISTRERE_UNNTAK_FRA_MEDLEMSKAP FERDIG (sist fullført steg: AVSLUTT_SAK_OG_BEHANDLING)'
+      '✅ REGISTRERE_UNNTAK_FRA_MEDLEMSKAP FERDIG (sist fullført steg: SYNK_SKJEMA_SAKSSTATUS)'
     );
   }
 

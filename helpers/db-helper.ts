@@ -69,27 +69,24 @@ export class DatabaseHelper {
   }
 
   /**
-   * Execute a DML statement (INSERT/UPDATE/DELETE) with autoCommit, so the change
-   * is immediately visible to melosys-api (which uses a separate connection).
+   * Execute a DML statement (UPDATE/INSERT/DELETE) with autoCommit.
    *
-   * `query`/`queryOne` run without autoCommit and are meant for reads; use this for
-   * test setup that must persist. Returns the number of affected rows.
-   *
-   * @example
-   * await db.execute(
-   *   "INSERT INTO BEHANDLING (SAKSNUMMER, STATUS, BEH_TYPE, ...) VALUES (:s, 'OPPRETTET', ...)",
-   *   { s: saksnummer }
-   * );
+   * NB: `query()` committer IKKE (oracledb default) — endringer der rulles tilbake når
+   * tilkoblingen lukkes. Bruk denne for testoppsett som skal være synlig for melosys-api.
+   * @returns antall berørte rader
    */
   async execute(sql: string, binds: any = {}): Promise<number> {
     if (!this.connection) {
       throw new Error('Database not connected. Call connect() first.');
     }
-    const result = await this.connection.execute(sql, binds, {
-      autoCommit: true,
-      outFormat: oracledb.OUT_FORMAT_OBJECT,
-    });
-    return result.rowsAffected ?? 0;
+
+    try {
+      const result = await this.connection.execute(sql, binds, { autoCommit: true });
+      return result.rowsAffected ?? 0;
+    } catch (error) {
+      console.error('❌ Execute failed:', error);
+      throw error;
+    }
   }
 
   /**

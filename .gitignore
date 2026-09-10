@@ -12,6 +12,9 @@ pnpm-debug.log*
 /playwright/.cache/
 /playwright/.auth/
 
+# playwright-bdd generated test files
+.features-gen/
+
 # Test artifacts
 *.mp4
 *.webm
@@ -111,3 +114,8 @@ debug-*.jpg
 
 # Serena (AI assistant files)
 .serena/
+
+# Scratch/review-kataloger (har blitt feilcommittet før)
+/.review-tmp/
+/.probe-tmp/
+/.features-gen/

@@ -19,6 +19,7 @@
     "fixtures/**/*",
     "pages/**/*",
     "recording/**/*",
+    "atdd/**/*",
     "types.d.ts"
   ],
   "exclude": ["node_modules"]

@@ -220,6 +220,7 @@ export abstract class BasePage {
       waitForContentTimeout?: number;
       apiPatterns?: string[];
       verifyHeadingChange?: boolean;
+      apiResponseTimeout?: number;
     },
   ): Promise<void> {
     const {
@@ -227,6 +228,11 @@ export abstract class BasePage {
       waitForContentTimeout = 45000,
       apiPatterns = ['/api/avklartefakta/', '/api/vilkaar/'],
       verifyHeadingChange = false,
+      // Hvor lenge vi venter på en auto-save-POST etter klikk (heading-change-modus).
+      // Steg som IKKE auto-lagrer (f.eks. resultat-periode, som kun bytter steg
+      // klientsidig) har ingen matchende POST — da er 10s ren dødtid. Slike POM-er
+      // sender en kort timeout; heading-endringen er uansett det reelle signalet.
+      apiResponseTimeout = 10000,
     } = options || {};
 
     console.log('🔄 Klikker "Bekreft og fortsett"...');
@@ -296,7 +302,7 @@ export abstract class BasePage {
           (response: Response) =>
             apiPatterns.some(p => response.url().includes(p)) &&
             response.request().method() === 'POST',
-          { timeout: 10000 },
+          { timeout: apiResponseTimeout },
         ).catch(() => null);
 
         await button.click();

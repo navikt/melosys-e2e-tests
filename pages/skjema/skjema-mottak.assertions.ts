@@ -178,6 +178,65 @@ export class SkjemaMottakAssertions {
   }
 
   /**
+   * MELOSYS-8084 (saksstatus-synk): les saksstatus-feltene for en innsending i skjema-api
+   * (Postgres `melosys-skjema`.innsending). Kolonnene `saksstatus` (MOTTATT/AVSLUTTET) og
+   * `saksstatus_oppdatert` kommer med V17-migrasjonen i melosys-skjema-api.
+   */
+  async hentSaksstatusISkjemaApi(
+    skjemaId: string
+  ): Promise<{ saksstatus: string | null; saksstatusOppdatert: Date | null }> {
+    const row = await withPgDatabase('melosys-skjema', (db) =>
+      db.queryOne<{ saksstatus: string | null; saksstatus_oppdatert: Date | null }>(
+        `SELECT saksstatus, saksstatus_oppdatert FROM innsending WHERE skjema_id = $1::uuid`,
+        [skjemaId]
+      )
+    );
+    return {
+      saksstatus: row?.saksstatus ?? null,
+      saksstatusOppdatert: row?.saksstatus_oppdatert ?? null,
+    };
+  }
+
+  /**
+   * MELOSYS-8084 (saksstatus-synk): poll skjema-api (Postgres `melosys-skjema`.innsending) til
+   * `saksstatus` har forventet verdi (MOTTATT/AVSLUTTET). Statusen settes av melosys-api via
+   * `PUT /m2m/api/skjema/saksstatus/bulk` (fagsak-statusendring → SYNK_SKJEMA_SAKSSTATUS-
+   * prosessinstans, eller admin-massesynken) — én oppdatering PER skjemaId koblet til saken
+   * (ingen kohort-sweep på saksnummer). Verifiserer også at `saksstatus_oppdatert` er satt
+   * når statusen matcher.
+   */
+  async ventPaaSaksstatusISkjemaApi(
+    skjemaId: string,
+    forventetStatus: 'MOTTATT' | 'AVSLUTTET',
+    timeoutMs = 45000
+  ): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    let siste: { saksstatus: string | null; saksstatusOppdatert: Date | null } = {
+      saksstatus: null,
+      saksstatusOppdatert: null,
+    };
+    while (Date.now() < deadline) {
+      siste = await this.hentSaksstatusISkjemaApi(skjemaId);
+      if (siste.saksstatus === forventetStatus) {
+        expect(
+          siste.saksstatusOppdatert,
+          `saksstatus_oppdatert skal være satt når saksstatus=${forventetStatus} (skjema ${skjemaId})`
+        ).not.toBeNull();
+        console.log(
+          `✅ skjema-api har saksstatus ${forventetStatus} for skjema ${skjemaId} (oppdatert ${siste.saksstatusOppdatert})`
+        );
+        return;
+      }
+      await new Promise((r) => setTimeout(r, 2000));
+    }
+    throw new Error(
+      `skjema-api (innsending.saksstatus) fikk ikke status ${forventetStatus} for skjema ${skjemaId} ` +
+        `innen ${timeoutMs} ms (siste verdi: ${siste.saksstatus}). ` +
+        'Sjekk saksstatus-synken i melosys-api (SkjemaSaksstatusEventListener → SYNK_SKJEMA_SAKSSTATUS-prosessinstans → PUT /m2m/api/skjema/saksstatus/bulk).'
+    );
+  }
+
+  /**
    * Verifiser at en innsendt del er journalført i Joark/SAF-mock og at det opplastede vedlegget
    * ligger på journalposten. Journalposten finnes via eksternReferanseId = referansenummeret, og
    * melosys-api setter vedleggets dokument-tittel = filnavnet (OpprettOgFerdigstillJournalpostDigitalSøknad).

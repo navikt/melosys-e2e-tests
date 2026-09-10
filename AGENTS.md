@@ -1,4 +1,4 @@
-# CLAUDE.md
+# CLAUDE.MD
 
 This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
 
@@ -33,6 +33,17 @@ npm run test:debug
 # Interactive UI mode (best for development)
 npm run test:ui
 ```
+
+**Note:** `npm test` (and the `test:headed`/`test:debug`/`test:ui`/`test:record` siblings) are pinned to `--project=chromium`, so they do **not** run the opt-in ATDD/BDD example. That example runs locally via `npm run test:bdd` (runs `npx bddgen` first, then `playwright test --project=bdd`) and is not part of CI by default — dispatch the `E2E Tests` workflow with `run_bdd=true` to run it on CI. While BDD is being stabilised, `run_bdd=true` runs **only** `--project=bdd` (not chromium), so an unrelated flaky chromium test can't sink the BDD experiment. See `docs/atdd/README.md`.
+
+#### ATDD/BDD Example (opt-in — Trygdeavtale)
+
+```bash
+# Run the ATDD example (Gherkin .feature files → DSL → drivers → POMs)
+npm run test:bdd
+```
+
+Four-layer ATDD (Farley) example scoped to trygdeavtale. Opt-in, not in `npm test`/CI. See `docs/atdd/README.md` for the scenario catalogue, the override-step pattern, mock constraints, and the "Er playwright-bdd nødvendig?" verdict (with a plain-Playwright `@manual` demo that drives the same DSL without Gherkin).
 
 #### Unit Tests (Node.js built-in test runner)
 
@@ -318,9 +329,9 @@ Oracle database connection (configured via `.env` or environment variables):
 Key settings in `playwright.config.ts`:
 
 - **Base URL**: `http://localhost:3000`
-- **Trace**: Always on (`trace: 'on'`)
-- **Screenshots**: Always captured (`screenshot: 'on'`)
-- **Video**: Always recorded (`video: 'on'`)
+- **Trace**: On retry only (`trace: 'on-first-retry'`) - spares ressurser på grønne kjøringer; på CI (retries=1) fanges trace fra 2. forsøk. Lokalt (retries=0) skjer ingen retry → bruk `--trace on` ved behov.
+- **Screenshots**: On failure only (`screenshot: 'only-on-failure'`)
+- **Video**: On retry only (`video: 'on-first-retry'`) - samme retry-logikk som trace
 - **Slow motion**: 100ms delay between actions (`slowMo: 100`)
 - **Parallel execution**: Disabled (`fullyParallel: false`)
 - **Workers**: 1 on CI, unlimited locally
@@ -564,6 +575,36 @@ await assertErrors(page, ["Feltet er påkrevd"]);
 await assertErrors(page, [/påkrevd/i, "Ugyldig format"]);
 ```
 
+### Text Assertions: Verify Behavior, Not Exact Wording Of Messages
+
+**Rule of thumb:** e2e tests should verify *behavior* (the correct state/message appears
+under the correct business condition), not the *exact wording* of UI. The exact wording is
+already locked down by unit tests, which live next to the component.
+
+```typescript
+// ❌ Avoid: exact full-sentence match in e2e
+await expect(
+  page.getByText('Trygdeavgift skal ikke betales da inntekten er under minstebeløpet i perioden som er angitt.')
+).toBeVisible();
+
+// ✅ Prefer: distinctive substring/regex that survives copy edits
+await expect(page.getByText(/inntekten er under minstebeløpet/i)).toBeVisible();
+```
+
+**Why this matters:** a pure copy-editing change (rewording an alert, adding a clarifying
+phrase) should not force edits across multiple e2e spec files and POM assertion files in
+this repo (and possibly in `melosys-web` too). If it does, the test is over-specified.
+This project's e2e suite is expensive to run: reserve exact-string
+assertions for unit tests (`melosys-web`'s vitest suite), and use e2e only to test behavior (e.g. right message/state renders).
+
+**When exact match of text is still be appropriate in e2e:**
+- Very short, stable labels/button text unlikely to be reworded (e.g. `'Lagre'`, `'Avbryt'`).
+- Verifying a specific enum/code value (e.g. `beregningsregel: 'MINSTEBELØP'`) rather than free text.
+
+**When to prefer a substring/regex:**
+- Any full sentence, alert message, or paragraph of user-facing text.
+- Anything a UX review might reword without changing behavior.
+
 ### Creating New POMs
 
 **Quick Guide:**
@@ -602,6 +643,8 @@ See `tests/opprett-sak-pom-eksempel.spec.ts` for complete example.
 ## Test Tags
 
 Tests can be tagged to control their execution behavior. Tags are added to the test name.
+
+**Where a tag can live:** plain Playwright specs put the tag in the test **title** (e.g. `test('… @known-error #MELOSYS-123', …)`). The opt-in ATDD/BDD example (playwright-bdd) can instead put tags as Gherkin **`@tags`** above a scenario, which Playwright surfaces via `testInfo.tags`. The shared `hasTag()` helper (`lib/test-tags.ts`) matches **both** places (case-insensitive), so `@known-error` and `@expect-docker-errors` work identically whether tagged in a title or in Gherkin. See `docs/guides/KNOWN-ERRORS.md`.
 
 ### @manual - Manual-only Tests
 
@@ -842,7 +885,7 @@ Key steps:
 - **Always run Docker Compose services first** - Tests will fail if services aren't running
 - **Use FormHelper for dynamic forms** - Many fields trigger API calls that need explicit waits
 - **Database verification is optional** - Commented out by default, uncomment when needed
-- **Traces are always captured** - Even for successful tests, useful for understanding workflows
+- **Traces/video captured on retry only** - `on-first-retry` sparer ressurser; grønne kjøringer produserer ingen tunge artefakter. Screenshot kun ved feil.
 - **Tests run sequentially** - `fullyParallel: false` to avoid race conditions
 - **Network must be idle on Trygdeavgift page** - Wait for calculations to complete before proceeding
 

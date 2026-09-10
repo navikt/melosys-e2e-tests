@@ -4,7 +4,7 @@ import {HovedsidePage} from '../../pages/hovedside.page';
 import {OpprettNySakPage} from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import {EuEosBehandlingPage} from '../../pages/behandling/eu-eos-behandling.page';
 import {USER_ID_VALID} from '../../pages/shared/constants';
-import {waitForProcessInstances} from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 import {withDatabase} from '../../helpers/db-helper';
 
 /**
@@ -52,9 +52,11 @@ test.describe('EU/EØS - Nyvurdering (MEDL-overføring)', () => {
         await behandling.velgLand('Danmark');
         await opprettSak.velgAarsak('SØKNAD');
         await opprettSak.leggBehandlingIMine();
-        await opprettSak.klikkOpprettNyBehandling();
-
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => opprettSak.klikkOpprettNyBehandling(),
+          { timeoutSeconds: 30 }
+        );
         await hovedside.goto();
         // Robust mot async saksoversikt-lasting (reload-retry) i stedet for rå link-klikk
         await hovedside.åpneBehandling('TRIVIELL KARAFFEL -');
@@ -67,17 +69,21 @@ test.describe('EU/EØS - Nyvurdering (MEDL-overføring)', () => {
         await behandling.velgArbeidstype(true);
         await behandling.svarJaOgFortsett();
         await behandling.svarJaOgFortsett();
-        await behandling.innvilgeOgFattVedtak();
-
-        console.log('📝 Del A: Venter på iverksetting av førstegangsvedtak...');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => behandling.innvilgeOgFattVedtak(),
+          { timeoutSeconds: 30 }
+        );
 
         // === DEL B: Opprett Nyvurdering ===
         console.log('📝 Del B: Oppretter nyvurdering...');
         await hovedside.goto();
         await hovedside.klikkOpprettNySak();
-        await opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => opprettSak.opprettNyVurdering(USER_ID_VALID, 'SØKNAD'),
+          { timeoutSeconds: 30 }
+        );
 
         // Åpne den NYE aktive behandlingen (åpneBehandling tar første lenke = nyeste, med reload-retry)
         await hovedside.goto();
@@ -117,11 +123,12 @@ test.describe('EU/EØS - Nyvurdering (MEDL-overføring)', () => {
         await behandling.klikkBekreftOgFortsett();
         await behandling.velgMottakerInstitusjon();
         await behandling.velgGrunnForNyttVedtak('FEIL_I_BEHANDLING');
-        await behandling.fattVedtak();
-
         // === DEL D: Verifiser MEDL-overføring + prosessinstans FERDIG ===
-        console.log('📝 Del D: Venter på iverksetting av NV-vedtak (kaster ved feilede prosessinstanser)...');
-        await waitForProcessInstances(page.request, 30);
+        await runAndWaitForProcessInstances(
+          page.request,
+          () => behandling.fattVedtak(),
+          { timeoutSeconds: 30 }
+        );
 
         await withDatabase(async (db) => {
             // Ingen feilede prosessinstanser de siste 10 min (fanger 8034-klassen)

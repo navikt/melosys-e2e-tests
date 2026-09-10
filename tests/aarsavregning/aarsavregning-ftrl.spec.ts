@@ -12,7 +12,7 @@ import {
   AARSAK,
   BEHANDLINGSTYPE,
 } from '../../pages/shared/constants';
-import {waitForProcessInstances} from '../../helpers/api-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 
 test.describe('Årsavregning FTRL - Komplett arbeidsflyt', () => {
   test('skal opprette og fullføre årsavregning behandling', async ({ page }) => {
@@ -42,12 +42,15 @@ test.describe('Årsavregning FTRL - Komplett arbeidsflyt', () => {
     await opprettSak.velgBehandlingstype(BEHANDLINGSTYPE.ÅRSAVREGNING);
     await opprettSak.velgAarsak(AARSAK.SØKNAD);
     await opprettSak.leggBehandlingIMine();
-    await opprettSak.klikkOpprettNyBehandling();
-    await opprettSak.assertions.verifiserBehandlingOpprettet();
+    await runAndWaitForProcessInstances(
+      page.request,
+      async () => {
+        await opprettSak.klikkOpprettNyBehandling();
+        await opprettSak.assertions.verifiserBehandlingOpprettet();
+      }, { timeoutSeconds: 30 }
+    );
 
-    // --- Steg 3: Vent på prosessinstanser ---
-    console.log('📝 Venter på prosessinstanser...');
-    await waitForProcessInstances(page.request, 30);
+    // --- Steg 3: Åpne behandlingen ---
     await hovedside.goto();
 
     // Lenketeksten er dynamisk (inkluderer navn, datoer), match på fnr
@@ -69,13 +72,14 @@ test.describe('Årsavregning FTRL - Komplett arbeidsflyt', () => {
     await aarsavregning.klikkBekreftOgFortsett();
 
     // --- Steg 5: Fatt vedtak ---
-    await vedtak.klikkFattVedtak();
-
     // --- Steg 6: Hard sluttilstand - vent på iverksetting + verifiser DB end-state ---
     // Årsavregningsbehandlingen er nyeste behandling (ren DB per fixture): skal være
     // AVSLUTTET med behandlingsresultat og alle prosessinstanser FERDIG.
-    console.log('📝 Steg 6: Venter på iverksetting + verifiserer DB-sluttilstand...');
-    await waitForProcessInstances(page.request, 60);
+    await runAndWaitForProcessInstances(
+      page.request,
+      () => vedtak.klikkFattVedtak(),
+      { timeoutSeconds: 60 }
+    );
     await vedtak.assertions.verifiserBehandlingAvsluttet();
   });
 });
