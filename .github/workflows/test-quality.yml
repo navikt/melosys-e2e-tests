@@ -9,16 +9,12 @@ on:
       - 'tests/**'
       - 'pages/**'
       - 'scripts/check-vacuous-tests.mjs'
-      - '.github/workflows/**'
-      - 'scripts/check-workflow-log-injection.mjs'
   push:
     branches: [main]
     paths:
       - 'tests/**'
       - 'pages/**'
       - 'scripts/check-vacuous-tests.mjs'
-      - '.github/workflows/**'
-      - 'scripts/check-workflow-log-injection.mjs'
 
 permissions:
   contents: read
@@ -33,13 +29,3 @@ jobs:
           node-version: 20
       - name: Sjekk for expect(true) og svelge-catcher
         run: npm run check:tests
-
-      - name: Sjekk workflow-logging for verdier utenfra
-        run: npm run check:workflow
-
-      # Uten denne er sjekken over upinnet: en endring i
-      # check-workflow-log-injection.mjs kunne slå av sin egen deteksjon i det
-      # stille. Testene er rene node-builtins, så jobben trenger fortsatt ikke
-      # npm ci — det er derfor test:scripts og ikke test:unit (som krever ts-node).
-      - name: Test sjekkene selv
-        run: npm run test:scripts

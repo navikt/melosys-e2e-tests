@@ -50,12 +50,12 @@ jobs:
           fi
 
           if ! [[ "$RUN_ID" =~ ^[0-9]+$ ]]; then
-            echo "::error::run_id må være et tall, var: $(printf '%q' "$RUN_ID")"  # log-injection-ok: %q kan ikke gi et rått linjeskift
+            echo "::error::run_id må være et tall, var: $(printf '%q' "$RUN_ID")"  # %q kan ikke gi et rått linjeskift
             exit 1
           fi
 
-          echo "$LEDETEKST $RUN_ID"  # log-injection-ok: validert som tall over
-          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT  # log-injection-ok: validert som tall over
+          echo "$LEDETEKST $RUN_ID"
+          echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
 
       - name: Download test artifacts
         uses: actions/download-artifact@v4
@@ -151,7 +151,7 @@ jobs:
           # Fetch annotations from the workflow run jobs
           RUN_ID="${{ steps.run-id.outputs.run_id }}"
 
-          echo "📋 Fetching annotations from run $RUN_ID..."  # log-injection-ok: validert som tall i «Determine run ID»
+          echo "📋 Fetching annotations from run $RUN_ID..."
 
           # Get all job IDs for this run
           JOB_IDS=$(gh api "repos/${{ github.repository }}/actions/runs/${RUN_ID}/jobs" --jq '.jobs[].id')
