@@ -8,17 +8,12 @@ import { TIMEOUT_LONG } from '../shared/constants';
  *
  * Behandlingen opprettes automatisk av melosys-api når faktureringskomponenten melder
  * MANGLENDE_INNBETALING på en fakturaserie for frivillig medlemskap. Steget viser en
- * radiogruppe med 4 valg (ManglendeInnbetalingHandlingsvalg-enum, MELOSYS-8257):
+ * radiogruppe med 4 valg (ManglendeInnbetalingHandlingsvalg-enum):
  *   - «Hele perioden skal opphøres»    → hopper rett til opphørsvedtak-steget
  *     «Opphør av frivillig medlemskap etter § 2-15»
  *   - «Deler av perioden skal opphøres» → full revurderingsflyt (Inngang → ... → Vedtak)
  *   - «Vedtaket skal endres.»
  *   - «Behandlingen skal avsluttes.»
- *
- * MELOSYS-8257: valget lagres kun ved «Bekreft og fortsett» (POST
- * /avklartefakta/{behandlingID}/manglende-innbetaling-handlingsvalg), ikke lenger ved
- * radio-onChange. clickStepButtonWithRetry sin default apiPatterns
- * (/api/avklartefakta/) dekker dette kallet.
  *
  * @example
  * const manglendeInnbetaling = new ManglendeInnbetalingPage(page);
@@ -65,8 +60,8 @@ export class ManglendeInnbetalingPage extends BasePage {
   /**
    * Velg «Hele perioden skal opphøres»
    *
-   * MELOSYS-8257: valget lagres ikke lenger ved radio-onChange, kun ved
-   * «Bekreft og fortsett» (se bekreftOgGaaTilOpphoersvedtak/bekreftOgGaaTilRevurderingsflyt).
+   * Valget lagres ikke ved radio-onChange, kun ved «Bekreft og fortsett»
+   * (se bekreftOgGaaTilOpphoersvedtak/bekreftOgGaaTilRevurderingsflyt).
    */
   async velgInnbetalingManglerHelePerioden(): Promise<void> {
     await this.helePeriodenRadio.check();
@@ -76,8 +71,8 @@ export class ManglendeInnbetalingPage extends BasePage {
   /**
    * Velg «Deler av perioden skal opphøres»
    *
-   * MELOSYS-8257: valget lagres ikke lenger ved radio-onChange, kun ved
-   * «Bekreft og fortsett» (se bekreftOgGaaTilRevurderingsflyt).
+   * Valget lagres ikke ved radio-onChange, kun ved «Bekreft og fortsett»
+   * (se bekreftOgGaaTilRevurderingsflyt).
    */
   async velgInnbetalingManglerDelerAvPerioden(): Promise<void> {
     if (await this.delerAvPeriodenRadio.isChecked()) {
