@@ -8,11 +8,17 @@ import { TIMEOUT_LONG } from '../shared/constants';
  *
  * Behandlingen opprettes automatisk av melosys-api når faktureringskomponenten melder
  * MANGLENDE_INNBETALING på en fakturaserie for frivillig medlemskap. Steget viser en
- * radiogruppe:
- *   - «Innbetaling mangler for hele medlemskapsperioden.»  → hopper rett til
- *     opphørsvedtak-steget «Opphør av frivillig medlemskap etter § 2-15»
- *   - «Innbetaling mangler for deler av medlemskapsperioden.» → full revurderingsflyt
- *     (Inngang → ... → Vedtak)
+ * radiogruppe med 4 valg (ManglendeInnbetalingHandlingsvalg-enum, MELOSYS-8257):
+ *   - «Hele perioden skal opphøres»    → hopper rett til opphørsvedtak-steget
+ *     «Opphør av frivillig medlemskap etter § 2-15»
+ *   - «Deler av perioden skal opphøres» → full revurderingsflyt (Inngang → ... → Vedtak)
+ *   - «Vedtaket skal endres.»
+ *   - «Behandlingen skal avsluttes.»
+ *
+ * MELOSYS-8257: valget lagres kun ved «Bekreft og fortsett» (POST
+ * /avklartefakta/{behandlingID}/manglende-innbetaling-handlingsvalg), ikke lenger ved
+ * radio-onChange. clickStepButtonWithRetry sin default apiPatterns
+ * (/api/avklartefakta/) dekker dette kallet.
  *
  * @example
  * const manglendeInnbetaling = new ManglendeInnbetalingPage(page);
@@ -28,11 +34,11 @@ export class ManglendeInnbetalingPage extends BasePage {
   });
 
   private readonly helePeriodenRadio = this.page.getByRole('radio', {
-    name: /Innbetaling mangler for hele medlemskapsperioden/,
+    name: /Hele perioden skal opphøres/,
   });
 
   private readonly delerAvPeriodenRadio = this.page.getByRole('radio', {
-    name: /Innbetaling mangler for deler av medlemskapsperioden/,
+    name: /Deler av perioden skal opphøres/,
   });
 
   private readonly bekreftButton = this.page.getByRole('button', {
@@ -57,41 +63,29 @@ export class ManglendeInnbetalingPage extends BasePage {
   }
 
   /**
-   * Velg «Innbetaling mangler for hele medlemskapsperioden.»
+   * Velg «Hele perioden skal opphøres»
    *
-   * Radio-valget lagres via API (avklartefakta/innbetalingsstatus) — vent på at
-   * nettverket roer seg før Bekreft, slik at lagringen er fullført.
+   * MELOSYS-8257: valget lagres ikke lenger ved radio-onChange, kun ved
+   * «Bekreft og fortsett» (se bekreftOgGaaTilOpphoersvedtak/bekreftOgGaaTilRevurderingsflyt).
    */
   async velgInnbetalingManglerHelePerioden(): Promise<void> {
     await this.helePeriodenRadio.check();
-    await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch((e) => {
-      console.log(`  ⚠️ networkidle etter radio-valg timet ut (fortsetter): ${e.message}`);
-    });
-    console.log('✅ Valgt: innbetaling mangler for HELE medlemskapsperioden');
+    console.log('✅ Valgt: HELE perioden skal opphøres');
   }
 
+  /**
+   * Velg «Deler av perioden skal opphøres»
+   *
+   * MELOSYS-8257: valget lagres ikke lenger ved radio-onChange, kun ved
+   * «Bekreft og fortsett» (se bekreftOgGaaTilRevurderingsflyt).
+   */
   async velgInnbetalingManglerDelerAvPerioden(): Promise<void> {
     if (await this.delerAvPeriodenRadio.isChecked()) {
-      console.log('✅ Innbetaling mangler for DELER av medlemskapsperioden var allerede valgt');
+      console.log('✅ DELER av perioden skal opphøres var allerede valgt');
       return;
     }
-
-    const lagret = this.page.waitForResponse(
-      response =>
-        response.url().includes('/avklartefakta/') &&
-        response.url().endsWith('/innbetalingsstatus') &&
-        response.request().method() === 'POST',
-      { timeout: 15_000 }
-    ).catch(() => null);
     await this.delerAvPeriodenRadio.check();
-    const response = await lagret;
-    if (!response) {
-      throw new Error('Lagring av innbetalingsstatus ga ingen respons innen 15000ms');
-    }
-    if (response.status() >= 400) {
-      throw new Error(`Lagring av innbetalingsstatus feilet: ${response.status()} ${await response.text()}`);
-    }
-    console.log('✅ Valgt: innbetaling mangler for DELER av medlemskapsperioden');
+    console.log('✅ Valgt: DELER av perioden skal opphøres');
   }
 
   async bekreftOgGaaTilRevurderingsflyt(): Promise<void> {
