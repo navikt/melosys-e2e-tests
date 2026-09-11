@@ -32,14 +32,29 @@ jobs:
 
       - name: Determine run ID
         id: run-id
+        # run_id leses fra env: og valideres som tall. En input med linjeskift kunne
+        # ellers starte en logglinje med «::» og bli lest som en workflow-kommando.
+        # Valideringen gjør samtidig at verdien er trygg der den senere leses
+        # tilbake som steg-output og settes inn i et gh api-kall.
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          INPUT_RUN_ID: ${{ inputs.run_id }}
+          WORKFLOW_RUN_ID: ${{ github.event.workflow_run.id }}
         run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            RUN_ID="${{ inputs.run_id }}"
-            echo "🔍 Manually triggered - analyzing run: $RUN_ID"
+          if [ "$EVENT_NAME" = "workflow_dispatch" ]; then
+            RUN_ID="$INPUT_RUN_ID"
+            LEDETEKST="🔍 Manually triggered - analyzing run:"
           else
-            RUN_ID="${{ github.event.workflow_run.id }}"
-            echo "🔔 Auto-triggered - analyzing run: $RUN_ID"
+            RUN_ID="$WORKFLOW_RUN_ID"
+            LEDETEKST="🔔 Auto-triggered - analyzing run:"
           fi
+
+          if ! [[ "$RUN_ID" =~ ^[0-9]+$ ]]; then
+            echo "::error::run_id må være et tall, var: $(printf '%q' "$RUN_ID")"  # %q kan ikke gi et rått linjeskift
+            exit 1
+          fi
+
+          echo "$LEDETEKST $RUN_ID"
           echo "run_id=$RUN_ID" >> $GITHUB_OUTPUT
 
       - name: Download test artifacts
