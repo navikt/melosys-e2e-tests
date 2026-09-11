@@ -19,7 +19,7 @@ const EESSI_BASE_URL = process.env.EESSI_BASE_URL || 'http://localhost:8081';
  * tåler en liten oppstarts-forsinkelse uten å maskere en faktisk nede tjeneste.
  *
  * Lokal rømningsluke: sett SKIP_EESSI_GATE=true for fokuserte ikke-eessi-kjøringer uten full
- * stack (jf. IntelliJ/delvis-stack-mønsteret i CLAUDE.MD). CI setter den aldri → fortsatt fail-hard.
+ * stack (jf. IntelliJ/delvis-stack-mønsteret i AGENTS.md). CI setter den aldri → fortsatt fail-hard.
  */
 async function assertEessiAvailable(): Promise<void> {
   if (process.env.SKIP_EESSI_GATE === 'true') {

@@ -12,7 +12,7 @@ import {ManglendeInnbetalingPage} from '../../pages/behandling/manglende-innbeta
 import {USER_ID_VALID, TIMEOUT_LONG} from '../../pages/shared/constants';
 import {TestPeriods} from '../../helpers/date-helper';
 import { runAndWaitForProcessInstances, waitForProcessInstances } from '../../helpers/api-helper';
-import {getFakturaserieReferanse, withDatabase} from '../../helpers/db-helper';
+import {getFakturaserieReferanse, ventPåManglendeInnbetalingBehandling, withDatabase} from '../../helpers/db-helper';
 import {FaktureringHelper} from '../../helpers/fakturering-helper';
 
 /**
@@ -31,7 +31,7 @@ import {FaktureringHelper} from '../../helpers/fakturering-helper';
  *     → behandling AVSLUTTET, resultat OPPHØRT, fagsak OPPHØRT, fakturaserie KANSELLERT
  *
  * Flyt og DB-fasit verifisert live 2026-06-11 (sak MEL-40, behandling 54→55), se
- * .claude/worker-briefs/gap-ftrl-manglende-innbetaling-opphor.progress.md.
+ * melosys-kode-wiki/archive/melosys-e2e-tests/2026-06-worker-briefs/gap-ftrl-manglende-innbetaling-opphor.progress.md.
  *
  * Forutsetninger i stacken (begge compose-filene):
  *   - faktureringskomponenten: NAIS_CLUSTER_NAME=dev-gcp (åpner admin-endepunktene)
@@ -136,7 +136,7 @@ test.describe('FTRL manglende innbetaling - opphør av frivillig medlemskap § 2
         // === DEL 3: Vent på automatisk opprettet MANGLENDE_INNBETALING_TRYGDEAVGIFT-behandling ===
 
         console.log('📝 Steg 10: Venter på automatisk opprettet behandling...');
-        const nyBehandling = await ventPaaManglendeInnbetalingBehandling(opprinneligBehandlingId!);
+        const nyBehandling = await ventPåManglendeInnbetalingBehandling(opprinneligBehandlingId!);
         console.log(`📋 Ny behandling: ${nyBehandling.ID} (sak ${nyBehandling.SAKSNUMMER})`);
 
         // La opprettelses-prosessen (oppgave + varselbrev) kjøre ferdig
@@ -276,33 +276,4 @@ test.describe('FTRL manglende innbetaling - opphør av frivillig medlemskap § 2
         console.log('✅ Komplett manglende innbetaling → opphør-flyt fullført');
     });
 
-    /**
-     * Poll på at melosys-api har opprettet MANGLENDE_INNBETALING_TRYGDEAVGIFT-behandlingen
-     * (Kafka-konsumering + prosess tar normalt ~5 sekunder)
-     */
-    async function ventPaaManglendeInnbetalingBehandling(
-        opprinneligBehandlingId: string,
-        timeoutMs = 60000
-    ): Promise<{ ID: number; SAKSNUMMER: string }> {
-        const deadline = Date.now() + timeoutMs;
-        while (Date.now() < deadline) {
-            const behandling = await withDatabase(async (db) =>
-                db.queryOne<{ ID: number; SAKSNUMMER: string }>(
-                    `SELECT ID, SAKSNUMMER
-                     FROM BEHANDLING
-                     WHERE BEH_TYPE = 'MANGLENDE_INNBETALING_TRYGDEAVGIFT'
-                       AND OPPRINNELIG_BEHANDLING_ID = :id`,
-                    {id: opprinneligBehandlingId}
-                )
-            );
-            if (behandling) {
-                return behandling;
-            }
-            await new Promise((resolve) => setTimeout(resolve, 2000));
-        }
-        throw new Error(
-            `Ingen MANGLENDE_INNBETALING_TRYGDEAVGIFT-behandling ble opprettet for behandling ` +
-            `${opprinneligBehandlingId} innen ${timeoutMs}ms - kom Kafka-meldingen frem til melosys-api?`
-        );
-    }
 });

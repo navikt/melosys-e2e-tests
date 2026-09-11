@@ -351,3 +351,34 @@ export async function getFakturaserieReferanse(behandlingId: string | null | und
     return result?.FAKTURASERIE_REFERANSE;
   });
 }
+
+/**
+ * Poller på behandlingen som opprettes asynkront etter at faktureringskomponenten
+ * har publisert en melding om manglende innbetaling.
+ */
+export async function ventPåManglendeInnbetalingBehandling(
+  opprinneligBehandlingId: string,
+  timeoutMs = 60_000
+): Promise<{ ID: number; SAKSNUMMER: string }> {
+  const deadline = Date.now() + timeoutMs;
+
+  while (Date.now() < deadline) {
+    const behandling = await withDatabase(async db =>
+      db.queryOne<{ ID: number; SAKSNUMMER: string }>(
+        `SELECT ID, SAKSNUMMER
+         FROM BEHANDLING
+         WHERE BEH_TYPE = 'MANGLENDE_INNBETALING_TRYGDEAVGIFT'
+           AND OPPRINNELIG_BEHANDLING_ID = :id`,
+        { id: opprinneligBehandlingId }
+      )
+    );
+    if (behandling) return behandling;
+
+    await new Promise(resolve => setTimeout(resolve, 2_000));
+  }
+
+  throw new Error(
+    `Ingen MANGLENDE_INNBETALING_TRYGDEAVGIFT-behandling ble opprettet for behandling ` +
+      `${opprinneligBehandlingId} innen ${timeoutMs}ms - kom Kafka-meldingen frem til melosys-api?`
+  );
+}

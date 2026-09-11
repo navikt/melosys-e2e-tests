@@ -115,6 +115,9 @@ debug-*.jpg
 # Serena (AI assistant files)
 .serena/
 
+# Lokal MCP-serverkonfigurasjon (maskinspesifikke stier)
+.mcp.json
+
 # Scratch/review-kataloger (har blitt feilcommittet før)
 /.review-tmp/
 /.probe-tmp/
