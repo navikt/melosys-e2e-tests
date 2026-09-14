@@ -66,9 +66,11 @@ REMOTE="$(git rev-parse "origin/$BRANCH" 2>/dev/null || echo "")"
 if [ "$LOCAL" != "$REMOTE" ]; then
   echo "⚠️  origin/$BRANCH peker på en annen commit enn HEAD. CI kjører remote-versjonen." >&2
 fi
-# CI tester branchen, ikke resultatet av merge. Mangler branchen commits fra main, kan en grønn
-# kjøring likevel bli rød etter merge — slik en e2e-branch ble da melosys-web #3108 landet.
-if [ "$BRANCH" != "main" ] && [ -n "$REMOTE" ] && ! git merge-base --is-ancestor origin/main "$REMOTE"; then
+# CI tester branchen, ikke resultatet av merge. Mangler branchen commits fra main i dette repoet,
+# kan en grønn kjøring bli rød etter merge. Endringer i images på latest fanges ikke her.
+# Finnes ikke origin/main lokalt (for eksempel i en --single-branch-klon), hoppes sjekken over.
+if [ -n "$REMOTE" ] && git rev-parse --verify --quiet origin/main >/dev/null \
+  && ! git merge-base --is-ancestor origin/main "$REMOTE"; then
   BAK="$(git rev-list --count "$REMOTE..origin/main")"
   echo "⚠️  origin/$BRANCH mangler $BAK commit(s) fra origin/main. Grønt her betyr ikke grønt etter merge." >&2
   echo "   Merge inn main først: git merge origin/main && git push" >&2

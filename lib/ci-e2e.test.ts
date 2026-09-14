@@ -285,3 +285,64 @@ test('affected-tests tar med nye spec-filer i en usporet mappe', () => {
   assert.equal(r.status, 0, r.stderr);
   assert.equal(r.stdout.trim(), 'ny/c\\.spec\\.ts');
 });
+
+// ---- Advarsel når main ikke er merget inn ----
+
+const JQ_SKIP = { skip: HAR_JQ ? false : 'krever jq for å etterligne gh --jq' };
+const ADVARSEL = /mangler (\d+) commit\(s\) fra origin\/main/;
+
+/** Committer på main fra arbeidsrepoet og pusher, og går tilbake til feature. */
+function nyCommitPåMain(arbeid: string, fil: string) {
+  git(arbeid, 'checkout', '-q', 'main');
+  writeFileSync(join(arbeid, fil), `${fil}\n`);
+  git(arbeid, 'add', '-A');
+  git(arbeid, 'commit', '-q', '-m', fil);
+  git(arbeid, 'push', '-q', 'origin', 'main');
+  git(arbeid, 'checkout', '-q', 'feature');
+}
+
+test('advarer når branchen mangler commits fra main, og starter kjøringen likevel', JQ_SKIP, () => {
+  const repo = lagRepo(TO_SPECS);
+  nyCommitPåMain(repo.arbeid, 'main-1.md');
+  nyCommitPåMain(repo.arbeid, 'main-2.md');
+  const r = repo.ciE2e();
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr.match(ADVARSEL)?.[1], '2', r.stderr);
+  assert.ok(dispatch(repo.ghKall()), 'kjøringen skal startes selv om main mangler');
+});
+
+test('advarer ikke når main er merget inn i branchen', JQ_SKIP, () => {
+  const repo = lagRepo(TO_SPECS);
+  nyCommitPåMain(repo.arbeid, 'main-1.md');
+  git(repo.arbeid, 'merge', '-q', '--no-edit', 'origin/main');
+  git(repo.arbeid, 'push', '-q', 'origin', 'feature');
+  const r = repo.ciE2e();
+  assert.equal(r.status, 0, r.stderr);
+  assert.doesNotMatch(r.stderr, ADVARSEL);
+});
+
+test('henter main før sjekken, så en gammel lokal origin/main ikke skjuler at branchen er bak', JQ_SKIP, () => {
+  const repo = lagRepo(TO_SPECS);
+  // En kollega pusher til main fra en annen klon; arbeidsrepoets origin/main er da gammel.
+  const origin = git(repo.arbeid, 'remote', 'get-url', 'origin').trim();
+  const kollega = mkdtempSync(join(tmpdir(), 'ci-e2e-kollega-'));
+  git(kollega, 'clone', '-q', origin, '.');
+  git(kollega, 'config', 'user.email', 'k@test');
+  git(kollega, 'config', 'user.name', 'k');
+  writeFileSync(join(kollega, 'kollega.md'), 'k\n');
+  git(kollega, 'add', '-A');
+  git(kollega, 'commit', '-q', '-m', 'kollega');
+  git(kollega, 'push', '-q', 'origin', 'main');
+  const r = repo.ciE2e();
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stderr.match(ADVARSEL)?.[1], '1', r.stderr);
+});
+
+test('stopper ikke når origin/main ikke finnes lokalt, for eksempel i en --single-branch-klon', JQ_SKIP, () => {
+  const repo = lagRepo(TO_SPECS);
+  git(repo.arbeid, 'config', 'remote.origin.fetch', '+refs/heads/feature:refs/remotes/origin/feature');
+  git(repo.arbeid, 'update-ref', '-d', 'refs/remotes/origin/main');
+  const r = repo.ciE2e();
+  assert.equal(r.status, 0, `scriptet stoppet (exit ${r.status}):\n${r.stderr}`);
+  assert.ok(dispatch(repo.ghKall()), 'kjøringen skal startes');
+});
