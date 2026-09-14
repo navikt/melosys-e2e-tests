@@ -558,6 +558,7 @@ npm run codegen
 - **[Error Reporting Guide](docs/guides/ERROR-REPORTING.md)** - How tests detect and report failures
 - **[Fixtures Guide](docs/guides/FIXTURES.md)** - Auto-cleanup and Docker log checking
 - **[GitHub Actions Guide](docs/ci-cd/GITHUB-ACTIONS.md)** - CI/CD setup and usage
+- **[Kjør e2e-testene på CI](docs/ci-cd/KJOR-E2E-PA-CI.md)** - `make ci-affected` før merge
 - **[Helpers Guide](docs/guides/HELPERS.md)** - FormHelper, DatabaseHelper, AuthHelper
 
 ### External Resources
