@@ -150,6 +150,30 @@ test-debug: ## Run tests in debug mode
 	@npm run test:debug
 
 # ==============================================================================
+# CI (GitHub Actions)
+# ==============================================================================
+
+.PHONY: affected
+affected: ## List spec files affected by your change (import graph, not guesswork)
+	@node scripts/affected-tests.mjs --files
+
+.PHONY: ci
+ci: ## Run the full E2E suite on CI against latest images
+	@./scripts/ci-e2e.sh
+
+.PHONY: ci-affected
+ci-affected: ## Run only the tests your change affects, on CI
+	@./scripts/ci-e2e.sh --affected
+
+.PHONY: ci-grep
+ci-grep: ## Run tests matching GREP=<pattern> on CI, e.g. make ci-grep GREP=8163
+	@./scripts/ci-e2e.sh --grep "$(GREP)"
+
+.PHONY: ci-images
+ci-images: ## Run on CI against your own images, e.g. make ci-images ENV=melosys-api:my-tag
+	@./scripts/ci-e2e.sh --env "$(ENV)"
+
+# ==============================================================================
 # Development
 # ==============================================================================
 

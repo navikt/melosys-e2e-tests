@@ -84,6 +84,47 @@ npm run open-screenshots
 npm run clean-results
 ```
 
+### Running tests on CI
+
+The `E2E Tests` workflow is dispatch-only, so pushing starts nothing. These targets wrap the
+dispatch, the image tags and the wait:
+
+```bash
+# Full suite against latest images
+make ci
+
+# Only the tests your change affects
+make ci-affected
+
+# A filter of your own
+make ci-grep GREP=8163
+
+# Against your own images, built with each repo's "Build and Push Image" workflow
+make ci-images ENV=melosys-api:my-tag,melosys-web:my-tag
+
+# See what your change affects without running anything
+make affected
+```
+
+`make ci-affected` asks `scripts/affected-tests.mjs`, which walks the import graph instead of
+guessing from test names. Change a shared module and it answers "almost the whole suite" — that
+is the correct answer, not a bug: `fixtures/` is imported by nearly every spec, so a four-line
+edit to `helpers/unleash-helper.ts` reaches all but a handful of spec files. It drops the filter
+and runs everything when 80 % or more of the specs are affected, when no spec is affected, and
+when a changed file lies outside the import graph (`playwright.config.ts`, `package.json`,
+`global-setup.ts`, compose files, workflows — anything that is not a `.ts` file under `tests/`,
+`pages/`, `helpers/`, `fixtures/`, `lib/`, `utils/` or `atdd/`, except Markdown). The graph only
+sees static imports, so a change that reaches tests through runtime state, such as Unleash
+toggles or seeded data, needs `make ci`. Add `--vis-filter` to print the filter it built.
+
+To see the reach of an edit before making it:
+
+```bash
+node scripts/affected-tests.mjs --changed pages/vedtak/vedtak.page.ts --files
+```
+
+Runs use `disable_retries` by default, so flaky tests show up instead of being retried away.
+
 ### Setup
 
 ```bash
