@@ -30,6 +30,13 @@ test('løser katalogimport til index-fila, så fixtures-endringer treffer hele s
   assert.ok(specs.length > 40, `fixtures/index.ts skal treffe det meste, fikk ${specs.length}`);
 });
 
+test('følger lange kjeder: helper → fixtures → spec', () => {
+  // unleash-helper nås av spec-ene bare via fixtures/, minst tre hopp unna. En utvelger som
+  // stopper etter to hopp finner bare de få spec-ene som importerer helperen direkte.
+  const specs = affectedSpecs(['helpers/unleash-helper.ts']);
+  assert.ok(specs.length > 40, `unleash-helper skal treffe det meste, fikk ${specs.length}`);
+});
+
 test('en endret spec-fil velger seg selv', () => {
   const selv = 'tests/eu-eos/eu-eos-art11-3b-medlemskap-offentlig-tjenesteperson.spec.ts';
   assert.ok(affectedSpecs([selv]).includes(selv));

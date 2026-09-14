@@ -12,10 +12,9 @@
 #   ./scripts/ci-e2e.sh --affected --no-wait starter og returnerer med én gang
 #   ./scripts/ci-e2e.sh --affected --vis-filter  skriver ut hele filteret
 #
-# --affected spør scripts/affected-tests.mjs, som følger importgrafen i stedet for å gjette.
-# Endrer du en fellesmodul svarer det gjerne «nesten hele suiten» — det er riktig svar, ikke
-# en feil: fixtures importeres av nær sagt hver spec. Over 80 % dropper scriptet filteret og
-# kjører alt, fordi et filter som dekker nesten alt bare er en skjør kjempestreng.
+# --affected spør scripts/affected-tests.mjs, som følger importgrafen i stedet for å gjette, og
+# som selv avgjør når hele suiten skal kjøres: ved endringer utenfor grafen, når ingen spec er
+# påvirket, og når 80 % eller mer er påvirket.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -23,16 +22,18 @@ cd "$(dirname "$0")/.."
 ENVIRONMENT="latest"
 GREP=""
 AFFECTED=0
-# Over denne andelen er «kun påvirkede» ikke lenger et utvalg. Å sende et filter som dekker
-# nesten alt gir bare en skjør kjempestreng av filstier, uten å spare kjøretid.
-FULL_SUITE_TERSKEL=80
 WAIT=1
 RETRIES="true"   # disable_retries: uten retries ser du ekte flakiness
 
 while [ $# -gt 0 ]; do
   case "$1" in
     --affected) AFFECTED=1; shift ;;
-    --grep)     GREP="$2"; shift 2 ;;
+    --grep)
+      if [ -z "${2:-}" ]; then
+        echo "❌ --grep krever et mønster. Bruk make ci for hele suiten." >&2
+        exit 2
+      fi
+      GREP="$2"; shift 2 ;;
     --env)      ENVIRONMENT="$2"; shift 2 ;;
     --no-wait)  WAIT=0; shift ;;
     --vis-filter) VIS_FILTER=1; shift ;;
@@ -45,15 +46,8 @@ done
 BRANCH="$(git rev-parse --abbrev-ref HEAD)"
 
 if [ "$AFFECTED" -eq 1 ]; then
-  RAPPORT="$(node scripts/affected-tests.mjs --json)"
-  ANDEL="$(printf '%s' "$RAPPORT" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>console.log(JSON.parse(d).sharePercent))')"
-  ANTALL="$(printf '%s' "$RAPPORT" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>console.log(JSON.parse(d).specs.length))')"
-  if [ "$ANDEL" -ge "$FULL_SUITE_TERSKEL" ]; then
-    echo "ℹ️  $ANTALL spec-filer ($ANDEL %) er påvirket — kjører hele suiten i stedet for å filtrere."
-    GREP=""
-  else
-    GREP="$(printf '%s' "$RAPPORT" | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>console.log(JSON.parse(d).grep))')"
-  fi
+  # Tom utdata betyr hele suiten; begrunnelsen skrives til stderr.
+  GREP="$(node scripts/affected-tests.mjs)"
 fi
 
 if ! git diff --quiet || ! git diff --cached --quiet; then
@@ -76,17 +70,32 @@ if [ -z "$GREP" ]; then
   echo "   filter:      <hele suiten>"
 else
   ANTALL_MONSTRE="$(printf '%s' "$GREP" | tr '|' '\n' | grep -c '')"
-  echo "   filter:      ${#GREP} tegn, $ANTALL_MONSTRE spec-filer (vis med --vis-filter)"
+  echo "   filter:      ${#GREP} tegn, $ANTALL_MONSTRE mønstre (vis med --vis-filter)"
   [ "${VIS_FILTER:-0}" -eq 1 ] && printf '%s\n' "$GREP"
 fi
 
 ARGS=(--ref "$BRANCH" -f environment="$ENVIRONMENT" -f disable_retries="$RETRIES")
 [ -n "$GREP" ] && ARGS+=(-f test_grep="$GREP")
+
+# Dispatch gir ingen run-id tilbake. Vi ser etter den eldste workflow_dispatch-kjøringen fra deg
+# på branchen som er opprettet etter dette tidspunktet, så en eldre kjøring eller en
+# repository_dispatch fra et image-bygg ikke blir fulgt i stedet.
+GH_USER="$(gh api user --jq .login)"
+START="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
 gh workflow run "E2E Tests" "${ARGS[@]}"
 
-# Dispatch gir ingen run-id tilbake, så vi henter den nyeste kjøringen på denne branchen.
-sleep 6
-RUN_ID="$(gh run list --workflow "E2E Tests" --branch "$BRANCH" --limit 1 --json databaseId --jq '.[0].databaseId')"
+RUN_ID=""
+for _ in $(seq 1 20); do
+  sleep 3
+  RUN_ID="$(gh run list --workflow "E2E Tests" --branch "$BRANCH" --event workflow_dispatch \
+    --user "$GH_USER" --limit 20 --json databaseId,createdAt \
+    --jq "[.[] | select(.createdAt >= \"$START\")] | last | .databaseId // empty")"
+  [ -n "$RUN_ID" ] && break
+done
+if [ -z "$RUN_ID" ]; then
+  echo "❌ Fant ikke kjøringen etter 60 sekunder. Se gh run list --workflow \"E2E Tests\" --branch $BRANCH" >&2
+  exit 1
+fi
 URL="$(gh run view "$RUN_ID" --json url --jq .url)"
 echo "   run:         $URL"
 

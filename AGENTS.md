@@ -109,10 +109,13 @@ make affected
 `make ci-affected` asks `scripts/affected-tests.mjs`, which walks the import graph instead of
 guessing from test names. Change a shared module and it answers "almost the whole suite" — that
 is the correct answer, not a bug: `fixtures/` is imported by nearly every spec, so a four-line
-edit to `helpers/unleash-helper.ts` really does reach 62 of 66 spec files. Above 80 % it drops
-the filter and runs everything, because a filter covering nearly all of the suite saves no time
-and sends a brittle several-kilobyte string of file paths. Add `--vis-filter` to print the
-filter it built.
+edit to `helpers/unleash-helper.ts` reaches all but a handful of spec files. It drops the filter
+and runs everything when 80 % or more of the specs are affected, when no spec is affected, and
+when a changed file lies outside the import graph (`playwright.config.ts`, `package.json`,
+`global-setup.ts`, compose files, workflows — anything that is not a `.ts` file under `tests/`,
+`pages/`, `helpers/`, `fixtures/`, `lib/`, `utils/` or `atdd/`, except Markdown). The graph only
+sees static imports, so a change that reaches tests through runtime state, such as Unleash
+toggles or seeded data, needs `make ci`. Add `--vis-filter` to print the filter it built.
 
 To see the reach of an edit before making it:
 
