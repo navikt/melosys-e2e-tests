@@ -334,7 +334,8 @@ export class UnleashHelper {
 
   /**
    * Reset all toggles to their default state (from seed script)
-   * Default state: all toggles enabled except 'melosys.arsavregning.uten.flyt'
+   * Default state: all toggles enabled except 'melosys.arsavregning.uten.flyt' and
+ * 'melosys.arsavregning.eos_tjenesteperson'
    *
    * Per-run overrides (applied on top of the defaults, and to toggles not in the
    * default list) can be supplied via comma-separated env vars:
@@ -354,10 +355,15 @@ export class UnleashHelper {
       { name: 'melosys.arsavregning', enabled: true },
       { name: 'melosys.arsavregning.uten.flyt', enabled: false },
       { name: 'melosys.arsavregning.eos_pensjonist', enabled: true },
-      // Tester som simulerer pre-prod-tilstand slår denne av. Uten standardverdi her ble
-      // togglen liggende av for resten av kjøringen — og videre til neste lokale kjøring,
-      // siden Unleash-tilstanden lever i postgres-containeren.
-      { name: 'melosys.arsavregning.eos_tjenesteperson', enabled: true },
+      // Denne oppføringen er den eneste grunnen til at togglen finnes i Unleash. Den står ikke i
+      // melosys-api sin ToggleName.kt, så api oppretter den aldri — og lokalt regner api en
+      // toggle den ikke finner i Unleash som på (DefaultEnabledUnleash, bare koblet inn under
+      // profilen «!nais & !test»; i prod er ukjent toggle av). Uten linja under ser altså
+      // art11-3b-testen en påslått flyt i stedet for den blokkerende meldingen. Verdien er av
+      // fordi flyten ikke er rullet ut. Det samme gjelder melosys.11_3_a_Norge_er_utpekt og
+      // melosys.trygdeavgift.25-prosentregel: heller ikke de finnes i ToggleName.kt, så ingen
+      // av de tre kan fjernes herfra i den tro at api synkroniserer dem.
+      { name: 'melosys.arsavregning.eos_tjenesteperson', enabled: false },
       { name: 'melosys.pensjonist', enabled: true },
       { name: 'melosys.pensjonist_eos', enabled: true },
       {
