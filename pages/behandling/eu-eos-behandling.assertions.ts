@@ -44,16 +44,19 @@ export class EuEosBehandlingAssertions {
   }
 
   /**
-   * Verifiser interim-oppførselen for sakstyper der automatisk årsavregning ennå
-   * ikke er implementert (jf. MELOSYS-7828): behandlingen viser varselet om at
-   * årsavregning ikke kan opprettes.
+   * Verifiser at årsavregningen er opprettet, men blokkert fordi sakstypen ennå ikke er
+   * støttet — altså at saksbehandleren ser meldingen og ikke kan gå videre.
    *
-   * NB: Når MELOSYS-7828 lander for EU/EØS off. tjenesteperson (FO_883_2004_ART11_3B)
-   * skal denne erstattes med en verifisering av at årsavregningsbehandlingen
-   * faktisk opprettes (slik FTRL-pensjonist-testen gjør).
+   * Erstattet det tidligere varselet «Du kan ikke årsavregne disse type saker i Melosys
+   * enda». MELOSYS-8163 opprettet årsavregningen automatisk også for EØS tjenesteperson og
+   * fjernet det varselet fra melosys-web (#3108); det som står igjen til flyten rulles ut er
+   * denne blokkerende meldingen, styrt av melosys.arsavregning.eos_tjenesteperson.
+   *
+   * Når togglen settes i produksjon skal denne erstattes med en verifisering av at
+   * årsavregningen kan fullføres, slik FTRL-pensjonist-testen gjør.
    */
-  async verifiserKanIkkeÅrsavregneEnda(): Promise<void> {
-    await expect(this.page.getByText('Du kan ikke årsavregne disse')).toBeVisible({
+  async verifiserÅrsavregningIkkeStøttet(): Promise<void> {
+    await expect(this.page.getByTestId('aarsavregning-ikke-stottet-sakstype')).toBeVisible({
       timeout: 15000,
     });
   }

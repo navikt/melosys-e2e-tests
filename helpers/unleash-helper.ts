@@ -354,6 +354,11 @@ export class UnleashHelper {
       { name: 'melosys.arsavregning', enabled: true },
       { name: 'melosys.arsavregning.uten.flyt', enabled: false },
       { name: 'melosys.arsavregning.eos_pensjonist', enabled: true },
+      // Av, fordi lista skal speile produksjon: årsavregningsflyten for EØS tjenesteperson er
+      // ikke rullet ut. Uten en standardverdi her arver testene den verdien melosys-api tilfeldigvis
+      // opprettet togglen med, og art11-3b-testen avhenger av at den er av for å se den
+      // blokkerende meldingen. Samme grunn som melosys.arsavregning.uten.flyt.
+      { name: 'melosys.arsavregning.eos_tjenesteperson', enabled: false },
       { name: 'melosys.pensjonist', enabled: true },
       { name: 'melosys.pensjonist_eos', enabled: true },
       {
