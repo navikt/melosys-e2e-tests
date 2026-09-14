@@ -106,8 +106,8 @@ test.describe('EØS Medlemskap Lovvalg - Offentlig tjenesteperson 11.3b', () => 
 
     // Step 7: Vedtak
     console.log('Step 7: Fatting vedtak...');
-    // Step 8: Verifiser interim-oppførsel (se faglig notat øverst)
-    console.log('Step 8: Verifying årsavregning cannot be created (interim behaviour)...');
+    // Step 8: Verifiser at årsavregningen opprettes, men er blokkert (se faglig notat øverst)
+    console.log('Step 8: Verifying årsavregning is created but blocked...');
     await runAndWaitForProcessInstances(
       page.request,
       () => vedtak.klikkFattVedtak(),
@@ -118,10 +118,19 @@ test.describe('EØS Medlemskap Lovvalg - Offentlig tjenesteperson 11.3b', () => 
     await hovedside.åpneBehandling(behandlingLenke);
 
     // Årsavregningen opprettes nå automatisk, men er blokkert til togglen rulles ut.
+    // Begge halvdelene må asserteres: meldingen alene ville også vist seg om
+    // årsavregningen aldri ble opprettet og web rendret meldingen et annet sted.
+    await withDatabase(async (db) => {
+      const rad = await db.queryOne<{ ID: number }>(
+        "SELECT ID FROM BEHANDLING WHERE BEH_TYPE = 'ÅRSAVREGNING' ORDER BY ID DESC FETCH FIRST 1 ROWS ONLY",
+        {}
+      );
+      expect(rad, 'Årsavregningen skal være opprettet automatisk etter vedtak').not.toBeNull();
+    });
     await behandling.assertions.verifiserÅrsavregningIkkeStøttet();
     console.log('✅ Bekreftet: Årsavregning er opprettet, men blokkert for denne sakstypen');
 
-    // Uavhengig av 7828: selve LOVVALGSVEDTAKET (FØRSTEGANG-behandlingen) SKAL ha nådd
+    // Selve LOVVALGSVEDTAKET (FØRSTEGANG-behandlingen) SKAL ha nådd
     // sin DB-sluttilstand. NB: URL-paramet behandlingID peker på den auto-opprettede
     // ÅRSAVREGNING-behandlingen (UNDER_BEHANDLING) etter re-åpning, så vi slår opp
     // FØRSTEGANG-behandlingen direkte i DB (cleanup-fixturen gir nøyaktig én per test).

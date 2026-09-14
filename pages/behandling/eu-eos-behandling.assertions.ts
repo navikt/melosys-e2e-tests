@@ -56,9 +56,15 @@ export class EuEosBehandlingAssertions {
    * årsavregningen kan fullføres, slik FTRL-pensjonist-testen gjør.
    */
   async verifiserÅrsavregningIkkeStøttet(): Promise<void> {
-    await expect(this.page.getByTestId('aarsavregning-ikke-stottet-sakstype')).toBeVisible({
-      timeout: 15000,
-    });
+    const melding = this.page.getByTestId('aarsavregning-ikke-stottet-sakstype');
+
+    // Antallssjekken først, med vilje: melosys-web rendrer denne meldingen fra to steg.
+    // Inngangssteget vokter den på aktivt steg, vedtakssteget gjør det ikke, og steg som er
+    // tatt i bruk forblir montert. Monteres begge samtidig, treffer getByTestId to noder og
+    // Playwright kaster en strict mode-feil som er vanskelig å lese. Da er «forventet 1, fikk
+    // 2» et tydeligere signal om at antakelsen her må revideres.
+    await expect(melding).toHaveCount(1, { timeout: 15000 });
+    await expect(melding).toBeVisible({ timeout: 15000 });
   }
 
   /**

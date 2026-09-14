@@ -354,10 +354,13 @@ export class UnleashHelper {
       { name: 'melosys.arsavregning', enabled: true },
       { name: 'melosys.arsavregning.uten.flyt', enabled: false },
       { name: 'melosys.arsavregning.eos_pensjonist', enabled: true },
-      // Av, fordi lista skal speile produksjon: årsavregningsflyten for EØS tjenesteperson er
-      // ikke rullet ut. Uten en standardverdi her arver testene den verdien melosys-api tilfeldigvis
-      // opprettet togglen med, og art11-3b-testen avhenger av at den er av for å se den
-      // blokkerende meldingen. Samme grunn som melosys.arsavregning.uten.flyt.
+      // Denne oppføringen er den eneste grunnen til at togglen finnes i Unleash i det hele tatt.
+      // I motsetning til de andre i lista står den ikke i melosys-api sin ToggleName.kt, så api
+      // oppretter den aldri. Og en toggle api ikke finner i Unleash regnes som PÅ
+      // (DefaultEnabledUnleash: «IKKE definert i Unleash, defaulter til ENABLED»). Uten linja
+      // under ser altså art11-3b-testen en påslått flyt i stedet for den blokkerende meldingen.
+      // Verdien er av fordi flyten ikke er rullet ut i produksjon. Ikke slett linja fordi «api
+      // synker disse likevel» — det stemmer for de andre oppføringene, men ikke for denne.
       { name: 'melosys.arsavregning.eos_tjenesteperson', enabled: false },
       { name: 'melosys.pensjonist', enabled: true },
       { name: 'melosys.pensjonist_eos', enabled: true },
