@@ -84,6 +84,42 @@ npm run open-screenshots
 npm run clean-results
 ```
 
+### Running tests on CI
+
+The `E2E Tests` workflow is dispatch-only, so pushing starts nothing. These targets wrap the
+dispatch, the image tags and the wait:
+
+```bash
+# Full suite against latest images
+make ci
+
+# Only the tests your change affects
+make ci-affected
+
+# A filter of your own
+make ci-grep GREP=8163
+
+# Against your own images, built with each repo's "Build and Push Image" workflow
+make ci-images ENV=melosys-api:my-tag,melosys-web:my-tag
+
+# See what your change affects without running anything
+make affected
+```
+
+`make ci-affected` asks `scripts/affected-tests.mjs`, which walks the import graph instead of
+guessing from test names. Change a shared module and it answers "almost the whole suite" — that
+is the correct answer, not a bug: `fixtures/` is imported by nearly every spec, so a four-line
+edit to `helpers/unleash-helper.ts` really does reach 62 of 66 spec files. The script says so and
+suggests running everything.
+
+To see the reach of an edit before making it:
+
+```bash
+node scripts/affected-tests.mjs --changed pages/vedtak/vedtak.page.ts --files
+```
+
+Runs use `disable_retries` by default, so flaky tests show up instead of being retried away.
+
 ### Setup
 
 ```bash
