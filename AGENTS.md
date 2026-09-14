@@ -109,8 +109,10 @@ make affected
 `make ci-affected` asks `scripts/affected-tests.mjs`, which walks the import graph instead of
 guessing from test names. Change a shared module and it answers "almost the whole suite" — that
 is the correct answer, not a bug: `fixtures/` is imported by nearly every spec, so a four-line
-edit to `helpers/unleash-helper.ts` really does reach 62 of 66 spec files. The script says so and
-suggests running everything.
+edit to `helpers/unleash-helper.ts` really does reach 62 of 66 spec files. Above 80 % it drops
+the filter and runs everything, because a filter covering nearly all of the suite saves no time
+and sends a brittle several-kilobyte string of file paths. Add `--vis-filter` to print the
+filter it built.
 
 To see the reach of an edit before making it:
 
