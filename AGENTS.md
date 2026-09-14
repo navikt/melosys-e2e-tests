@@ -125,6 +125,11 @@ node scripts/affected-tests.mjs --changed pages/vedtak/vedtak.page.ts --files
 
 Runs use `disable_retries` by default, so flaky tests show up instead of being retried away.
 
+CI runs your branch, not the result of merging it. To catch a PR that breaks on merge, merge
+`main` in before you run: `git fetch origin && git merge origin/main && git push`. The script
+fetches `main` itself and warns when `origin/<branch>` is missing commits from `origin/main`,
+but it still starts the run.
+
 ### Setup
 
 ```bash
