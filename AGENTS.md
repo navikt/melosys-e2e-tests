@@ -220,7 +220,7 @@ import { UnleashHelper } from '../helpers/unleash-helper';
 
 test('my test with unleash', async ({ page, request }) => {
   // ALL toggles are reset to defaults BEFORE test runs (automatically)
-  // Default state: All toggles ON except 'melosys.arsavregning.uten.flyt' which is OFF
+  // Default state: All toggles ON except 'melosys.arsavregning.uten.flyt' and 'melosys.arsavregning.eos_tjenesteperson', which are OFF
 
   const unleash = new UnleashHelper(request);
 
@@ -236,7 +236,7 @@ test('my test with unleash', async ({ page, request }) => {
 
 **Key Points:**
 - **All tests start with consistent state**: Default fixture resets ALL toggles BEFORE each test
-- **Default state**: All toggles enabled except `melosys.arsavregning.uten.flyt` (disabled)
+- **Default state**: All toggles enabled except `melosys.arsavregning.uten.flyt` and `melosys.arsavregning.eos_tjenesteperson` (disabled)
 - **Cleanup after test**: Toggles reset after test to ensure next test gets clean state (prevents race conditions on CI)
 - **Local debugging**: Set `SKIP_UNLEASH_CLEANUP_AFTER=true` in `.env` to preserve toggle state after failed tests
 - **Simple approach**: Just disable/enable the toggles you need - no need to track changes

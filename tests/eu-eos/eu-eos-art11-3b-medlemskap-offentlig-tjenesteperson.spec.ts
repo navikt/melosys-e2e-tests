@@ -27,18 +27,21 @@ import { withDatabase } from '../../helpers/db-helper';
  * - Arbeidsforhold: Velg arbeidsgiver
  * - Lovvalg: Rfo. 883/2004 art.11(3)(b)
  * - Vedtak: Fullføring av saksflyt
- * - Verifisering: Årsavregning kan ikke opprettes ennå for denne sakstypen
+ * - Verifisering: Årsavregningen opprettes, men er blokkert for denne sakstypen
  *
- * NB (faglig, jf. MELOSYS-7828): For EU_EOS/MEDLEMSKAP_LOVVALG/ARBEID_TJENESTEPERSON_ELLER_FLY
- * med lovvalgsbestemmelse FO_883_2004_ART11_3B for foregående år SKAL Melosys etter hvert
- * opprette årsavregning automatisk. Den funksjonaliteten er enda ikke på plass for denne
- * sakstypen (jf. Jira-kommentar 2026-04-27 "blir ikke automatisk opprettet enda"), så testen
- * verifiserer den nåværende interim-oppførselen: varselet "Du kan ikke årsavregne disse type
- * saker i Melosys enda". Når MELOSYS-7828 implementeres for denne sakstypen må assertionen
- * snus til å verifisere at årsavregning faktisk opprettes (slik ftrl-pensjonist-testen gjør).
+ * NB (faglig): For EU_EOS/MEDLEMSKAP_LOVVALG/ARBEID_TJENESTEPERSON_ELLER_FLY med
+ * lovvalgsbestemmelse FO_883_2004_ART11_3B for foregående år oppretter Melosys nå
+ * årsavregningen automatisk (MELOSYS-8163). Selve årsavregningsflyten er derimot ikke rullet
+ * ut: så lenge melosys.arsavregning.eos_tjenesteperson er av, møter saksbehandleren en
+ * blokkerende melding og kommer ikke videre. Testen verifiserer den tilstanden.
+ *
+ * Frem til 2026-09-14 sto det et eget varsel her, «Du kan ikke årsavregne disse type saker i
+ * Melosys enda». Det ble fjernet fra melosys-web i #3108, og assertionen er flyttet til den
+ * blokkerende meldingen. Når togglen settes i produksjon skal den snus igjen, til at
+ * årsavregningen kan fullføres — slik ftrl-pensjonist-testen gjør.
  */
 test.describe('EØS Medlemskap Lovvalg - Offentlig tjenesteperson 11.3b', () => {
-  test('skal fullføre sak og verifisere at årsavregning ikke kan opprettes', async ({ page }) => {
+  test('skal fullføre sak og verifisere at årsavregningen er blokkert for sakstypen', async ({ page }) => {
     test.setTimeout(120000);
 
     // Setup
@@ -103,8 +106,8 @@ test.describe('EØS Medlemskap Lovvalg - Offentlig tjenesteperson 11.3b', () => 
 
     // Step 7: Vedtak
     console.log('Step 7: Fatting vedtak...');
-    // Step 8: Verifiser interim-oppførsel (se faglig notat øverst)
-    console.log('Step 8: Verifying årsavregning cannot be created (interim behaviour)...');
+    // Step 8: Verifiser at årsavregningen opprettes, men er blokkert (se faglig notat øverst)
+    console.log('Step 8: Verifying årsavregning is created but blocked...');
     await runAndWaitForProcessInstances(
       page.request,
       () => vedtak.klikkFattVedtak(),
@@ -114,11 +117,14 @@ test.describe('EØS Medlemskap Lovvalg - Offentlig tjenesteperson 11.3b', () => 
 
     await hovedside.åpneBehandling(behandlingLenke);
 
-    // Interim-oppførsel (gated på MELOSYS-7828): årsavregning kan ikke opprettes enda.
-    await behandling.assertions.verifiserKanIkkeÅrsavregneEnda();
-    console.log('✅ Bekreftet: Årsavregning kan ikke opprettes for denne sakstypen (enda)');
+    // Årsavregningen opprettes nå automatisk, men er blokkert til togglen rulles ut.
+    // Meldingen rendres i dag bare fra årsavregningsstegene, så den impliserer isolert sett at
+    // behandlingen finnes. DB-sjekken er en regresjonspinne: flyttes meldingen senere til et
+    // steg som vises uten en årsavregning, fanger den at behandlingen faktisk ble opprettet.
+    await behandling.assertions.verifiserÅrsavregningIkkeStøttet();
+    console.log('✅ Bekreftet: Årsavregning er opprettet, men blokkert for denne sakstypen');
 
-    // Uavhengig av 7828: selve LOVVALGSVEDTAKET (FØRSTEGANG-behandlingen) SKAL ha nådd
+    // Selve LOVVALGSVEDTAKET (FØRSTEGANG-behandlingen) SKAL ha nådd
     // sin DB-sluttilstand. NB: URL-paramet behandlingID peker på den auto-opprettede
     // ÅRSAVREGNING-behandlingen (UNDER_BEHANDLING) etter re-åpning, så vi slår opp
     // FØRSTEGANG-behandlingen direkte i DB (cleanup-fixturen gir nøyaktig én per test).
@@ -128,6 +134,21 @@ test.describe('EØS Medlemskap Lovvalg - Offentlig tjenesteperson 11.3b', () => 
         {}
       );
       expect(rad, 'Forventet en FØRSTEGANG-lovvalgsbehandling i DB').not.toBeNull();
+
+      // Årsavregningen opprettes av vedtaket, altså etter lovvalgsbehandlingen. Scopet på
+      // ID > lovvalgsbehandlingen: cleanup-fixturen svelger en feilet DB-opprydding og lar
+      // kjøringen gå videre, så et usikret oppslag kan treffe forrige tests rad.
+      const aarsavregning = await db.queryOne<{ ID: number }>(
+        `SELECT ID FROM BEHANDLING
+         WHERE BEH_TYPE = 'ÅRSAVREGNING' AND ID > :lovvalgId
+         ORDER BY ID DESC FETCH FIRST 1 ROWS ONLY`,
+        { lovvalgId: rad!.ID }
+      );
+      expect(
+        aarsavregning,
+        'Årsavregningen skal være opprettet automatisk av vedtaket'
+      ).not.toBeNull();
+
       return String(rad!.ID);
     });
 
