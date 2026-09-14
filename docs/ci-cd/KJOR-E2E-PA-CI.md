@@ -13,7 +13,7 @@ git fetch origin && git merge origin/main && git push
 make ci-affected
 ```
 
-Merge inn main først. CI tester branchen din, ikke resultatet av merge. Mangler branchen commits fra main, kan en grønn kjøring bli rød etter merge. Scriptet henter main selv og advarer når `origin/<branch>` mangler commits fra `origin/main`, men starter kjøringen likevel.
+Merge inn main først. CI tester branchen din, ikke resultatet av merge. Mangler branchen commits fra main, kan en grønn kjøring bli rød etter merge. Scriptet henter main selv og advarer når `origin/<branch>` mangler commits fra `origin/main`, men starter kjøringen likevel. I en klon uten `origin/main`, for eksempel laget med `--single-branch`, sjekker scriptet ikke dette og sier ikke fra. I en grunn klon (`--depth`) kan advarselen vises selv om main er merget inn.
 
 Advarselen gjelder bare commits i dette repoet. Kjøringen bruker images fra `latest`, og endres de etter kjøringen din, kan testene bli røde etter merge selv om main var merget inn. Har det gått tid siden sist du kjørte, kjør på nytt før du merger.
 
@@ -21,7 +21,7 @@ Push før du kjører. CI kjører koden på `origin`, ikke arbeidstreet ditt.
 
 ## Slik velger `make ci-affected` tester
 
-`make ci-affected` følger importgrafen fra filene du har endret, mot `origin/main` og inkludert ucommittede endringer. Den sender bare spec-filene som importerer en endret fil, direkte eller via andre moduler.
+`make ci-affected` følger importgrafen fra filene du har endret mot `origin/main`. Ucommittede og upushede endringer teller med i utvalget, men CI kjører bare det som ligger på `origin/<branch>`. Den sender bare spec-filene som importerer en endret fil, direkte eller via andre moduler.
 
 Den kjører hele suiten i stedet når:
 
@@ -66,4 +66,4 @@ Make-målene kaller `scripts/ci-e2e.sh`. Kall scriptet direkte når du vil kombi
 node scripts/affected-tests.mjs --changed pages/vedtak/vedtak.page.ts --files
 ```
 
-`--changed` later som om fila er endret og lister spec-filene som ville blitt kjørt.
+`--changed` later som om fila er endret og lister spec-filene som er påvirket. Er 80 % eller mer påvirket, kjører `make ci-affected` likevel hele suiten.
