@@ -32,6 +32,8 @@ if (args[0] === 'run' && args[1] === 'list') {
   fs.writeFileSync(tellerFil, String(n + 1));
   let runs = svar[Math.min(n, svar.length - 1)].map((r) => ({ ...r, createdAt: r.createdAt === 'NÅ' ? nå() : r.createdAt }));
   if (flag('--event')) runs = runs.filter((r) => r.event === flag('--event'));
+  if (flag('--user')) runs = runs.filter((r) => (r.user ?? 'tester') === flag('--user'));
+  if (flag('--branch')) runs = runs.filter((r) => (r.headBranch ?? 'feature') === flag('--branch'));
   if (flag('--limit')) runs = runs.slice(0, Number(flag('--limit')));
   data = runs;
 }
@@ -124,22 +126,21 @@ const TO_SPECS: Filer = {
   'tests/b.spec.ts': "import { felles } from '../helpers/felles';\nimport { b } from '../helpers/bare-b';\n",
 };
 
-test('--affected kjører hele suiten når alt er påvirket, også når FORCE_COLOR er satt', { skip: !HAR_JQ }, () => {
-  // Claude Code setter FORCE_COLOR, og da farget console.log tallet terskelen ble sammenlignet med.
+test('--affected kjører hele suiten når alt er påvirket', { skip: HAR_JQ ? false : 'krever jq for å etterligne gh --jq' }, () => {
   const repo = lagRepo(TO_SPECS, { 'helpers/felles.ts': 'export const felles = 2;\n' });
   const r = repo.ciE2e('--affected');
   assert.equal(r.status, 0, r.stderr);
   assert.equal(sendtFilter(repo.ghKall()), null, 'hele suiten skal kjøres uten test_grep');
 });
 
-test('--affected sender filteret når bare en del av suiten er påvirket', { skip: !HAR_JQ }, () => {
+test('--affected sender filteret når bare en del av suiten er påvirket', { skip: HAR_JQ ? false : 'krever jq for å etterligne gh --jq' }, () => {
   const repo = lagRepo(TO_SPECS, { 'helpers/bare-b.ts': 'export const b = 2;\n' });
   const r = repo.ciE2e('--affected');
   assert.equal(r.status, 0, r.stderr);
   assert.equal(sendtFilter(repo.ghKall()), 'b\\.spec\\.ts');
 });
 
-test('--affected kjører hele suiten når en endret fil ligger utenfor importgrafen', { skip: !HAR_JQ }, () => {
+test('--affected kjører hele suiten når en endret fil ligger utenfor importgrafen', { skip: HAR_JQ ? false : 'krever jq for å etterligne gh --jq' }, () => {
   const repo = lagRepo(TO_SPECS, {
     'playwright.config.ts': 'export default {};\n',
     'helpers/bare-b.ts': 'export const b = 2;\n',
@@ -149,14 +150,45 @@ test('--affected kjører hele suiten når en endret fil ligger utenfor importgra
   assert.equal(sendtFilter(repo.ghKall()), null, 'playwright.config.ts kan påvirke alle tester');
 });
 
-test('en endret Markdown-fil utvider ikke utvalget', { skip: !HAR_JQ }, () => {
+test('--affected kjører hele suiten ved nøyaktig 80 % påvirket', { skip: HAR_JQ ? false : 'krever jq for å etterligne gh --jq' }, () => {
+  const felles = "import { felles } from '../helpers/felles';\n";
+  const repo = lagRepo(
+    {
+      'helpers/felles.ts': 'export const felles = 1;\n',
+      'tests/a.spec.ts': felles,
+      'tests/b.spec.ts': felles,
+      'tests/c.spec.ts': felles,
+      'tests/d.spec.ts': felles,
+      'tests/e.spec.ts': 'export {};\n',
+    },
+    { 'helpers/felles.ts': 'export const felles = 2;\n' }
+  );
+  const r = repo.ciE2e('--affected');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(sendtFilter(repo.ghKall()), null, '4 av 5 er 80 %');
+});
+
+test('--affected kjører hele suiten når ingen spec er påvirket', { skip: HAR_JQ ? false : 'krever jq for å etterligne gh --jq' }, () => {
+  const repo = lagRepo({ ...TO_SPECS, 'helpers/ubrukt.ts': 'export const u = 1;\n' }, {
+    'helpers/ubrukt.ts': 'export const u = 2;\n',
+  });
+  const r = repo.ciE2e('--affected');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(sendtFilter(repo.ghKall()), null);
+  // Et tomt utvalg gir tomt filter uansett; valget skal likevel stå som hele suiten i rapporten.
+  const rapport = JSON.parse(repo.affected('--json').stdout);
+  assert.equal(rapport.fullSuite, true);
+  assert.equal(rapport.reason, 'ingen spec-filer er påvirket');
+});
+
+test('en endret Markdown-fil utvider ikke utvalget', { skip: HAR_JQ ? false : 'krever jq for å etterligne gh --jq' }, () => {
   const repo = lagRepo(TO_SPECS, { 'README.md': '# ny\n', 'helpers/bare-b.ts': 'export const b = 2;\n' });
   const r = repo.ciE2e('--affected');
   assert.equal(r.status, 0, r.stderr);
   assert.equal(sendtFilter(repo.ghKall()), 'b\\.spec\\.ts');
 });
 
-test('følger kjøringen denne dispatchen startet, ikke en eldre eller en fra et annet event', { skip: !HAR_JQ }, () => {
+test('følger kjøringen denne dispatchen startet, ikke en eldre eller en fra et annet event', { skip: HAR_JQ ? false : 'krever jq for å etterligne gh --jq' }, () => {
   const repo = lagRepo(TO_SPECS);
   const gammel = { databaseId: 111, event: 'workflow_dispatch', createdAt: '2020-01-01T00:00:00Z' };
   const annetEvent = { databaseId: 333, event: 'repository_dispatch', createdAt: 'NÅ' };
@@ -170,7 +202,19 @@ test('følger kjøringen denne dispatchen startet, ikke en eldre eller en fra et
   assert.deepEqual([...new Set(sette)], ['222']);
 });
 
-test('--grep med tomt mønster avvises i stedet for å kjøre hele suiten', { skip: !HAR_JQ }, () => {
+test('følger ikke kjøringer fra andre brukere eller andre brancher', { skip: HAR_JQ ? false : 'krever jq for å etterligne gh --jq' }, () => {
+  const repo = lagRepo(TO_SPECS);
+  const annenBruker = { databaseId: 444, event: 'workflow_dispatch', createdAt: 'NÅ', user: 'kollega' };
+  const annenBranch = { databaseId: 555, event: 'workflow_dispatch', createdAt: 'NÅ', headBranch: 'main' };
+  const ny = { databaseId: 222, event: 'workflow_dispatch', createdAt: 'NÅ' };
+  repo.settRuns([[annenBruker, annenBranch], [ny, annenBruker, annenBranch]]);
+  const r = repo.ciE2e();
+  assert.equal(r.status, 0, r.stderr);
+  const sette = repo.ghKall().filter((a) => a[0] === 'run' && a[1] === 'view').map((a) => a[2]);
+  assert.deepEqual([...new Set(sette)], ['222']);
+});
+
+test('--grep med tomt mønster avvises i stedet for å kjøre hele suiten', { skip: HAR_JQ ? false : 'krever jq for å etterligne gh --jq' }, () => {
   const repo = lagRepo(TO_SPECS);
   const r = repo.ciE2e('--grep', '');
   assert.notEqual(r.status, 0);
@@ -181,6 +225,13 @@ test('affected-tests feiler når --base ikke finnes, i stedet for å svare med f
   const repo = lagRepo(TO_SPECS, { 'helpers/bare-b.ts': 'export const b = 2;\n' });
   assert.notEqual(repo.affected('--base', 'origin/finnes-ikke').status, 0);
   assert.notEqual(repo.affected('--base').status, 0, '--base uten verdi');
+});
+
+test('affected-tests godtar --changed med ./-prefiks', () => {
+  const repo = lagRepo(TO_SPECS);
+  const r = repo.affected('--changed', './helpers/bare-b.ts');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout.trim(), 'b\\.spec\\.ts');
 });
 
 test('affected-tests tar med nye spec-filer i en usporet mappe', () => {

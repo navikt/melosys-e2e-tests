@@ -31,8 +31,8 @@ test('løser katalogimport til index-fila, så fixtures-endringer treffer hele s
 });
 
 test('følger lange kjeder: helper → fixtures → spec', () => {
-  // unleash-helper nås av spec-ene bare via fixtures/, minst tre hopp unna. En utvelger som
-  // stopper etter to hopp finner bare de få spec-ene som importerer helperen direkte.
+  // Rundt 20 spec-er importerer unleash-helper direkte; resten nås bare via fixtures/, tre hopp
+  // unna. En utvelger som stopper etter to hopp finner bare de direkte.
   const specs = affectedSpecs(['helpers/unleash-helper.ts']);
   assert.ok(specs.length > 40, `unleash-helper skal treffe det meste, fikk ${specs.length}`);
 });

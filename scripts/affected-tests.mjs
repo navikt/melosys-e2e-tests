@@ -142,10 +142,9 @@ function main() {
 
   let changed;
   if (forced) {
-    changed = [forced];
+    changed = [relative(ROOT, resolve(forced))];
   } else {
     try {
-      git('rev-parse', '--verify', '--quiet', `${base}^{commit}`);
       changed = changedFiles(base);
     } catch (e) {
       fail(`Fant ikke endrede filer mot ${base}: ${(e.stderr || e.message).toString().trim() || 'ukjent ref'}`);
