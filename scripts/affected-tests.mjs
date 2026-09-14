@@ -31,8 +31,8 @@
  * Kjør: node scripts/affected-tests.mjs   (ren node, ingen avhengigheter)
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync, existsSync, statSync } from 'node:fs';
-import { join, dirname, relative, resolve } from 'node:path';
+import { readFileSync, readdirSync, existsSync, realpathSync, statSync } from 'node:fs';
+import { join, dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 const ROOT = resolve(join(fileURLToPath(import.meta.url), '..', '..'));
@@ -122,6 +122,17 @@ export function affectedSpecs(changed, files = sourceFiles()) {
   return [...affected].filter((p) => existsSync(join(ROOT, p))).sort();
 }
 
+/**
+ * Gjør en --changed-sti om til en sti fra repo-roten. En relativ sti leses fra roten hvis fila
+ * finnes der, ellers fra mappa du står i. Symlinker løses opp, så en absolutt sti via /var på
+ * macOS treffer samme fil som /private/var.
+ */
+function repoSti(sti) {
+  if (!isAbsolute(sti) && existsSync(join(ROOT, sti))) return relative(ROOT, join(ROOT, sti));
+  const abs = resolve(sti);
+  return relative(realpathSync(ROOT), existsSync(abs) ? realpathSync(abs) : abs);
+}
+
 function fail(msg) {
   process.stderr.write(`❌ ${msg}\n`);
   process.exit(2);
@@ -142,7 +153,7 @@ function main() {
 
   let changed;
   if (forced) {
-    changed = [relative(ROOT, resolve(forced))];
+    changed = [repoSti(forced)];
   } else {
     try {
       changed = changedFiles(base);
@@ -187,6 +198,11 @@ function main() {
 }
 
 // Kjør bare når scriptet startes direkte, ikke når testen importerer affectedSpecs.
-if (process.argv[1] && resolve(process.argv[1]) === resolve(fileURLToPath(import.meta.url))) {
+// Node løser opp symlinker i import.meta.url, men ikke i argv[1], så begge må løses opp.
+if (
+  process.argv[1] &&
+  existsSync(process.argv[1]) &&
+  realpathSync(process.argv[1]) === realpathSync(fileURLToPath(import.meta.url))
+) {
   main();
 }

@@ -1,7 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { chmodSync, copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import {
+  chmodSync,
+  copyFileSync,
+  existsSync,
+  mkdirSync,
+  mkdtempSync,
+  readFileSync,
+  realpathSync,
+  writeFileSync,
+} from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 
@@ -106,6 +115,14 @@ function lagRepo(main: Filer, endringer: Filer = {}, ucommittet: Filer = {}) {
     ciE2e: (...a: string[]) => spawnSync('bash', ['scripts/ci-e2e.sh', ...a], { cwd: arbeid, env, encoding: 'utf8' }),
     affected: (...a: string[]) =>
       spawnSync('node', ['scripts/affected-tests.mjs', ...a], { cwd: arbeid, env, encoding: 'utf8' }),
+    affectedFra: (mappe: string, ...a: string[]) =>
+      spawnSync('node', [join(realpathSync(arbeid), 'scripts/affected-tests.mjs'), ...a], {
+        cwd: join(realpathSync(arbeid), mappe),
+        env,
+        encoding: 'utf8',
+      }),
+    affectedViaSymlink: (...a: string[]) =>
+      spawnSync('node', [join(arbeid, 'scripts/affected-tests.mjs'), ...a], { cwd: arbeid, env, encoding: 'utf8' }),
     ghKall: (): string[][] =>
       existsSync(logg) ? readFileSync(logg, 'utf8').split('\n').filter(Boolean).map((l) => JSON.parse(l)) : [],
   };
@@ -227,11 +244,39 @@ test('affected-tests feiler når --base ikke finnes, i stedet for å svare med f
   assert.notEqual(repo.affected('--base').status, 0, '--base uten verdi');
 });
 
-test('affected-tests godtar --changed med ./-prefiks', () => {
+// Alle måtene å skrive stien til helpers/bare-b.ts på, fra roten og fra tests/. mkdtemp gir en
+// sti under /var på macOS, som er en symlink til /private/var, så «absolutt» dekker også symlinker.
+const STIER: [string, string, (arbeid: string) => string][] = [
+  ['repo-relativ fra roten', '.', () => 'helpers/bare-b.ts'],
+  ['./-prefiks fra roten', '.', () => './helpers/bare-b.ts'],
+  ['absolutt sti', '.', (arbeid) => join(arbeid, 'helpers/bare-b.ts')],
+  ['absolutt sti uten symlinker', '.', (arbeid) => join(realpathSync(arbeid), 'helpers/bare-b.ts')],
+  ['repo-relativ fra tests/', 'tests', () => 'helpers/bare-b.ts'],
+  ['relativ til mappa fra tests/', 'tests', () => '../helpers/bare-b.ts'],
+  ['absolutt sti fra tests/', 'tests', (arbeid) => join(arbeid, 'helpers/bare-b.ts')],
+];
+for (const [navn, mappe, sti] of STIER) {
+  test(`affected-tests --changed: ${navn}`, () => {
+    const repo = lagRepo(TO_SPECS);
+    const r = repo.affectedFra(mappe, '--changed', sti(repo.arbeid));
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(r.stdout.trim(), 'b\\.spec\\.ts', r.stderr);
+  });
+}
+
+test('affected-tests skriver resultatet også når skriptet startes via en symlinket sti', () => {
   const repo = lagRepo(TO_SPECS);
-  const r = repo.affected('--changed', './helpers/bare-b.ts');
+  assert.notEqual(repo.arbeid, realpathSync(repo.arbeid), 'forutsetter at tmpdir går via en symlink');
+  const r = repo.affectedViaSymlink('--changed', 'helpers/bare-b.ts');
   assert.equal(r.status, 0, r.stderr);
-  assert.equal(r.stdout.trim(), 'b\\.spec\\.ts');
+  assert.equal(r.stdout.trim(), 'b\\.spec\\.ts', r.stderr);
+});
+
+test('affected-tests --changed: en spec relativ til mappa fra tests/', () => {
+  const repo = lagRepo(TO_SPECS);
+  const r = repo.affectedFra('tests', '--changed', 'a.spec.ts');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(r.stdout.trim(), 'a\\.spec\\.ts', r.stderr);
 });
 
 test('affected-tests tar med nye spec-filer i en usporet mappe', () => {
