@@ -118,15 +118,9 @@ test.describe('EØS Medlemskap Lovvalg - Offentlig tjenesteperson 11.3b', () => 
     await hovedside.åpneBehandling(behandlingLenke);
 
     // Årsavregningen opprettes nå automatisk, men er blokkert til togglen rulles ut.
-    // Begge halvdelene må asserteres: meldingen alene ville også vist seg om
-    // årsavregningen aldri ble opprettet og web rendret meldingen et annet sted.
-    await withDatabase(async (db) => {
-      const rad = await db.queryOne<{ ID: number }>(
-        "SELECT ID FROM BEHANDLING WHERE BEH_TYPE = 'ÅRSAVREGNING' ORDER BY ID DESC FETCH FIRST 1 ROWS ONLY",
-        {}
-      );
-      expect(rad, 'Årsavregningen skal være opprettet automatisk etter vedtak').not.toBeNull();
-    });
+    // Meldingen rendres i dag bare fra årsavregningsstegene, så den impliserer isolert sett at
+    // behandlingen finnes. DB-sjekken er en regresjonspinne: flyttes meldingen senere til et
+    // steg som vises uten en årsavregning, fanger den at behandlingen faktisk ble opprettet.
     await behandling.assertions.verifiserÅrsavregningIkkeStøttet();
     console.log('✅ Bekreftet: Årsavregning er opprettet, men blokkert for denne sakstypen');
 
@@ -140,6 +134,21 @@ test.describe('EØS Medlemskap Lovvalg - Offentlig tjenesteperson 11.3b', () => 
         {}
       );
       expect(rad, 'Forventet en FØRSTEGANG-lovvalgsbehandling i DB').not.toBeNull();
+
+      // Årsavregningen opprettes av vedtaket, altså etter lovvalgsbehandlingen. Scopet på
+      // ID > lovvalgsbehandlingen: cleanup-fixturen svelger en feilet DB-opprydding og lar
+      // kjøringen gå videre, så et usikret oppslag kan treffe forrige tests rad.
+      const aarsavregning = await db.queryOne<{ ID: number }>(
+        `SELECT ID FROM BEHANDLING
+         WHERE BEH_TYPE = 'ÅRSAVREGNING' AND ID > :lovvalgId
+         ORDER BY ID DESC FETCH FIRST 1 ROWS ONLY`,
+        { lovvalgId: rad!.ID }
+      );
+      expect(
+        aarsavregning,
+        'Årsavregningen skal være opprettet automatisk av vedtaket'
+      ).not.toBeNull();
+
       return String(rad!.ID);
     });
 
