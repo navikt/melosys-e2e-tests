@@ -348,20 +348,23 @@ services:
           - melosys-web.melosys.docker-internal
     ports:
       - "3000:3000"
-    # Nginx resolverer alle upstreams ved oppstart og dør permanent hvis én mangler i
-    # docker-DNS — derfor må ALLE tjenester nginx-configen refererer stå i depends_on,
-    # og restart-policy fange resterende oppstarts-racer (container-start ≠ DNS-registrert)
-    restart: on-failure
     depends_on:
       - melosys-api
       - mock-oauth2-server
       - faktureringskomponenten
       - melosys-trygdeavtale
-    volumes:
-      # Etter melosys-web PR #3142 inneholder imaget ikke lenger nginx-config eller env-config.js.
-      # I Nais mountes disse fra en ConfigMap (nais/runtime-config.yaml). Lokalt mounter vi dem manuelt.
-      - ./melosys-web/default.conf:/etc/nginx/conf.d/default.conf:ro
-      - ./melosys-web/env-config.js:/etc/nginx/conf.d/env-config.js:ro
+    environment:
+      FRONTEND_APP_NAME: "Melosys Lokalt"
+      AZURE_APP_TENANT_ID: "966ac572-f5b7-4bbe-aa88-c76419c0f851"
+      AZURE_CLIENT_ID: "44d6bc90-5754-4ba7-a56c-005f122cdc96"
+      AZURE_CLIENT_NAME: "melosys-web"
+      CLUSTER_NAME: "dev-fss"
+      FAKTURERINGSKOMPONENTEN_CLUSTER: "dev-gcp"
+      APP_NAME_FAKTURERINGSKOMPONENTEN_API: "faktureringskomponenten"
+      APP_NAME_TRYGDEAVTALE_API: "melosys-trygdeavtale-q1"
+      APP_NAME_API: "melosys-q1"
+      ENVIRONMENT_NAME: "local"
+      LOCAL_AUTH_TOKEN: "eyJhbGciOiJSUzI1NiIsImtpZCI6Imlzc28iLCJ0eXAiOiJKV1QifQ.eyJzdWIiOiJaMTIzNDU2IiwiTkFWaWRlbnQiOiJaMTIzNDU2IiwiaXNzIjoiaHR0cDovL2hvc3QuZG9ja2VyLmludGVybmFsOjgwODIvaXNzbyIsImdyb3VwcyI6WyIwMDAwLUdBLU1FTE9TWVMiXSwibm9uY2UiOiJhYmMxMjMiLCJhdWQiOiJtZWxvc3lzLWxvY2FsaG9zdCIsIm5iZiI6MTc3NTc1MTYxMywiYXpwIjoibWVsb3N5cy1sb2NhbGhvc3QiLCJuYW1lIjoiTG9rYWwgVGVzdGJydWtlciIsImV4cCI6MTk2NDk2NzYxMywiaWF0IjoxNzc1NzUxNjEzfQ.KcnXsmydJ_RINiubpIZXtIpfHf7kRRDROvYnpChGh8KFmzrf1xptlhF1n1nXv5trvH1_yrItMATVmb8eu73DwuWNNx4nkjzKlz6EPIF9qxDkSHmruHW3fgAHTEP8kgIYVVqZXRPtqDv4aWsVjU1COm12blH24HFyNisNEULGuAtYQDJ5mOoYuv6x8BWK6QcADDjPP8UeGswZBQdfAM2cirWT1yo0HacfEK4TrsRTnSSdmREL9GzjVaoxg8Rb8B5EDIbuxyr-NPeGUNGtpOhaSBC5l_2UnEehKqjt4kdkmWF1CIieTvncjh9ActNvCrOrsGhU9y8T9PRCl-vbBAYwcQ"
 
   postgres_felleskodeverk:
     image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:latest
