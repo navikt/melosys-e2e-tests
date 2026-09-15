@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Starter «E2E Tests»-workflowen på GitHub for branchen du står på, og venter på resultatet.
+# Starter «E2E Tests»-workflowen på GitHub for en branch, og venter på resultatet.
 #
 # Workflowen er dispatch-only, så en push starter ingenting — du må sende inn image-tagger og
 # eventuelt et testfilter for hånd. Det er fire gh-kall og en pollesløyfe å huske, og filteret
@@ -11,6 +11,10 @@
 #   ./scripts/ci-e2e.sh --env melosys-api:min-tag,melosys-web:min-tag
 #   ./scripts/ci-e2e.sh --affected --no-wait starter og returnerer med én gang
 #   ./scripts/ci-e2e.sh --affected --vis-filter  skriver ut hele filteret
+#   ./scripts/ci-e2e.sh --affected --branch min-branch  en annen branch enn den du står på
+#   ./scripts/ci-e2e.sh --affected -p        skriver ut gh-kommandoen uten å starte noe
+#
+# Uten --branch spør scriptet om branchen du står på skal brukes, når det kjører i en terminal.
 #
 # --affected spør scripts/affected-tests.mjs, som følger importgrafen i stedet for å gjette, og
 # som selv avgjør når hele suiten skal kjøres: ved endringer utenfor grafen, når ingen spec er
@@ -20,6 +24,8 @@ set -euo pipefail
 cd "$(dirname "$0")/.."
 
 ENVIRONMENT="latest"
+BRANCH=""
+PREVIEW=0
 GREP=""
 AFFECTED=0
 WAIT=1
@@ -34,37 +40,70 @@ while [ $# -gt 0 ]; do
         exit 2
       fi
       GREP="$2"; shift 2 ;;
+    --branch)
+      if [ -z "${2:-}" ]; then
+        echo "❌ --branch krever et branchnavn." >&2
+        exit 2
+      fi
+      BRANCH="$2"; shift 2 ;;
     --env)      ENVIRONMENT="$2"; shift 2 ;;
     --no-wait)  WAIT=0; shift ;;
+    -p|--preview) PREVIEW=1; shift ;;
     --vis-filter) VIS_FILTER=1; shift ;;
     --retries)  RETRIES="false"; shift ;;
-    -h|--help)  sed -n '2,16p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+    -h|--help)  awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "$0"; exit 0 ;;
     *) echo "Ukjent flagg: $1" >&2; exit 2 ;;
   esac
 done
 
-BRANCH="$(git rev-parse --abbrev-ref HEAD)"
+GJELDENDE="$(git rev-parse --abbrev-ref HEAD)"
+if [ -z "$BRANCH" ]; then
+  BRANCH="$GJELDENDE"
+  # Spør bare i en terminal. Kalt fra et annet script eller en test brukes branchen du står på.
+  if [ -t 0 ]; then
+    read -r -p "Kjør mot branchen du står på, «${GJELDENDE}»? [J/n] " SVAR
+    case "$SVAR" in
+      [nN]*)
+        read -r -p "Branch: " BRANCH
+        if [ -z "$BRANCH" ]; then
+          echo "❌ Ingen branch oppgitt." >&2
+          exit 2
+        fi ;;
+    esac
+  fi
+fi
 
 # Hent main og branchen før noe annet: utvalget regnes mot origin/main, og sjekkene under leser
 # origin/$BRANCH. Uten fetch sammenligner begge mot det som tilfeldigvis lå lokalt.
 git fetch --quiet origin main "$BRANCH" 2>/dev/null || git fetch --quiet origin main 2>/dev/null || true
 
-if [ "$AFFECTED" -eq 1 ]; then
-  # Tom utdata betyr hele suiten; begrunnelsen skrives til stderr.
-  GREP="$(node scripts/affected-tests.mjs)"
-fi
-
-if ! git diff --quiet || ! git diff --cached --quiet; then
-  echo "⚠️  Du har ucommittede endringer. CI kjører koden som ligger på origin/$BRANCH." >&2
-fi
 if ! git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
   echo "❌ Branchen $BRANCH finnes ikke på origin. Push den først — workflowen leser fra ref-en." >&2
   exit 1
 fi
-LOCAL="$(git rev-parse HEAD)"
+
+SAMMENDRAG=""
+if [ "$AFFECTED" -eq 1 ]; then
+  # Tom utdata betyr hele suiten. Utvalget regnes fra origin/$BRANCH, fordi CI bare ser det som
+  # er pushet. Sammendraget på stderr vises i startblokken under.
+  SAMMENDRAG_FIL="$(mktemp)"
+  trap 'rm -f "$SAMMENDRAG_FIL"' EXIT
+  if ! GREP="$(node scripts/affected-tests.mjs --kun-committet --head "origin/$BRANCH" 2>"$SAMMENDRAG_FIL")"; then
+    cat "$SAMMENDRAG_FIL" >&2
+    exit 2
+  fi
+  SAMMENDRAG="$(cat "$SAMMENDRAG_FIL")"
+fi
+
 REMOTE="$(git rev-parse "origin/$BRANCH" 2>/dev/null || echo "")"
-if [ "$LOCAL" != "$REMOTE" ]; then
-  echo "⚠️  origin/$BRANCH peker på en annen commit enn HEAD. CI kjører remote-versjonen." >&2
+# Arbeidstreet og HEAD gjelder bare når du kjører branchen du står på.
+if [ "$BRANCH" = "$GJELDENDE" ]; then
+  if ! git diff --quiet || ! git diff --cached --quiet; then
+    echo "⚠️  Du har ucommittede endringer. CI kjører koden som ligger på origin/$BRANCH." >&2
+  fi
+  if [ "$(git rev-parse HEAD)" != "$REMOTE" ]; then
+    echo "⚠️  origin/$BRANCH peker på en annen commit enn HEAD. CI kjører remote-versjonen." >&2
+  fi
 fi
 # CI tester branchen, ikke resultatet av merge. Mangler branchen commits fra main i dette repoet,
 # kan en grønn kjøring bli rød etter merge. Endringer i images på latest fanges ikke her.
@@ -76,7 +115,7 @@ if [ -n "$REMOTE" ] && git rev-parse --verify --quiet origin/main >/dev/null \
   echo "   Merge inn main først: git merge origin/main && git push" >&2
 fi
 
-echo "🚀 Starter E2E Tests"
+if [ "$PREVIEW" -eq 1 ]; then echo "🔍 Forhåndsvisning av E2E Tests"; else echo "🚀 Starter E2E Tests"; fi
 echo "   branch:      $BRANCH"
 echo "   environment: $ENVIRONMENT"
 if [ -z "$GREP" ]; then
@@ -86,9 +125,21 @@ else
   echo "   filter:      ${#GREP} tegn, $ANTALL_MONSTRE mønstre (vis med --vis-filter)"
   [ "${VIS_FILTER:-0}" -eq 1 ] && printf '%s\n' "$GREP"
 fi
+if [ -n "$SAMMENDRAG" ]; then
+  printf '%s\n' "$SAMMENDRAG" | sed 's/^/   /'
+fi
 
 ARGS=(--ref "$BRANCH" -f environment="$ENVIRONMENT" -f disable_retries="$RETRIES")
 [ -n "$GREP" ] && ARGS+=(-f test_grep="$GREP")
+
+if [ "$PREVIEW" -eq 1 ]; then
+  # %q gir en linje du kan lime rett inn i skallet.
+  echo ""
+  printf 'gh workflow run %q' "E2E Tests"
+  printf ' %q' "${ARGS[@]}"
+  echo ""
+  exit 0
+fi
 
 # Dispatch gir ingen run-id tilbake. Vi ser etter den eldste workflow_dispatch-kjøringen fra deg
 # på branchen som er opprettet etter dette tidspunktet, så en eldre kjøring eller en

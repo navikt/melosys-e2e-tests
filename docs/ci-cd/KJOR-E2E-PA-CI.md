@@ -1,6 +1,6 @@
 # Kjør e2e-testene på CI
 
-E2E-workflowen er dispatch-only, så en push starter ingen testkjøring. Make-målene under starter kjøringen for branchen du står på, venter og skriver ut resultatet.
+E2E-workflowen er dispatch-only, så en push starter ingen testkjøring. Make-målene under starter kjøringen, venter og skriver ut resultatet. Uten `BRANCH=<navn>` spør de om branchen du står på skal brukes.
 
 Du trenger `gh` innlogget mot navikt.
 
@@ -21,13 +21,13 @@ Push før du kjører. CI kjører koden på `origin`, ikke arbeidstreet ditt.
 
 ## Slik velger `make ci-affected` tester
 
-`make ci-affected` følger importgrafen fra filene du har endret mot `origin/main`. Ucommittede og upushede endringer teller med i utvalget, men CI kjører bare det som ligger på `origin/<branch>`. Den sender bare spec-filene som importerer en endret fil, direkte eller via andre moduler.
+`make ci-affected` følger importgrafen fra filene du har endret mot `origin/main`. Bare committede filer teller, fordi CI kjører det som ligger på `origin/<branch>`. `make affected` tar også med ucommittede og usporede filer, så du ser rekkevidden før du committer. Den sender bare spec-filene som importerer en endret fil, direkte eller via andre moduler.
 
 Den kjører hele suiten i stedet når:
 
 - 80 % eller mer av spec-filene er påvirket. En endring i `fixtures/` eller `helpers/unleash-helper.ts` når nesten alle.
 - ingen spec-fil er påvirket.
-- en endret fil ligger utenfor importgrafen, for eksempel `playwright.config.ts`, `package.json`, `global-setup.ts`, compose-filer eller workflows. Grafen dekker `.ts`-filer under `tests/`, `pages/`, `helpers/`, `fixtures/`, `lib/`, `utils/` og `atdd/`. Markdown teller ikke.
+- en endret fil ligger utenfor importgrafen, for eksempel `playwright.config.ts`, `package.json`, `global-setup.ts`, compose-filer eller workflows. Grafen dekker `.ts`-filer under `tests/`, `pages/`, `helpers/`, `fixtures/`, `lib/`, `utils/` og `atdd/`. Markdown og filer under `docs/` teller ikke.
 
 Grafen ser bare statiske importer. Når endringen din når testene via kjøretidstilstand, som Unleash-toggler eller seedet data, kjør `make ci`.
 
@@ -36,6 +36,8 @@ Grafen ser bare statiske importer. Når endringen din når testene via kjøretid
 | Mål | Hva det gjør |
 |---|---|
 | `make affected` | Lister påvirkede spec-filer uten å kjøre noe |
+| `make ci-affected BRANCH=min-branch` | Kjører påvirkede tester for en annen branch enn den du står på. `BRANCH` virker også for `affected`, `ci` og `ci-grep` |
+| `make ci-affected PREVIEW=1` | Skriver ut `gh`-kommandoen som ville blitt sendt, uten å starte kjøringen. Virker også for `ci` og `ci-grep` |
 | `make ci` | Kjører hele suiten mot `latest` |
 | `make ci-grep GREP=8163` | Kjører tester som matcher et eget filter |
 | `make ci-images ENV=melosys-api:min-tag,melosys-web:min-tag` | Kjører hele suiten mot egne images |
@@ -54,9 +56,11 @@ Make-målene kaller `scripts/ci-e2e.sh`. Kall scriptet direkte når du vil kombi
 | Flagg | Hva det gjør |
 |---|---|
 | `--affected` | Kjører bare påvirkede tester |
+| `--branch <navn>` | Kjører mot en annen branch enn den du står på. Uten flagget spør scriptet i terminalen |
 | `--grep <mønster>` | Eget filter |
 | `--env <tagger>` | Egne images, for eksempel `melosys-api:min-tag,melosys-web:min-tag` |
 | `--no-wait` | Starter kjøringen og returnerer med én gang |
+| `-p`, `--preview` | Skriver ut `gh`-kommandoen som ville blitt sendt, uten å starte kjøringen |
 | `--vis-filter` | Skriver ut hele filteret som sendes |
 | `--retries` | Slår på retries. Standard er av, så flaky tester synes |
 

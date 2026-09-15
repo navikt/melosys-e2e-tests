@@ -205,6 +205,19 @@ test('en endret Markdown-fil utvider ikke utvalget', { skip: HAR_JQ ? false : 'k
   assert.equal(sendtFilter(repo.ghKall()), 'b\\.spec\\.ts');
 });
 
+test('--affected ser bort fra lokale filer og filer under docs/', { skip: HAR_JQ ? false : 'krever jq for å etterligne gh --jq' }, () => {
+  const repo = lagRepo(
+    TO_SPECS,
+    { 'docs/diagrams/tjenester.svg': '<svg/>\n', 'helpers/bare-b.ts': 'export const b = 2;\n' },
+    { 'lokal.json': '{}\n' }
+  );
+  const r = repo.ciE2e('--affected');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(sendtFilter(repo.ghKall()), 'b\\.spec\\.ts', 'CI ser ikke lokal.json');
+  // make affected viser fortsatt rekkevidden av arbeidstreet.
+  assert.equal(JSON.parse(repo.affected('--json').stdout).fullSuite, true);
+});
+
 test('følger kjøringen denne dispatchen startet, ikke en eldre eller en fra et annet event', { skip: HAR_JQ ? false : 'krever jq for å etterligne gh --jq' }, () => {
   const repo = lagRepo(TO_SPECS);
   const gammel = { databaseId: 111, event: 'workflow_dispatch', createdAt: '2020-01-01T00:00:00Z' };
@@ -346,3 +359,66 @@ test('stopper ikke når origin/main ikke finnes lokalt, for eksempel i en --sing
   assert.equal(r.status, 0, `scriptet stoppet (exit ${r.status}):\n${r.stderr}`);
   assert.ok(dispatch(repo.ghKall()), 'kjøringen skal startes');
 });
+
+/** Pusher en branch fra main med `endringer` og går tilbake til feature. */
+function lagBranch(arbeid: string, navn: string, endringer: Filer) {
+  git(arbeid, 'checkout', '-q', '-b', navn, 'main');
+  for (const [sti, innhold] of Object.entries(endringer)) {
+    mkdirSync(dirname(join(arbeid, sti)), { recursive: true });
+    writeFileSync(join(arbeid, sti), innhold);
+  }
+  git(arbeid, 'add', '-A');
+  git(arbeid, 'commit', '-q', '-m', navn);
+  git(arbeid, 'push', '-q', 'origin', navn);
+  git(arbeid, 'checkout', '-q', 'feature');
+}
+
+test('--branch kjører påvirkede tester for en annen branch enn den du står på', JQ_SKIP, () => {
+  const repo = lagRepo(TO_SPECS, { 'helpers/felles.ts': 'export const felles = 2;\n' });
+  lagBranch(repo.arbeid, 'annen', { 'helpers/bare-b.ts': 'export const b = 2;\n' });
+  repo.settRuns([[{ databaseId: 1, event: 'workflow_dispatch', createdAt: 'NÅ', headBranch: 'annen' }]]);
+  const r = repo.ciE2e('--affected', '--branch', 'annen');
+  assert.equal(r.status, 0, r.stderr);
+  const d = dispatch(repo.ghKall());
+  assert.ok(d);
+  assert.equal(d[d.indexOf('--ref') + 1], 'annen');
+  assert.equal(sendtFilter(repo.ghKall()), 'b\\.spec\\.ts', 'utvalget skal regnes fra annen, ikke feature');
+  assert.doesNotMatch(r.stderr, /peker på en annen commit/, 'HEAD på feature gjelder ikke annen');
+});
+
+test('--branch finner spec-filer som bare finnes på den andre branchen', JQ_SKIP, () => {
+  // Grafen må bygges fra origin/<branch>. Fra arbeidstreet på feature finnes ikke c.spec.ts, så
+  // utvalget blir tomt og hele suiten kjøres.
+  const repo = lagRepo(TO_SPECS);
+  lagBranch(repo.arbeid, 'annen', { 'tests/c.spec.ts': "import { b } from '../helpers/bare-b';\n" });
+  repo.settRuns([[{ databaseId: 1, event: 'workflow_dispatch', createdAt: 'NÅ', headBranch: 'annen' }]]);
+  const r = repo.ciE2e('--affected', '--branch', 'annen');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(sendtFilter(repo.ghKall()), 'c\\.spec\\.ts');
+  assert.match(r.stdout, /Påvirkede spec-filer: 1 av 3/);
+});
+
+test('--affected skriver sammendraget av utvalget i startblokken', JQ_SKIP, () => {
+  const repo = lagRepo(TO_SPECS, { 'helpers/bare-b.ts': 'export const b = 2;\n' });
+  const r = repo.ciE2e('--affected');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /Endrede filer: 1\n/);
+  assert.match(r.stdout, /Påvirkede spec-filer: 1 av 2 \(50 %\)/);
+});
+
+for (const flagg of ['--preview', '-p']) {
+  test(`${flagg} skriver ut kommandoen uten å starte workflowen`, JQ_SKIP, () => {
+    const repo = lagRepo(TO_SPECS, { 'helpers/bare-b.ts': 'export const b = 2;\n' });
+    const r = repo.ciE2e('--affected', flagg);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(dispatch(repo.ghKall()), undefined, 'ingen workflow skal startes');
+    const linje = r.stdout.split('\n').find((l) => l.startsWith('gh workflow run '));
+    assert.ok(linje, `kommandoen skal skrives ut, fikk:\n${r.stdout}`);
+    // Kommandoen skal kunne limes inn i et skall og gi de samme argumentene som en ekte dispatch.
+    const args = execFileSync('bash', ['-c', `printf '%s\\n' ${linje.slice('gh '.length)}`], { encoding: 'utf8' });
+    assert.deepEqual(args.trim().split('\n'), [
+      'workflow', 'run', 'E2E Tests', '--ref', 'feature',
+      '-f', 'environment=latest', '-f', 'disable_retries=true', '-f', 'test_grep=b\\.spec\\.ts',
+    ]);
+  });
+}

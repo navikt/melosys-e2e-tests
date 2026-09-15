@@ -25,13 +25,16 @@
  *   --files   påvirkede spec-stier, én per linje
  *   --json    maskinlesbar rapport med både stier og begrunnelse
  *   --base <ref>   sammenlign mot en annen ref enn origin/main
+ *   --head <ref>   regn endringene fra en annen ref enn HEAD, for eksempel origin/min-branch
+ *   --kun-committet  se bort fra arbeidstreet. CI kjører branchen, så ci-e2e.sh bruker denne.
  *   --changed <sti>  hopp over git og lat som om akkurat denne fila er endret. Nyttig for å
  *             se rekkevidden av en endring før du gjør den, og for å teste grafen.
  *
  * Kjør: node scripts/affected-tests.mjs   (ren node, ingen avhengigheter)
  */
 import { execFileSync } from 'node:child_process';
-import { readFileSync, readdirSync, existsSync, realpathSync, statSync } from 'node:fs';
+import { readFileSync, readdirSync, existsSync, mkdtempSync, realpathSync, rmSync, statSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join, dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -42,20 +45,36 @@ export const FULL_SUITE_TERSKEL = 80;
 
 const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] });
 
-/** Endrede filer: committet mot basen + alt som ligger ucommittet i arbeidstreet. */
-function changedFiles(base) {
-  const committed = git('diff', '--name-only', `${base}...HEAD`).split('\n');
+/**
+ * Endrede filer: committet mot basen, og med `arbeidstre` også alt som ligger ucommittet.
+ * Eksportert for testen; `run` erstatter git der.
+ */
+export function changedFiles(base, { arbeidstre = true, head = 'HEAD', run = git } = {}) {
+  const committed = run('diff', '--name-only', `${base}...${head}`).split('\n');
+  if (!arbeidstre) return [...new Set(committed)].filter(Boolean);
   // --porcelain gir «XY <sti>»; ved rename står «XY <fra> -> <til>» og vi vil ha målet.
   // --untracked-files=all lister filene i en ny mappe i stedet for bare mappa.
-  const working = git('status', '--porcelain', '--untracked-files=all')
+  const working = run('status', '--porcelain', '--untracked-files=all')
     .split('\n')
     .map((l) => l.slice(3).trim())
     .map((p) => (p.includes(' -> ') ? p.split(' -> ')[1] : p));
   return [...new Set([...committed, ...working])].filter(Boolean);
 }
 
+/**
+ * Pakker ut treet til `ref` i en midlertidig mappe, så grafen kan bygges fra en annen branch
+ * enn den som ligger i arbeidstreet. Mappa slettes når prosessen avslutter.
+ */
+function pakkUt(ref) {
+  const dir = mkdtempSync(join(tmpdir(), 'affected-tests-'));
+  process.on('exit', () => rmSync(dir, { recursive: true, force: true }));
+  const tar = execFileSync('git', ['archive', ref], { cwd: ROOT, maxBuffer: 1024 ** 3 });
+  execFileSync('tar', ['-x', '-C', dir], { input: tar });
+  return dir;
+}
+
 /** Alle .ts-filer under de katalogene en spec kan importere fra. */
-function sourceFiles() {
+function sourceFiles(rot = ROOT) {
   const out = [];
   const walk = (dir) => {
     if (!existsSync(dir)) return;
@@ -64,20 +83,20 @@ function sourceFiles() {
       if (statSync(p).isDirectory()) {
         if (name !== 'node_modules') walk(p);
       } else if (name.endsWith('.ts')) {
-        out.push(relative(ROOT, p));
+        out.push(relative(rot, p));
       }
     }
   };
-  for (const d of GRAPH_DIRS) walk(join(ROOT, d));
+  for (const d of GRAPH_DIRS) walk(join(rot, d));
   return out;
 }
 
 /** Løser en relativ importspesifikator til en sti i repoet, eller null for pakker. */
-function resolveImport(fromFile, spec) {
+function resolveImport(fromFile, spec, rot = ROOT) {
   if (!spec.startsWith('.')) return null;
-  const base = resolve(dirname(join(ROOT, fromFile)), spec);
+  const base = resolve(dirname(join(rot, fromFile)), spec);
   for (const cand of [`${base}.ts`, join(base, 'index.ts'), base]) {
-    if (existsSync(cand) && statSync(cand).isFile()) return relative(ROOT, cand);
+    if (existsSync(cand) && statSync(cand).isFile()) return relative(rot, cand);
   }
   return null;
 }
@@ -85,12 +104,12 @@ function resolveImport(fromFile, spec) {
 const IMPORT_RE = /(?:from|import)\s*['"]([^'"]+)['"]/g;
 
 /** importers.get(modul) = filene som importerer den direkte. */
-function reverseGraph(files) {
+function reverseGraph(files, rot) {
   const importers = new Map();
   for (const file of files) {
-    const src = readFileSync(join(ROOT, file), 'utf8');
+    const src = readFileSync(join(rot, file), 'utf8');
     for (const m of src.matchAll(IMPORT_RE)) {
-      const target = resolveImport(file, m[1]);
+      const target = resolveImport(file, m[1], rot);
       if (!target) continue;
       if (!importers.has(target)) importers.set(target, new Set());
       importers.get(target).add(file);
@@ -101,14 +120,14 @@ function reverseGraph(files) {
 
 const isSpec = (p) => p.endsWith('.spec.ts');
 const inGraph = (p) => p.endsWith('.ts') && GRAPH_DIRS.includes(p.split('/')[0]);
-const isDoc = (p) => p.endsWith('.md');
+export const isDoc = (p) => p.endsWith('.md') || p.startsWith('docs/');
 
 /**
  * Spec-filene som påvirkes av at `changed` endres, funnet ved å gå oppover importgrafen.
  * Eksportert for regresjonstesten i lib/affected-tests.test.ts.
  */
-export function affectedSpecs(changed, files = sourceFiles()) {
-  const importers = reverseGraph(files);
+export function affectedSpecs(changed, files = sourceFiles(), rot = ROOT) {
+  const importers = reverseGraph(files, rot);
   const affected = new Set();
   const seen = new Set();
   const queue = [...changed];
@@ -119,7 +138,7 @@ export function affectedSpecs(changed, files = sourceFiles()) {
     if (isSpec(cur)) affected.add(cur);
     for (const importer of importers.get(cur) ?? []) queue.push(importer);
   }
-  return [...affected].filter((p) => existsSync(join(ROOT, p))).sort();
+  return [...affected].filter((p) => existsSync(join(rot, p))).sort();
 }
 
 /**
@@ -148,6 +167,7 @@ function main() {
     return v;
   };
   const base = valueOf('--base') ?? 'origin/main';
+  const head = valueOf('--head') ?? 'HEAD';
   const forced = valueOf('--changed');
   const mode = args.includes('--files') ? 'files' : args.includes('--json') ? 'json' : 'grep';
 
@@ -156,15 +176,17 @@ function main() {
     changed = [repoSti(forced)];
   } else {
     try {
-      changed = changedFiles(base);
+      changed = changedFiles(base, { arbeidstre: !args.includes('--kun-committet'), head });
     } catch (e) {
       fail(`Fant ikke endrede filer mot ${base}: ${(e.stderr || e.message).toString().trim() || 'ukjent ref'}`);
     }
   }
 
-  const files = sourceFiles();
+  // Med --head bygges grafen fra det treet, så spec-filer som bare finnes der kommer med.
+  const rot = head === 'HEAD' ? ROOT : pakkUt(head);
+  const files = sourceFiles(rot);
   const outside = changed.filter((p) => !inGraph(p) && !isDoc(p));
-  const specs = affectedSpecs(changed.filter(inGraph), files);
+  const specs = affectedSpecs(changed.filter(inGraph), files, rot);
   const total = files.filter(isSpec).length;
   const share = total ? (specs.length / total) * 100 : 0;
 

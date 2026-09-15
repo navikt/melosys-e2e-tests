@@ -153,21 +153,25 @@ test-debug: ## Run tests in debug mode
 # CI (GitHub Actions)
 # ==============================================================================
 
+# BRANCH=<navn> kjører mot en annen branch enn den du står på. Uten spør scriptet i terminalen.
+# PREVIEW=1 skriver ut gh-kommandoen i stedet for å starte kjøringen.
+BRANCH_FLAGG = $(if $(BRANCH),--branch "$(BRANCH)") $(if $(PREVIEW),--preview)
+
 .PHONY: affected
-affected: ## List spec files affected by your change (import graph, not guesswork)
-	@node scripts/affected-tests.mjs --files
+affected: ## List spec files affected by your change (import graph, not guesswork), or BRANCH=<name>
+	@node scripts/affected-tests.mjs --files $(if $(BRANCH),--kun-committet --head "origin/$(BRANCH)")
 
 .PHONY: ci
 ci: ## Run the full E2E suite on CI against latest images
-	@./scripts/ci-e2e.sh
+	@./scripts/ci-e2e.sh $(BRANCH_FLAGG)
 
 .PHONY: ci-affected
-ci-affected: ## Run only the tests your change affects, on CI
-	@./scripts/ci-e2e.sh --affected
+ci-affected: ## Run only the tests your change affects, on CI, e.g. make ci-affected BRANCH=my-branch
+	@./scripts/ci-e2e.sh --affected $(BRANCH_FLAGG)
 
 .PHONY: ci-grep
 ci-grep: ## Run tests matching GREP=<pattern> on CI, e.g. make ci-grep GREP=8163
-	@./scripts/ci-e2e.sh --grep "$(GREP)"
+	@./scripts/ci-e2e.sh --grep "$(GREP)" $(BRANCH_FLAGG)
 
 .PHONY: ci-images
 ci-images: ## Run on CI against your own images, e.g. make ci-images ENV=melosys-api:my-tag
