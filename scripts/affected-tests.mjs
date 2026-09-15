@@ -16,6 +16,8 @@
  *   4. Velger hele suiten i stedet for et filter når en endret fil ligger utenfor grafen (for
  *      eksempel playwright.config.ts eller package.json), når ingen spec er påvirket, eller når
  *      FULL_SUITE_TERSKEL % eller mer av spec-ene er påvirket.
+ *   5. Er bare dokumentasjon og verktøy som e2e-workflowen ikke leser endret, er det ingenting å
+ *      kjøre. Grep-modus avslutter da med kode 3.
  *
  * Utdata på stdout styres av flagg; oppsummeringen går alltid til stderr.
  *
@@ -122,6 +124,10 @@ const isSpec = (p) => p.endsWith('.spec.ts');
 const inGraph = (p) => p.endsWith('.ts') && GRAPH_DIRS.includes(p.split('/')[0]);
 export const isDoc = (p) => p.endsWith('.md') || p.startsWith('docs/');
 
+/** Verktøy som e2e-workflowen ikke leser. Et nytt script under scripts/ kan brukes av CI, så lista er eksplisitt. */
+const VERKTOY = ['Makefile', 'scripts/ci-e2e.sh', 'scripts/affected-tests.mjs'];
+export const utenE2eEffekt = (p) => isDoc(p) || VERKTOY.includes(p) || (p.startsWith('lib/') && p.endsWith('.test.ts'));
+
 /**
  * Spec-filene som påvirkes av at `changed` endres, funnet ved å gå oppover importgrafen.
  * Eksportert for regresjonstesten i lib/affected-tests.test.ts.
@@ -185,13 +191,16 @@ function main() {
   // Med --head bygges grafen fra det treet, så spec-filer som bare finnes der kommer med.
   const rot = head === 'HEAD' ? ROOT : pakkUt(head);
   const files = sourceFiles(rot);
-  const outside = changed.filter((p) => !inGraph(p) && !isDoc(p));
-  const specs = affectedSpecs(changed.filter(inGraph), files, rot);
+  const relevante = changed.filter((p) => !utenE2eEffekt(p));
+  const ingenting = relevante.length === 0;
+  const outside = relevante.filter((p) => !inGraph(p));
+  const specs = affectedSpecs(relevante.filter(inGraph), files, rot);
   const total = files.filter(isSpec).length;
   const share = total ? (specs.length / total) * 100 : 0;
 
   let reason = null;
-  if (outside.length) reason = `endrede filer utenfor importgrafen: ${outside.join(', ')}`;
+  if (ingenting) reason = null;
+  else if (outside.length) reason = `endrede filer utenfor importgrafen: ${outside.join(', ')}`;
   else if (specs.length === 0) reason = 'ingen spec-filer er påvirket';
   else if (share >= FULL_SUITE_TERSKEL) reason = `${Math.floor(share)} % av spec-filene er påvirket`;
 
@@ -204,6 +213,7 @@ function main() {
   process.stderr.write(
     `Endrede filer: ${changed.length}\n` +
       `Påvirkede spec-filer: ${specs.length} av ${total} (${Math.floor(share)} %)\n` +
+      (ingenting ? 'Kjører ingenting: bare dokumentasjon og verktøy e2e-workflowen ikke leser er endret.\n' : '') +
       (reason ? `Kjører hele suiten: ${reason}.\n` : '')
   );
 
@@ -211,12 +221,16 @@ function main() {
   else if (mode === 'json')
     process.stdout.write(
       JSON.stringify(
-        { base, head, changed, outside, specs, total, fullSuite: Boolean(reason), reason, grep },
+        { base, head, changed, outside, specs, total, ingenting, fullSuite: Boolean(reason), reason, grep },
         null,
         2
       ) + '\n'
     );
-  else process.stdout.write(grep + '\n');
+  else {
+    process.stdout.write(grep + '\n');
+    // Tom linje betyr hele suiten, så «ingenting å kjøre» må meldes med exit-koden.
+    if (ingenting) process.exitCode = 3;
+  }
 }
 
 // Kjør bare når scriptet startes direkte, ikke når testen importerer affectedSpecs.

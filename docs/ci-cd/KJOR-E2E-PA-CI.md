@@ -23,11 +23,13 @@ Push før du kjører. CI kjører koden på `origin`, ikke arbeidstreet ditt.
 
 `make ci-affected` følger importgrafen fra filene du har endret mot `origin/main`. Bare pushede commits teller, fordi utvalget regnes fra `origin/<branch>`, som er det CI kjører. `make affected` tar også med ucommittede og usporede filer, så du ser rekkevidden før du committer. Den sender bare spec-filene som importerer en endret fil, direkte eller via andre moduler.
 
+Er bare filer som e2e-workflowen ikke leser endret, starter `make ci-affected` ingenting og sier fra. Det gjelder dokumentasjon (`*.md` og `docs/`), `Makefile`, `scripts/ci-e2e.sh`, `scripts/affected-tests.mjs` og enhetstestene i `lib/*.test.ts`. Slike filer tvinger heller ikke hele suiten. Andre filer under `scripts/` teller som endringer utenfor grafen, fordi CI kan bruke dem.
+
 Den kjører hele suiten i stedet når:
 
 - 80 % eller mer av spec-filene er påvirket. En endring i `fixtures/` eller `helpers/unleash-helper.ts` når nesten alle.
-- ingen spec-fil er påvirket.
-- en endret fil ligger utenfor importgrafen, for eksempel `playwright.config.ts`, `package.json`, `global-setup.ts`, compose-filer eller workflows. Grafen dekker `.ts`-filer under `tests/`, `pages/`, `helpers/`, `fixtures/`, `lib/`, `utils/` og `atdd/`. Markdown og filer under `docs/` teller ikke.
+- endringene når importgrafen, men ingen spec-fil er påvirket.
+- en endret fil ligger utenfor importgrafen, for eksempel `playwright.config.ts`, `package.json`, `global-setup.ts`, compose-filer eller workflows. Grafen dekker `.ts`-filer under `tests/`, `pages/`, `helpers/`, `fixtures/`, `lib/`, `utils/` og `atdd/`. Filene fra avsnittet over teller ikke.
 
 Grafen ser bare statiske importer. Når endringen din når testene via kjøretidstilstand, som Unleash-toggler eller seedet data, kjør `make ci`.
 
