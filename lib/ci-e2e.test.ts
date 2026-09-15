@@ -514,3 +514,75 @@ for (const [navn, svar] of [
     assert.match(r.stdout, /❌ Avbrutt\./);
   });
 }
+
+// Filer som e2e-workflowen ikke leser. Endres bare slike filer, finnes det ingenting å kjøre.
+const UTEN_E2E_EFFEKT: Filer = {
+  Makefile: 'ci:\n',
+  'lib/noe.test.ts': 'export {};\n',
+  'docs/diagrams/tjenester.svg': '<svg/>\n',
+  'README.md': '# ny\n',
+};
+
+test('--affected starter ingenting når bare verktøy og dokumentasjon er endret', JQ_SKIP, () => {
+  const repo = lagRepo(TO_SPECS, UTEN_E2E_EFFEKT);
+  const r = repo.ciE2e('--affected');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(dispatch(repo.ghKall()), undefined, 'ingen workflow skal startes');
+  assert.match(r.stdout, /Ingen endringer påvirker e2e-testene/);
+  assert.match(r.stdout, /Kjører ingenting: bare dokumentasjon og verktøy/);
+});
+
+test('--affected --preview skriver ingen gh-kommando når det ikke er noe å kjøre', JQ_SKIP, () => {
+  const repo = lagRepo(TO_SPECS, UTEN_E2E_EFFEKT);
+  const r = repo.ciE2e('--affected', '--preview');
+  assert.equal(r.status, 0, r.stderr);
+  assert.doesNotMatch(r.stdout, /gh workflow run/);
+  assert.match(r.stdout, /Ingen endringer påvirker e2e-testene/);
+});
+
+test('affected-tests rapporterer ingenting å kjøre, og grep-modus avslutter med 3', () => {
+  const repo = lagRepo(TO_SPECS, UTEN_E2E_EFFEKT);
+  const rapport = JSON.parse(repo.affected('--json').stdout);
+  assert.equal(rapport.ingenting, true);
+  assert.equal(rapport.fullSuite, false);
+  assert.equal(repo.affected().status, 3);
+  const filer = repo.affected('--files');
+  assert.equal(filer.status, 0, 'make affected skal ikke feile');
+  assert.equal(filer.stdout, '');
+});
+
+test('verktøyfiler tvinger ikke hele suiten når en spec også er påvirket', JQ_SKIP, () => {
+  const repo = lagRepo(TO_SPECS, { ...UTEN_E2E_EFFEKT, 'helpers/bare-b.ts': 'export const b = 2;\n' });
+  const r = repo.ciE2e('--affected');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(sendtFilter(repo.ghKall()), 'b\\.spec\\.ts');
+});
+
+test('andre filer i scripts/ tvinger fortsatt hele suiten', JQ_SKIP, () => {
+  // Bare filene workflowen beviselig ikke leser er unntatt; et nytt script kan brukes av CI.
+  const repo = lagRepo(TO_SPECS, { 'scripts/nytt.mjs': 'export {};\n', 'helpers/bare-b.ts': 'export const b = 2;\n' });
+  const r = repo.ciE2e('--affected');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(sendtFilter(repo.ghKall()), null);
+});
+
+test('ingenting å starte advarer fortsatt om upushede og ucommittede endringer', JQ_SKIP, () => {
+  // Den egentlige endringen kan ligge lokalt. Da må ✅-meldingen ikke stå alene.
+  const repo = lagRepo(TO_SPECS, UTEN_E2E_EFFEKT, { 'helpers/felles.ts': 'export const felles = 3;\n' });
+  writeFileSync(join(repo.arbeid, 'helpers', 'bare-b.ts'), 'export const b = 2;\n');
+  git(repo.arbeid, 'commit', '-q', '-m', 'upushet', '--', 'helpers/bare-b.ts');
+  const r = repo.ciE2e('--affected');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(dispatch(repo.ghKall()), undefined);
+  assert.match(r.stderr, /peker på en annen commit enn HEAD/);
+  assert.match(r.stderr, /ucommittede endringer/);
+});
+
+test('en branch uten endringer sier det, og peker på make ci', JQ_SKIP, () => {
+  const repo = lagRepo(TO_SPECS);
+  const r = repo.ciE2e('--affected');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(dispatch(repo.ghKall()), undefined);
+  assert.match(r.stdout, /Kjører ingenting: ingen endringer mot origin\/main/);
+  assert.match(r.stdout, /make ci/);
+});

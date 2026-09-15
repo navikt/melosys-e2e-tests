@@ -18,7 +18,8 @@
 #
 # --affected spør scripts/affected-tests.mjs, som følger importgrafen i stedet for å gjette, og
 # som selv avgjør når hele suiten skal kjøres: ved endringer utenfor grafen, når ingen spec er
-# påvirket, og når 80 % eller mer er påvirket.
+# påvirket, og når 80 % eller mer er påvirket. Er bare dokumentasjon og verktøy endret, starter
+# scriptet ingenting.
 set -euo pipefail
 
 cd "$(dirname "$0")/.."
@@ -86,16 +87,21 @@ if ! git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
 fi
 
 SAMMENDRAG=""
+INGENTING=0
 if [ "$AFFECTED" -eq 1 ]; then
-  # Tom utdata betyr hele suiten. Utvalget regnes fra origin/$BRANCH, fordi CI bare ser det som
-  # er pushet. Sammendraget på stderr vises i startblokken under.
+  # Tom utdata betyr hele suiten, og exit 3 betyr at ingenting skal kjøres. Utvalget regnes fra
+  # origin/$BRANCH, fordi CI bare ser det som er pushet. Sammendraget på stderr vises under.
   SAMMENDRAG_FIL="$(mktemp)"
   trap 'rm -f "$SAMMENDRAG_FIL"' EXIT
-  if ! GREP="$(node scripts/affected-tests.mjs --kun-committet --head "origin/$BRANCH" 2>"$SAMMENDRAG_FIL")"; then
-    cat "$SAMMENDRAG_FIL" >&2
+  RC=0
+  GREP="$(node scripts/affected-tests.mjs --kun-committet --head "origin/$BRANCH" 2>"$SAMMENDRAG_FIL")" || RC=$?
+  SAMMENDRAG="$(cat "$SAMMENDRAG_FIL")"
+  if [ "$RC" -eq 3 ]; then
+    INGENTING=1
+  elif [ "$RC" -ne 0 ]; then
+    printf '%s\n' "$SAMMENDRAG" >&2
     exit 2
   fi
-  SAMMENDRAG="$(cat "$SAMMENDRAG_FIL")"
 fi
 
 REMOTE="$(git rev-parse "origin/$BRANCH" 2>/dev/null || echo "")"
@@ -116,6 +122,14 @@ if [ -n "$REMOTE" ] && git rev-parse --verify --quiet origin/main >/dev/null \
   BAK="$(git rev-list --count "$REMOTE..origin/main")"
   echo "⚠️  origin/$BRANCH mangler $BAK commit(s) fra origin/main. Grønt her betyr ikke grønt etter merge." >&2
   echo "   Merge inn main først: git merge origin/main && git push" >&2
+fi
+
+# Etter advarslene, fordi den egentlige endringen kan ligge upushet eller ucommittet.
+if [ "$INGENTING" -eq 1 ]; then
+  echo "   branch:      $BRANCH"
+  printf '%s\n' "$SAMMENDRAG" | sed 's/^/   /'
+  echo "✅ Ingen endringer påvirker e2e-testene. Ingenting å starte. Vil du kjøre likevel, bruk make ci."
+  exit 0
 fi
 
 if [ "$PREVIEW" -eq 1 ]; then echo "🔍 Forhåndsvisning av E2E Tests"; else echo "🚀 Starter E2E Tests"; fi
