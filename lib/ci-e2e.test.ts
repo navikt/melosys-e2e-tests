@@ -529,6 +529,7 @@ test('--affected starter ingenting når bare verktøy og dokumentasjon er endret
   assert.equal(r.status, 0, r.stderr);
   assert.equal(dispatch(repo.ghKall()), undefined, 'ingen workflow skal startes');
   assert.match(r.stdout, /Ingen endringer påvirker e2e-testene/);
+  assert.match(r.stdout, /Kjører ingenting: bare dokumentasjon og verktøy/);
 });
 
 test('--affected --preview skriver ingen gh-kommando når det ikke er noe å kjøre', JQ_SKIP, () => {
