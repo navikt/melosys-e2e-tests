@@ -46,17 +46,17 @@ jobs:
           RC=0
           GREP="$(node scripts/affected-tests.mjs --kun-committet --base "$BASE_SHA" --head "$HEAD_SHA" 2>"$SAMMENDRAG")" || RC=$?
           cat "$SAMMENDRAG"
-          case "$RC" in
-            0) KJOR=true ;;
-            3) KJOR=false ;;
-            *) exit "$RC" ;;
-          esac
-
+          # Før exit, så også en feil i scriptet vises i jobbsammendraget.
           {
             echo "## Utvalg for merge queue"
             echo ""
             sed 's/^/    /' "$SAMMENDRAG"
           } >> "$GITHUB_STEP_SUMMARY"
+          case "$RC" in
+            0) KJOR=true ;;
+            3) KJOR=false ;;
+            *) exit "$RC" ;;
+          esac
 
           # Filteret kan bli langt og inneholder regex-tegn, så det skrives med tilfeldig skilletegn.
           SKILLE="GREP_EOF_$(openssl rand -hex 16)"

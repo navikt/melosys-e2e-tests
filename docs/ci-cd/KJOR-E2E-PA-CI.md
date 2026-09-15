@@ -9,12 +9,20 @@ Du trenger `gh` innlogget mot navikt.
 Workflowen «E2E før merge» (`.github/workflows/e2e-for-merge.yml`) gir sjekken `e2e-for-merge`, som ruleset-et på `main` krever.
 
 - På en PR svarer sjekken grønt med én gang. Den kjører ingen tester, så en push koster sekunder.
-- Når du trykker **Merge when ready**, lager GitHub en merge-commit av `main` og PR-en. Workflowen velger testene med `scripts/affected-tests.mjs` mellom `base_sha` og `head_sha` i køen, og kjører «E2E Tests» mot `latest` med det filteret. Utvalget følger de samme reglene som `make ci-affected`, beskrevet under.
+- Når du trykker **Merge when ready**, lager GitHub en midlertidig commit av `main` med PR-en lagt på. Knappen i nettleseren virker; `gh pr merge` mot køen feilet med intern GitHub-feil da dette ble satt opp. Workflowen velger testene med `scripts/affected-tests.mjs` mellom `base_sha` og `head_sha` i køen, og kjører «E2E Tests» mot `latest` med det filteret. Utvalget følger de samme reglene som `make ci-affected`, beskrevet under.
 - Endrer PR-en bare dokumentasjon eller verktøy, kjører ingenting, og sjekken blir grønn.
 - Blir kjøringen rød, tas PR-en ut av køen. Fiks, push og sett den i kø igjen.
 - Retries er på, som i `playwright.config.ts`. En flaky test stopper derfor ikke merge, men vises som flaky i jobbsammendraget.
 
 Kjøringen i køen bruker images fra `latest` på det tidspunktet. Hele suiten tar rundt en time, et fokusert utvalg 4–12 minutter.
+
+Ruleset-et for merge queue på `main` må ha:
+
+- `check_response_timeout_minutes` på 120. Standardverdien 60 er kortere enn hele suiten (66–68 min målt), så en PR som kjører hele suiten ville falt ut av køen.
+- `max_entries_to_build` på 1, så køen ikke starter flere e2e-stacker på 8-kjerners runnere samtidig med kjøringene fra image-bygg.
+- påkrevd sjekk `e2e-for-merge`.
+
+Sjekken `e2e-for-merge` er grønn på en PR før den står i kø, og betyr bare noe i køen. Merger en admin forbi køen, har ingen e2e-tester kjørt.
 
 ## Før du setter en PR i kø
 
