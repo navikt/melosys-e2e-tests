@@ -153,32 +153,45 @@ test-debug: ## Run tests in debug mode
 # CI (GitHub Actions)
 # ==============================================================================
 
-# BRANCH=<navn> kjører mot en annen branch enn den du står på. Uten spør scriptet i terminalen.
-# PREVIEW=1 skriver ut gh-kommandoen i stedet for å starte kjøringen.
-# Begge leses bare fra kommandolinjen, så en BRANCH eksportert i skallet ikke styrer CI stille.
+# Variablene tilsvarer flaggene i scripts/ci-e2e.sh (se docs/ci-cd/KJOR-E2E-PA-CI.md):
+# BRANCH=<navn>, ENV=<tagger>, PREVIEW=1, RETRIES=1, VIS_FILTER=1, NO_WAIT=1.
+# De leses bare fra kommandolinjen, så en BRANCH eller ENV eksportert i skallet ikke styrer CI stille.
 fra_kommandolinje = $(if $(filter command line,$(origin $(1))),$($(1)))
 BRANCH_ARG = $(call fra_kommandolinje,BRANCH)
-BRANCH_FLAGG = $(if $(BRANCH_ARG),--branch "$(BRANCH_ARG)") $(if $(call fra_kommandolinje,PREVIEW),--preview)
+ENV_ARG = $(call fra_kommandolinje,ENV)
+CI_FLAGG = $(if $(BRANCH_ARG),--branch "$(BRANCH_ARG)") \
+	$(if $(ENV_ARG),--env "$(ENV_ARG)") \
+	$(if $(call fra_kommandolinje,PREVIEW),--preview) \
+	$(if $(call fra_kommandolinje,RETRIES),--retries) \
+	$(if $(call fra_kommandolinje,VIS_FILTER),--vis-filter) \
+	$(if $(call fra_kommandolinje,NO_WAIT),--no-wait)
 
-.PHONY: affected
-affected: ## List spec files affected by your change (import graph, not guesswork), or BRANCH=<name>
+.PHONY: list-affected
+list-affected: ## List spec files affected by your change (import graph, not guesswork), or BRANCH=<name>
 	@$(if $(BRANCH_ARG),git fetch --quiet origin "+refs/heads/main:refs/remotes/origin/main" "+refs/heads/$(BRANCH_ARG):refs/remotes/origin/$(BRANCH_ARG)" &&) node scripts/affected-tests.mjs --files $(if $(BRANCH_ARG),--kun-committet --head "origin/$(BRANCH_ARG)")
 
 .PHONY: ci
 ci: ## Run the full E2E suite on CI against latest images
-	@./scripts/ci-e2e.sh $(BRANCH_FLAGG)
+	@./scripts/ci-e2e.sh $(CI_FLAGG)
 
 .PHONY: ci-affected
 ci-affected: ## Run only the tests your change affects, on CI, e.g. make ci-affected BRANCH=my-branch
-	@./scripts/ci-e2e.sh --affected $(BRANCH_FLAGG)
+	@./scripts/ci-e2e.sh --affected $(CI_FLAGG)
 
 .PHONY: ci-grep
 ci-grep: ## Run tests matching GREP=<pattern> on CI, e.g. make ci-grep GREP=8163
-	@./scripts/ci-e2e.sh --grep "$(GREP)" $(BRANCH_FLAGG)
+	@./scripts/ci-e2e.sh --grep "$(GREP)" $(CI_FLAGG)
+
+# Sjekkes når Makefile leses, så `make ci ci-images` uten ENV ikke starter ci først.
+ifneq ($(filter ci-images,$(MAKECMDGOALS)),)
+ifeq ($(ENV_ARG),)
+$(error ci-images krever ENV=<tagger> på kommandolinjen, for eksempel make ci-images ENV=melosys-api:min-tag)
+endif
+endif
 
 .PHONY: ci-images
-ci-images: ## Run on CI against your own images, e.g. make ci-images ENV=melosys-api:my-tag
-	@./scripts/ci-e2e.sh --env "$(ENV)"
+ci-images: ## Run the full suite on CI against your own images, e.g. make ci-images ENV=melosys-api:my-tag
+	@./scripts/ci-e2e.sh $(CI_FLAGG)
 
 # ==============================================================================
 # Development
