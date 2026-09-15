@@ -1,6 +1,6 @@
 # Kjør e2e-testene på CI
 
-E2E-workflowen er dispatch-only, så en push starter ingen testkjøring. Make-målene under starter kjøringen, venter og skriver ut resultatet. Uten `BRANCH=<navn>` spør de om branchen du står på skal brukes.
+E2E-workflowen er dispatch-only, så en push starter ingen testkjøring. Make-målene under starter kjøringen, venter og skriver ut resultatet. Uten `BRANCH=<navn>` spør `ci`, `ci-affected` og `ci-grep` om branchen du står på skal brukes. `BRANCH` leses bare fra kommandolinjen, ikke fra miljøet.
 
 Du trenger `gh` innlogget mot navikt.
 
@@ -21,7 +21,7 @@ Push før du kjører. CI kjører koden på `origin`, ikke arbeidstreet ditt.
 
 ## Slik velger `make ci-affected` tester
 
-`make ci-affected` følger importgrafen fra filene du har endret mot `origin/main`. Bare committede filer teller, fordi CI kjører det som ligger på `origin/<branch>`. `make affected` tar også med ucommittede og usporede filer, så du ser rekkevidden før du committer. Den sender bare spec-filene som importerer en endret fil, direkte eller via andre moduler.
+`make ci-affected` følger importgrafen fra filene du har endret mot `origin/main`. Bare pushede commits teller, fordi utvalget regnes fra `origin/<branch>`, som er det CI kjører. `make affected` tar også med ucommittede og usporede filer, så du ser rekkevidden før du committer. Den sender bare spec-filene som importerer en endret fil, direkte eller via andre moduler.
 
 Den kjører hele suiten i stedet når:
 
@@ -36,7 +36,7 @@ Grafen ser bare statiske importer. Når endringen din når testene via kjøretid
 | Mål | Hva det gjør |
 |---|---|
 | `make affected` | Lister påvirkede spec-filer uten å kjøre noe |
-| `make ci-affected BRANCH=min-branch` | Kjører påvirkede tester for en annen branch enn den du står på. `BRANCH` virker også for `affected`, `ci` og `ci-grep` |
+| `make ci-affected BRANCH=min-branch` | Kjører påvirkede tester for en annen branch enn den du står på. `BRANCH` virker også for `affected`, som henter branchen først, og for `ci` og `ci-grep` |
 | `make ci-affected PREVIEW=1` | Skriver ut `gh`-kommandoen som ville blitt sendt, uten å starte kjøringen. Virker også for `ci` og `ci-grep` |
 | `make ci` | Kjører hele suiten mot `latest` |
 | `make ci-grep GREP=8163` | Kjører tester som matcher et eget filter |

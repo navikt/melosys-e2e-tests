@@ -61,10 +61,10 @@ if [ -z "$BRANCH" ]; then
   BRANCH="$GJELDENDE"
   # Spør bare i en terminal. Kalt fra et annet script eller en test brukes branchen du står på.
   if [ -t 0 ]; then
-    read -r -p "Kjør mot branchen du står på, «${GJELDENDE}»? [J/n] " SVAR
+    read -r -p "Kjør mot branchen du står på, «${GJELDENDE}»? [J/n] " SVAR || { echo "" >&2; echo "❌ Avbrutt." >&2; exit 2; }
     case "$SVAR" in
       [nN]*)
-        read -r -p "Branch: " BRANCH
+        read -r -p "Branch: " BRANCH || { echo "" >&2; echo "❌ Avbrutt." >&2; exit 2; }
         if [ -z "$BRANCH" ]; then
           echo "❌ Ingen branch oppgitt." >&2
           exit 2
@@ -75,7 +75,7 @@ fi
 
 # Hent main og branchen før noe annet: utvalget regnes mot origin/main, og sjekkene under leser
 # origin/$BRANCH. Uten fetch sammenligner begge mot det som tilfeldigvis lå lokalt.
-git fetch --quiet origin main "$BRANCH" 2>/dev/null || git fetch --quiet origin main 2>/dev/null || true
+git fetch --quiet origin main "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null || git fetch --quiet origin main 2>/dev/null || true
 
 if ! git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
   echo "❌ Branchen $BRANCH finnes ikke på origin. Push den først — workflowen leser fra ref-en." >&2

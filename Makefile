@@ -155,11 +155,14 @@ test-debug: ## Run tests in debug mode
 
 # BRANCH=<navn> kjører mot en annen branch enn den du står på. Uten spør scriptet i terminalen.
 # PREVIEW=1 skriver ut gh-kommandoen i stedet for å starte kjøringen.
-BRANCH_FLAGG = $(if $(BRANCH),--branch "$(BRANCH)") $(if $(PREVIEW),--preview)
+# Begge leses bare fra kommandolinjen, så en BRANCH eksportert i skallet ikke styrer CI stille.
+fra_kommandolinje = $(if $(filter command line,$(origin $(1))),$($(1)))
+BRANCH_ARG = $(call fra_kommandolinje,BRANCH)
+BRANCH_FLAGG = $(if $(BRANCH_ARG),--branch "$(BRANCH_ARG)") $(if $(call fra_kommandolinje,PREVIEW),--preview)
 
 .PHONY: affected
 affected: ## List spec files affected by your change (import graph, not guesswork), or BRANCH=<name>
-	@node scripts/affected-tests.mjs --files $(if $(BRANCH),--kun-committet --head "origin/$(BRANCH)")
+	@$(if $(BRANCH_ARG),git fetch --quiet origin "+refs/heads/$(BRANCH_ARG):refs/remotes/origin/$(BRANCH_ARG)" && )node scripts/affected-tests.mjs --files $(if $(BRANCH_ARG),--kun-committet --head "origin/$(BRANCH_ARG)")
 
 .PHONY: ci
 ci: ## Run the full E2E suite on CI against latest images

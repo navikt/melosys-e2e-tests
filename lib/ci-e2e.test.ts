@@ -422,3 +422,47 @@ for (const flagg of ['--preview', '-p']) {
     ]);
   });
 }
+
+test('--branch virker i en klon som ikke henter den andre branchen', JQ_SKIP, () => {
+  // I en --single-branch-klon oppdaterer `git fetch origin <branch>` ikke origin/<branch>.
+  const repo = lagRepo(TO_SPECS);
+  lagBranch(repo.arbeid, 'annen', { 'helpers/bare-b.ts': 'export const b = 2;\n' });
+  git(repo.arbeid, 'config', 'remote.origin.fetch', '+refs/heads/feature:refs/remotes/origin/feature');
+  git(repo.arbeid, 'update-ref', '-d', 'refs/remotes/origin/annen');
+  repo.settRuns([[{ databaseId: 1, event: 'workflow_dispatch', createdAt: 'NÅ', headBranch: 'annen' }]]);
+  const r = repo.ciE2e('--affected', '--branch', 'annen');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(sendtFilter(repo.ghKall()), 'b\\.spec\\.ts');
+});
+
+test('--affected viser feilen fra utvelgeren når den stopper', JQ_SKIP, () => {
+  const repo = lagRepo(TO_SPECS);
+  writeFileSync(join(repo.arbeid, 'scripts', 'affected-tests.mjs'), "process.stderr.write('utvelgeren feilet\\n'); process.exit(2);\n");
+  const r = repo.ciE2e('--affected');
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /utvelgeren feilet/);
+  assert.equal(dispatch(repo.ghKall()), undefined);
+});
+
+test('affected-tests --head står i rapporten og i feilmeldingen', () => {
+  const repo = lagRepo(TO_SPECS);
+  assert.equal(JSON.parse(repo.affected('--json', '--head', 'origin/feature').stdout).head, 'origin/feature');
+  const r = repo.affected('--head', 'origin/finnes-ikke');
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /Fant ikke endrede filer mellom origin\/main og origin\/finnes-ikke/);
+});
+
+const make = (env: Record<string, string>, ...a: string[]) =>
+  execFileSync('make', ['-n', ...a], { cwd: REPO, env: { ...process.env, ...env }, encoding: 'utf8' });
+
+test('make leser BRANCH og PREVIEW bare fra kommandolinjen, ikke fra miljøet', () => {
+  const ut = make({ BRANCH: 'fra-miljoet', PREVIEW: '1' }, 'ci', 'ci-affected', 'ci-grep', 'affected', 'GREP=x');
+  assert.doesNotMatch(ut, /fra-miljoet|--preview/);
+  const arg = make({}, 'ci-affected', 'BRANCH=min-branch', 'PREVIEW=1');
+  assert.match(arg, /--branch "min-branch"/);
+  assert.match(arg, /--preview/);
+});
+
+test('make affected BRANCH= henter branchen før utvalget regnes', () => {
+  assert.match(make({}, 'affected', 'BRANCH=min-branch'), /git fetch[^\n]*refs\/heads\/min-branch:refs\/remotes\/origin\/min-branch[^\n]*\n?[^\n]*--head "origin\/min-branch"/);
+});
