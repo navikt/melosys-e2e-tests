@@ -1,12 +1,24 @@
 # Kjør e2e-testene på CI
 
-E2E-workflowen er dispatch-only, så en push starter ingen testkjøring. Make-målene under starter kjøringen, venter og skriver ut resultatet. Uten `BRANCH=<navn>` spør `ci`, `ci-affected` og `ci-grep` om branchen du står på skal brukes. `BRANCH` leses bare fra kommandolinjen, ikke fra miljøet.
+En push starter ingen testkjøring. Testene en PR påvirker kjører én gang når du setter PR-en i merge queue. Vil du se resultatet før det, starter make-målene under en kjøring, venter og skriver ut resultatet. Uten `BRANCH=<navn>` spør `ci`, `ci-affected` og `ci-grep` om branchen du står på skal brukes. `BRANCH` leses bare fra kommandolinjen, ikke fra miljøet.
 
 Du trenger `gh` innlogget mot navikt.
 
-## Før du merger en PR
+## Merge queue
 
-Stå i branchen og kjør:
+Workflowen «E2E før merge» (`.github/workflows/e2e-for-merge.yml`) gir sjekken `e2e-for-merge`, som ruleset-et på `main` krever.
+
+- På en PR svarer sjekken grønt med én gang. Den kjører ingen tester, så en push koster sekunder.
+- Når du trykker **Merge when ready**, lager GitHub en merge-commit av `main` og PR-en. Workflowen velger testene med `scripts/affected-tests.mjs` mellom `base_sha` og `head_sha` i køen, og kjører «E2E Tests» mot `latest` med det filteret. Utvalget følger de samme reglene som `make ci-affected`, beskrevet under.
+- Endrer PR-en bare dokumentasjon eller verktøy, kjører ingenting, og sjekken blir grønn.
+- Blir kjøringen rød, tas PR-en ut av køen. Fiks, push og sett den i kø igjen.
+- Retries er på, som i `playwright.config.ts`. En flaky test stopper derfor ikke merge, men vises som flaky i jobbsammendraget.
+
+Kjøringen i køen bruker images fra `latest` på det tidspunktet. Hele suiten tar rundt en time, et fokusert utvalg 4–12 minutter.
+
+## Før du setter en PR i kø
+
+Vil du se resultatet før du setter PR-en i kø, stå i branchen og kjør:
 
 ```bash
 git fetch origin && git merge origin/main && git push
