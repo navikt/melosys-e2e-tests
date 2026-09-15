@@ -214,7 +214,7 @@ test('--affected ser bort fra lokale filer og filer under docs/', { skip: HAR_JQ
   const r = repo.ciE2e('--affected');
   assert.equal(r.status, 0, r.stderr);
   assert.equal(sendtFilter(repo.ghKall()), 'b\\.spec\\.ts', 'CI ser ikke lokal.json');
-  // make affected viser fortsatt rekkevidden av arbeidstreet.
+  // make list-affected viser fortsatt rekkevidden av arbeidstreet.
   assert.equal(JSON.parse(repo.affected('--json').stdout).fullSuite, true);
 });
 
@@ -459,18 +459,34 @@ test('affected-tests --head står i rapporten og i feilmeldingen', () => {
 const make = (env: Record<string, string>, ...a: string[]) =>
   execFileSync('make', ['-n', ...a], { cwd: REPO, env: { ...process.env, ...env }, encoding: 'utf8' });
 
-test('make leser BRANCH og PREVIEW bare fra kommandolinjen, ikke fra miljøet', () => {
-  const ut = make({ BRANCH: 'fra-miljoet', PREVIEW: '1' }, 'ci', 'ci-affected', 'ci-grep', 'affected', 'GREP=x');
-  assert.doesNotMatch(ut, /fra-miljoet|--preview/);
-  const arg = make({}, 'ci-affected', 'BRANCH=min-branch', 'PREVIEW=1');
-  assert.match(arg, /--branch "min-branch"/);
-  assert.match(arg, /--preview/);
+const MAKE_VARIABLER = ['BRANCH=min-branch', 'PREVIEW=1', 'RETRIES=1', 'VIS_FILTER=1', 'NO_WAIT=1', 'ENV=melosys-api:min-tag'];
+const SCRIPT_FLAGG = [/--branch "min-branch"/, /--preview/, /--retries/, /--vis-filter/, /--no-wait/, /--env "melosys-api:min-tag"/];
+
+test('make leser variablene bare fra kommandolinjen, ikke fra miljøet', () => {
+  const miljo = { BRANCH: 'fra-miljoet', PREVIEW: '1', RETRIES: '1', VIS_FILTER: '1', NO_WAIT: '1', ENV: 'melosys-api:fra-miljoet' };
+  const ut = make(miljo, 'ci', 'ci-affected', 'ci-grep', 'list-affected', 'GREP=x');
+  assert.doesNotMatch(ut, /fra-miljoet|--preview|--retries|--vis-filter|--no-wait|--env/);
 });
 
-test('make affected BRANCH= henter branchen før utvalget regnes', () => {
+for (const mål of ['ci', 'ci-affected', 'ci-grep']) {
+  test(`make ${mål} sender alle variablene videre til scriptet`, () => {
+    const arg = make({}, mål, 'GREP=x', ...MAKE_VARIABLER);
+    for (const flagg of SCRIPT_FLAGG) assert.match(arg, flagg);
+  });
+}
+
+test('make ci-images sender ENV og de andre variablene videre, og feiler uten ENV', () => {
+  const arg = make({}, 'ci-images', ...MAKE_VARIABLER);
+  for (const flagg of SCRIPT_FLAGG) assert.match(arg, flagg);
+  const uten = spawnSync('make', ['-n', 'ci-images'], { cwd: REPO, env: { ...process.env, ENV: 'melosys-api:fra-miljoet' }, encoding: 'utf8' });
+  assert.notEqual(uten.status, 0);
+  assert.match(uten.stderr, /ENV=/);
+});
+
+test('make list-affected BRANCH= henter branchen før utvalget regnes', () => {
   // && gjør at en branch som ikke finnes stopper make i stedet for å regne mot en gammel ref.
   assert.match(
-    make({}, 'affected', 'BRANCH=min-branch'),
+    make({}, 'list-affected', 'BRANCH=min-branch'),
     /git fetch --quiet origin "\+refs\/heads\/main:refs\/remotes\/origin\/main" "\+refs\/heads\/min-branch:refs\/remotes\/origin\/min-branch" && node scripts\/affected-tests\.mjs --files --kun-committet --head "origin\/min-branch"/
   );
 });
@@ -547,7 +563,7 @@ test('affected-tests rapporterer ingenting å kjøre, og grep-modus avslutter me
   assert.equal(rapport.fullSuite, false);
   assert.equal(repo.affected().status, 3);
   const filer = repo.affected('--files');
-  assert.equal(filer.status, 0, 'make affected skal ikke feile');
+  assert.equal(filer.status, 0, 'make list-affected skal ikke feile');
   assert.equal(filer.stdout, '');
 });
 

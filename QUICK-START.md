@@ -106,6 +106,20 @@ npm run clean-results     # Clean old results
 
 ---
 
+## Running Tests on CI
+
+PRs merge through the merge queue (**Merge when ready**), which runs the tests your change affects. To run on CI before that:
+
+```bash
+make list-affected    # List spec files your change affects, without running anything
+make ci-affected      # Run those tests on CI and wait for the result
+make ci               # Run the full suite on CI
+```
+
+Details and variables (`BRANCH=`, `ENV=`, `RETRIES=1`, …): `docs/ci-cd/KJOR-E2E-PA-CI.md`
+
+---
+
 ## Need Help?
 
 - **Full documentation**: `README.md`

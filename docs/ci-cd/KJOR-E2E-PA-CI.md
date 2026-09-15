@@ -43,7 +43,7 @@ Push før du kjører. CI kjører koden på `origin`, ikke arbeidstreet ditt.
 
 ## Slik velger `make ci-affected` tester
 
-`make ci-affected` følger importgrafen fra filene du har endret mot `origin/main`. Bare pushede commits teller, fordi utvalget regnes fra `origin/<branch>`, som er det CI kjører. `make affected` tar også med ucommittede og usporede filer, så du ser rekkevidden før du committer. Den sender bare spec-filene som importerer en endret fil, direkte eller via andre moduler.
+`make ci-affected` følger importgrafen fra filene du har endret mot `origin/main`. Bare pushede commits teller, fordi utvalget regnes fra `origin/<branch>`, som er det CI kjører. `make list-affected` tar også med ucommittede og usporede filer, så du ser rekkevidden før du committer. Den sender bare spec-filene som importerer en endret fil, direkte eller via andre moduler.
 
 Er bare filer som e2e-workflowen ikke leser endret, starter `make ci-affected` ingenting og sier fra. Det gjelder dokumentasjon (`*.md` og `docs/`), `Makefile`, `scripts/ci-e2e.sh`, `scripts/affected-tests.mjs` og enhetstestene i `lib/**/*.test.ts`. Slike filer tvinger heller ikke hele suiten. En branch uten endringer mot `origin/main` starter heller ingenting. Vil du kjøre likevel, for eksempel mot nye images på `latest`, bruk `make ci`. Når du kjører branchen du står på, vises advarslene om upushede og ucommittede endringer også når ingenting startes. Andre filer under `scripts/` teller som endringer utenfor grafen, fordi CI kan bruke dem.
 
@@ -59,34 +59,31 @@ Grafen ser bare statiske importer. Når endringen din når testene via kjøretid
 
 | Mål | Hva det gjør |
 |---|---|
-| `make affected` | Lister påvirkede spec-filer uten å kjøre noe |
-| `make ci-affected BRANCH=min-branch` | Kjører påvirkede tester for en annen branch enn den du står på. `BRANCH` virker også for `affected`, som henter branchen først, og for `ci` og `ci-grep` |
-| `make ci-affected PREVIEW=1` | Skriver ut `gh`-kommandoen som ville blitt sendt, uten å starte kjøringen. Virker også for `ci` og `ci-grep` |
+| `make list-affected` | Lister påvirkede spec-filer uten å kjøre noe. Tar med ucommittede filer |
 | `make ci` | Kjører hele suiten mot `latest` |
 | `make ci-grep GREP=8163` | Kjører tester som matcher et eget filter |
 | `make ci-images ENV=melosys-api:min-tag,melosys-web:min-tag` | Kjører hele suiten mot egne images |
 
 Egne images bygger du med «Build and Push Image»-workflowen i hvert repo. Workflow-fila må finnes på branchen du bygger fra.
 
-## Flagg til scriptet
+## Variabler
 
-Make-målene kaller `scripts/ci-e2e.sh`. Kall scriptet direkte når du vil kombinere flagg:
+`ci`, `ci-affected`, `ci-grep` og `ci-images` tar de samme variablene, og du kan kombinere dem:
 
 ```bash
-# Påvirkede tester mot egne images
-./scripts/ci-e2e.sh --affected --env melosys-api:min-tag,melosys-web:min-tag
+make ci-affected ENV=melosys-api:min-tag RETRIES=1
 ```
 
-| Flagg | Hva det gjør |
-|---|---|
-| `--affected` | Kjører bare påvirkede tester |
-| `--branch <navn>` | Kjører mot en annen branch enn den du står på. Uten flagget spør scriptet i terminalen |
-| `--grep <mønster>` | Eget filter |
-| `--env <tagger>` | Egne images, for eksempel `melosys-api:min-tag,melosys-web:min-tag` |
-| `--no-wait` | Starter kjøringen og returnerer med én gang |
-| `-p`, `--preview` | Skriver ut `gh`-kommandoen som ville blitt sendt, uten å starte kjøringen |
-| `--vis-filter` | Skriver ut hele filteret som sendes |
-| `--retries` | Slår på retries. Standard er av, så flaky tester synes |
+| Variabel | Flagg til `scripts/ci-e2e.sh` | Hva det gjør |
+|---|---|---|
+| `BRANCH=<navn>` | `--branch <navn>` | Kjører mot en annen branch enn den du står på. Uten spør scriptet i terminalen. Virker også for `list-affected`, som henter branchen først |
+| `ENV=<tagger>` | `--env <tagger>` | Egne images, for eksempel `melosys-api:min-tag,melosys-web:min-tag`. Påkrevd for `ci-images` |
+| `PREVIEW=1` | `--preview` | Skriver ut `gh`-kommandoen som ville blitt sendt, uten å starte kjøringen |
+| `RETRIES=1` | `--retries` | Slår på retries. Standard er av, så flaky tester synes |
+| `VIS_FILTER=1` | `--vis-filter` | Skriver ut hele filteret som sendes |
+| `NO_WAIT=1` | `--no-wait` | Starter kjøringen og returnerer med én gang |
+
+Variablene leses bare fra kommandolinjen. En `BRANCH` eller `ENV` eksportert i skallet styrer ikke CI.
 
 ## Se rekkevidden før du endrer noe
 
