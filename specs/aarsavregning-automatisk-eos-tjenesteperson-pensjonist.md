@@ -1,14 +1,10 @@
 ---
 jira: MELOSYS-8163
 epic: MELOSYS-7080 — Støtte til endringer i medlemskap og trygdeavgift for tidligere år
-status: verified   # 2/2 grønt i CI (run 34375780858, 2026-09-09), kjørt med disable_retries
-# Kjørt mot feature-images: melosys-api:8163-arsavregning-eos-tjenesteperson-017c8b2b19
-# og melosys-web:8163-arsavregning-eos-melding-4a968fb39, begge bygget med Build and Push Image.
-# Ingen av passeringene kom av et nytt forsøk etter feil — kjøringen slo av retries.
-# Merk at peer-PR-ene (melosys-web #3108, melosys-api #3410) fortsatt er åpne drafts. Mot
-# latest-images er testen rød, siden testid-en aarsavregning-ikke-stottet-sakstype ikke
-# finnes på master i melosys-web før #3108 lander.
-test: tests/eu-eos/aarsavregning-automatisk-eos-tjenesteperson-pensjonist.spec.ts
+status: implemented   # web #3108 og api #3410 er merget; se endringsloggen 2026-09-15
+test:
+  - tests/eu-eos/eu-eos-art11-3b-medlemskap-offentlig-tjenesteperson.spec.ts   # scenario A
+  - tests/eu-eos/aarsavregning-automatisk-eos-pensjonist.spec.ts               # scenario B
 toggles: {}            # default-state generelt; toggle-overstyring for blokkerings-scenariene er testmekanikk (se binding)
 tags: [årsavregning, brev, innhenting, eu-eos, tjenesteperson, pensjonist, lovvalg, saksbehandlingsflyt]
 analysis_trace_id: 22c51252-8947-4eef-931e-cd718c4e16a4
@@ -317,3 +313,21 @@ brev-helperen `verifiserInnhentingsbrevSendt` (samme modul/mønster som i
   imaget + `melosys-web:8163-arsavregning-eos-melding` ga **2 passed (1.7m), ingen docker-log-feil,
   ingen retries**. Begge scenariene (A: tjenesteperson art.11.3b, B: pensjonist) verifisert grønt i
   CI. Status hevet til `verified`.
+- 2026-09-15 (omlegging etter review av hva A faktisk testet): Scenario A overlappet nesten helt
+  med `eu-eos-art11-3b-medlemskap-offentlig-tjenesteperson.spec.ts` (#329), og brevsjekken var for
+  svak. Den godtok enhver innhentingsbrev-prosessinstans fra de siste 10 minuttene, og perioden ble
+  ikke sjekket. Endringer:
+  - Scenario A er slått sammen med #329-testen, og den separate testen er slettet. Testen sjekker
+    nå også årsavregningens status og år, og leser innhentingsbrevet fra PDF-en som melosys-mock
+    arkiverer på saken (`helpers/brev-helper.ts`, ny dev-avhengighet `unpdf`). Testen krever
+    setningen «Perioden du skal sende opplysninger for er 1. januar <år> - 31. desember <år>». Den
+    setningen utelater dokgen-malen når mapperen ikke finner perioder, som den ikke gjorde før 8163
+    (tjenesteperson har ingen medlemskapsperioder).
+  - `verifiserÅrsavregningIkkeStøttet()` sjekker nå også at «Bekreft og fortsett» er synlig og
+    deaktivert.
+  - Filen med scenario B har fått nytt navn: `aarsavregning-automatisk-eos-pensjonist.spec.ts`.
+  - Utforsket lokalt med `melosys.arsavregning.eos_tjenesteperson` **på**. «Innbetalt
+    trygdeavgift» er tomt. Med «Beregn trygdeavgiften» har «Bestemmelse» bare «Velg…», og steget
+    kommer ikke videre. Med «Oppgi beløp» fattes vedtaket, og årsavregningen blir AVSLUTTET uten
+    feil. Dette står som `test.fixme` i art11-3b-testen, med henvisning til MELOSYS-6837 og
+    MELOSYS-6815.
