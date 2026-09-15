@@ -22,6 +22,8 @@ Ruleset-et for merge queue på `main` må ha:
 - `max_entries_to_build` på 1, så køen ikke starter flere e2e-stacker på 8-kjerners runnere samtidig med kjøringene fra image-bygg.
 - påkrevd sjekk `e2e-for-merge`.
 
+Merge queue virker bare på brancher med kort navn. `nais/login` avviser et OIDC-token der `sub` er over 127 byte, og i køen er `sub` `repo:navikt/melosys-e2e-tests:ref:refs/heads/gh-readonly-queue/<branch>/pr-<nr>-<sha>`. For `main` blir det 115–117 byte.
+
 Sjekken `e2e-for-merge` er grønn på en PR før den står i kø, og betyr bare noe i køen. Merger en admin forbi køen, har ingen e2e-tester kjørt.
 
 ## Før du setter en PR i kø
