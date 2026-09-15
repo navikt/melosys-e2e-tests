@@ -1,0 +1,109 @@
+name: E2E før merge
+
+# Kjører testene en PR påvirker én gang, når PR-en settes i merge queue, i stedet for på hver push.
+#
+# Merge queue krever at den påkrevde sjekken også finnes på PR-en før den kan settes i kø. På
+# pull_request kjører derfor bare «e2e-for-merge», som svarer grønt med én gang. På merge_group
+# regnes utvalget mellom base_sha og head_sha, og E2E Tests kjøres som gjenbrukbar workflow.
+# Sjekknavnet «e2e-for-merge» er det ruleset-et på main krever.
+
+on:
+  pull_request:
+  merge_group:
+    types: [checks_requested]
+
+# E2E Tests kan ikke få flere rettigheter enn denne workflowen gir.
+permissions:
+  contents: read
+  packages: read
+  id-token: write
+
+jobs:
+  utvalg:
+    if: github.event_name == 'merge_group'
+    runs-on: ubuntu-latest
+    outputs:
+      kjor: ${{ steps.velg.outputs.kjor }}
+      grep: ${{ steps.velg.outputs.grep }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # affected-tests.mjs trenger merge-basen mellom base_sha og head_sha.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Velg påvirkede tester
+        id: velg
+        env:
+          BASE_SHA: ${{ github.event.merge_group.base_sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+        run: |
+          # Tom utdata betyr hele suiten, og exit 3 betyr at ingenting skal kjøres.
+          SAMMENDRAG="$RUNNER_TEMP/sammendrag.txt"
+          RC=0
+          GREP="$(node scripts/affected-tests.mjs --kun-committet --base "$BASE_SHA" --head "$HEAD_SHA" 2>"$SAMMENDRAG")" || RC=$?
+          cat "$SAMMENDRAG"
+          # Før exit, så også en feil i scriptet vises i jobbsammendraget.
+          {
+            echo "## Utvalg for merge queue"
+            echo ""
+            sed 's/^/    /' "$SAMMENDRAG"
+          } >> "$GITHUB_STEP_SUMMARY"
+          case "$RC" in
+            0) KJOR=true ;;
+            3) KJOR=false ;;
+            *) exit "$RC" ;;
+          esac
+
+          # Filteret kan bli langt og inneholder regex-tegn, så det skrives med tilfeldig skilletegn.
+          SKILLE="GREP_EOF_$(openssl rand -hex 16)"
+          {
+            echo "kjor=$KJOR"
+            echo "grep<<$SKILLE"
+            printf '%s\n' "$GREP"
+            echo "$SKILLE"
+          } >> "$GITHUB_OUTPUT"
+
+  e2e:
+    needs: utvalg
+    if: needs.utvalg.outputs.kjor == 'true'
+    uses: ./.github/workflows/e2e-tests.yml
+    with:
+      environment: latest
+      test_grep: ${{ needs.utvalg.outputs.grep }}
+    secrets: inherit
+
+  e2e-for-merge:
+    name: e2e-for-merge
+    needs: [utvalg, e2e]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - name: Samle resultat
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          UTVALG: ${{ needs.utvalg.result }}
+          KJOR: ${{ needs.utvalg.outputs.kjor }}
+          E2E: ${{ needs.e2e.result }}
+        run: |
+          if [ "$EVENT_NAME" != "merge_group" ]; then
+            echo "✅ E2E kjøres når PR-en settes i merge queue, ikke på push."
+            exit 0
+          fi
+          if [ "$UTVALG" != "success" ]; then
+            echo "❌ Utvalget feilet ($UTVALG)."
+            exit 1
+          fi
+          if [ "$KJOR" = "false" ]; then
+            echo "✅ Ingen endringer påvirker e2e-testene. Ingenting å kjøre."
+            exit 0
+          fi
+          if [ "$E2E" = "success" ]; then
+            echo "✅ E2E Tests grønn."
+            exit 0
+          fi
+          echo "❌ E2E Tests: $E2E."
+          exit 1

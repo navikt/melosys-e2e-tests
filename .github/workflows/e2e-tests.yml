@@ -48,6 +48,19 @@ on:
         type: string
         default: ''
 
+  # Kalles fra «E2E før merge» (e2e-for-merge.yml) når en PR står i merge queue.
+  # Inputene som ikke er deklarert her, er tomme ved kall og gir samme oppførsel som standardverdiene.
+  workflow_call:
+    inputs:
+      environment:
+        type: string
+        required: false
+        default: 'latest'
+      test_grep:
+        type: string
+        required: false
+        default: ''
+
   repository_dispatch:
     types:
       - melosys-api-published

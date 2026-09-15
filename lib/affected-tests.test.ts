@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 // @ts-expect-error — .mjs uten typedeklarasjon; scriptet er ren node uten avhengigheter.
-import { affectedSpecs } from '../scripts/affected-tests.mjs';
+import { affectedSpecs, changedFiles, isDoc } from '../scripts/affected-tests.mjs';
 
 /**
  * Regresjonstest for utvelgeren bak `make ci-affected`.
@@ -44,4 +44,36 @@ test('en endret spec-fil velger seg selv', () => {
 
 test('en fil ingen importerer gir ingen spec-er', () => {
   assert.deepEqual(affectedSpecs(['helpers/form-helper.ts']), []);
+});
+
+test('alt under docs/ regnes som dokumentasjon, ikke som fil utenfor grafen', () => {
+  // Et diagram i docs/ tvang hele suiten fordi bare .md-filer var unntatt.
+  assert.ok(isDoc('docs/diagrams/docker-services.svg'));
+  assert.ok(isDoc('docs/diagrams/docker-services.architecture.json'));
+  assert.ok(isDoc('specs/noe.md'));
+  assert.ok(!isDoc('playwright.config.ts'), 'konfig skal fortsatt tvinge hele suiten');
+  assert.ok(!isDoc('package.json'));
+});
+
+test('uten arbeidstreet teller bare committede filer, slik CI ser branchen', () => {
+  // CI kjører origin/<branch>. En usporet lokal fil skal ikke bestemme hva CI kjører.
+  const run = (cmd: string) =>
+    cmd === 'diff' ? 'tests/a.spec.ts\n' : '?? scratch/lokal.json\n M helpers/b.ts\n';
+  assert.deepEqual(changedFiles('origin/main', { arbeidstre: false, run }), ['tests/a.spec.ts']);
+  assert.deepEqual(changedFiles('origin/main', { run }), [
+    'tests/a.spec.ts',
+    'scratch/lokal.json',
+    'helpers/b.ts',
+  ]);
+});
+
+test('head velger hvilken ref diffen regnes mot', () => {
+  // ci-e2e.sh --branch regner utvalget fra origin/<branch>, ikke fra branchen du står på.
+  const kall: string[][] = [];
+  const run = (...a: string[]) => {
+    kall.push(a);
+    return '';
+  };
+  changedFiles('origin/main', { arbeidstre: false, head: 'origin/annen', run });
+  assert.deepEqual(kall, [['diff', '--name-only', 'origin/main...origin/annen']]);
 });
