@@ -564,3 +564,24 @@ test('andre filer i scripts/ tvinger fortsatt hele suiten', JQ_SKIP, () => {
   assert.equal(r.status, 0, r.stderr);
   assert.equal(sendtFilter(repo.ghKall()), null);
 });
+
+test('ingenting å starte advarer fortsatt om upushede og ucommittede endringer', JQ_SKIP, () => {
+  // Den egentlige endringen kan ligge lokalt. Da må ✅-meldingen ikke stå alene.
+  const repo = lagRepo(TO_SPECS, UTEN_E2E_EFFEKT, { 'helpers/felles.ts': 'export const felles = 3;\n' });
+  writeFileSync(join(repo.arbeid, 'helpers', 'bare-b.ts'), 'export const b = 2;\n');
+  git(repo.arbeid, 'commit', '-q', '-m', 'upushet', '--', 'helpers/bare-b.ts');
+  const r = repo.ciE2e('--affected');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(dispatch(repo.ghKall()), undefined);
+  assert.match(r.stderr, /peker på en annen commit enn HEAD/);
+  assert.match(r.stderr, /ucommittede endringer/);
+});
+
+test('en branch uten endringer sier det, og peker på make ci', JQ_SKIP, () => {
+  const repo = lagRepo(TO_SPECS);
+  const r = repo.ciE2e('--affected');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(dispatch(repo.ghKall()), undefined);
+  assert.match(r.stdout, /Kjører ingenting: ingen endringer mot origin\/main/);
+  assert.match(r.stdout, /make ci/);
+});

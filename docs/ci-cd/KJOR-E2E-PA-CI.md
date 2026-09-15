@@ -23,7 +23,7 @@ Push før du kjører. CI kjører koden på `origin`, ikke arbeidstreet ditt.
 
 `make ci-affected` følger importgrafen fra filene du har endret mot `origin/main`. Bare pushede commits teller, fordi utvalget regnes fra `origin/<branch>`, som er det CI kjører. `make affected` tar også med ucommittede og usporede filer, så du ser rekkevidden før du committer. Den sender bare spec-filene som importerer en endret fil, direkte eller via andre moduler.
 
-Er bare filer som e2e-workflowen ikke leser endret, starter `make ci-affected` ingenting og sier fra. Det gjelder dokumentasjon (`*.md` og `docs/`), `Makefile`, `scripts/ci-e2e.sh`, `scripts/affected-tests.mjs` og enhetstestene i `lib/*.test.ts`. Slike filer tvinger heller ikke hele suiten. Andre filer under `scripts/` teller som endringer utenfor grafen, fordi CI kan bruke dem.
+Er bare filer som e2e-workflowen ikke leser endret, starter `make ci-affected` ingenting og sier fra. Det gjelder dokumentasjon (`*.md` og `docs/`), `Makefile`, `scripts/ci-e2e.sh`, `scripts/affected-tests.mjs` og enhetstestene i `lib/**/*.test.ts`. Slike filer tvinger heller ikke hele suiten. En branch uten endringer mot `origin/main` starter heller ingenting. Vil du kjøre likevel, for eksempel mot nye images på `latest`, bruk `make ci`. Advarslene om upushede og ucommittede endringer vises også når ingenting startes. Andre filer under `scripts/` teller som endringer utenfor grafen, fordi CI kan bruke dem.
 
 Den kjører hele suiten i stedet når:
 

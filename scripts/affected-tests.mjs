@@ -199,8 +199,9 @@ function main() {
   const share = total ? (specs.length / total) * 100 : 0;
 
   let reason = null;
-  if (ingenting) reason = null;
-  else if (outside.length) reason = `endrede filer utenfor importgrafen: ${outside.join(', ')}`;
+  if (ingenting) {
+    // Ingenting å kjøre er verken et filter eller hele suiten, så reason forblir null.
+  } else if (outside.length) reason = `endrede filer utenfor importgrafen: ${outside.join(', ')}`;
   else if (specs.length === 0) reason = 'ingen spec-filer er påvirket';
   else if (share >= FULL_SUITE_TERSKEL) reason = `${Math.floor(share)} % av spec-filene er påvirket`;
 
@@ -213,7 +214,9 @@ function main() {
   process.stderr.write(
     `Endrede filer: ${changed.length}\n` +
       `Påvirkede spec-filer: ${specs.length} av ${total} (${Math.floor(share)} %)\n` +
-      (ingenting ? 'Kjører ingenting: bare dokumentasjon og verktøy e2e-workflowen ikke leser er endret.\n' : '') +
+      (ingenting
+        ? `Kjører ingenting: ${changed.length ? 'bare dokumentasjon og verktøy e2e-workflowen ikke leser er endret' : `ingen endringer mot ${base}`}.\n`
+        : '') +
       (reason ? `Kjører hele suiten: ${reason}.\n` : '')
   );
 
