@@ -205,6 +205,19 @@ test('en endret Markdown-fil utvider ikke utvalget', { skip: HAR_JQ ? false : 'k
   assert.equal(sendtFilter(repo.ghKall()), 'b\\.spec\\.ts');
 });
 
+test('--affected ser bort fra lokale filer og filer under docs/', { skip: HAR_JQ ? false : 'krever jq for å etterligne gh --jq' }, () => {
+  const repo = lagRepo(
+    TO_SPECS,
+    { 'docs/diagrams/tjenester.svg': '<svg/>\n', 'helpers/bare-b.ts': 'export const b = 2;\n' },
+    { 'lokal.json': '{}\n' }
+  );
+  const r = repo.ciE2e('--affected');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(sendtFilter(repo.ghKall()), 'b\\.spec\\.ts', 'CI ser ikke lokal.json');
+  // make affected viser fortsatt rekkevidden av arbeidstreet.
+  assert.equal(JSON.parse(repo.affected('--json').stdout).fullSuite, true);
+});
+
 test('følger kjøringen denne dispatchen startet, ikke en eldre eller en fra et annet event', { skip: HAR_JQ ? false : 'krever jq for å etterligne gh --jq' }, () => {
   const repo = lagRepo(TO_SPECS);
   const gammel = { databaseId: 111, event: 'workflow_dispatch', createdAt: '2020-01-01T00:00:00Z' };
@@ -338,11 +351,166 @@ test('henter main før sjekken, så en gammel lokal origin/main ikke skjuler at 
   assert.equal(r.stderr.match(ADVARSEL)?.[1], '1', r.stderr);
 });
 
-test('stopper ikke når origin/main ikke finnes lokalt, for eksempel i en --single-branch-klon', JQ_SKIP, () => {
+test('stopper ikke når origin/main ikke kan hentes', JQ_SKIP, () => {
+  // Scriptet henter main med eksplisitt refspec, så main må mangle på origin for at sjekken skal hoppes over.
   const repo = lagRepo(TO_SPECS);
-  git(repo.arbeid, 'config', 'remote.origin.fetch', '+refs/heads/feature:refs/remotes/origin/feature');
-  git(repo.arbeid, 'update-ref', '-d', 'refs/remotes/origin/main');
+  const origin = git(repo.arbeid, 'remote', 'get-url', 'origin').trim();
+  git(origin, 'symbolic-ref', 'HEAD', 'refs/heads/feature');
+  git(repo.arbeid, 'push', '-q', 'origin', '--delete', 'main');
   const r = repo.ciE2e();
+  assert.notEqual(spawnSync('git', ['rev-parse', '--verify', '--quiet', 'origin/main'], { cwd: repo.arbeid }).status, 0, 'origin/main skal mangle');
   assert.equal(r.status, 0, `scriptet stoppet (exit ${r.status}):\n${r.stderr}`);
   assert.ok(dispatch(repo.ghKall()), 'kjøringen skal startes');
 });
+
+/** Pusher en branch fra main med `endringer` og går tilbake til feature. */
+function lagBranch(arbeid: string, navn: string, endringer: Filer) {
+  git(arbeid, 'checkout', '-q', '-b', navn, 'main');
+  for (const [sti, innhold] of Object.entries(endringer)) {
+    mkdirSync(dirname(join(arbeid, sti)), { recursive: true });
+    writeFileSync(join(arbeid, sti), innhold);
+  }
+  git(arbeid, 'add', '-A');
+  git(arbeid, 'commit', '-q', '-m', navn);
+  git(arbeid, 'push', '-q', 'origin', navn);
+  git(arbeid, 'checkout', '-q', 'feature');
+}
+
+test('--branch kjører påvirkede tester for en annen branch enn den du står på', JQ_SKIP, () => {
+  const repo = lagRepo(TO_SPECS, { 'helpers/felles.ts': 'export const felles = 2;\n' });
+  lagBranch(repo.arbeid, 'annen', { 'helpers/bare-b.ts': 'export const b = 2;\n' });
+  repo.settRuns([[{ databaseId: 1, event: 'workflow_dispatch', createdAt: 'NÅ', headBranch: 'annen' }]]);
+  const r = repo.ciE2e('--affected', '--branch', 'annen');
+  assert.equal(r.status, 0, r.stderr);
+  const d = dispatch(repo.ghKall());
+  assert.ok(d);
+  assert.equal(d[d.indexOf('--ref') + 1], 'annen');
+  assert.equal(sendtFilter(repo.ghKall()), 'b\\.spec\\.ts', 'utvalget skal regnes fra annen, ikke feature');
+  assert.doesNotMatch(r.stderr, /peker på en annen commit/, 'HEAD på feature gjelder ikke annen');
+});
+
+test('--branch finner spec-filer som bare finnes på den andre branchen', JQ_SKIP, () => {
+  // Grafen må bygges fra origin/<branch>. Fra arbeidstreet på feature finnes ikke c.spec.ts, så
+  // utvalget blir tomt og hele suiten kjøres.
+  const repo = lagRepo(TO_SPECS);
+  lagBranch(repo.arbeid, 'annen', { 'tests/c.spec.ts': "import { b } from '../helpers/bare-b';\n" });
+  repo.settRuns([[{ databaseId: 1, event: 'workflow_dispatch', createdAt: 'NÅ', headBranch: 'annen' }]]);
+  const r = repo.ciE2e('--affected', '--branch', 'annen');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(sendtFilter(repo.ghKall()), 'c\\.spec\\.ts');
+  assert.match(r.stdout, /Påvirkede spec-filer: 1 av 3/);
+});
+
+test('--affected skriver sammendraget av utvalget i startblokken', JQ_SKIP, () => {
+  const repo = lagRepo(TO_SPECS, { 'helpers/bare-b.ts': 'export const b = 2;\n' });
+  const r = repo.ciE2e('--affected');
+  assert.equal(r.status, 0, r.stderr);
+  assert.match(r.stdout, /Endrede filer: 1\n/);
+  assert.match(r.stdout, /Påvirkede spec-filer: 1 av 2 \(50 %\)/);
+});
+
+for (const flagg of ['--preview', '-p']) {
+  test(`${flagg} skriver ut kommandoen uten å starte workflowen`, JQ_SKIP, () => {
+    const repo = lagRepo(TO_SPECS, { 'helpers/bare-b.ts': 'export const b = 2;\n' });
+    const r = repo.ciE2e('--affected', flagg);
+    assert.equal(r.status, 0, r.stderr);
+    assert.equal(dispatch(repo.ghKall()), undefined, 'ingen workflow skal startes');
+    const linje = r.stdout.split('\n').find((l) => l.startsWith('gh workflow run '));
+    assert.ok(linje, `kommandoen skal skrives ut, fikk:\n${r.stdout}`);
+    // Kommandoen skal kunne limes inn i et skall og gi de samme argumentene som en ekte dispatch.
+    const args = execFileSync('bash', ['-c', `printf '%s\\n' ${linje.slice('gh '.length)}`], { encoding: 'utf8' });
+    assert.deepEqual(args.trim().split('\n'), [
+      'workflow', 'run', 'E2E Tests', '--ref', 'feature',
+      '-f', 'environment=latest', '-f', 'disable_retries=true', '-f', 'test_grep=b\\.spec\\.ts',
+    ]);
+  });
+}
+
+test('--branch virker i en klon som ikke henter den andre branchen', JQ_SKIP, () => {
+  // I en --single-branch-klon oppdaterer `git fetch origin <branch>` ikke origin/<branch>.
+  const repo = lagRepo(TO_SPECS);
+  lagBranch(repo.arbeid, 'annen', { 'helpers/bare-b.ts': 'export const b = 2;\n' });
+  git(repo.arbeid, 'config', 'remote.origin.fetch', '+refs/heads/feature:refs/remotes/origin/feature');
+  git(repo.arbeid, 'update-ref', '-d', 'refs/remotes/origin/annen');
+  git(repo.arbeid, 'update-ref', '-d', 'refs/remotes/origin/main');
+  repo.settRuns([[{ databaseId: 1, event: 'workflow_dispatch', createdAt: 'NÅ', headBranch: 'annen' }]]);
+  const r = repo.ciE2e('--affected', '--branch', 'annen');
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(sendtFilter(repo.ghKall()), 'b\\.spec\\.ts');
+});
+
+test('--affected viser feilen fra utvelgeren når den stopper', JQ_SKIP, () => {
+  const repo = lagRepo(TO_SPECS);
+  writeFileSync(join(repo.arbeid, 'scripts', 'affected-tests.mjs'), "process.stderr.write('utvelgeren feilet\\n'); process.exit(2);\n");
+  const r = repo.ciE2e('--affected');
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /utvelgeren feilet/);
+  assert.equal(dispatch(repo.ghKall()), undefined);
+});
+
+test('affected-tests --head står i rapporten og i feilmeldingen', () => {
+  const repo = lagRepo(TO_SPECS);
+  assert.equal(JSON.parse(repo.affected('--json', '--head', 'origin/feature').stdout).head, 'origin/feature');
+  const r = repo.affected('--head', 'origin/finnes-ikke');
+  assert.equal(r.status, 2);
+  assert.match(r.stderr, /Fant ikke endrede filer mellom origin\/main og origin\/finnes-ikke: fatal/);
+});
+
+const make = (env: Record<string, string>, ...a: string[]) =>
+  execFileSync('make', ['-n', ...a], { cwd: REPO, env: { ...process.env, ...env }, encoding: 'utf8' });
+
+test('make leser BRANCH og PREVIEW bare fra kommandolinjen, ikke fra miljøet', () => {
+  const ut = make({ BRANCH: 'fra-miljoet', PREVIEW: '1' }, 'ci', 'ci-affected', 'ci-grep', 'affected', 'GREP=x');
+  assert.doesNotMatch(ut, /fra-miljoet|--preview/);
+  const arg = make({}, 'ci-affected', 'BRANCH=min-branch', 'PREVIEW=1');
+  assert.match(arg, /--branch "min-branch"/);
+  assert.match(arg, /--preview/);
+});
+
+test('make affected BRANCH= henter branchen før utvalget regnes', () => {
+  // && gjør at en branch som ikke finnes stopper make i stedet for å regne mot en gammel ref.
+  assert.match(
+    make({}, 'affected', 'BRANCH=min-branch'),
+    /git fetch --quiet origin "\+refs\/heads\/main:refs\/remotes\/origin\/main" "\+refs\/heads\/min-branch:refs\/remotes\/origin\/min-branch" && node scripts\/affected-tests\.mjs --files --kun-committet --head "origin\/min-branch"/
+  );
+});
+
+const HAR_PYTHON = spawnSync('python3', ['--version']).status === 0;
+
+/** Kjører ci-e2e.sh i en ekte terminal, venter på spørsmålet og skriver `svar`. */
+const PTY = `
+import os, pty, select, sys, time
+pid, fd = pty.fork()
+if pid == 0:
+    os.chdir(sys.argv[1])
+    os.execvp('bash', ['bash', 'scripts/ci-e2e.sh', '--preview'])
+ut = b''
+slutt = time.time() + 30
+while b'[J/n] ' not in ut and time.time() < slutt:
+    if select.select([fd], [], [], 0.2)[0]:
+        ut += os.read(fd, 4096)
+os.write(fd, sys.argv[2].encode())
+while True:
+    try:
+        c = os.read(fd, 4096)
+    except OSError:
+        break
+    if not c:
+        break
+    ut += c
+_, status = os.waitpid(pid, 0)
+sys.stdout.write(ut.decode(errors='replace'))
+sys.exit(os.waitstatus_to_exitcode(status))
+`;
+
+for (const [navn, svar] of [
+  ['Ctrl-D på spørsmålet om branchen du står på', '\x04'],
+  ['Ctrl-D når scriptet spør om branchnavn', 'n\n\x04'],
+]) {
+  test(`${navn} avbryter med en melding`, { skip: HAR_PYTHON ? false : 'krever python3 for pty' }, () => {
+    const repo = lagRepo(TO_SPECS);
+    const r = spawnSync('python3', ['-c', PTY, repo.arbeid, svar], { encoding: 'utf8', timeout: 60_000 });
+    assert.equal(r.status, 2, r.stdout);
+    assert.match(r.stdout, /❌ Avbrutt\./);
+  });
+}
