@@ -1,3 +1,4 @@
+// Test av merge queue (e2e-for-merge), skal ikke til main.
 import {expect, test} from '../../fixtures';
 import {AuthHelper} from '../../helpers/auth-helper';
 import {HovedsidePage} from '../../pages/hovedside.page';
