@@ -351,11 +351,14 @@ test('henter main før sjekken, så en gammel lokal origin/main ikke skjuler at 
   assert.equal(r.stderr.match(ADVARSEL)?.[1], '1', r.stderr);
 });
 
-test('stopper ikke når origin/main ikke finnes lokalt, for eksempel i en --single-branch-klon', JQ_SKIP, () => {
+test('stopper ikke når origin/main ikke kan hentes', JQ_SKIP, () => {
+  // Scriptet henter main med eksplisitt refspec, så main må mangle på origin for at sjekken skal hoppes over.
   const repo = lagRepo(TO_SPECS);
-  git(repo.arbeid, 'config', 'remote.origin.fetch', '+refs/heads/feature:refs/remotes/origin/feature');
-  git(repo.arbeid, 'update-ref', '-d', 'refs/remotes/origin/main');
+  const origin = git(repo.arbeid, 'remote', 'get-url', 'origin').trim();
+  git(origin, 'symbolic-ref', 'HEAD', 'refs/heads/feature');
+  git(repo.arbeid, 'push', '-q', 'origin', '--delete', 'main');
   const r = repo.ciE2e();
+  assert.notEqual(spawnSync('git', ['rev-parse', '--verify', '--quiet', 'origin/main'], { cwd: repo.arbeid }).status, 0, 'origin/main skal mangle');
   assert.equal(r.status, 0, `scriptet stoppet (exit ${r.status}):\n${r.stderr}`);
   assert.ok(dispatch(repo.ghKall()), 'kjøringen skal startes');
 });

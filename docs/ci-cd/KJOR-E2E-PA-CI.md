@@ -13,7 +13,7 @@ git fetch origin && git merge origin/main && git push
 make ci-affected
 ```
 
-Merge inn main først. CI tester branchen din, ikke resultatet av merge. Mangler branchen commits fra main, kan en grønn kjøring bli rød etter merge. Scriptet henter main selv og advarer når `origin/<branch>` mangler commits fra `origin/main`, men starter kjøringen likevel. I en klon uten `origin/main`, for eksempel laget med `--single-branch`, sjekker scriptet ikke dette og sier ikke fra. I en grunn klon (`--depth`) kan advarselen vises selv om main er merget inn.
+Merge inn main først. CI tester branchen din, ikke resultatet av merge. Mangler branchen commits fra main, kan en grønn kjøring bli rød etter merge. Scriptet henter main selv og advarer når `origin/<branch>` mangler commits fra `origin/main`, men starter kjøringen likevel. Scriptet henter `origin/main` også i en klon laget med `--single-branch`. Kan main ikke hentes, sjekker scriptet ikke dette og sier ikke fra. I en grunn klon (`--depth`) kan advarselen vises selv om main er merget inn.
 
 Advarselen gjelder bare commits i dette repoet. Kjøringen bruker images fra `latest`, og endres de etter kjøringen din, kan testene bli røde etter merge selv om main var merget inn. Har det gått tid siden sist du kjørte, kjør på nytt før du merger.
 

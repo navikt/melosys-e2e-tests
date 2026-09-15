@@ -110,7 +110,7 @@ if [ "$BRANCH" = "$GJELDENDE" ]; then
 fi
 # CI tester branchen, ikke resultatet av merge. Mangler branchen commits fra main i dette repoet,
 # kan en grønn kjøring bli rød etter merge. Endringer i images på latest fanges ikke her.
-# Finnes ikke origin/main lokalt (for eksempel i en --single-branch-klon), hoppes sjekken over.
+# Kan origin/main ikke hentes, for eksempel når origin mangler main, hoppes sjekken over.
 if [ -n "$REMOTE" ] && git rev-parse --verify --quiet origin/main >/dev/null \
   && ! git merge-base --is-ancestor origin/main "$REMOTE"; then
   BAK="$(git rev-list --count "$REMOTE..origin/main")"
