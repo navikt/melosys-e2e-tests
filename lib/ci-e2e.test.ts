@@ -483,6 +483,30 @@ test('make ci-images sender ENV og de andre variablene videre, og feiler uten EN
   assert.match(uten.stderr, /ENV=/);
 });
 
+test('make ci-affected og ci-grep sender utvalget til scriptet', () => {
+  assert.match(make({}, 'ci-affected'), /ci-e2e\.sh --affected/);
+  assert.match(make({}, 'ci-grep', 'GREP=abc'), /ci-e2e\.sh --grep "abc"/);
+});
+
+test('make ci ci-images uten ENV stopper før noe mål kjører', () => {
+  const r = spawnSync('make', ['-n', 'ci', 'ci-images'], { cwd: REPO, encoding: 'utf8' });
+  assert.notEqual(r.status, 0);
+  assert.match(r.stderr, /ENV=/);
+  assert.doesNotMatch(r.stdout, /ci-e2e\.sh/);
+});
+
+test('VIS_FILTER i miljøet skriver ikke ut filteret', () => {
+  const repo = lagRepo(TO_SPECS);
+  const kjør = (env: Record<string, string>, ...a: string[]) =>
+    spawnSync('bash', ['scripts/ci-e2e.sh', '--grep', 'abc|def', '--branch', 'feature', '--preview', ...a], {
+      cwd: repo.arbeid,
+      env: { ...process.env, ...env },
+      encoding: 'utf8',
+    });
+  assert.doesNotMatch(kjør({ VIS_FILTER: '1' }).stdout, /^abc\|def$/m);
+  assert.match(kjør({}, '--vis-filter').stdout, /^abc\|def$/m);
+});
+
 test('make list-affected BRANCH= henter branchen før utvalget regnes', () => {
   // && gjør at en branch som ikke finnes stopper make i stedet for å regne mot en gammel ref.
   assert.match(

@@ -30,6 +30,7 @@ PREVIEW=0
 GREP=""
 AFFECTED=0
 WAIT=1
+VIS_FILTER=0
 RETRIES="true"   # disable_retries: uten retries ser du ekte flakiness
 
 while [ $# -gt 0 ]; do
@@ -140,7 +141,7 @@ if [ -z "$GREP" ]; then
 else
   ANTALL_MONSTRE="$(printf '%s' "$GREP" | tr '|' '\n' | grep -c '')"
   echo "   filter:      ${#GREP} tegn, $ANTALL_MONSTRE mønstre (vis med --vis-filter)"
-  [ "${VIS_FILTER:-0}" -eq 1 ] && printf '%s\n' "$GREP"
+  [ "$VIS_FILTER" -eq 1 ] && printf '%s\n' "$GREP"
 fi
 if [ -n "$SAMMENDRAG" ]; then
   printf '%s\n' "$SAMMENDRAG" | sed 's/^/   /'

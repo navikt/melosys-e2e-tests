@@ -59,7 +59,7 @@ Grafen ser bare statiske importer. Når endringen din når testene via kjøretid
 
 | Mål | Hva det gjør |
 |---|---|
-| `make list-affected` | Lister påvirkede spec-filer uten å kjøre noe. Tar med ucommittede filer |
+| `make list-affected` | Lister påvirkede spec-filer uten å kjøre noe. Tar med ucommittede filer, men ikke med `BRANCH=`, som regner fra `origin/<branch>` |
 | `make ci` | Kjører hele suiten mot `latest` |
 | `make ci-grep GREP=8163` | Kjører tester som matcher et eget filter |
 | `make ci-images ENV=melosys-api:min-tag,melosys-web:min-tag` | Kjører hele suiten mot egne images |

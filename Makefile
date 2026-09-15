@@ -182,9 +182,16 @@ ci-affected: ## Run only the tests your change affects, on CI, e.g. make ci-affe
 ci-grep: ## Run tests matching GREP=<pattern> on CI, e.g. make ci-grep GREP=8163
 	@./scripts/ci-e2e.sh --grep "$(GREP)" $(CI_FLAGG)
 
+# Sjekkes når Makefile leses, så `make ci ci-images` uten ENV ikke starter ci først.
+ifneq ($(filter ci-images,$(MAKECMDGOALS)),)
+ifeq ($(ENV_ARG),)
+$(error ci-images krever ENV=<tagger> på kommandolinjen, for eksempel make ci-images ENV=melosys-api:min-tag)
+endif
+endif
+
 .PHONY: ci-images
 ci-images: ## Run the full suite on CI against your own images, e.g. make ci-images ENV=melosys-api:my-tag
-	@$(if $(ENV_ARG),,$(error ci-images krever ENV=<tagger> på kommandolinjen, for eksempel make ci-images ENV=melosys-api:min-tag))./scripts/ci-e2e.sh $(CI_FLAGG)
+	@./scripts/ci-e2e.sh $(CI_FLAGG)
 
 # ==============================================================================
 # Development
