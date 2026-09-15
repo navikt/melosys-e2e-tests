@@ -85,3 +85,5 @@ node scripts/affected-tests.mjs --changed pages/vedtak/vedtak.page.ts --files
 ```
 
 `--changed` later som om fila er endret og lister spec-filene som er påvirket. Er 80 % eller mer påvirket, kjører `make ci-affected` likevel hele suiten.
+
+<!-- Test av merge queue, skal ikke til main. -->
