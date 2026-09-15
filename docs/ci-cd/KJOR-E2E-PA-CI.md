@@ -18,13 +18,13 @@ Kjøringen i køen bruker images fra `latest` på det tidspunktet. Hele suiten t
 
 Ruleset-et for merge queue på `main` må ha:
 
-- `check_response_timeout_minutes` på 120. Standardverdien 60 er kortere enn hele suiten (66–68 min målt), så en PR som kjører hele suiten ville falt ut av køen.
+- `check_response_timeout_minutes` på 120. Standardverdien 60 er kortere enn hele suiten (64–68 min målt), så en PR som kjører hele suiten ville falt ut av køen.
 - `max_entries_to_build` på 1, så køen ikke starter flere e2e-stacker på 8-kjerners runnere samtidig med kjøringene fra image-bygg.
 - påkrevd sjekk `e2e-for-merge`.
 
-Merge queue virker bare på brancher med kort navn. `nais/login` avviser et OIDC-token der `sub` er over 127 byte, og i køen er `sub` `repo:navikt/melosys-e2e-tests:ref:refs/heads/gh-readonly-queue/<branch>/pr-<nr>-<sha>`. For `main` blir det 115–117 byte.
+Merge queue virker bare på brancher med navn på høyst 15 tegn. `nais/login` avviser et OIDC-token der `sub` er over 127 byte, og i køen er `sub` `repo:navikt/melosys-e2e-tests:ref:refs/heads/gh-readonly-queue/<branch>/pr-<nr>-<sha>`. For `main` blir det 115–117 byte. En for lang branch stopper bare PR-er som kjører e2e; doc-PR-er går gjennom.
 
-Sjekken `e2e-for-merge` er grønn på en PR før den står i kø, og betyr bare noe i køen. Merger en admin forbi køen, har ingen e2e-tester kjørt.
+Sjekken `e2e-for-merge` er grønn på en PR før den står i kø, og betyr bare noe i køen. Merger noen med bypass på ruleset-et forbi køen, har ingen e2e-tester kjørt.
 
 ## Før du setter en PR i kø
 
