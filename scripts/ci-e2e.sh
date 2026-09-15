@@ -75,7 +75,10 @@ fi
 
 # Hent main og branchen før noe annet: utvalget regnes mot origin/main, og sjekkene under leser
 # origin/$BRANCH. Uten fetch sammenligner begge mot det som tilfeldigvis lå lokalt.
-git fetch --quiet origin main "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null || git fetch --quiet origin main 2>/dev/null || true
+# Eksplisitte refspecs, fordi en --single-branch-klon ellers ikke oppdaterer origin/main eller origin/<branch>.
+MAIN_REF="+refs/heads/main:refs/remotes/origin/main"
+git fetch --quiet origin "$MAIN_REF" "+refs/heads/$BRANCH:refs/remotes/origin/$BRANCH" 2>/dev/null \
+  || git fetch --quiet origin "$MAIN_REF" 2>/dev/null || true
 
 if ! git ls-remote --exit-code --heads origin "$BRANCH" >/dev/null 2>&1; then
   echo "❌ Branchen $BRANCH finnes ikke på origin. Push den først — workflowen leser fra ref-en." >&2

@@ -429,6 +429,7 @@ test('--branch virker i en klon som ikke henter den andre branchen', JQ_SKIP, ()
   lagBranch(repo.arbeid, 'annen', { 'helpers/bare-b.ts': 'export const b = 2;\n' });
   git(repo.arbeid, 'config', 'remote.origin.fetch', '+refs/heads/feature:refs/remotes/origin/feature');
   git(repo.arbeid, 'update-ref', '-d', 'refs/remotes/origin/annen');
+  git(repo.arbeid, 'update-ref', '-d', 'refs/remotes/origin/main');
   repo.settRuns([[{ databaseId: 1, event: 'workflow_dispatch', createdAt: 'NÅ', headBranch: 'annen' }]]);
   const r = repo.ciE2e('--affected', '--branch', 'annen');
   assert.equal(r.status, 0, r.stderr);
@@ -449,7 +450,7 @@ test('affected-tests --head står i rapporten og i feilmeldingen', () => {
   assert.equal(JSON.parse(repo.affected('--json', '--head', 'origin/feature').stdout).head, 'origin/feature');
   const r = repo.affected('--head', 'origin/finnes-ikke');
   assert.equal(r.status, 2);
-  assert.match(r.stderr, /Fant ikke endrede filer mellom origin\/main og origin\/finnes-ikke/);
+  assert.match(r.stderr, /Fant ikke endrede filer mellom origin\/main og origin\/finnes-ikke: fatal/);
 });
 
 const make = (env: Record<string, string>, ...a: string[]) =>
@@ -464,5 +465,49 @@ test('make leser BRANCH og PREVIEW bare fra kommandolinjen, ikke fra miljøet', 
 });
 
 test('make affected BRANCH= henter branchen før utvalget regnes', () => {
-  assert.match(make({}, 'affected', 'BRANCH=min-branch'), /git fetch[^\n]*refs\/heads\/min-branch:refs\/remotes\/origin\/min-branch[^\n]*\n?[^\n]*--head "origin\/min-branch"/);
+  // && gjør at en branch som ikke finnes stopper make i stedet for å regne mot en gammel ref.
+  assert.match(
+    make({}, 'affected', 'BRANCH=min-branch'),
+    /git fetch --quiet origin "\+refs\/heads\/main:refs\/remotes\/origin\/main" "\+refs\/heads\/min-branch:refs\/remotes\/origin\/min-branch" && node scripts\/affected-tests\.mjs --files --kun-committet --head "origin\/min-branch"/
+  );
 });
+
+const HAR_PYTHON = spawnSync('python3', ['--version']).status === 0;
+
+/** Kjører ci-e2e.sh i en ekte terminal, venter på spørsmålet og skriver `svar`. */
+const PTY = `
+import os, pty, select, sys, time
+pid, fd = pty.fork()
+if pid == 0:
+    os.chdir(sys.argv[1])
+    os.execvp('bash', ['bash', 'scripts/ci-e2e.sh', '--preview'])
+ut = b''
+slutt = time.time() + 30
+while b'[J/n] ' not in ut and time.time() < slutt:
+    if select.select([fd], [], [], 0.2)[0]:
+        ut += os.read(fd, 4096)
+os.write(fd, sys.argv[2].encode())
+while True:
+    try:
+        c = os.read(fd, 4096)
+    except OSError:
+        break
+    if not c:
+        break
+    ut += c
+_, status = os.waitpid(pid, 0)
+sys.stdout.write(ut.decode(errors='replace'))
+sys.exit(os.waitstatus_to_exitcode(status))
+`;
+
+for (const [navn, svar] of [
+  ['Ctrl-D på spørsmålet om branchen du står på', '\x04'],
+  ['Ctrl-D når scriptet spør om branchnavn', 'n\n\x04'],
+]) {
+  test(`${navn} avbryter med en melding`, { skip: HAR_PYTHON ? false : 'krever python3 for pty' }, () => {
+    const repo = lagRepo(TO_SPECS);
+    const r = spawnSync('python3', ['-c', PTY, repo.arbeid, svar], { encoding: 'utf8', timeout: 60_000 });
+    assert.equal(r.status, 2, r.stdout);
+    assert.match(r.stdout, /❌ Avbrutt\./);
+  });
+}

@@ -162,7 +162,7 @@ BRANCH_FLAGG = $(if $(BRANCH_ARG),--branch "$(BRANCH_ARG)") $(if $(call fra_komm
 
 .PHONY: affected
 affected: ## List spec files affected by your change (import graph, not guesswork), or BRANCH=<name>
-	@$(if $(BRANCH_ARG),git fetch --quiet origin "+refs/heads/$(BRANCH_ARG):refs/remotes/origin/$(BRANCH_ARG)" && )node scripts/affected-tests.mjs --files $(if $(BRANCH_ARG),--kun-committet --head "origin/$(BRANCH_ARG)")
+	@$(if $(BRANCH_ARG),git fetch --quiet origin "+refs/heads/main:refs/remotes/origin/main" "+refs/heads/$(BRANCH_ARG):refs/remotes/origin/$(BRANCH_ARG)" &&) node scripts/affected-tests.mjs --files $(if $(BRANCH_ARG),--kun-committet --head "origin/$(BRANCH_ARG)")
 
 .PHONY: ci
 ci: ## Run the full E2E suite on CI against latest images

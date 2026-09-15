@@ -68,8 +68,6 @@ export function changedFiles(base, { arbeidstre = true, head = 'HEAD', run = git
 function pakkUt(ref) {
   const dir = mkdtempSync(join(tmpdir(), 'affected-tests-'));
   process.on('exit', () => rmSync(dir, { recursive: true, force: true }));
-  // 'exit' fyrer ikke ved signaler; gjør dem om til en vanlig avslutning så mappa slettes.
-  for (const s of ['SIGINT', 'SIGTERM']) process.on(s, () => process.exit(130));
   const tar = execFileSync('git', ['archive', ref], { cwd: ROOT, maxBuffer: 1024 ** 3 });
   execFileSync('tar', ['-x', '-C', dir], { input: tar });
   return dir;
@@ -180,7 +178,7 @@ function main() {
     try {
       changed = changedFiles(base, { arbeidstre: !args.includes('--kun-committet'), head });
     } catch (e) {
-      fail(`Fant ikke endrede filer mellom ${base} og ${head}:${(e.stderr || e.message).toString().trim() || 'ukjent ref'}`);
+      fail(`Fant ikke endrede filer mellom ${base} og ${head}: ${(e.stderr || e.message).toString().trim() || 'ukjent ref'}`);
     }
   }
 
