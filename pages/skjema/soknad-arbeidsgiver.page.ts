@@ -147,8 +147,6 @@ export class SoknadArbeidsgiverPage {
   /** Steg 2: arbeidsgiverens virksomhet i Norge (privat virksomhet med ordinær drift). */
   async fyllArbeidsgiverensVirksomhet(): Promise<void> {
     const page = this.page;
-    await svarRadio(page, /offentlig virksomhet/, 'Nei');
-    // «bemannings-/vikarbyrå» og «opprettholder vanlig drift» dukker først opp etter «Nei» over.
     await svarRadio(page, /bemannings- eller vikarbyrå/, 'Nei');
     await svarRadio(page, /Opprettholder arbeidsgiveren vanlig drift/, 'Ja');
     await lagreOgFortsett(page, /\/utenlandsoppdraget/);
