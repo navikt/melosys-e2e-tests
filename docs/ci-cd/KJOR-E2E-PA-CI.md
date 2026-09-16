@@ -13,6 +13,7 @@ Workflowen «E2E før merge» (`.github/workflows/e2e-for-merge.yml`) gir sjekke
 - Endrer PR-en bare dokumentasjon eller verktøy, kjører ingenting, og sjekken blir grønn.
 - Blir kjøringen rød, tas PR-en ut av køen. Fiks, push og sett den i kø igjen.
 - Retries er på, som i `playwright.config.ts`. En flaky test stopper derfor ikke merge, men vises som flaky i jobbsammendraget.
+- Du skriver ikke squash-meldingen selv i køen. GitHub setter tittelen fra PR-tittelen pluss `(#nummer)`, og brødteksten fra PR-beskrivelsen. Rett beskrivelsen før du setter PR-en i kø.
 
 Kjøringen i køen bruker images fra `latest` på det tidspunktet. Hele suiten tar rundt en time, et fokusert utvalg 4–12 minutter.
 
