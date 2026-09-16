@@ -35,7 +35,8 @@
     "@types/pg": "^8.16.0",
     "playwright-bdd": "^8.5.0",
     "ts-node": "^10.9.2",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "unpdf": "^1.8.1"
   },
   "dependencies": {
     "dotenv": "^17.2.3",
