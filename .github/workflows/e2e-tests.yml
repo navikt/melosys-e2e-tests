@@ -568,7 +568,7 @@ jobs:
           failed="$RUNNER_TEMP/pull-failed"
           : > "$failed"
           # Ett nytt forsøk: før dette hentet compose up et image som feilet her på nytt,
-          # så en forbigående registerfeil (429, timeout) felte ikke kjøringen.
+          # så en kortvarig registerfeil felte ikke kjøringen.
           pull() {
             docker pull --platform linux/amd64 "$1" \
               || { sleep 10; docker pull --platform linux/amd64 "$1"; } \
@@ -602,11 +602,7 @@ jobs:
             {
               echo "## ❌ Image kunne ikke hentes"
               echo ""
-              if [ "$GITHUB_EVENT_NAME" = "repository_dispatch" ]; then
-                echo "Stacken ble ikke startet. Sjekk om bygget i kilderepoet feilet – da ble taggen fra repository_dispatch aldri pushet."
-              else
-                echo "Stacken ble ikke startet. Sjekk at taggene under er pushet, og at innloggingen mot registeret virket (feiler alle GAR-images, er det innloggingen)."
-              fi
+              echo "Stacken ble ikke startet. Mangler en commit-tag (ikke \`latest\`), er den trolig ikke pushet. Ved repository_dispatch betyr det som regel at bygget i kilderepoet feilet."
               echo ""
               sed 's/^/- `/; s/$/`/' "$failed"
             } | tee -a "$GITHUB_STEP_SUMMARY"
