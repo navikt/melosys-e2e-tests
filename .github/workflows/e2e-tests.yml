@@ -563,30 +563,52 @@ jobs:
       - name: Pre-pull Docker images in parallel
         run: |
           echo "🐳 Pre-pulling Docker images to avoid timeout during compose up..."
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:${{ steps.image-tags.outputs.melosys_api_tag }} &
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-web:${{ steps.image-tags.outputs.melosys_web_tag }} &
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:${{ steps.image-tags.outputs.faktureringskomponenten_tag }} &
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-dokgen:${{ steps.image-tags.outputs.melosys_dokgen_tag }} &
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:${{ steps.image-tags.outputs.melosys_trygdeavgift_tag }} &
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }} &
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-inngangsvilkar:${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }} &
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-eessi:${{ steps.image-tags.outputs.melosys_eessi_tag }} &
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:latest &
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/felles-kodeverk:latest &
-          docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-docker-compose-mock:${{ steps.image-tags.outputs.melosys_mock_tag }} &
-          docker pull --platform linux/amd64 gvenzl/oracle-xe:18.4.0-slim &
-          docker pull --platform linux/amd64 postgres:13-alpine &
-          docker pull --platform linux/amd64 confluentinc/cp-kafka:7.8.0 &
-          docker pull --platform linux/amd64 ghcr.io/navikt/mock-oauth2-server:2.3.0 &
-          docker pull --platform linux/amd64 ghcr.io/navikt/mock-oauth2-server:0.4.8 &
-          docker pull --platform linux/amd64 unleashorg/unleash-server:latest &
+          # En bar `wait` returnerer 0 selv om en pull feilet. Da stoppet en manglende tag
+          # først i compose up, to minutter senere, under overskriften «Stacken startet ikke».
+          failed="$RUNNER_TEMP/pull-failed"
+          : > "$failed"
+          # Ett nytt forsøk: før dette hentet compose up et image som feilet her på nytt,
+          # så en kortvarig registerfeil felte ikke kjøringen.
+          pull() {
+            docker pull --platform linux/amd64 "$1" \
+              || { sleep 10; docker pull --platform linux/amd64 "$1"; } \
+              || echo "$1" >> "$failed"
+          }
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:${{ steps.image-tags.outputs.melosys_api_tag }} &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-web:${{ steps.image-tags.outputs.melosys_web_tag }} &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:${{ steps.image-tags.outputs.faktureringskomponenten_tag }} &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-dokgen:${{ steps.image-tags.outputs.melosys_dokgen_tag }} &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:${{ steps.image-tags.outputs.melosys_trygdeavgift_tag }} &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }} &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-inngangsvilkar:${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }} &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-eessi:${{ steps.image-tags.outputs.melosys_eessi_tag }} &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:latest &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/felles-kodeverk:latest &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-docker-compose-mock:${{ steps.image-tags.outputs.melosys_mock_tag }} &
+          pull gvenzl/oracle-xe:18.4.0-slim &
+          pull postgres:13-alpine &
+          pull confluentinc/cp-kafka:7.8.0 &
+          pull ghcr.io/navikt/mock-oauth2-server:2.3.0 &
+          pull ghcr.io/navikt/mock-oauth2-server:0.4.8 &
+          pull unleashorg/unleash-server:latest &
           # Skjema-stack (digital «Utsendt arbeidstaker»-søknad) — kun når skjema er i scope.
           if [ "$SKJEMA_IN_SCOPE" = "true" ]; then
-            docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-skjema-api:${{ steps.image-tags.outputs.melosys_skjema_api_tag }} &
-            docker pull --platform linux/amd64 europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-skjema-web:${{ steps.image-tags.outputs.melosys_skjema_web_tag }} &
-            docker pull --platform linux/amd64 ghcr.io/nais/wonderwall:latest &
+            pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-skjema-api:${{ steps.image-tags.outputs.melosys_skjema_api_tag }} &
+            pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-skjema-web:${{ steps.image-tags.outputs.melosys_skjema_web_tag }} &
+            pull ghcr.io/nais/wonderwall:latest &
           fi
           wait
+          if [ -s "$failed" ]; then
+            {
+              echo "## ❌ Image kunne ikke hentes"
+              echo ""
+              echo "Stacken ble ikke startet. Mangler en commit-tag (ikke \`latest\`), er den trolig ikke pushet. Ved repository_dispatch betyr det som regel at bygget i kilderepoet feilet."
+              echo ""
+              sed 's/^/- `/; s/$/`/' "$failed"
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+            while read -r img; do echo "::error::Kunne ikke hente $img"; done < "$failed"
+            exit 1
+          fi
           echo "✅ All images pre-pulled successfully"
 
       - name: Registrer image-digester og entrypoints
