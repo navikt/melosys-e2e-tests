@@ -567,7 +567,13 @@ jobs:
           # først i compose up, to minutter senere, under overskriften «Stacken startet ikke».
           failed="$RUNNER_TEMP/pull-failed"
           : > "$failed"
-          pull() { docker pull --platform linux/amd64 "$1" || echo "$1" >> "$failed"; }
+          # Ett nytt forsøk: før dette hentet compose up et image som feilet her på nytt,
+          # så en forbigående registerfeil (429, timeout) felte ikke kjøringen.
+          pull() {
+            docker pull --platform linux/amd64 "$1" \
+              || { sleep 10; docker pull --platform linux/amd64 "$1"; } \
+              || echo "$1" >> "$failed"
+          }
           pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:${{ steps.image-tags.outputs.melosys_api_tag }} &
           pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-web:${{ steps.image-tags.outputs.melosys_web_tag }} &
           pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:${{ steps.image-tags.outputs.faktureringskomponenten_tag }} &
@@ -596,7 +602,11 @@ jobs:
             {
               echo "## ❌ Image kunne ikke hentes"
               echo ""
-              echo "Stacken ble ikke startet. En tag som mangler i GAR betyr som regel at bygget i kilderepoet feilet, men likevel sendte repository_dispatch."
+              if [ "$GITHUB_EVENT_NAME" = "repository_dispatch" ]; then
+                echo "Stacken ble ikke startet. Sjekk om bygget i kilderepoet feilet – da ble taggen fra repository_dispatch aldri pushet."
+              else
+                echo "Stacken ble ikke startet. Sjekk at taggene under er pushet, og at innloggingen mot registeret virket (feiler alle GAR-images, er det innloggingen)."
+              fi
               echo ""
               sed 's/^/- `/; s/$/`/' "$failed"
             } | tee -a "$GITHUB_STEP_SUMMARY"
