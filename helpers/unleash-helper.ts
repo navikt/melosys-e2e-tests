@@ -435,13 +435,19 @@ export class UnleashHelper {
       const defaultFeatures = [
         'melosys.faktureringskomponent.vis_referanse',
         'melosys.ftrl.begrense_periode_vedtak',
-        'melosys.11_3_a_Norge_er_utpekt',
         'melosys.pensjonist',
         'melosys.pensjonist_eos',
         'standardvedlegg_eget_vedlegg_avtaleland',
         'melosys.arsavregning',
         'melosys.arsavregning.uten.flyt',
+        'melosys.arsavregning.eos_pensjonist',
         'melosys.faktureringskomponenten.ikke-tidligere-perioder',
+        'melosys.cdm-4-4',
+        'melosys.tekstblokker',
+        'melosys.tekstblokker.dynamisk-placeholder',
+        'melosys.administrasjon',
+        'melosys.vis-pensjonsopptjening-popp',
+        'melosys.trygdeavgift.vis_beregningsforklaring',
       ];
 
       const features = featureNames || defaultFeatures;
