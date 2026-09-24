@@ -1831,7 +1831,9 @@ jobs:
           ACTOR="$PAYLOAD_ACTOR"
           SOURCE_REPO="$PAYLOAD_REPOSITORY"
           COMMIT_SHA="$PAYLOAD_COMMIT_SHA"
-          COMMIT_MSG="$PAYLOAD_COMMIT_MESSAGE"
+          # Doble backslash: MESSAGE skrives med printf '%b', som ellers tolker
+          # «\c» i emnet som «stopp her» og kutter resten av Slack-meldinga.
+          COMMIT_MSG="${PAYLOAD_COMMIT_MESSAGE//\\/\\\\}"
           IMAGE_TAG="$PAYLOAD_IMAGE_TAG"
           SHORT_SHA="${COMMIT_SHA:0:7}"
 
