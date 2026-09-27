@@ -52,6 +52,7 @@ jobs:
           SERVICE: ${{ inputs.service }}
           IMAGE: ${{ inputs.image }}
           TAG: ${{ inputs.tag }}
+          QUEUE_REF: ${{ inputs.queue_ref }}
           GH_TOKEN: ${{ github.token }}
         run: |
           # E2E Tests ignorerer en ukjent tjeneste og tester da latest. En markør
@@ -71,6 +72,10 @@ jobs:
             echo "::error::tag må være en commit-SHA (40 hex-tegn)"
             exit 1
           fi
+          if [ -n "$QUEUE_REF" ] && ! [[ "$QUEUE_REF" =~ ^(refs/heads/)?gh-readonly-queue/[A-Za-z0-9._/-]+/pr-[0-9]+-[0-9a-f]{40}$ ]]; then
+            echo "::error::queue_ref må være en gh-readonly-queue-ref"
+            exit 1
+          fi
 
           # Treet hentes her, ikke fra kalleren.
           TREE=$(gh api "repos/navikt/$SERVICE/commits/$TAG" --jq .commit.tree.sha)
@@ -81,8 +86,11 @@ jobs:
           echo "tree=$TREE" >> "$GITHUB_OUTPUT"
           echo "🌳 $SERVICE@$TAG har tree $TREE"
 
+      # Feiler innloggingen, feiler også oppslaget under, og det regnes som bom:
+      # da kjører testene. Det er aldri en vei til grønn uten kjøring.
       - name: Login to NAIS registry
         uses: nais/login@v0
+        continue-on-error: true
         with:
           team: teammelosys
 
@@ -145,25 +153,42 @@ jobs:
             '$ARGS.named | with_entries(select(.value != ""))')
           echo "🧾 gate_context: $GATE_CONTEXT"
 
-          # gh skriver URL-en til kjøringen når API-et returnerer den. Ellers finnes
-          # kjøringen via tittelen «E2E Tests · <correlation_id>» (run-name i e2e-tests.yml).
-          OUT=$(gh workflow run e2e-tests.yml -R "$E2E_REPO" --ref main \
-            -f environment="$SERVICE:$TAG" \
-            -f gate_context="$GATE_CONTEXT" \
-            -f correlation_id="$CORRELATION_ID")
-          echo "$OUT"
-          RUN_ID=$(printf '%s' "$OUT" | sed -nE 's#.*/actions/runs/([0-9]+).*#\1#p' | head -1)
-          if [ -z "$RUN_ID" ]; then
+          # Finner kjøringen via tittelen «E2E Tests · <correlation_id>» (run-name i
+          # e2e-tests.yml). Den listes ikke med én gang, så det prøves i ca. 30 s.
+          finn_kjoring() {
+            GH_TOKEN="$READ_TOKEN" gh run list -R "$E2E_REPO" --workflow e2e-tests.yml \
+                --event workflow_dispatch -L 30 --json databaseId,displayTitle \
+              | jq -r --arg t "E2E Tests · $CORRELATION_ID" \
+                  '[.[] | select(.displayTitle == $t)][0].databaseId // empty' || true
+          }
+          vent_paa_kjoring() {
             for _ in $(seq 1 10); do
+              RUN_ID=$(finn_kjoring)
+              [ -n "$RUN_ID" ] && return 0
               sleep 3
-              RUN_ID=$(GH_TOKEN="$READ_TOKEN" gh run list -R "$E2E_REPO" --workflow e2e-tests.yml \
-                  --event workflow_dispatch -L 30 --json databaseId,displayTitle \
-                | jq -r --arg t "E2E Tests · $CORRELATION_ID" '[.[] | select(.displayTitle == $t)][0].databaseId // empty') || RUN_ID=""
-              [ -n "$RUN_ID" ] && break
             done
-          fi
+            return 1
+          }
+
+          # gh skriver URL-en til kjøringen når API-et returnerer den. En feil fra
+          # API-et kan komme selv om kjøringen ble opprettet, så før et nytt forsøk
+          # sjekkes tittelen; ellers ville suiten startet to ganger.
+          RUN_ID=""
+          for forsok in 1 2 3; do
+            if OUT=$(gh workflow run e2e-tests.yml -R "$E2E_REPO" --ref main \
+                -f environment="$SERVICE:$TAG" \
+                -f gate_context="$GATE_CONTEXT" \
+                -f correlation_id="$CORRELATION_ID" 2> "$RUNNER_TEMP/dispatch.err"); then
+              echo "$OUT"
+              RUN_ID=$(printf '%s' "$OUT" | sed -nE 's#.*/actions/runs/([0-9]+).*#\1#p' | head -1)
+              [ -n "$RUN_ID" ] || vent_paa_kjoring || true
+              break
+            fi
+            echo "⚠️  gh workflow run feilet (forsøk $forsok): $(tr '\n\r' '  ' < "$RUNNER_TEMP/dispatch.err")"
+            if vent_paa_kjoring; then break; fi
+          done
           if [ -z "$RUN_ID" ]; then
-            echo "::error::Fant ikke kjøringen etter dispatch (tittel «E2E Tests · $CORRELATION_ID»)"
+            echo "::error::Fant ikke kjøringen etter dispatch (tittel «E2E Tests · ${CORRELATION_ID}»)"
             exit 1
           fi
           echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
@@ -173,7 +198,8 @@ jobs:
         id: wait
         env:
           # Lesing med kallerens GITHUB_TOKEN: e2e-repoet er offentlig, og det
-          # sparer PAT-ens rate limit. Grensen er 1000 kall i timen per repo.
+          # sparer PAT-ens rate limit. Grensen er 1000 kall i timen, delt med alle
+          # workflows i kallerrepoet; gaten bruker 1–2 i minuttet.
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ steps.dispatch.outputs.run_id }}
           QUEUE_REF: ${{ inputs.queue_ref }}
@@ -192,18 +218,21 @@ jobs:
                 exit 1
               fi
             fi
-            if ! SVAR=$(gh run view "$RUN_ID" -R "$E2E_REPO" --json status,conclusion 2>&1); then
+            # Ett API-kall; `gh run view` bruker to. Et svar som ikke er JSON med
+            # status, telles som en feil og prøves igjen.
+            if SVAR=$(gh api "repos/$E2E_REPO/actions/runs/$RUN_ID" --jq '{status, conclusion}' 2> "$RUNNER_TEMP/view.err") \
+               && STATUS=$(printf '%s' "$SVAR" | jq -er .status 2>> "$RUNNER_TEMP/view.err") \
+               && CONCLUSION=$(printf '%s' "$SVAR" | jq -r '.conclusion // ""'); then
+              FEIL_I_RAD=0
+            else
               FEIL_I_RAD=$((FEIL_I_RAD + 1))
-              echo "⚠️  gh run view feilet ($FEIL_I_RAD på rad): $(printf '%s' "$SVAR" | tr '\n\r' '  ')"
+              echo "⚠️  Statusoppslaget feilet ($FEIL_I_RAD på rad): $(tr '\n\r' '  ' < "$RUNNER_TEMP/view.err")"
               if [ "$FEIL_I_RAD" -ge 10 ]; then
-                echo "::error::gh run view feilet 10 ganger på rad"
+                echo "::error::Statusoppslaget feilet 10 ganger på rad"
                 exit 1
               fi
               continue
             fi
-            FEIL_I_RAD=0
-            STATUS=$(printf '%s' "$SVAR" | jq -r .status)
-            CONCLUSION=$(printf '%s' "$SVAR" | jq -r .conclusion)
             echo "$(date -u +%H:%M:%S) status=$STATUS conclusion=$CONCLUSION"
             if [ "$STATUS" = "completed" ]; then
               if [ "$CONCLUSION" = "success" ]; then
@@ -217,34 +246,51 @@ jobs:
       - name: Avbryt E2E Tests
         # Kjører når ventingen ikke ble grønn: gaten er avbrutt (label fjernet,
         # køoppføring kastet ut), har fått timeout, eller E2E Tests er rød.
-        # En ferdig kjøring gir 409; det er ingen feil.
+        # En ferdig kjøring gir 409; det er ingen feil. Andre feil gir en advarsel,
+        # for da går suiten videre i opptil 68 minutter.
         if: always() && steps.dispatch.outcome != 'skipped' && steps.wait.outcome != 'success'
         env:
           GH_TOKEN: ${{ secrets.E2E_TRIGGER_PAT }}
           READ_TOKEN: ${{ github.token }}
           RUN_ID: ${{ steps.dispatch.outputs.run_id }}
         run: |
-          if [ -z "$RUN_ID" ]; then
-            # Avbrutt midt i dispatch-steget: slå opp via tittelen.
-            RUN_ID=$(GH_TOKEN="$READ_TOKEN" gh run list -R "$E2E_REPO" --workflow e2e-tests.yml \
+          finn_kjoring() {
+            GH_TOKEN="$READ_TOKEN" gh run list -R "$E2E_REPO" --workflow e2e-tests.yml \
                 --event workflow_dispatch -L 30 --json databaseId,displayTitle \
-              | jq -r --arg t "E2E Tests · $CORRELATION_ID" '[.[] | select(.displayTitle == $t)][0].databaseId // empty') || RUN_ID=""
+              | jq -r --arg t "E2E Tests · $CORRELATION_ID" \
+                  '[.[] | select(.displayTitle == $t)][0].databaseId // empty' || true
+          }
+          if [ -z "$RUN_ID" ]; then
+            # Avbrutt midt i dispatch-steget: slå opp via tittelen. En kjøring som
+            # nettopp er startet, listes ikke med én gang.
+            for _ in 1 2 3; do
+              RUN_ID=$(finn_kjoring)
+              [ -n "$RUN_ID" ] && break
+              sleep 3
+            done
           fi
           if [ -z "$RUN_ID" ]; then
             echo "Ingen kjøring å avbryte."
             exit 0
           fi
-          gh run cancel "$RUN_ID" -R "$E2E_REPO" || true
+          if gh run cancel "$RUN_ID" -R "$E2E_REPO" 2> "$RUNNER_TEMP/cancel.err"; then
+            echo "Avbrøt E2E Tests $RUN_ID."
+          elif grep -q "completed" "$RUNNER_TEMP/cancel.err"; then
+            echo "E2E Tests $RUN_ID var alt ferdig."
+          else
+            echo "::warning::Klarte ikke avbryte E2E Tests $RUN_ID: $(tr '\n\r' '  ' < "$RUNNER_TEMP/cancel.err")"
+          fi
 
       - name: Skriv lenke ved rødt
-        if: failure()
+        # cancelled() dekker også timeout-minutes.
+        if: failure() || cancelled()
         env:
           RUN_ID: ${{ steps.dispatch.outputs.run_id }}
         run: |
           if [ -n "$RUN_ID" ]; then
-            echo "❌ E2E Tests var ikke grønn: https://github.com/$E2E_REPO/actions/runs/$RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+            echo "❌ Gaten ble ikke grønn. E2E Tests: https://github.com/$E2E_REPO/actions/runs/$RUN_ID" >> "$GITHUB_STEP_SUMMARY"
           else
-            echo "❌ Gaten feilet før E2E Tests ble startet." >> "$GITHUB_STEP_SUMMARY"
+            echo "❌ Gaten ble ikke grønn, og ingen kjøring med tittelen «E2E Tests · ${CORRELATION_ID}» ble funnet." >> "$GITHUB_STEP_SUMMARY"
           fi
 
   mark:
@@ -254,13 +300,18 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       # Egen innlogging: tokenet fra nais/login varer én time, og E2E Tests tar
-      # ca. 68 minutter.
+      # ca. 68 minutter. Markøren sparer bare tid, så en feil her gjør ikke gaten
+      # rød etter en grønn kjøring; neste kjøring på samme tree tester på nytt.
       - name: Login to NAIS registry
+        id: login
         uses: nais/login@v0
+        continue-on-error: true
         with:
           team: teammelosys
 
       - name: Tagg imaget e2e-ok-<tree>
+        id: tag
+        continue-on-error: true
         env:
           IMAGE: ${{ inputs.image }}
           TAG: ${{ inputs.tag }}
@@ -268,3 +319,7 @@ jobs:
         run: |
           docker buildx imagetools create -t "$IMAGE:e2e-ok-$TREE" "$IMAGE:$TAG"
           echo "🏷️  $IMAGE:$TAG er tagget e2e-ok-$TREE" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Varsle om manglende markør
+        if: steps.login.outcome == 'failure' || steps.tag.outcome == 'failure'
+        run: echo "::warning::E2E Tests var grønn, men markøren e2e-ok-<tree> ble ikke satt. Neste kjøring på samme tree kjører e2e på nytt."
