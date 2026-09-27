@@ -13,7 +13,7 @@ When a repository pushes a new Docker image to GCP, it can automatically trigger
 2. `melosys-api` workflow builds and pushes Docker image to GCP
 3. `melosys-api` workflow triggers `melosys-e2e-tests` workflow
 4. E2E tests run with the newly pushed image
-5. Results are reported back
+5. Results stay in `melosys-e2e-tests`: the run's job summary and artifacts. If the run fails, a message goes to Slack `#melosys-ci`. Nothing is reported back to the source repo: no commit status and no check.
 
 ---
 

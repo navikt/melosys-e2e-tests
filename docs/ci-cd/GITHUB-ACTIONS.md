@@ -46,6 +46,10 @@ For debugging race conditions or running specific tests multiple times, use the 
 | `repeat_each` | Run each test N times | `1` |
 | `disable_retries` | Disable test retries (for accurate race condition detection) | `false` |
 | `run_bdd` | Run ONLY the opt-in ATDD/BDD example (`--project=bdd`) instead of chromium | `false` |
+| `unleash_force_disable` | Comma-separated Unleash toggles forced OFF for the whole run | `` |
+| `unleash_force_enable` | Comma-separated Unleash toggles forced ON for the whole run | `` |
+| `gate_context` | Set by the e2e gate, not for manual runs. JSON that goes to the `source*`/`gate*` fields in `trigger-context.json`. Invalid JSON gives a warning, and the run continues without gate fields. | `` |
+| `correlation_id` | Set by the e2e gate, not for manual runs. Gives the run the title `E2E Tests · <id>`, so the gate can find it. | `` |
 
 ### Using GitHub CLI (`gh`)
 
@@ -116,7 +120,7 @@ Source repositories (like `melosys-api`, `faktureringskomponenten`) can automati
 1. Source repo builds and pushes Docker image
 2. Source repo sends trigger to this E2E workflow
 3. E2E tests run with the newly pushed image
-4. Results are reported
+4. Results stay in this repo: the run's job summary and artifacts. If the run fails, a message goes to Slack `#melosys-ci`. The source repo gets no commit status or check back.
 
 **Supported triggers:**
 - `melosys-api-published`
