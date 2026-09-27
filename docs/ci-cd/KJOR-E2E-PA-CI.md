@@ -42,6 +42,17 @@ Kalleren sender `service`, `image` (GAR-sti uten tag), `tag` (commit-SHA-en imag
 
 Gate-kjøringer sender ikke varsel til Slack; det gjør bare `repository_dispatch`-kjøringer. Svaret står i PR-en eller i køen.
 
+### Labelen `e2e` i melosys-api
+
+Sett labelen `e2e` på en PR i melosys-api for å kjøre hele suiten mot PR-en flettet inn i master (`.github/workflows/e2e-pr.yml` der). Sjekken er ikke påkrevd.
+
+- Kjøringen tar rundt 75 minutter: bygg, så «E2E Tests» mot `melosys-api:<merge-sha>` og `latest` for resten.
+- Er nøyaktig samme kode testet grønt før, hoppes både bygg og kjøring over.
+- Fjerner du labelen, avbrytes kjøringen. Andre labeler, som `wip`, påvirker den ikke.
+- En push starter ingen ny kjøring. For en ny kjøring fjerner du labelen og setter den på nytt. Ikke bruk «Re-run jobs»: den tester den gamle merge-commiten.
+- Sett labelen rett før du merger. Står master stille fra kjøringen er grønn til du merger, har commiten på master samme tree, og `deploy-dev` hopper over e2e-kjøringen etter merge. Har master flyttet seg, kjører e2e etter merge som før.
+- PR-er fra Dependabot og fra forks kjører ikke.
+
 ## Før du setter en PR i kø
 
 Vil du se resultatet før du setter PR-en i kø, stå i branchen og kjør:
