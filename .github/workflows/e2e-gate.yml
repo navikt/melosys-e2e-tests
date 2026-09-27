@@ -172,8 +172,8 @@ jobs:
 
           # gh skriver URL-en til kjøringen når API-et returnerer den. En feil fra
           # API-et kan komme selv om kjøringen ble opprettet, så før et nytt forsøk
-          # sjekkes tittelen i ca. 30 s. Listes kjøringen senere enn det, starter
-          # suiten to ganger; gaten følger da bare den siste.
+          # sjekkes tittelen i ca. 30 s. Listes en kjøring senere enn det, kan suiten
+          # starte opptil tre ganger. Gaten følger én av dem, og de andre avbrytes ikke.
           RUN_ID=""
           for forsok in 1 2 3; do
             if OUT=$(gh workflow run e2e-tests.yml -R "$E2E_REPO" --ref main \
@@ -324,7 +324,8 @@ jobs:
           echo "🏷️  $IMAGE:$TAG er tagget e2e-ok-$TREE" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Varsle om manglende markør
-        # outcome, ikke conclusion: med continue-on-error er conclusion alltid success.
+        # outcome, ikke conclusion: med continue-on-error er conclusion success også
+        # når steget feiler.
         if: steps.login.outcome == 'failure' || steps.tag.outcome == 'failure'
         run: |
           MELDING="E2E Tests var grønn, men markøren e2e-ok-<tree> ble ikke satt. Neste kjøring på samme tree kjører e2e på nytt."
