@@ -379,11 +379,21 @@ jobs:
           # viser gate-kjøringer som før til den leser feltene. Ugyldig gate_context gir
           # en advarsel og null i gate-feltene; testene trenger den ikke, så kjøringen
           # går videre. Feilmeldingen er vår egen tekst, aldri input-verdien.
-          GATE_FIELDS=$(jq -n --arg correlationId "$INPUT_CORRELATION_ID" "$JQ_HELPERS"'
+          # correlation_id og source_repo får bare tegnene gaten selv bruker; da kan de
+          # heller ikke bli en workflow-kommando når fila logges under.
+          CORRELATION_ID=""
+          if [ -n "$INPUT_CORRELATION_ID" ]; then
+            if [[ "$INPUT_CORRELATION_ID" =~ ^[A-Za-z0-9._-]{1,100}$ ]]; then
+              CORRELATION_ID="$INPUT_CORRELATION_ID"
+            else
+              echo "::warning::Ugyldig correlation_id (tillatt: A-Z a-z 0-9 . _ -, maks 100 tegn), feltet blir null."
+            fi
+          fi
+          GATE_FIELDS=$(jq -n --arg correlationId "$CORRELATION_ID" "$JQ_HELPERS"'
             {
               sourceRepo: null, sourceSha: null, gateTrigger: null, tree: null,
               gateActor: null, prNumber: null, headSha: null, queueRef: null,
-              correlationId: ($correlationId | txt)
+              correlationId: ($correlationId | nz)
             }') || GATE_FIELDS='{}'
           if [ -n "$INPUT_GATE_CONTEXT" ]; then
             if GATE_PARSED=$(printf '%s' "$INPUT_GATE_CONTEXT" | jq -c -s "$JQ_HELPERS"'
@@ -393,10 +403,16 @@ jobs:
                 def hex40($f): tekst($f)
                   | if . == null or test("^[0-9a-f]{40}$") then .
                     else error("\($f) er ikke 40 hex-tegn") end;
+                # Feltene gaten alltid sender. Uten dem kunne en kjøring fått
+                # sourceRepo uten sourceSha og blitt feil attribuert i console.
+                def kreves($f): if (.[$f] // "") == "" then error("\($f) mangler") else . end;
                 if length != 1 or (.[0] | type) != "object"
                 then error("er ikke ett JSON-objekt") else .[0] end
+                | kreves("source_repo") | kreves("source_sha") | kreves("tree") | kreves("trigger")
                 | {
-                    sourceRepo: tekst("source_repo"),
+                    sourceRepo: (tekst("source_repo")
+                      | if test("^[A-Za-z0-9._-]{1,100}$") then .
+                        else error("source_repo har ugyldige tegn") end),
                     sourceSha: hex40("source_sha"),
                     gateTrigger: (tekst("trigger")
                       | if . == null or . == "pr-label" or . == "merge-queue" then .
@@ -405,8 +421,8 @@ jobs:
                     gateActor: tekst("actor"),
                     prNumber: (.pr_number
                       | if . == null then null
-                        elif type == "number" and . == floor and . > 0 then .
-                        elif type == "string" and test("^[1-9][0-9]{0,9}$") then tonumber
+                        elif type == "number" and . == floor and . > 0 and . < 1e10 then floor
+                        elif type == "string" and test("^[1-9][0-9]{0,9}\\z") then tonumber
                         else error("pr_number er ikke et positivt heltall") end),
                     headSha: hex40("head_sha"),
                     queueRef: tekst("queue_ref")
