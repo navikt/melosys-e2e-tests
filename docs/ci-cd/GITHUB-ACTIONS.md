@@ -48,8 +48,8 @@ For debugging race conditions or running specific tests multiple times, use the 
 | `run_bdd` | Run ONLY the opt-in ATDD/BDD example (`--project=bdd`) instead of chromium | `false` |
 | `unleash_force_disable` | Comma-separated Unleash toggles forced OFF for the whole run | `` |
 | `unleash_force_enable` | Comma-separated Unleash toggles forced ON for the whole run | `` |
-| `gate_context` | Set by the e2e gate, not for manual runs. JSON with `source_repo`, `source_sha`, `tree`, `trigger` (required) and `actor`, `pr_number`, `head_sha`, `queue_ref`, written to new fields in `trigger-context.json`. If the JSON or a value is invalid, the run logs a warning and continues with all gate fields null. | `` |
-| `correlation_id` | Set by the e2e gate, not for manual runs. Gives the run the title `E2E Tests · <id>`, so the gate can find it. Allowed characters: `A-Z a-z 0-9 . _ -`, at most 100. | `` |
+| `gate_context` | Set by the e2e gate, not for manual runs. JSON with `source_repo`, `source_sha`, `tree`, `trigger` (required) and `actor`, `pr_number`, `head_sha`, `queue_ref`, written to new fields in `trigger-context.json`. Other keys are rejected. If the JSON, a key or a value is invalid, the run logs a warning and continues with all gate fields null. | `` |
+| `correlation_id` | Set by the e2e gate, not for manual runs. Gives the run the title `E2E Tests · <id>`, so the gate can find it. Allowed characters: `A-Z a-z 0-9 . _ -`, at most 100. Any other value gives a warning and `correlationId: null`; the title still uses the raw value. | `` |
 
 ### Using GitHub CLI (`gh`)
 

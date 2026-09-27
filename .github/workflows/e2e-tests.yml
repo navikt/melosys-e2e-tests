@@ -403,29 +403,36 @@ jobs:
                 def hex40($f): tekst($f)
                   | if . == null or test("^[0-9a-f]{40}$") then .
                     else error("\($f) er ikke 40 hex-tegn") end;
+                def tillat($f; $re): tekst($f)
+                  | if . == null or test($re) then . else error("\($f) har ugyldige tegn") end;
                 # Feltene gaten alltid sender. Uten dem kunne en kjøring fått
                 # sourceRepo uten sourceSha og blitt feil attribuert i console.
                 def kreves($f): if (.[$f] // "") == "" then error("\($f) mangler") else . end;
                 if length != 1 or (.[0] | type) != "object"
                 then error("er ikke ett JSON-objekt") else .[0] end
                 | kreves("source_repo") | kreves("source_sha") | kreves("tree") | kreves("trigger")
+                # Ukjente nøkler (for eksempel headSha for head_sha) avvises, ellers ble
+                # feltet stille null. Nøkkelnavnet logges ikke: det er input.
+                | if (keys - ["source_repo", "source_sha", "tree", "trigger", "actor",
+                              "pr_number", "head_sha", "queue_ref"]) != []
+                  then error("har ukjente felt") else . end
                 | {
-                    sourceRepo: (tekst("source_repo")
-                      | if test("^[A-Za-z0-9._-]{1,100}$") then .
-                        else error("source_repo har ugyldige tegn") end),
+                    sourceRepo: tillat("source_repo"; "^[A-Za-z0-9._-]{1,100}$"),
                     sourceSha: hex40("source_sha"),
                     gateTrigger: (tekst("trigger")
                       | if . == null or . == "pr-label" or . == "merge-queue" then .
                         else error("trigger er verken pr-label eller merge-queue") end),
                     tree: hex40("tree"),
-                    gateActor: tekst("actor"),
+                    # GitHub-brukernavn, eventuelt med [bot]. Uten # kan verdien ikke
+                    # bli en ##[-kommando i loggen.
+                    gateActor: tillat("actor"; "^[A-Za-z0-9-]{1,39}(\\[bot\\])?$"),
                     prNumber: (.pr_number
-                      | if . == null then null
+                      | if . == null or . == "" then null
                         elif type == "number" and . == floor and . > 0 and . < 1e10 then floor
                         elif type == "string" and test("^[1-9][0-9]{0,9}\\z") then tonumber
                         else error("pr_number er ikke et positivt heltall") end),
                     headSha: hex40("head_sha"),
-                    queueRef: tekst("queue_ref")
+                    queueRef: tillat("queue_ref"; "^[A-Za-z0-9._/-]{1,255}$")
                   }' 2>"$RUNNER_TEMP/gate-context.err") \
                && GATE_MERGED=$(jq -n --argjson a "$GATE_FIELDS" --argjson b "$GATE_PARSED" '$a + $b'); then
               GATE_FIELDS="$GATE_MERGED"
