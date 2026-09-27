@@ -1,4 +1,8 @@
 name: E2E Tests
+# Med correlation_id får kjøringen en tittel e2e-gate.yml kan søke etter. Uten den gir
+# tom verdi GitHubs standardtittel: «E2E Tests», eller event-typen ved repository_dispatch.
+# melosys-console tolker begge, så standardtittelen må ikke endres.
+run-name: ${{ inputs.correlation_id && format('E2E Tests · {0}', inputs.correlation_id) || '' }}
 
 on:
   workflow_dispatch:
@@ -44,6 +48,16 @@ on:
         default: ''
       unleash_force_enable:
         description: 'Comma-separated Unleash toggles to force ON for the whole run'
+        required: false
+        type: string
+        default: ''
+      gate_context:
+        description: 'Set by e2e-gate.yml: JSON with source_repo, source_sha, tree, trigger, actor, pr_number, head_sha, queue_ref. Leave empty for manual runs.'
+        required: false
+        type: string
+        default: ''
+      correlation_id:
+        description: 'Set by e2e-gate.yml so it can find the run by title. Leave empty for manual runs.'
         required: false
         type: string
         default: ''
@@ -157,6 +171,8 @@ jobs:
           INPUT_RUN_BDD: ${{ inputs.run_bdd }}
           INPUT_UNLEASH_FORCE_DISABLE: ${{ inputs.unleash_force_disable }}
           INPUT_UNLEASH_FORCE_ENABLE: ${{ inputs.unleash_force_enable }}
+          INPUT_GATE_CONTEXT: ${{ inputs.gate_context }}
+          INPUT_CORRELATION_ID: ${{ inputs.correlation_id }}
         run: |
           # Verdier utenfra (payload og workflow_dispatch-input) får linjeskiftene
           # fjernet før de logges. En workflow-kommando
@@ -355,7 +371,75 @@ jobs:
             def nz: if . == "" then null else . end;
             def as_bool: if . == "true" then true elif . == "false" then false else null end;
             def as_num: if . == "" then null else (tonumber? // null) end;
+            def txt: gsub("[\r\n]"; " ") | nz;
           '
+
+          # ---- Gate-kontekst fra e2e-gate.yml ----
+          # Skrives til egne felt, så repository/commitSha/actor er uendret og console
+          # viser gate-kjøringer som før til den leser feltene. Ugyldig gate_context gir
+          # en advarsel og null i gate-feltene; testene trenger den ikke, så kjøringen
+          # går videre. Feilmeldingen er vår egen tekst, aldri input-verdien.
+          # correlation_id og source_repo får bare tegnene gaten selv bruker; da kan de
+          # heller ikke bli en workflow-kommando når fila logges under.
+          CORRELATION_ID=""
+          if [ -n "$INPUT_CORRELATION_ID" ]; then
+            if [[ "$INPUT_CORRELATION_ID" =~ ^[A-Za-z0-9._-]{1,100}$ ]]; then
+              CORRELATION_ID="$INPUT_CORRELATION_ID"
+            else
+              echo "::warning::Ugyldig correlation_id (tillatt: A-Z a-z 0-9 . _ -, maks 100 tegn), feltet blir null."
+            fi
+          fi
+          GATE_FIELDS=$(jq -n --arg correlationId "$CORRELATION_ID" "$JQ_HELPERS"'
+            {
+              sourceRepo: null, sourceSha: null, gateTrigger: null, tree: null,
+              gateActor: null, prNumber: null, headSha: null, queueRef: null,
+              correlationId: ($correlationId | nz)
+            }') || GATE_FIELDS='{}'
+          if [ -n "$INPUT_GATE_CONTEXT" ]; then
+            if GATE_PARSED=$(printf '%s' "$INPUT_GATE_CONTEXT" | jq -c -s "$JQ_HELPERS"'
+                def tekst($f): .[$f] | if . == null then null
+                  elif type == "string" then txt
+                  else error("\($f) er ikke tekst") end;
+                def hex40($f): tekst($f)
+                  | if . == null or test("^[0-9a-f]{40}$") then .
+                    else error("\($f) er ikke 40 hex-tegn") end;
+                def tillat($f; $re): tekst($f)
+                  | if . == null or test($re) then . else error("\($f) har ugyldige tegn") end;
+                # Feltene gaten alltid sender. Uten dem kunne en kjøring fått
+                # sourceRepo uten sourceSha og blitt feil attribuert i console.
+                def kreves($f): if (.[$f] // "") == "" then error("\($f) mangler") else . end;
+                if length != 1 or (.[0] | type) != "object"
+                then error("er ikke ett JSON-objekt") else .[0] end
+                | kreves("source_repo") | kreves("source_sha") | kreves("tree") | kreves("trigger")
+                # Ukjente nøkler (for eksempel headSha for head_sha) avvises, ellers ble
+                # feltet stille null. Nøkkelnavnet logges ikke: det er input.
+                | if (keys - ["source_repo", "source_sha", "tree", "trigger", "actor",
+                              "pr_number", "head_sha", "queue_ref"]) != []
+                  then error("har ukjente felt") else . end
+                | {
+                    sourceRepo: tillat("source_repo"; "^[A-Za-z0-9._-]{1,100}$"),
+                    sourceSha: hex40("source_sha"),
+                    gateTrigger: (tekst("trigger")
+                      | if . == null or . == "pr-label" or . == "merge-queue" then .
+                        else error("trigger er verken pr-label eller merge-queue") end),
+                    tree: hex40("tree"),
+                    # GitHub-brukernavn, eventuelt med [bot]. Uten # kan verdien ikke
+                    # bli en ##[-kommando i loggen.
+                    gateActor: tillat("actor"; "^[A-Za-z0-9-]{1,39}(\\[bot\\])?$"),
+                    prNumber: (.pr_number
+                      | if . == null or . == "" then null
+                        elif type == "number" and . == floor and . > 0 and . < 1e10 then floor
+                        elif type == "string" and test("^[1-9][0-9]{0,9}\\z") then tonumber
+                        else error("pr_number er ikke et positivt heltall") end),
+                    headSha: hex40("head_sha"),
+                    queueRef: tillat("queue_ref"; "^[A-Za-z0-9._/-]{1,255}$")
+                  }' 2>"$RUNNER_TEMP/gate-context.err") \
+               && GATE_MERGED=$(jq -n --argjson a "$GATE_FIELDS" --argjson b "$GATE_PARSED" '$a + $b'); then
+              GATE_FIELDS="$GATE_MERGED"
+            else
+              echo "::warning::Ugyldig gate_context, kjøringen fortsetter uten gate-felt: $(tr '\n\r' '  ' < "$RUNNER_TEMP/gate-context.err")"
+            fi
+          fi
 
           if [ -z "$RESOLVED_TAGS" ]; then
             TRIGGER_JSON=""
@@ -370,6 +454,7 @@ jobs:
               --arg headBranch "$HEAD_BRANCH" \
               --arg runAttempt "$RUN_ATTEMPT" \
               --argjson resolvedTags "$RESOLVED_TAGS" \
+              --argjson gate "$GATE_FIELDS" \
               "$JQ_HELPERS"'
               {
                 schemaVersion: 1,
@@ -384,7 +469,7 @@ jobs:
                 runAttempt: ($runAttempt | as_num),
                 resolvedTags: $resolvedTags,
                 inputs: null
-              }') || TRIGGER_JSON=""
+              } + $gate') || TRIGGER_JSON=""
           else
             TRIGGER_JSON=$(jq -n \
               --arg actor "$GITHUB_ACTOR_NAME" \
@@ -399,6 +484,7 @@ jobs:
               --arg unleashForceDisable "$INPUT_UNLEASH_FORCE_DISABLE" \
               --arg unleashForceEnable "$INPUT_UNLEASH_FORCE_ENABLE" \
               --argjson resolvedTags "$RESOLVED_TAGS" \
+              --argjson gate "$GATE_FIELDS" \
               "$JQ_HELPERS"'
               {
                 schemaVersion: 1,
@@ -422,7 +508,7 @@ jobs:
                   unleash_force_disable: ($unleashForceDisable | nz),
                   unleash_force_enable: ($unleashForceEnable | nz)
                 }
-              }') || TRIGGER_JSON=""
+              } + $gate') || TRIGGER_JSON=""
           fi
 
           echo ""
