@@ -27,6 +27,21 @@ Merge queue virker bare på brancher med navn på høyst 15 tegn. `nais/login` a
 
 Sjekken `e2e-for-merge` er grønn på en PR før den står i kø, og betyr bare noe i køen. Merger noen med bypass på ruleset-et forbi køen, har ingen e2e-tester kjørt.
 
+## E2E-gate for kilderepoer
+
+`.github/workflows/e2e-gate.yml` er en gjenbrukbar workflow et kilderepo (først melosys-api) kaller fra en PR eller fra sin egen merge queue. Den svarer på ett spørsmål: er nøyaktig denne koden testet grønt før?
+
+1. Gaten henter git-treet til `tag` fra kilderepoet og slår opp `<image>:e2e-ok-<tree>` i GAR. Finnes markøren, er gaten grønn uten å kjøre noe.
+2. Ellers starter den «E2E Tests» med `environment=<service>:<tag>`, `gate_context` og `correlation_id`, og kjøringen får tittelen `E2E Tests · <service>-<run_id>-<attempt>`. Gaten venter og poller hvert minutt.
+3. Er «E2E Tests» grønn, tagger gaten imaget `e2e-ok-<tree>`. Feiler taggingen, er gaten likevel grønn, med en advarsel. Er «E2E Tests» rød, er gaten rød, og jobbsammendraget lenker til kjøringen.
+4. Avbrytes gaten, for eksempel fordi labelen fjernes eller køoppføringen kastes ut, avbryter den også «E2E Tests».
+
+Treet er nøkkelen, ikke SHA-en: merge-refen på PR-en, commiten i køen og commiten på master har samme tree når koden er den samme. Markøren sparer bare e2e-kjøringen; den gjør aldri et PR-image til et image som deployes.
+
+Kalleren sender `service`, `image` (GAR-sti uten tag), `tag` (commit-SHA-en imaget er bygget fra) og fra merge queue `queue_ref`. Den gir `permissions: { id-token: write, contents: read }` og sender `E2E_TRIGGER_PAT` (Actions: read and write på dette repoet) under `secrets:`.
+
+Gate-kjøringer sender ikke varsel til Slack; det gjør bare `repository_dispatch`-kjøringer. Svaret står i PR-en eller i køen.
+
 ## Før du setter en PR i kø
 
 Vil du se resultatet før du setter PR-en i kø, stå i branchen og kjør:
