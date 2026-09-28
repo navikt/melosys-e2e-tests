@@ -38,7 +38,9 @@ Sjekken `e2e-for-merge` er grønn på en PR før den står i kø, og betyr bare 
 
 Treet er nøkkelen, ikke SHA-en: merge-refen på PR-en, commiten i køen og commiten på master har samme tree når koden er den samme. Markøren sparer bare e2e-kjøringen; den gjør aldri et PR-image til et image som deployes.
 
-Kalleren sender `service`, `image` (GAR-sti uten tag), `tag` (commit-SHA-en imaget er bygget fra) og fra merge queue `queue_ref`. Den gir `permissions: { id-token: write, contents: read }` og sender `E2E_TRIGGER_PAT` (Actions: read and write på dette repoet) under `secrets:`.
+Kalleren sender `service`, `image` (GAR-sti uten tag), `tag` (commit-SHA-en imaget er bygget fra) og fra merge queue `queue_ref`. Den gir `permissions: { id-token: write, contents: read }` og sender `E2E_TRIGGER_PAT` (Actions: read and write på dette repoet) under `secrets:`. Gaten gir tilbake outputs `hit`, `tree` og `run_id` (ID-en til «E2E Tests», tom ved treff).
+
+En gate-kjøring er `workflow_dispatch` på `main`, så GitHub viser dette repoets siste commit og eieren av `E2E_TRIGGER_PAT` øverst på siden. Kilderepo, PR, PR-head og tree står i jobbsammendraget.
 
 Gate-kjøringer sender ikke varsel til Slack; det gjør bare `repository_dispatch`-kjøringer. Svaret står i PR-en eller i køen.
 
@@ -48,6 +50,7 @@ Sett labelen `e2e` på en PR i melosys-api for å kjøre hele suiten mot PR-en f
 
 - Kjøringen tar rundt 75 minutter: bygg, så «E2E Tests» mot `melosys-api:<merge-sha>` og `latest` for resten.
 - Er nøyaktig samme kode testet grønt før, hoppes både bygg og kjøring over.
+- Når kjøringen er ferdig, kommer resultatet som en kommentar i PR-en. Checken henger på PR-headen da labelen ble satt, og vises ikke lenger på PR-siden etter en ny push. Har PR-en fått nye commits underveis, sier kommentaren det.
 - Fjerner du labelen, avbrytes kjøringen. Andre labeler, som `wip`, påvirker den ikke.
 - En push starter ingen ny kjøring. For en ny kjøring fjerner du labelen og setter den på nytt. Ikke bruk «Re-run jobs»: den tester den gamle merge-commiten.
 - Sett labelen rett før du merger. Står master stille fra kjøringen er grønn til du merger, har commiten på master samme tree, og `deploy-dev` hopper over e2e-kjøringen etter merge. Har master flyttet seg, kjører e2e etter merge som før.
