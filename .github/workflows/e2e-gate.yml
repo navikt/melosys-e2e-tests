@@ -37,6 +37,17 @@ on:
       E2E_TRIGGER_PAT:
         description: 'Token med Actions: read and write på navikt/melosys-e2e-tests'
         required: true
+    # Lar kalleren melde resultatet tilbake, for eksempel som en kommentar i PR-en.
+    outputs:
+      hit:
+        description: 'true når markøren fantes og E2E Tests ikke ble startet'
+        value: ${{ jobs.lookup.outputs.hit }}
+      tree:
+        description: 'Git-treet til tag'
+        value: ${{ jobs.lookup.outputs.tree }}
+      run_id:
+        description: 'ID-en til E2E Tests-kjøringen i melosys-e2e-tests, tom ved treff'
+        value: ${{ jobs.run.outputs.run_id }}
 
 jobs:
   lookup:
@@ -115,6 +126,8 @@ jobs:
     runs-on: ubuntu-latest
     # E2E Tests har selv 120 min. Resten er kø, dispatch og polling.
     timeout-minutes: 135
+    outputs:
+      run_id: ${{ steps.dispatch.outputs.run_id || steps.cancel.outputs.run_id }}
     env:
       E2E_REPO: navikt/melosys-e2e-tests
       CORRELATION_ID: ${{ inputs.service }}-${{ github.run_id }}-${{ github.run_attempt }}
