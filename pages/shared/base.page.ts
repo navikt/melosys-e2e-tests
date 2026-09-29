@@ -244,9 +244,9 @@ export abstract class BasePage {
     const maxAttempts = verifyHeadingChange ? 3 : 1;
     let disabledWaits = 0;
 
-    // Overskriften kan bytte før lagringen klikket startet, er ferdig. Vi venter derfor på
-    // skrivekallene som faktisk startet før vi går videre. Kaster løkka, feiler testen, og
-    // lytteren forsvinner når siden lukkes.
+    // Overskriften bytter før lagringene er ferdige, så etter stegbyttet venter vi på
+    // skrivekallene som faktisk startet. Kaster løkka, feiler testen, og lytteren
+    // forsvinner når siden lukkes.
     const skrivekall = verifyHeadingChange ? sporKall(this.page, erSkrivekallMotApi) : null;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) {
@@ -438,13 +438,18 @@ export abstract class BasePage {
     }
 
     if (skrivekall) {
-      const { startet, besvart } = await skrivekall.ventPåStartedeKall({ svartidMs: 30000 });
-      if (startet > besvart) {
-        console.log(`  ⚠️  ${startet - besvart} av ${startet} skrivekall uten svar etter 30 s`);
-      }
+      // Stegvelgeren i melosys-web bytter steg først og lagrer deretter ett kall om gangen
+      // (lovvalgsperioder, avklartefakta, vilkaar, …). Vinduet på 500 ms erstatter den
+      // faste søvnen og forlenges så lenge kjeden fortsetter.
+      const { startet, besvart } = await skrivekall.ventPåStartedeKall({
+        startvinduMs: 500,
+        stilleMs: 500,
+        svartidMs: 30000,
+      });
+      console.log(`  💾 ${besvart} av ${startet} lagringskall fullført etter stegbytte`);
+    } else {
+      await this.page.waitForTimeout(500);
     }
-
-    await this.page.waitForTimeout(500);
 
     if (waitForContent) {
       console.log('  ⏳ Venter på innhold på neste steg...');

@@ -16,23 +16,32 @@ export interface KallSporing {
    * som kanskje aldri kommer.
    *
    * Har ingen kall startet ennå, venter den inntil `startvinduMs` på det første. Deretter
-   * venter den inntil `svartidMs` på svar på alle kall som har startet. Stopper sporingen.
-   * Kaster aldri: kallstedet avgjør hva et manglende svar betyr.
+   * venter den inntil `svartidMs` på svar på alle kall som har startet. Med `stilleMs` venter
+   * den etter siste svar så lenge på et nytt kall, for kjeder der neste lagring starter når
+   * forrige har svart. Stopper sporingen. Kaster aldri: kallstedet avgjør hva et manglende
+   * svar betyr.
    */
-  ventPåStartedeKall(opts?: { startvinduMs?: number; svartidMs?: number }): Promise<Kallresultat>;
+  ventPåStartedeKall(opts?: {
+    startvinduMs?: number;
+    stilleMs?: number;
+    svartidMs?: number;
+  }): Promise<Kallresultat>;
   stopp(): void;
 }
 
-/** Matcher skrivekall (POST/PUT/PATCH/DELETE) mot melosys-api. */
+/** Matcher POST/PUT/PATCH/DELETE mot melosys-api, også POST-er som bare leser. */
 export const erSkrivekallMotApi: KallFilter = request =>
   request.method() !== 'GET' && request.method() !== 'HEAD' && request.url().includes('/api/');
 
 /**
- * Skjemaene autolagrer med debounce (ca. 500 ms), og bare når de er gyldige. Starter ingen
- * lagring innen dette vinduet, kommer den ikke. Målt på CI: PUT-en er ferdig ca. 450 ms
- * etter klikket.
+ * Skjemaene autolagrer med debounce (350–600 ms i melosys-web), og bare når de er gyldige.
+ * Starter ingen lagring innen dette vinduet, kommer den ikke. Målt på CI: lagringen var
+ * ferdig ca. 230 ms etter at avkryssingen var bekreftet.
  */
 export const AUTOLAGRING_STARTVINDU_MS = 1500;
+
+/** Årsavregningen lagrer innbetalt beløp og beregningen etter hverandre (600 ms debounce). */
+const AUTOLAGRING_STILLE_MS = 1000;
 
 /**
  * Begynner å spore kall som matcher `filter`. Start sporingen FØR handlingen som kan utløse
@@ -56,36 +65,48 @@ export function sporKall(page: Pick<Page, 'on' | 'off'>, filter: KallFilter): Ka
     page.off('request', påRequest);
   };
 
+  const ventPåNyttKall = (ms: number) =>
+    new Promise<void>(resolve => {
+      const timer = setTimeout(resolve, ms);
+      nyttKall = () => {
+        clearTimeout(timer);
+        resolve();
+      };
+    }).finally(() => {
+      nyttKall = null;
+    });
+
   const ventPåStartedeKall: KallSporing['ventPåStartedeKall'] = async ({
     startvinduMs = 0,
+    stilleMs = 0,
     svartidMs = 30_000,
   } = {}) => {
     if (startede.length === 0 && startvinduMs > 0) {
-      await new Promise<void>(resolve => {
-        const timer = setTimeout(resolve, startvinduMs);
-        nyttKall = () => {
-          clearTimeout(timer);
-          resolve();
-        };
-      });
-      nyttKall = null;
+      await ventPåNyttKall(startvinduMs);
     }
 
-    // Et kall som starter mens vi venter på svar, tas også med.
+    // Kall som starter mens vi venter på svar, eller innen stilleMs etter siste svar,
+    // tas også med.
     const besvarte = new Set<Request>();
     const frist = Date.now() + svartidMs;
     let ventet = 0;
-    while (ventet < startede.length && Date.now() < frist) {
-      const ubesvarte = startede.slice(ventet);
-      ventet = startede.length;
-      const gjenstår = Math.max(0, frist - Date.now());
-      await Promise.all(
-        ubesvarte.map(request =>
-          medTidsfrist(request.response(), gjenstår).then(svar => {
-            if (svar) besvarte.add(request);
-          }),
-        ),
-      );
+    while (Date.now() < frist) {
+      if (ventet < startede.length) {
+        const ubesvarte = startede.slice(ventet);
+        ventet = startede.length;
+        const gjenstår = Math.max(0, frist - Date.now());
+        await Promise.all(
+          ubesvarte.map(request =>
+            medTidsfrist(request.response(), gjenstår).then(svar => {
+              if (svar) besvarte.add(request);
+            }),
+          ),
+        );
+        continue;
+      }
+      if (ventet === 0 || stilleMs <= 0) break;
+      await ventPåNyttKall(Math.min(stilleMs, Math.max(0, frist - Date.now())));
+      if (ventet === startede.length) break;
     }
 
     stopp();
@@ -96,20 +117,21 @@ export function sporKall(page: Pick<Page, 'on' | 'off'>, filter: KallFilter): Ka
 }
 
 /**
- * Venter på autolagringen `sporing` fanget, hvis den starter innen
- * AUTOLAGRING_STARTVINDU_MS, og logger utfallet.
+ * Venter på lagringen `sporing` fanget, hvis den starter innen AUTOLAGRING_STARTVINDU_MS,
+ * og på lagringer som følger etter den. Logger utfallet.
  */
 export async function ventPåAutolagringHvisDenStarter(sporing: KallSporing, hva: string): Promise<void> {
   const { startet, besvart } = await sporing.ventPåStartedeKall({
     startvinduMs: AUTOLAGRING_STARTVINDU_MS,
+    stilleMs: AUTOLAGRING_STILLE_MS,
     svartidMs: 10_000,
   });
   if (startet === 0) {
-    console.log(`ℹ️  ${hva}: ingen autolagring (skjemaet lagrer bare når det er gyldig)`);
+    console.log(`ℹ️  ${hva}: ingen lagring startet innen ${AUTOLAGRING_STARTVINDU_MS} ms`);
   } else if (besvart < startet) {
-    console.log(`⚠️  ${hva}: ${startet - besvart} av ${startet} lagringer uten svar etter 10 s`);
+    console.log(`⚠️  ${hva}: ${startet - besvart} av ${startet} kall uten svar etter 10 s`);
   } else {
-    console.log(`✅ ${hva}: autolagring fullført`);
+    console.log(`✅ ${hva}: ${startet} kall fullført`);
   }
 }
 

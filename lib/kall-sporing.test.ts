@@ -97,6 +97,43 @@ describe('sporKall', () => {
     assert.ok(Date.now() - start >= 240, `brukte ${Date.now() - start} ms`);
   });
 
+  test('med stillevindu ventes en kjede av kall som starter etter hverandre', async () => {
+    // Som tilSteg i melosys-web: neste lagring starter først når forrige har svart.
+    const side = falskSide();
+    const sporing = sporKall(side as any, erSkrivekallMotApi);
+    const kjede = (igjen: number) => {
+      const kall = PUT(30);
+      side.send(kall);
+      if (igjen > 1) kall.response().then(() => setTimeout(() => kjede(igjen - 1), 5));
+    };
+    kjede(3);
+    const res = await sporing.ventPåStartedeKall({ stilleMs: 100 });
+    assert.deepStrictEqual(res, { startet: 3, besvart: 3 });
+  });
+
+  test('stillevinduet koster bare stilleMs når ingen nye kall kommer', async () => {
+    const side = falskSide();
+    const sporing = sporKall(side as any, erSkrivekallMotApi);
+    side.send(PUT(20));
+    const start = Date.now();
+    const res = await sporing.ventPåStartedeKall({ stilleMs: 100 });
+    const brukt = Date.now() - start;
+    assert.deepStrictEqual(res, { startet: 1, besvart: 1 });
+    assert.ok(brukt >= 110 && brukt < 500, `brukte ${brukt} ms`);
+  });
+
+  test('et kall som feiler, telles ikke som besvart og kaster ikke', async () => {
+    const side = falskSide();
+    const sporing = sporKall(side as any, erSkrivekallMotApi);
+    side.send({
+      method: () => 'POST',
+      url: () => 'http://localhost:3000/melosys/api/vilkaar/1',
+      response: () => Promise.reject(new Error('Target closed')),
+    } as unknown as Request);
+    const res = await sporing.ventPåStartedeKall();
+    assert.deepStrictEqual(res, { startet: 1, besvart: 0 });
+  });
+
   test('svartiden begrenser ventingen og kaster ikke', async () => {
     const side = falskSide();
     const sporing = sporKall(side as any, erSkrivekallMotApi);
@@ -111,6 +148,7 @@ describe('sporKall', () => {
     const side = falskSide();
     const sporing = sporKall(side as any, erSkrivekallMotApi);
     side.send(falsktKall('GET', 'http://localhost:3000/melosys/api/saker', null));
+    side.send(falsktKall('HEAD', 'http://localhost:3000/melosys/api/saker', null));
     side.send(falsktKall('POST', 'http://localhost:3000/melosys/static/x', null));
     const res = await sporing.ventPåStartedeKall({ startvinduMs: 50 });
     assert.deepStrictEqual(res, { startet: 0, besvart: 0 });
