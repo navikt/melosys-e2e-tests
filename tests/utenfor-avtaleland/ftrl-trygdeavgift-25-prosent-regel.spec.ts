@@ -451,8 +451,8 @@ test.describe('FTRL Pensjonist — 25%-regelen', () => {
     test.setTimeout(120000);
 
     // Pensjonist-forskuddet beregnes for perioden «i dag → 31.12», som KRYMPER
-    // utover året. Backend teller hele kalendermåneder fra startmåneden t.o.m.
-    // desember (= 12 − getMonth()), og avkorter IKKE minstebeløpet for delår.
+    // utover året. Backend (MonthCalculator) teller startmåneden som brøk av
+    // gjenstående dager, og avkorter IKKE minstebeløpet for delår.
     // Derfor kan vi ikke hardkode en månedsinntekt mot en 12-måneders antagelse:
     // gjør vi det, faller periodeinntekten under minstebeløpet senere på året og
     // beregningen blir MINSTEBELØP (`**`) i stedet for 25%-regel (`*`).
@@ -463,7 +463,11 @@ test.describe('FTRL Pensjonist — 25%-regelen', () => {
     // PENSJON_UFØRETRYGD) er 9,1 % → øvre grense ≈ 156 700. Vi sikter på
     // 1,3 × minstebeløp (≈ 129 500), midt i båndet uansett kjøremåned.
     const minstebeløp = await hentMinstebeløp(request, TESTÅR);
-    const restMånederIÅret = 12 - new Date().getMonth(); // forskudd: i dag → 31.12
+    // Hele måneder ga 99 428 kr < minstebeløp 29.09 (3,07 mnd, ikke 4).
+    const iDag = new Date();
+    const dagerIMåneden = new Date(iDag.getFullYear(), iDag.getMonth() + 1, 0).getDate();
+    const restMånederIÅret =
+      (dagerIMåneden - iDag.getDate() + 1) / dagerIMåneden + (11 - iDag.getMonth());
     const månedsinntekt = String(
       Math.ceil((minstebeløp * 1.3) / restMånederIÅret),
     );
