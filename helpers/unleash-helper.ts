@@ -34,6 +34,7 @@ const endredeToggles = new Set<string>();
 // Første reset i en worker-prosess setter alle standardtoggles: vi vet ikke hva en tidligere
 // kjøring, en krasjet worker eller Unleash-UI-et har etterlatt.
 let fullResetGjort = false;
+let advartOmApiSjekk = false;
 
 /** Bare for enhetstester: nullstill sporingen som om worker-prosessen var ny. */
 export function _nullstillSporingForTest(): void {
@@ -324,6 +325,11 @@ export class UnleashHelper {
       const response = await this.request.get(url, options);
 
       if (!response.ok()) {
+        // Uten dette svaret venter resetten bare på Unleash, ikke på at melosys-api ser endringen.
+        if (!advartOmApiSjekk) {
+          advartOmApiSjekk = true;
+          console.log(`   ⚠️  Unleash: melosys-api /featuretoggle svarte ${response.status()} — venter bare på Unleash`);
+        }
         return null; // Return null to indicate we couldn't fetch (different from false)
       }
 
@@ -439,8 +445,9 @@ export class UnleashHelper {
   }
 
   /**
-   * Setter tilbake bare toggles som enableFeature/disableFeature har endret siden forrige
-   * reset. Første kall i en worker-prosess gjør full reset (resetToDefaults).
+   * Setter tilbake toggles som enableFeature/disableFeature har endret siden forrige reset,
+   * og standardtoggles som står feil i Unleash. Første kall i en worker-prosess gjør full
+   * reset (resetToDefaults).
    *
    * @returns antall toggles som ble satt (0 når ingen var endret)
    */
@@ -449,7 +456,31 @@ export class UnleashHelper {
       return this.resetToDefaults(silent, skipFrontendCheck);
     }
     const effective = this.effectiveDefaults();
-    return this.resetToggles([], effective, silent, skipFrontendCheck);
+    const avvik = await this.togglesSomAvvikerFraStandard(effective);
+    return this.resetToggles(avvik, effective, silent, skipFrontendCheck);
+  }
+
+  /**
+   * Standardtoggles som står feil i Unleash, også når de er endret utenom UnleashHelper
+   * (Unleash-UI, curl, en annen kjøring). Ett kall; feiler det, nøyer vi oss med sporingen.
+   */
+  private async togglesSomAvvikerFraStandard(effective: Map<string, boolean>): Promise<string[]> {
+    try {
+      const response = await this.request.get(
+        `${this.baseUrl}/api/admin/projects/${this.project}/features`,
+        { headers: { Authorization: this.apiToken } }
+      );
+      if (!response.ok()) throw new Error(`${response.status()}`);
+      const faktisk = new Map<string, boolean>();
+      for (const feature of (await response.json()).features ?? []) {
+        const env = feature.environments?.find((e: any) => e.name === this.environment);
+        faktisk.set(feature.name, env?.enabled === true);
+      }
+      return [...effective].filter(([name, enabled]) => faktisk.get(name) !== enabled).map(([name]) => name);
+    } catch (error: any) {
+      console.log(`   ⚠️  Unleash: kunne ikke lese toggle-lista, setter bare sporede toggles: ${error.message || error}`);
+      return [];
+    }
   }
 
   /**

@@ -108,9 +108,9 @@ async function cleanupTestData(page: any, waitForProcesses: boolean = false): Pr
     await resetUnleash(page.request, 'før test');
 }
 
-async function resetUnleash(request: APIRequestContext, når: string): Promise<void> {
+async function resetUnleash(request: APIRequestContext, når: string, bareUnleash = false): Promise<void> {
     try {
-        const antall = await new UnleashHelper(request).resetChangedToggles(true, false);
+        const antall = await new UnleashHelper(request).resetChangedToggles(true, bareUnleash);
         if (antall > 0) {
             console.log(`   ✅ Unleash: ${antall} toggles satt til standard (${når})`);
         }
@@ -141,6 +141,7 @@ export const cleanupFixture = base.extend<{ autoCleanup: void }>({
         await use();
 
         // AFTER test: wait for processes to complete
+        let prosessventFeilet = false;
         try {
             // expectedNew: 0 — en tømming vet per definisjon ikke hvor mange prosesser testen
             // startet, men alt som er registrert etter markøren må være ferdig før vi rydder.
@@ -148,6 +149,7 @@ export const cleanupFixture = base.extend<{ autoCleanup: void }>({
         } catch (error: any) {
             const errorMessage = error.message || String(error);
             console.log(`   ⚠️  Process instance check failed: ${errorMessage}`);
+            prosessventFeilet = true;
 
             // FAIL THE TEST - Process failures should not be ignored
             throw new Error(
@@ -156,10 +158,12 @@ export const cleanupFixture = base.extend<{ autoCleanup: void }>({
         } finally {
             // AFTER test: reset toggles the test changed (unless debugging locally), also when
             // the process wait threw. Next test's before-reset catches what is left.
+            // Feilet prosessventen, har den brukt 30 s av teardown-budsjettet (60 s). Da venter vi
+            // ikke på melosys-api: testen feiler, og neste worker gjør full reset med venting.
             if (process.env.SKIP_UNLEASH_CLEANUP_AFTER === 'true') {
                 console.log(`   ⏭️  Unleash: Skipping cleanup after test (SKIP_UNLEASH_CLEANUP_AFTER=true)`);
             } else {
-                await resetUnleash(request, 'etter test');
+                await resetUnleash(request, 'etter test', prosessventFeilet);
             }
         }
     }, {auto: true}]

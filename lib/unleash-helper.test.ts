@@ -14,7 +14,7 @@ const IKKE_TIDLIGERE = 'melosys.faktureringskomponenten.ikke-tidligere-perioder'
 const UTEN_FLYT = 'melosys.arsavregning.uten.flyt';
 
 /** Falsk Unleash + melosys-api: admin-API og /featuretoggle svarer med samme tilstand. */
-function falskUnleash(opts: { feilPåPost?: Set<string>; forsinkelseMs?: number } = {}) {
+function falskUnleash(opts: { feilPåPost?: Set<string>; forsinkelseMs?: number; finnesIkke?: Set<string> } = {}) {
   const tilstand = new Map<string, boolean>();
   const poster: string[] = [];
   let samtidige = 0;
@@ -31,6 +31,7 @@ function falskUnleash(opts: { feilPåPost?: Set<string>; forsinkelseMs?: number 
       const m = url.match(/features\/([^/]+)\/environments\/[^/]+\/(on|off)$/);
       if (!m) return svar(true); // opprettelse av toggle
       const navn = decodeURIComponent(m[1]);
+      if (opts.finnesIkke?.delete(navn)) return svar(false); // 404 første gang: må opprettes
       samtidige++;
       maksSamtidige = Math.max(maksSamtidige, samtidige);
       await new Promise(r => setTimeout(r, opts.forsinkelseMs ?? 0));
@@ -45,6 +46,13 @@ function falskUnleash(opts: { feilPåPost?: Set<string>; forsinkelseMs?: number 
       if (ft) {
         const navn = decodeURIComponent(ft[1]);
         return svar(true, { [navn]: tilstand.get(navn) ?? true });
+      }
+      if (url.endsWith('/features')) {
+        const features = [...tilstand].map(([name, enabled]) => ({
+          name,
+          environments: [{ name: 'development', enabled }, { name: 'production', enabled: false }],
+        }));
+        return svar(true, { features });
       }
       const navn = decodeURIComponent(url.split('/features/')[1]);
       return svar(true, { environments: [{ name: 'development', enabled: tilstand.get(navn) ?? false }] });
@@ -132,6 +140,51 @@ describe('UnleashHelper — reset av endrede toggles', () => {
     await unleash.enableFeature(IKKE_TIDLIGERE, true);
     await unleash.resetChangedToggles(true);
     assert.strictEqual(f.tilstand.get(IKKE_TIDLIGERE), false);
+  });
+
+  test('en endret toggle spores ikke videre når den er satt tilbake', async () => {
+    const f = falskUnleash();
+    const unleash = new UnleashHelper(f.request);
+    await unleash.resetChangedToggles(true);
+    await unleash.disableFeature(IKKE_TIDLIGERE, true);
+    assert.strictEqual(await unleash.resetChangedToggles(true), 1);
+    f.poster.length = 0;
+    assert.strictEqual(await unleash.resetChangedToggles(true), 0);
+    assert.deepStrictEqual(f.poster, []);
+  });
+
+  test('en feilet reset av en endret toggle prøves igjen neste gang', async () => {
+    const feil = new Set<string>();
+    const f = falskUnleash({ feilPåPost: feil });
+    const unleash = new UnleashHelper(f.request);
+    await unleash.resetChangedToggles(true);
+    await unleash.disableFeature(IKKE_TIDLIGERE, true);
+
+    feil.add(IKKE_TIDLIGERE);
+    await assert.rejects(unleash.resetChangedToggles(true), /feilet for 1 av 1/);
+    feil.clear();
+    assert.strictEqual(await unleash.resetChangedToggles(true), 1);
+    assert.strictEqual(f.tilstand.get(IKKE_TIDLIGERE), true);
+  });
+
+  test('en toggle som ikke finnes, opprettes og settes uten å bli sporet', async () => {
+    const f = falskUnleash({ finnesIkke: new Set(['melosys.cdm-4-4']) });
+    const unleash = new UnleashHelper(f.request);
+    await unleash.resetChangedToggles(true);
+    assert.strictEqual(f.tilstand.get('melosys.cdm-4-4'), true);
+    f.poster.length = 0;
+    assert.strictEqual(await unleash.resetChangedToggles(true), 0);
+    assert.deepStrictEqual(f.poster, []);
+  });
+
+  test('en toggle endret utenfor UnleashHelper settes tilbake før neste test', async () => {
+    const f = falskUnleash();
+    const unleash = new UnleashHelper(f.request);
+    await unleash.resetChangedToggles(true);
+    f.tilstand.set(UTEN_FLYT, true); // f.eks. endret i Unleash-UI-et
+    f.poster.length = 0;
+    assert.strictEqual(await unleash.resetChangedToggles(true), 1);
+    assert.deepStrictEqual(f.poster, [`${UTEN_FLYT}=off`]);
   });
 
   test('toggles settes parallelt', async () => {
