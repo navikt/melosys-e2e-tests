@@ -122,6 +122,35 @@ describe('sporKall', () => {
     assert.ok(brukt >= 110 && brukt < 500, `brukte ${brukt} ms`);
   });
 
+  test('uten kall koster start- og stillevindu bare startvinduet', async () => {
+    const side = falskSide();
+    const sporing = sporKall(side as any, erSkrivekallMotApi);
+    const start = Date.now();
+    const res = await sporing.ventPåStartedeKall({ startvinduMs: 100, stilleMs: 300 });
+    const brukt = Date.now() - start;
+    assert.deepStrictEqual(res, { startet: 0, besvart: 0 });
+    assert.ok(brukt >= 95 && brukt < 300, `brukte ${brukt} ms`);
+  });
+
+  test('uten stilleMs returnerer den straks etter siste svar', async () => {
+    const side = falskSide();
+    const sporing = sporKall(side as any, erSkrivekallMotApi);
+    side.send(PUT(20));
+    const start = Date.now();
+    await sporing.ventPåStartedeKall();
+    assert.ok(Date.now() - start < 80, `brukte ${Date.now() - start} ms`);
+  });
+
+  test('stillevinduet går ikke forbi svartiden', async () => {
+    const side = falskSide();
+    const sporing = sporKall(side as any, erSkrivekallMotApi);
+    side.send(PUT(20));
+    const start = Date.now();
+    await sporing.ventPåStartedeKall({ stilleMs: 1_000, svartidMs: 100 });
+    const brukt = Date.now() - start;
+    assert.ok(brukt < 300, `brukte ${brukt} ms`);
+  });
+
   test('et kall som feiler, telles ikke som besvart og kaster ikke', async () => {
     const side = falskSide();
     const sporing = sporKall(side as any, erSkrivekallMotApi);

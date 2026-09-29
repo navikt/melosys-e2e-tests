@@ -457,8 +457,8 @@ export class EuEosBehandlingPage extends BasePage {
   async velgMottakerInstitusjon(institusjon?: string): Promise<void> {
     await this.institusjonDropdown.waitFor({ state: 'visible', timeout: 10000 });
 
-    // Nedtrekkslisten vises først når institusjonene er hentet, så kallet er alltid ferdig
-    // her (målt på CI: 5 av 5 ventet forgjeves i 10 s). Vi sjekker bare at valget finnes.
+    // Nedtrekkslisten vises først når institusjonene er hentet, så vi venter på at valget
+    // finnes, ikke på kallet (målt på CI: 5 av 5 ventet forgjeves i 10 s på kallet).
     const ønsketValg = institusjon
       ? this.institusjonDropdown.locator(`option[value="${institusjon}"]`)
       : this.institusjonDropdown.locator('option:not([value=""])').filter({ hasNotText: 'Velg' });

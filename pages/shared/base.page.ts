@@ -438,15 +438,19 @@ export abstract class BasePage {
     }
 
     if (skrivekall) {
-      // Stegvelgeren i melosys-web bytter steg først og lagrer deretter ett kall om gangen
-      // (lovvalgsperioder, avklartefakta, vilkaar, …). Vinduet på 500 ms erstatter den
-      // faste søvnen og forlenges så lenge kjeden fortsetter.
+      // Stegvelgeren i melosys-web bytter steg først og lagrer deretter, stort sett ett kall
+      // om gangen (avklartefakta, vilkaar, …). Vinduet på 500 ms erstatter den faste søvnen
+      // og forlenges så lenge kjeden fortsetter.
       const { startet, besvart } = await skrivekall.ventPåStartedeKall({
         startvinduMs: 500,
         stilleMs: 500,
         svartidMs: 30000,
       });
-      console.log(`  💾 ${besvart} av ${startet} lagringskall fullført etter stegbytte`);
+      if (besvart < startet) {
+        console.log(`  ⚠️  ${startet - besvart} av ${startet} lagringskall uten svar etter 30 s`);
+      } else {
+        console.log(`  💾 ${startet} lagringskall fullført etter stegbytte`);
+      }
     } else {
       await this.page.waitForTimeout(500);
     }

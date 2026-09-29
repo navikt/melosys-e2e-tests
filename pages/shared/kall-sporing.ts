@@ -34,13 +34,16 @@ export const erSkrivekallMotApi: KallFilter = request =>
   request.method() !== 'GET' && request.method() !== 'HEAD' && request.url().includes('/api/');
 
 /**
- * Skjemaene autolagrer med debounce (350–600 ms i melosys-web), og bare når de er gyldige.
- * Starter ingen lagring innen dette vinduet, kommer den ikke. Målt på CI: lagringen var
- * ferdig ca. 230 ms etter at avkryssingen var bekreftet.
+ * Skjemaene i melosys-web autolagrer med en debounce på inntil 600 ms, og bare når de er
+ * gyldige. Starter ingen lagring innen dette vinduet, kommer den ikke. Målt på CI: lagringen
+ * var ferdig ca. 230 ms etter at avkryssingen var bekreftet.
  */
 export const AUTOLAGRING_STARTVINDU_MS = 1500;
 
-/** Årsavregningen lagrer innbetalt beløp og beregningen etter hverandre (600 ms debounce). */
+/**
+ * Én endring kan starte flere lagringer med hver sin debounce (årsavregningen: innbetalt
+ * beløp etter 350 ms, beregningen etter 600 ms).
+ */
 const AUTOLAGRING_STILLE_MS = 1000;
 
 /**
