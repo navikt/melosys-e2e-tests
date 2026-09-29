@@ -106,8 +106,3 @@ Every change to Melosys is described first as an executable specification in the
 readable by domain experts, and is releasable when that specification and all existing ones pass against a
 production-like deployment. The specifications are isolated, deterministic and independent of how the system
 is built, so they survive changes to the UI and services, and each new specification is cheaper to write than the last.
-
-
-Course examples are available here:
-https://github.com/davef77/atdd-course-examples
-https://github.com/davef77/Flight-Search-ATDD
