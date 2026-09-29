@@ -36,9 +36,15 @@ In a system like Melosys, where 17 services evolve and the frontend regularly ad
 Without it, a single UI refactor can break dozens of tests that all hardcode the same selector, turning the test suite into a maintenance burden.
 
 Equally important, the separation between test cases and the DSL creates a shared language that bridges the gap between domain experts and developers.
-When a test reads e.g. "Gitt en person som arbeider i Norge og Sverige, når lovvalg avgjøres etter art. 13,
-skal Norge være lovvalgsland," a domain expert can verify that the specification states the right rule without
-needing to understand programming or tools like Playwright.
+When a test reads e.g.
+
+    Gitt en arbeidstaker som sendes ut av en norsk arbeidsgiver for å arbeide i Sverige i 18 måneder
+    Når søknaden om medlemskap behandles
+    Så skal arbeidstakeren fortsatt være medlem i folketrygden etter artikkel 12 nr. 1
+
+and a companion scenario states that a 30-month posting is not covered by artikkel 12 nr. 1,
+a domain expert can verify that the specifications state the right rule, including the 24-month limit,
+without needing to understand programming or tools like Playwright.
 Note that the example describes one business outcome, not a workflow of screens ("opprett behandling ... fatt vedtak").
 Each specification asserts a single outcome; a good check is whether a completely different system could fulfil it.
 This means tests become living documentation that the whole team can read, challenge, and extend, not just artifacts that developers maintain in isolation.
