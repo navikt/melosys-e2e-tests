@@ -15,6 +15,14 @@ We want to use Dave Farley's four layer model, which consists of:
    deployed using the same tools and techniques that would be used in production.
 
 
+Specifications should come first:
+
+ATDD is test-driven. New behaviour starts as an example from a domain expert, written as an executable
+specification before any implementation exists. The specification decides which DSL functions we need;
+the DSL decides which protocol-driver methods we need; and only then do we write just enough of the system
+to make the specification pass. When the specification passes, the feature is done.
+
+
 Why this approach is especially valuable:
 
 The most powerful benefit of the four-layer model is that it makes test cases survive change.
