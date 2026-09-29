@@ -23,6 +23,20 @@ the DSL decides which protocol-driver methods we need; and only then do we write
 to make the specification pass. When the specification passes, the feature is done.
 
 
+Tests are isolated from each other:
+
+We can only trust a green suite if every test controls its own world. The DSL layer is responsible for this:
+
+- Functional isolation: each test creates its own synthetic data (person, case, employer) through the DSL,
+  instead of depending on shared fixtures or pre-loaded state.
+- Temporal isolation: the DSL aliases the names and identifiers a test uses, so the same test can run twice,
+  or in parallel with other tests, against the same deployed system and still see only its own data.
+- The system boundary is explicit: everything outside Melosys is replaced by a stub that the test programs itself.
+
+Cleaning the database between tests is a temporary measure while we get there, not the target.
+A test that only passes after cleanup is not isolated.
+
+
 Why this approach is especially valuable:
 
 The most powerful benefit of the four-layer model is that it makes test cases survive change.
