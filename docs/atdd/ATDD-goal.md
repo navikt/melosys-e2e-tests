@@ -15,6 +15,21 @@ We want to use Dave Farley's four layer model, which consists of:
    deployed using the same tools and techniques that would be used in production.
 
 
+Responsibilities of each layer:
+
+- Test cases: short (typically given / when / then), in domain language, asserting one outcome.
+  No selectors, URLs, clicks or technical identifiers.
+- DSL: provides default values so a test states only what matters to it, and full precision where it does.
+  Handles aliasing for isolation. Is split by domain area (e.g. sak, behandling, lovvalg, eksterne systemer)
+  rather than one large file. Calls protocol drivers at the same level of abstraction as tests call the DSL.
+- Protocol drivers: the only place that knows how the system works (Playwright, HTTP, Kafka, database).
+  Every method either succeeds or fails the test, so each step is atomic: if control returns, it happened.
+  Assertions live here, with error messages in domain language. Asynchronous work is awaited by polling
+  with a timeout, never by fixed sleeps.
+- Stubs: external systems (PDL, EUX, AAREG etc.) are replaced by simple stubs the DSL programs with the
+  response a test needs. Stubs are translators, not simulations of the real system.
+
+
 Specifications should come first:
 
 ATDD is test-driven. New behaviour starts as an example from a domain expert, written as an executable
