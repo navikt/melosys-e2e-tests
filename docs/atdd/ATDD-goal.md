@@ -27,28 +27,6 @@ We want to use Dave Farley's four layer model, which consists of:
    deployed using the same tools and techniques that would be used in production.
 
 
-Specifications should come first:
-
-ATDD is test-driven. New behaviour starts as an example from a domain expert, written as an executable
-specification before any implementation exists. The specification decides which DSL functions we need;
-the DSL decides which protocol-driver methods we need; and only then do we write just enough of the system
-to make the specification pass. When the specification passes, the feature is done.
-
-
-Tests are isolated from each other:
-
-We can only trust a green suite if every test controls its own world. The DSL layer is responsible for this:
-
-- Functional isolation: each test creates its own synthetic data (person, case, employer) through the DSL,
-  instead of depending on shared fixtures or pre-loaded state.
-- Temporal isolation: the DSL aliases the names and identifiers a test uses, so the same test can run twice,
-  or in parallel with other tests, against the same deployed system and still see only its own data.
-- The system boundary is explicit: everything outside Melosys is replaced by a stub that the test programs itself.
-
-Cleaning the database between tests is a temporary measure while we get there, not the target.
-A test that only passes after cleanup is not isolated.
-
-
 Why this approach is especially valuable:
 
 The most powerful benefit of the four-layer model is that it makes test cases survive change.
@@ -70,6 +48,28 @@ because you are composing existing vocabulary rather than scripting from scratch
 The first test in a new workflow category may require building a DSL function, but the second and third tests in that category
 become trivial. This turns the test suite from a linear cost where more tests automatically give more maintenance, into a platform with decreasing marginal cost,
 which is exactly what you need for a long-lived system that keeps gaining new case types, integrations and regulations.
+
+
+Specifications should come first:
+
+ATDD is test-driven. New behaviour starts as an example from a domain expert, written as an executable
+specification before any implementation exists. The specification decides which DSL functions we need;
+the DSL decides which protocol-driver methods we need; and only then do we write just enough of the system
+to make the specification pass. When the specification passes, the feature is done.
+
+
+Tests are isolated from each other:
+
+We can only trust a green suite if every test controls its own world. The DSL layer is responsible for this:
+
+- Functional isolation: each test creates its own synthetic data (person, case, employer) through the DSL,
+  instead of depending on shared fixtures or pre-loaded state.
+- Temporal isolation: the DSL aliases the names and identifiers a test uses, so the same test can run twice,
+  or in parallel with other tests, against the same deployed system and still see only its own data.
+- The system boundary is explicit: everything outside Melosys is replaced by a stub that the test programs itself.
+
+Cleaning the database between tests is a temporary measure while we get there, not the target.
+A test that only passes after cleanup is not isolated.
 
 
 Success criteria:
