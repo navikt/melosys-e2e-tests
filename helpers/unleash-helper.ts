@@ -27,6 +27,20 @@ dotenv.config({ path: path.resolve(__dirname, '../.env.local'), override: true }
  * await unleash.resetToDefaults();
  * ```
  */
+
+// Toggles som enableFeature/disableFeature har endret siden forrige reset. Ligger på modulnivå
+// fordi hver test lager sin egen UnleashHelper; mengden gjelder én worker-prosess.
+const endredeToggles = new Set<string>();
+// Første reset i en worker-prosess setter alle standardtoggles: vi vet ikke hva en tidligere
+// kjøring, en krasjet worker eller Unleash-UI-et har etterlatt.
+let fullResetGjort = false;
+
+/** Bare for enhetstester: nullstill sporingen som om worker-prosessen var ny. */
+export function _nullstillSporingForTest(): void {
+  endredeToggles.clear();
+  fullResetGjort = false;
+}
+
 export class UnleashHelper {
   private baseUrl: string;
   private apiToken: string;
@@ -67,6 +81,22 @@ export class UnleashHelper {
    * @param skipFrontendCheck - If true, only waits for Admin API (faster, for cleanup)
    */
   async enableFeature(featureName: string, silent: boolean = false, skipFrontendCheck: boolean = false): Promise<void> {
+    endredeToggles.add(featureName);
+    await this.setEnabled(featureName, silent, skipFrontendCheck);
+  }
+
+  /**
+   * Disable a feature toggle for all services
+   * @param featureName - The name of the feature toggle
+   * @param silent - If true, suppresses logging (default: false)
+   * @param skipFrontendCheck - If true, only waits for Admin API (faster, for cleanup)
+   */
+  async disableFeature(featureName: string, silent: boolean = false, skipFrontendCheck: boolean = false): Promise<void> {
+    endredeToggles.add(featureName);
+    await this.setDisabled(featureName, silent, skipFrontendCheck);
+  }
+
+  private async setEnabled(featureName: string, silent: boolean = false, skipFrontendCheck: boolean = false): Promise<void> {
     const url = `${this.baseUrl}/api/admin/projects/${this.project}/features/${featureName}/environments/${this.environment}/on`;
 
     const response = await this.request.post(url, {
@@ -102,13 +132,7 @@ export class UnleashHelper {
     await this.waitForToggleState(featureName, true, silent, skipFrontendCheck);
   }
 
-  /**
-   * Disable a feature toggle for all services
-   * @param featureName - The name of the feature toggle
-   * @param silent - If true, suppresses logging (default: false)
-   * @param skipFrontendCheck - If true, only waits for Admin API (faster, for cleanup)
-   */
-  async disableFeature(featureName: string, silent: boolean = false, skipFrontendCheck: boolean = false): Promise<void> {
+  private async setDisabled(featureName: string, silent: boolean = false, skipFrontendCheck: boolean = false): Promise<void> {
     const url = `${this.baseUrl}/api/admin/projects/${this.project}/features/${featureName}/environments/${this.environment}/off`;
 
     const response = await this.request.post(url, {
@@ -169,7 +193,7 @@ export class UnleashHelper {
 
     // Enable/disable in the environment
     if (enabled) {
-      await this.enableFeature(featureName);
+      await this.setEnabled(featureName);
     }
   }
 
@@ -207,8 +231,8 @@ export class UnleashHelper {
   /**
    * Wait for a toggle to reach the expected state
    * Polls the toggle state until it matches expectedState or timeout is reached
-   * This is necessary because Unleash has server-side caching (~10-15s refresh interval)
-   * and the frontend also caches toggle responses
+   * This is necessary because Unleash has server-side caching and the frontend also caches
+   * toggle responses; melosys-api polls Unleash every 15 s (unleash-client-java default).
    *
    * @param silent - If true, suppresses confirmation logging (default: false)
    * @param skipFrontendCheck - If true, only checks Admin API (for cleanup before page exists)
@@ -223,7 +247,7 @@ export class UnleashHelper {
   ): Promise<void> {
     const startTime = Date.now();
 
-    // Give melosys-api cache a moment to start refreshing (it polls Unleash every 10s by default)
+    // Give melosys-api cache a moment to start refreshing
     await new Promise(resolve => setTimeout(resolve, 100));
 
     // Poll Admin API (always required)
@@ -333,20 +357,12 @@ export class UnleashHelper {
   }
 
   /**
-   * Reset all toggles to their default state (from seed script)
-   * Default state: all toggles enabled except 'melosys.arsavregning.uten.flyt' and
- * 'melosys.arsavregning.eos_tjenesteperson'
-   *
-   * Per-run overrides (applied on top of the defaults, and to toggles not in the
-   * default list) can be supplied via comma-separated env vars:
-   *   - UNLEASH_FORCE_DISABLE - force these toggles OFF for the whole run
-   *   - UNLEASH_FORCE_ENABLE  - force these toggles ON for the whole run
-   * Example: UNLEASH_FORCE_DISABLE=melosys.trygdeavgift.25-prosentregel
-   *
-   * @param silent - If true, suppresses individual toggle logging (default: false)
-   * @param skipFrontendCheck - If true, only waits for Admin API (faster, for cleanup before test)
+   * Standardtilstanden fixturen setter toggles tilbake til, med overstyringene fra
+   * UNLEASH_FORCE_ENABLE / UNLEASH_FORCE_DISABLE (kommaseparert) lagt oppå. Overstyringene
+   * gjelder også toggles som ikke står i standardlista.
+   * Eksempel: UNLEASH_FORCE_DISABLE=melosys.trygdeavgift.25-prosentregel
    */
-  async resetToDefaults(silent: boolean = false, skipFrontendCheck: boolean = false): Promise<void> {
+  private effectiveDefaults(): Map<string, boolean> {
     const defaultToggles = [
       { name: 'melosys.behandlingstype.klage', enabled: true },
       { name: 'melosys.send_melding_om_vedtak', enabled: true },
@@ -379,13 +395,14 @@ export class UnleashHelper {
       // 25 %-regelen er på i produksjon. Tester som trenger ordinær sats må slå den av selv;
       // uten standardverdi arvet testene tilstanden fra forrige test som rørte den.
       { name: 'melosys.trygdeavgift.25-prosentregel', enabled: true },
+      // Testene slår disse på selv. Uten standardverdi ble de stående på etter første test som
+      // rørte dem. På er også det api svarer før de finnes i Unleash (ukjent toggle = på lokalt).
+      { name: 'melosys.cdm-4-4', enabled: true },
+      { name: 'melosys.trygdeavgift.vis_beregningsforklaring', enabled: true },
+      { name: 'melosys.vis_pensjonsopptjening_popp', enabled: true },
+      { name: 'melosys.vis-pensjonsopptjening-popp', enabled: true },
     ];
 
-    // Per-run overrides via env vars (comma-separated toggle names).
-    // Lets a whole test run pin specific toggles without code changes, e.g.
-    //   UNLEASH_FORCE_DISABLE=melosys.trygdeavgift.25-prosentregel
-    // Overrides are applied on top of the defaults above and also apply to
-    // toggles that are not part of the default list.
     const parseList = (value?: string): string[] =>
       (value || '').split(',').map(s => s.trim()).filter(Boolean);
     const forceEnable = parseList(process.env.UNLEASH_FORCE_ENABLE);
@@ -403,14 +420,76 @@ export class UnleashHelper {
         `   ⚙️  Unleash override: force-enable=[${forceEnable.join(', ')}] force-disable=[${forceDisable.join(', ')}]`
       );
     }
+    return effective;
+  }
 
-    for (const [name, enabled] of effective) {
-      if (enabled) {
-        await this.enableFeature(name, silent, skipFrontendCheck);
-      } else {
-        await this.disableFeature(name, silent, skipFrontendCheck);
-      }
+  /**
+   * Setter ALLE standardtoggles (se effectiveDefaults) samtidig, pluss toggles endret siden
+   * forrige reset.
+   *
+   * @param silent - If true, suppresses individual toggle logging (default: false)
+   * @param skipFrontendCheck - If true, only waits for Admin API, not for melosys-api
+   * @returns antall toggles som ble satt
+   */
+  async resetToDefaults(silent: boolean = false, skipFrontendCheck: boolean = false): Promise<number> {
+    const effective = this.effectiveDefaults();
+    const antall = await this.resetToggles([...effective.keys()], effective, silent, skipFrontendCheck);
+    fullResetGjort = true;
+    return antall;
+  }
+
+  /**
+   * Setter tilbake bare toggles som enableFeature/disableFeature har endret siden forrige
+   * reset. Første kall i en worker-prosess gjør full reset (resetToDefaults).
+   *
+   * @returns antall toggles som ble satt (0 når ingen var endret)
+   */
+  async resetChangedToggles(silent: boolean = false, skipFrontendCheck: boolean = false): Promise<number> {
+    if (!fullResetGjort) {
+      return this.resetToDefaults(silent, skipFrontendCheck);
     }
+    const effective = this.effectiveDefaults();
+    return this.resetToggles([], effective, silent, skipFrontendCheck);
+  }
+
+  /**
+   * Setter `names` pluss alle sporede endringer til standardverdien, parallelt. En toggle
+   * fjernes fra sporingen først når den er satt, så en feilet reset prøves igjen neste gang.
+   */
+  private async resetToggles(
+    names: string[],
+    effective: Map<string, boolean>,
+    silent: boolean,
+    skipFrontendCheck: boolean
+  ): Promise<number> {
+    const alle = [...new Set([...names, ...endredeToggles])];
+    const utenStandard = alle.filter(name => !effective.has(name));
+    for (const name of utenStandard) {
+      console.log(
+        `   ⚠️  Unleash: '${name}' ble endret av testen, men har ingen standardverdi i ` +
+        `unleash-helper.ts — tilstanden lekker til neste test. Legg den inn i standardlista.`
+      );
+      endredeToggles.delete(name);
+    }
+
+    const medStandard = alle.filter(name => effective.has(name));
+    const resultater = await Promise.allSettled(medStandard.map(async name => {
+      if (effective.get(name)) {
+        await this.setEnabled(name, silent, skipFrontendCheck);
+      } else {
+        await this.setDisabled(name, silent, skipFrontendCheck);
+      }
+      endredeToggles.delete(name);
+    }));
+
+    const feil = resultater.flatMap(r => (r.status === 'rejected' ? [r.reason] : []));
+    if (feil.length > 0) {
+      throw new Error(
+        `Unleash-reset feilet for ${feil.length} av ${medStandard.length} toggles: ` +
+        feil.map(e => e?.message || String(e)).join('; ')
+      );
+    }
+    return medStandard.length;
   }
 
   /**

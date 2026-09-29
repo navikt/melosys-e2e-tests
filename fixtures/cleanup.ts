@@ -1,4 +1,4 @@
-import {test as base} from '@playwright/test';
+import {APIRequestContext, test as base} from '@playwright/test';
 import {DatabaseHelper} from '../helpers/db-helper';
 import {PgDatabaseHelper} from '../helpers/pg-db-helper';
 import {clearMockDataSilent} from '../helpers/mock-helper';
@@ -12,12 +12,12 @@ import {UnleashHelper} from '../helpers/unleash-helper';
  * Before each test:
  * - Cleans database (removes all test data)
  * - Clears mock service data
- * - Resets ALL Unleash feature toggles to default state
- * - Adds 2s delay for melosys-api cache propagation
+ * - Resets Unleash toggles changed since the last reset (all defaults on the first test in a
+ *   worker process), and waits until melosys-api sees the new state
  *
  * After each test:
  * - Waits for async processes to complete
- * - Resets Unleash toggles (ensures next test gets clean state)
+ * - Resets Unleash toggles the test changed — also when the process wait fails
  * - Leaves data intact for debugging
  *
  * Environment variables:
@@ -103,18 +103,19 @@ async function cleanupTestData(page: any, waitForProcesses: boolean = false): Pr
         console.log(`   ⚠️  Mock cleanup failed: ${error.message || error}`);
     }
 
-    // Reset Unleash feature toggles to default state
-    // This ensures all tests start with consistent toggle state
-    try {
-        const unleash = new UnleashHelper(page.request);
-        await unleash.resetToDefaults(true, true); // silent mode, skip frontend check
-        console.log(`   ✅ Unleash: All toggles reset to defaults`);
+    // Normalt tomt: resetten etter forrige test har allerede satt tilbake det den endret.
+    // Venter på at melosys-api ser tilstanden, så ingen fast søvn trengs etterpå.
+    await resetUnleash(page.request, 'før test');
+}
 
-        // Give melosys-api extra time to poll Unleash and update its cache
-        // melosys-api polls every ~10 seconds, so we wait a bit to ensure cache refresh
-        await new Promise(resolve => setTimeout(resolve, 2000)); // 2 second safety buffer
+async function resetUnleash(request: APIRequestContext, når: string): Promise<void> {
+    try {
+        const antall = await new UnleashHelper(request).resetChangedToggles(true, false);
+        if (antall > 0) {
+            console.log(`   ✅ Unleash: ${antall} toggles satt til standard (${når})`);
+        }
     } catch (error: any) {
-        console.log(`   ⚠️  Unleash reset failed: ${error.message || error}`);
+        console.log(`   ⚠️  Unleash reset failed (${når}): ${error.message || error}`);
     }
 }
 
@@ -152,21 +153,14 @@ export const cleanupFixture = base.extend<{ autoCleanup: void }>({
             throw new Error(
                 `Test failed due to process instance errors: ${errorMessage}`
             );
-        }
-
-        // AFTER test: Reset Unleash toggles (unless debugging locally)
-        // This ensures next test gets clean state without race conditions
-        const skipCleanupAfter = process.env.SKIP_UNLEASH_CLEANUP_AFTER === 'true';
-        if (!skipCleanupAfter) {
-            try {
-                const unleash = new UnleashHelper(request);
-                await unleash.resetToDefaults(true, false); // silent mode, check frontend API
-                console.log(`   ✅ Unleash: Toggles reset after test (cleanup for next test)`);
-            } catch (error: any) {
-                console.log(`   ⚠️  Unleash cleanup after test failed: ${error.message || error}`);
+        } finally {
+            // AFTER test: reset toggles the test changed (unless debugging locally), also when
+            // the process wait threw. Next test's before-reset catches what is left.
+            if (process.env.SKIP_UNLEASH_CLEANUP_AFTER === 'true') {
+                console.log(`   ⏭️  Unleash: Skipping cleanup after test (SKIP_UNLEASH_CLEANUP_AFTER=true)`);
+            } else {
+                await resetUnleash(request, 'etter test');
             }
-        } else {
-            console.log(`   ⏭️  Unleash: Skipping cleanup after test (SKIP_UNLEASH_CLEANUP_AFTER=true)`);
         }
     }, {auto: true}]
 });
