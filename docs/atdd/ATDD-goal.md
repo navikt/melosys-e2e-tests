@@ -23,7 +23,7 @@ We want to use Dave Farley's four layer model, which consists of:
    - External systems (PDL, EUX, AAREG etc.) are replaced by simple stubs the DSL programs with the
      response a test needs. Stubs are translators, not simulations of the real system.
 
-4. System Under Test (SUT) Layer: The actual implementation that fulfils the requirements of the test cases,
+4. System Under Test (SUT) Layer: The actual implementation that fulfills the requirements of the test cases,
    deployed using the same tools and techniques that would be used in production.
 
 
