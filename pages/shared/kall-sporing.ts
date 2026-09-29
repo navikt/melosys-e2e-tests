@@ -34,9 +34,9 @@ export const erSkrivekallMotApi: KallFilter = request =>
   request.method() !== 'GET' && request.method() !== 'HEAD' && request.url().includes('/api/');
 
 /**
- * Skjemaene i melosys-web autolagrer med en debounce på inntil 600 ms, og bare når de er
- * gyldige. Starter ingen lagring innen dette vinduet, kommer den ikke. Målt på CI: lagringen
- * var ferdig ca. 230 ms etter at avkryssingen var bekreftet.
+ * Skjemaene disse POM-ene fyller i melosys-web, autolagrer med en debounce på inntil
+ * 600 ms, og bare når de er gyldige. Starter ingen lagring innen dette vinduet, kommer den
+ * ikke. Målt på CI: lagringen var ferdig ca. 230 ms etter at avkryssingen var bekreftet.
  */
 export const AUTOLAGRING_STARTVINDU_MS = 1500;
 
