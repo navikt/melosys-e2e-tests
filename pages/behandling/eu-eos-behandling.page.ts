@@ -1,5 +1,6 @@
-import { Page } from '@playwright/test';
+import { Page, expect } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+import { erSkrivekallMotApi, sporKall, ventPåAutolagringHvisDenStarter } from '../shared/kall-sporing';
 import { EuEosBehandlingAssertions } from './eu-eos-behandling.assertions';
 
 /**
@@ -255,10 +256,6 @@ export class EuEosBehandlingPage extends BasePage {
   /**
    * Velg arbeidsgiver(e) med checkbox
    *
-   * IMPORTANT: Checkbox triggers immediate API save when checked!
-   * Investigation showed: POST /api/mottatteopplysninger/{id} -> 200
-   * This method now waits for that API call to complete.
-   *
    * @param arbeidsgiverNavn - Navn på arbeidsgiver (f.eks. 'Ståles Stål AS')
    */
   async velgArbeidsgiver(arbeidsgiverNavn: string): Promise<void> {
@@ -291,24 +288,11 @@ export class EuEosBehandlingPage extends BasePage {
     try {
       await checkbox.waitFor({ state: 'visible', timeout: 45000 });
 
-      // CRITICAL: Set up response listener BEFORE checking
-      // Checkbox triggers immediate API save: POST /api/mottatteopplysninger/{id}
-      const responsePromise = this.page.waitForResponse(
-        response => response.url().includes('/api/mottatteopplysninger/') &&
-                    response.request().method() === 'POST' &&
-                    response.status() === 200,
-        { timeout: 5000 }
-      ).catch(() => null); // Don't fail if API doesn't fire
-
+      // Målt på CI: avkrysningen lagrer ikke (0 av 20); lagringen kommer ved
+      // «Bekreft og fortsett». Vent derfor bare hvis en lagring faktisk starter.
+      const autolagring = sporKall(this.page, erSkrivekallMotApi);
       await checkbox.check();
-
-      // Wait for immediate API save
-      const response = await responsePromise;
-      if (response) {
-        console.log(`✅ Arbeidsgiver selection saved: ${response.url()} -> ${response.status()}`);
-      } else {
-        console.log('⚠️  No immediate API save detected (checkbox might already be checked)');
-      }
+      await ventPåAutolagringHvisDenStarter(autolagring, `Arbeidsgiver ${arbeidsgiverNavn}`);
 
       console.log(`✅ Valgte arbeidsgiver: ${arbeidsgiverNavn}`);
     } catch (error) {
@@ -471,21 +455,14 @@ export class EuEosBehandlingPage extends BasePage {
    *                      Hvis ikke angitt, velges første tilgjengelige institusjon
    */
   async velgMottakerInstitusjon(institusjon?: string): Promise<void> {
-    // Wait for the dropdown to be visible and populated
     await this.institusjonDropdown.waitFor({ state: 'visible', timeout: 10000 });
 
-    // Wait for dropdown to be populated with options (API call fetches institutions)
-    await this.page.waitForResponse(
-      response => response.url().includes('/api/eessi/') &&
-                  response.url().includes('/mottakerinstitusjoner') &&
-                  response.status() === 200,
-      { timeout: 10000 }
-    ).catch(() => {
-      console.log('⚠️  Mottakerinstitusjoner API not detected, dropdown may be pre-populated');
-    });
-
-    // Small wait for dropdown to render options
-    await this.page.waitForTimeout(500);
+    // Vent på at valgene er på plass, ikke på kallet som henter dem: kallet er ofte
+    // ferdig før vi kommer hit (målt på CI: 5 av 5 ventet forgjeves i 10 s).
+    const ønsketValg = institusjon
+      ? this.institusjonDropdown.locator(`option[value="${institusjon}"]`)
+      : this.institusjonDropdown.locator('option:not([value=""])').filter({ hasNotText: 'Velg' });
+    await expect(ønsketValg.first()).toBeAttached({ timeout: 10000 });
 
     if (institusjon) {
       // Select specific institution

@@ -1,5 +1,6 @@
 import { Page, Locator, Response, expect } from '@playwright/test';
 import { TIMEOUT_MEDIUM } from './constants';
+import { erSkrivekallMotApi, sporKall } from './kall-sporing';
 
 /**
  * Base Page Object class providing common functionality
@@ -229,9 +230,7 @@ export abstract class BasePage {
       apiPatterns = ['/api/avklartefakta/', '/api/vilkaar/'],
       verifyHeadingChange = false,
       // Hvor lenge vi venter på en auto-save-POST etter klikk (heading-change-modus).
-      // Steg som IKKE auto-lagrer (f.eks. resultat-periode, som kun bytter steg
-      // klientsidig) har ingen matchende POST — da er 10s ren dødtid. Slike POM-er
-      // sender en kort timeout; heading-endringen er uansett det reelle signalet.
+      // Bytter overskriften først, slutter ventingen der.
       apiResponseTimeout = 10000,
     } = options || {};
 
@@ -245,6 +244,10 @@ export abstract class BasePage {
     const maxAttempts = verifyHeadingChange ? 3 : 1;
     let disabledWaits = 0;
 
+    // Overskriften kan bytte før lagringen klikket startet, er ferdig. Vi venter derfor på
+    // skrivekallene som faktisk startet før vi går videre. Kaster løkka, feiler testen, og
+    // lytteren forsvinner når siden lukkes.
+    const skrivekall = verifyHeadingChange ? sporKall(this.page, erSkrivekallMotApi) : null;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) {
         console.log(`  🔄 Retry ${attempt}/${maxAttempts}...`);
@@ -305,17 +308,6 @@ export abstract class BasePage {
           { timeout: apiResponseTimeout },
         ).catch(() => null);
 
-        await button.click();
-
-        const apiResponse = await apiResponsePromise;
-        if (apiResponse) {
-          console.log(`  ✅ API: ${apiResponse.url().split('/api/')[1]?.split('?')[0]} → ${apiResponse.status()}`);
-        } else {
-          console.log(`  ⚠️  Ingen API-respons (forsøk ${attempt})`);
-        }
-
-        // Verify UI actually transitioned
-        const transitionStart = Date.now();
         const headingCheckFn = (originalHeading: string) => {
           const headings = document.querySelectorAll('main h1');
           for (const h of headings) {
@@ -328,6 +320,27 @@ export abstract class BasePage {
           return false;
         };
 
+        await button.click();
+
+        // Mange steg sender ingen POST som matcher apiPatterns. Da er overskriftsskiftet
+        // signalet, så vi venter ikke hele apiResponseTimeout på et kall som ikke kommer.
+        const headingEndretTidlig = this.page.waitForFunction(
+          headingCheckFn,
+          headingBefore!,
+          { timeout: apiResponseTimeout },
+        ).then(() => true).catch(() => false);
+        const apiResponse = await Promise.race([
+          apiResponsePromise,
+          headingEndretTidlig.then(endret => (endret ? null : apiResponsePromise)),
+        ]);
+        if (apiResponse) {
+          console.log(`  ✅ API: ${apiResponse.url().split('/api/')[1]?.split('?')[0]} → ${apiResponse.status()}`);
+        } else if (!(await headingEndretTidlig)) {
+          console.log(`  ⚠️  Ingen API-respons (forsøk ${attempt})`);
+        }
+
+        // Verify UI actually transitioned
+        const transitionStart = Date.now();
         const headingChanged = await this.page.waitForFunction(
           headingCheckFn,
           headingBefore!,
@@ -421,6 +434,13 @@ export abstract class BasePage {
         // Simple mode: just click and proceed
         await button.click();
         break;
+      }
+    }
+
+    if (skrivekall) {
+      const { startet, besvart } = await skrivekall.ventPåStartedeKall({ svartidMs: 30000 });
+      if (startet > besvart) {
+        console.log(`  ⚠️  ${startet - besvart} av ${startet} skrivekall uten svar etter 30 s`);
       }
     }
 

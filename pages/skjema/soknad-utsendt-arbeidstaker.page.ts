@@ -28,7 +28,14 @@ export class SoknadUtsendtArbeidstakerPage {
     await page.getByRole('button', { name: 'DEG SELV' }).click();
     await page.waitForURL(/\/oversikt/);
 
+    // Arbeidsgiveren settes i skjemaet først når ereg-oppslaget har svart. Klikkes
+    // «Start søknad» før det, feiler valideringen stille og ingen søknad opprettes.
+    const eregSvar = page.waitForResponse(
+      r => r.url().includes(`/api/ereg/organisasjon-med-juridisk-enhet/${arbeidsgiverOrgnr}`) && r.ok(),
+    );
     await page.getByRole('textbox', { name: 'Arbeidsgivers organisasjonsnummer' }).fill(arbeidsgiverOrgnr);
+    const org = await (await eregSvar).json();
+    await expect(page.locator('form').getByText(org.juridiskEnhet.navn, { exact: true })).toBeVisible();
     await page.getByRole('checkbox', { name: /Jeg bekrefter/ }).check();
     await page.getByRole('button', { name: 'Start søknad' }).click();
 
