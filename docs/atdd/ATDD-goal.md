@@ -75,6 +75,36 @@ become trivial. This turns the test suite from a linear cost where more tests au
 which is exactly what you need for a long-lived system that keeps gaining new case types, integrations and regulations.
 
 
+Success criteria:
+
+We have reached the goal when all of the following hold:
+
+1. Spec first: new acceptance behaviour is merged with an executable specification that was written before
+   the implementation and reviewed by a domain expert.
+2. Domain language only: no test case contains selectors, URLs, clicks, database queries or technical identifiers.
+   Playwright, HTTP and database code exists only in protocol drivers.
+3. Single outcome: each test case asserts one business outcome and is typically given / when / then.
+4. Change survives: a UI change (renamed button, replaced component) is fixed by editing protocol drivers only,
+   with no change to test cases or DSL.
+5. Isolation: every test creates its own data through the DSL, passes when run twice in a row against the same
+   environment without cleanup, and passes when run in parallel with the rest of the suite.
+6. Programmable stubs: every external system a test depends on is set up by the test through the DSL,
+   not by pre-loaded mock data.
+7. Deterministic: no fixed sleeps; asynchronous work is awaited by polling with a timeout. The suite has no
+   known intermittent failures, and known gaps are tracked as expected failures, never silently skipped.
+8. Release gate: the acceptance suite runs in CI against a production-like deployment, and a green run means
+   the change is releasable.
+9. Decreasing cost: a second test in an existing domain area needs no new protocol-driver code.
+
+
+Final goal:
+
+Every change to Melosys is described first as an executable specification in the language of the domain,
+readable by domain experts, and is releasable when that specification and all existing ones pass against a
+production-like deployment. The specifications are isolated, deterministic and independent of how the system
+is built, so they survive changes to the UI and services, and each new specification is cheaper to write than the last.
+
+
 Course examples are available here:
 https://github.com/davef77/atdd-course-examples
 https://github.com/davef77/Flight-Search-ATDD
