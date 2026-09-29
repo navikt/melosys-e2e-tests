@@ -75,7 +75,7 @@ Open Playwright trace and check Network tab:
 ### Unleash Admin API (Port 4242)
 - URL: `http://localhost:4242/api/admin/projects/default/features/{feature}/environments/development/on`
 - Used by: `UnleashHelper.enableFeature()` / `disableFeature()`
-- Cache: Server-side, ~10-15s refresh interval
+- Cache: Server-side; melosys-api polls every 15 s (unleash-client-java default)
 - Purpose: Configure toggles
 
 ### Unleash Frontend/Proxy API
@@ -398,7 +398,7 @@ test('skal ikke vise årsavregning når toggle er deaktivert', ...)
 
 For per-test control use `unleash.disableFeature()` / `enableFeature()` inside the test. When you instead want the **whole suite** to run with a toggle forced on/off — e.g. validating that a backend branch doesn't break existing behaviour with a feature toggle disabled — use the run-level overrides.
 
-`UnleashHelper.resetToDefaults()` (called by the cleanup fixture before/after every test) reads two comma-separated env vars and applies them on top of the default toggle list, including toggles that are not part of that list:
+The default list the cleanup fixture resets to (`UnleashHelper.resetChangedToggles()`, before/after every test) reads two comma-separated env vars and applies them on top of the default toggle list, including toggles that are not part of that list:
 
 - `UNLEASH_FORCE_DISABLE` — toggles forced **OFF** for the whole run
 - `UNLEASH_FORCE_ENABLE` — toggles forced **ON** for the whole run
