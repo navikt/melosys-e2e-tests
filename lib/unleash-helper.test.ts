@@ -14,7 +14,15 @@ const IKKE_TIDLIGERE = 'melosys.faktureringskomponenten.ikke-tidligere-perioder'
 const UTEN_FLYT = 'melosys.arsavregning.uten.flyt';
 
 /** Falsk Unleash + melosys-api: admin-API og /featuretoggle svarer med samme tilstand. */
-function falskUnleash(opts: { feilPåPost?: Set<string>; forsinkelseMs?: number; finnesIkke?: Set<string> } = {}) {
+type Opts = {
+  feilPåPost?: Set<string>;
+  forsinkelseMs?: number;
+  finnesIkke?: Set<string>;
+  /** Svar på GET /features: 'feil' gir 500, ellers utelates navnene i lista fra svaret. */
+  featureliste?: 'feil' | Set<string>;
+};
+
+function falskUnleash(opts: Opts = {}) {
   const tilstand = new Map<string, boolean>();
   const poster: string[] = [];
   let samtidige = 0;
@@ -48,9 +56,12 @@ function falskUnleash(opts: { feilPåPost?: Set<string>; forsinkelseMs?: number;
         return svar(true, { [navn]: tilstand.get(navn) ?? true });
       }
       if (url.endsWith('/features')) {
-        const features = [...tilstand].map(([name, enabled]) => ({
+        if (opts.featureliste === 'feil') return svar(false);
+        const utelatt = opts.featureliste ?? new Set<string>();
+        // production først og med motsatt verdi: koden må velge riktig miljø.
+        const features = [...tilstand].filter(([name]) => !utelatt.has(name)).map(([name, enabled]) => ({
           name,
-          environments: [{ name: 'development', enabled }, { name: 'production', enabled: false }],
+          environments: [{ name: 'production', enabled: !enabled }, { name: 'development', enabled }],
         }));
         return svar(true, { features });
       }
@@ -155,7 +166,8 @@ describe('UnleashHelper — reset av endrede toggles', () => {
 
   test('en feilet reset av en endret toggle prøves igjen neste gang', async () => {
     const feil = new Set<string>();
-    const f = falskUnleash({ feilPåPost: feil });
+    // Toggle-lista feiler, så bare sporingen kan finne togglen igjen.
+    const f = falskUnleash({ feilPåPost: feil, featureliste: 'feil' });
     const unleash = new UnleashHelper(f.request);
     await unleash.resetChangedToggles(true);
     await unleash.disableFeature(IKKE_TIDLIGERE, true);
@@ -185,6 +197,44 @@ describe('UnleashHelper — reset av endrede toggles', () => {
     f.poster.length = 0;
     assert.strictEqual(await unleash.resetChangedToggles(true), 1);
     assert.deepStrictEqual(f.poster, [`${UTEN_FLYT}=off`]);
+  });
+
+  test('en standardtoggle som mangler i Unleash, opprettes før neste test', async () => {
+    const f = falskUnleash({ featureliste: new Set([UTEN_FLYT]) });
+    const unleash = new UnleashHelper(f.request);
+    await unleash.resetChangedToggles(true);
+    f.poster.length = 0;
+    assert.strictEqual(await unleash.resetChangedToggles(true), 1);
+    assert.deepStrictEqual(f.poster, [`${UTEN_FLYT}=off`]);
+  });
+
+  test('feiler toggle-lista, settes bare sporede toggles', async () => {
+    const f = falskUnleash({ featureliste: 'feil' });
+    const unleash = new UnleashHelper(f.request);
+    await unleash.resetChangedToggles(true);
+    f.tilstand.set(UTEN_FLYT, true);
+    await unleash.disableFeature(IKKE_TIDLIGERE, true);
+    f.poster.length = 0;
+    assert.strictEqual(await unleash.resetChangedToggles(true), 1);
+    assert.deepStrictEqual(f.poster, [`${IKKE_TIDLIGERE}=on`]);
+  });
+
+  test('advarer én gang når melosys-api /featuretoggle ikke svarer', async () => {
+    const f = falskUnleash();
+    const get = f.request.get.bind(f.request);
+    (f.request as any).get = async (url: string, o?: any) => {
+      if (url.includes('featuretoggle')) throw new Error('connect ECONNREFUSED');
+      return get(url, o);
+    };
+    const logg: string[] = [];
+    const original = console.log;
+    console.log = (...args: unknown[]) => { logg.push(args.join(' ')); };
+    try {
+      await new UnleashHelper(f.request).resetChangedToggles(true);
+    } finally {
+      console.log = original;
+    }
+    assert.strictEqual(logg.filter(l => l.includes('/featuretoggle')).length, 1);
   });
 
   test('toggles settes parallelt', async () => {

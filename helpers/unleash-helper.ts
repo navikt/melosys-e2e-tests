@@ -36,10 +36,19 @@ const endredeToggles = new Set<string>();
 let fullResetGjort = false;
 let advartOmApiSjekk = false;
 
+// Uten svar fra melosys-api /featuretoggle venter resetten bare på Unleash, ikke på at
+// melosys-api ser endringen. Sies én gang per worker-prosess.
+function advarOmApiSjekk(årsak: string): void {
+  if (advartOmApiSjekk) return;
+  advartOmApiSjekk = true;
+  console.log(`   ⚠️  Unleash: melosys-api /featuretoggle ${årsak} — venter bare på Unleash`);
+}
+
 /** Bare for enhetstester: nullstill sporingen som om worker-prosessen var ny. */
 export function _nullstillSporingForTest(): void {
   endredeToggles.clear();
   fullResetGjort = false;
+  advartOmApiSjekk = false;
 }
 
 export class UnleashHelper {
@@ -325,11 +334,7 @@ export class UnleashHelper {
       const response = await this.request.get(url, options);
 
       if (!response.ok()) {
-        // Uten dette svaret venter resetten bare på Unleash, ikke på at melosys-api ser endringen.
-        if (!advartOmApiSjekk) {
-          advartOmApiSjekk = true;
-          console.log(`   ⚠️  Unleash: melosys-api /featuretoggle svarte ${response.status()} — venter bare på Unleash`);
-        }
+        advarOmApiSjekk(`svarte ${response.status()}`);
         return null; // Return null to indicate we couldn't fetch (different from false)
       }
 
@@ -340,6 +345,7 @@ export class UnleashHelper {
       if (error.message?.includes('closed') || error.message?.includes('disposed')) {
         return null;
       }
+      advarOmApiSjekk(`feilet: ${error.message || error}`);
       return null;
     }
   }
