@@ -5,13 +5,13 @@ We want to use Dave Farley's four layer model, which consists of:
 1. Test Cases Layer: Executable specifications in plain text written from the perspective of an external user, focusing on WHAT the system does,
    NOT HOW it does it, using the language of the problem domain.
 
-2. Domain Specific Language (DSL) Layer: A shared language between the test cases that make it easy to write tests with precision where needed,
-   while allowing detailed to be skipped where they are not needed.
+2. Domain Specific Language (DSL) Layer: A language whose vocabulary is the problem domain, making it easy to write tests with precision where needed,
+   while allowing details to be skipped where they are not needed.
 
 3. Protocol Drivers and Stubs Layer: Translators and adapters that convert between the DSL and the
-   actual system implementation, isolation all test infrastructure knowledge of the system.
+   actual system implementation, isolating all test infrastructure knowledge of the system.
 
-4. System Under Test (SUT) Layer: The actual implementation that fulfills the requirements of the test cases,
+4. System Under Test (SUT) Layer: The actual implementation that fulfils the requirements of the test cases,
    deployed using the same tools and techniques that would be used in production.
 
 
@@ -72,7 +72,7 @@ Finally, the layered approach compounds in value over time. Each new DSL functio
 because you are composing existing vocabulary rather than scripting from scratch.
 The first test in a new workflow category may require building a DSL function, but the second and third tests in that category
 become trivial. This turns the test suite from a linear cost where more tests automatically give more maintenance, into a platform with decreasing marginal cost,
-which is exactly what you need for a long-lived system that keeps case types, integrations and regulations.
+which is exactly what you need for a long-lived system that keeps gaining new case types, integrations and regulations.
 
 
 Course examples are available here:
