@@ -4,30 +4,27 @@ We want to use Dave Farley's four layer model, which consists of:
 
 1. Test Cases Layer: Executable specifications in plain text written from the perspective of an external user, focusing on WHAT the system does,
    NOT HOW it does it, using the language of the problem domain.
+   - Short (typically given / when / then), asserting one outcome.
+   - No selectors, URLs, clicks or technical identifiers.
 
 2. Domain Specific Language (DSL) Layer: A language whose vocabulary is the problem domain, making it easy to write tests with precision where needed,
    while allowing details to be skipped where they are not needed.
+   - Provides default values so a test states only what matters to it, and full precision where it does.
+   - Handles aliasing for isolation (see below).
+   - Is split by domain area rather than one large file.
+   - Calls protocol drivers at the same level of abstraction as tests call the DSL.
 
 3. Protocol Drivers and Stubs Layer: Translators and adapters that convert between the DSL and the
    actual system implementation, isolating all test infrastructure knowledge of the system.
+   - Protocol drivers are the only place that knows how the system works (Playwright, HTTP, Kafka, database).
+   - Every driver method either succeeds or fails the test, so each step is atomic: if control returns, it happened.
+   - Assertions live here, with error messages in domain language.
+   - Asynchronous work is awaited by polling with a timeout, never by fixed sleeps.
+   - External systems (PDL, EUX, AAREG etc.) are replaced by simple stubs the DSL programs with the
+     response a test needs. Stubs are translators, not simulations of the real system.
 
 4. System Under Test (SUT) Layer: The actual implementation that fulfils the requirements of the test cases,
    deployed using the same tools and techniques that would be used in production.
-
-
-Responsibilities of each layer:
-
-- Test cases: short (typically given / when / then), in domain language, asserting one outcome.
-  No selectors, URLs, clicks or technical identifiers.
-- DSL: provides default values so a test states only what matters to it, and full precision where it does.
-  Handles aliasing for isolation. Is split by domain area (e.g. sak, behandling, lovvalg, eksterne systemer)
-  rather than one large file. Calls protocol drivers at the same level of abstraction as tests call the DSL.
-- Protocol drivers: the only place that knows how the system works (Playwright, HTTP, Kafka, database).
-  Every method either succeeds or fails the test, so each step is atomic: if control returns, it happened.
-  Assertions live here, with error messages in domain language. Asynchronous work is awaited by polling
-  with a timeout, never by fixed sleeps.
-- Stubs: external systems (PDL, EUX, AAREG etc.) are replaced by simple stubs the DSL programs with the
-  response a test needs. Stubs are translators, not simulations of the real system.
 
 
 Specifications should come first:
