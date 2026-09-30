@@ -67,7 +67,7 @@ export async function findNewNavFormatSed(
   timeoutMs = 30000
 ): Promise<Record<string, any>> {
   const beforeKeys = new Set(before.map(d => `${d.caseId}:${d.documentId}`));
-  const pollInterval = 2000;
+  const pollInterval = 500;
   const deadline = Date.now() + timeoutMs;
 
   while (Date.now() < deadline) {
@@ -126,7 +126,7 @@ export async function findNewRinaSedDocument(
     if (navFormatDocs.length > 0) {
       return navFormatDocs[navFormatDocs.length - 1];
     }
-    await new Promise(resolve => setTimeout(resolve, 2000));
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
   throw new Error(`Timed out waiting for NAV-format ${sedType} document (${timeoutMs}ms)`);
 }
@@ -203,7 +203,7 @@ export async function findNewUtgaaendeJournalpost(
       return newEessiJournalpost[0];
     }
     console.log(`⏳ Venter på UTGAAENDE EESSI-journalpost...`);
-    await new Promise((r) => setTimeout(r, 2000));
+    await new Promise((r) => setTimeout(r, 500));
   }
   return null;
 }
@@ -298,7 +298,7 @@ export async function finnVedtaksbrevForMottaker(
       };
     }
     console.log(`⏳ Venter på vedtaksbrev-journalpost for mottaker ${mottakerFnr}...`);
-    await new Promise((r) => setTimeout(r, 2000));
+    await new Promise((r) => setTimeout(r, 500));
   }
   return null;
 }

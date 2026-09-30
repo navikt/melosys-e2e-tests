@@ -34,6 +34,15 @@ const bddTestDir = defineBddConfig({
 });
 
 /**
+ * Pause etter hver handling. 0 på CI (sparte 4–5 min per kjøring); lokalt 100 ms for å
+ * kunne følge med i headed-modus. Overstyr med SLOWMO=<ms>.
+ */
+const slowMoFraEnv = Number(process.env.SLOWMO);
+const slowMo = process.env.SLOWMO && Number.isFinite(slowMoFraEnv)
+  ? slowMoFraEnv
+  : process.env.CI ? 0 : 100;
+
+/**
  * See https://playwright.dev/docs/test-configuration.
  */
 export default defineConfig({
@@ -98,9 +107,8 @@ export default defineConfig({
       name: 'chromium',
       use: { 
         ...devices['Desktop Chrome'],
-        // Slow down actions slightly for more stable tests
         launchOptions: {
-          slowMo: 100,
+          slowMo,
           // Skjema-innlogging: wonderwall redirecter nettleseren til host.docker.internal:8082
           // (mock-oauth2). Chromium leser ikke pålitelig /etc/hosts, så vi tvinger mappingen på
           // browser-nivå. Uskadelig for øvrige tester (ingen annen nettlesertrafikk går dit), og
@@ -125,7 +133,7 @@ export default defineConfig({
       use: {
         ...devices['Desktop Chrome'],
         launchOptions: {
-          slowMo: 100,
+          slowMo,
           // Speiler chromium-prosjektet: skjema-innlogging redirecter til
           // host.docker.internal:8082 (mock-oauth2), og Chromium leser ikke
           // /etc/hosts pålitelig. Uskadelig for de øvrige kallene.

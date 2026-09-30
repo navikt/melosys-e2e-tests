@@ -5,6 +5,7 @@ import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page
 import { OppgaverPage } from '../../pages/oppgaver/oppgaver.page';
 import { USER_ID_VALID } from '../../pages/shared/constants';
 import { fetchOppgaver } from '../../helpers/mock-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 import type { APIRequestContext } from '@playwright/test';
 
 /**
@@ -72,7 +73,8 @@ test.describe('Oppgaver', () => {
     console.log('📝 Step 1: Creating a case...');
     await hovedside.gotoOgOpprettNySak();
     const opprettSak = new OpprettNySakPage(page);
-    await opprettSak.opprettStandardSak(USER_ID_VALID);
+    // Saksprosessen lager oppgaven etter innsending; forsiden må lastes etter at den finnes.
+    await runAndWaitForProcessInstances(request, () => opprettSak.opprettStandardSak(USER_ID_VALID));
     await opprettSak.assertions.verifiserBehandlingOpprettet();
 
     // Step 2: Navigate back to forside to see the task
@@ -91,7 +93,8 @@ test.describe('Oppgaver', () => {
     console.log('📝 Step 1: Creating a case...');
     await hovedside.gotoOgOpprettNySak();
     const opprettSak = new OpprettNySakPage(page);
-    await opprettSak.opprettStandardSak(USER_ID_VALID);
+    // Saksprosessen lager oppgaven etter innsending; forsiden må lastes etter at den finnes.
+    await runAndWaitForProcessInstances(request, () => opprettSak.opprettStandardSak(USER_ID_VALID));
     await opprettSak.assertions.verifiserBehandlingOpprettet();
 
     // Step 2: Go to forside
@@ -118,7 +121,8 @@ test.describe('Oppgaver', () => {
     console.log('📝 Step 1: Creating a case...');
     await hovedside.gotoOgOpprettNySak();
     const opprettSak = new OpprettNySakPage(page);
-    await opprettSak.opprettStandardSak(USER_ID_VALID);
+    // Saksprosessen lager oppgaven etter innsending; forsiden må lastes etter at den finnes.
+    await runAndWaitForProcessInstances(request, () => opprettSak.opprettStandardSak(USER_ID_VALID));
     await opprettSak.assertions.verifiserBehandlingOpprettet();
 
     // Step 2: Go to forside

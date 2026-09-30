@@ -399,14 +399,11 @@ export class AarsavregningPage extends BasePage {
     await radioInput.waitFor({ state: 'attached', timeout: TIMEOUT_MEDIUM });
     await radioInput.click({ force: true });
 
-    await this.page.waitForTimeout(200);
-
-    const isChecked = await radioInput.isChecked();
-    if (!isChecked) {
+    const erValgt = await expect(radioInput).toBeChecked({ timeout: 1000 }).then(() => true, () => false);
+    if (!erValgt) {
       const radioLabel = erSkattepliktig ? 'Ja' : 'Nei';
       const labelText = this.skattepliktigGroup.getByText(radioLabel, { exact: true });
       await labelText.click();
-      await this.page.waitForTimeout(200);
     }
 
     await expect(radioInput).toBeChecked({ timeout: TIMEOUT_MEDIUM });

@@ -43,10 +43,8 @@ export class OppgaverPage extends BasePage {
    * Wait for task lists to be loaded
    */
   async ventPåOppgaverLastet(): Promise<void> {
-    // Wait for page to settle - tasks load via API
+    // networkidle etter navigering betyr 500 ms uten kall, nok til at listene er tegnet
     await this.page.waitForLoadState('networkidle');
-    // Give a moment for React to render
-    await this.page.waitForTimeout(1000);
   }
 
   /**

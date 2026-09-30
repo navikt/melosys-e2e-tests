@@ -1,6 +1,6 @@
 import { Page, Locator, Response, expect } from '@playwright/test';
 import { TIMEOUT_MEDIUM } from './constants';
-import { erSkrivekallMotApi, sporKall } from './kall-sporing';
+import { erSkrivekallMotApi, sporKall, utførOgVentPåApi } from './kall-sporing';
 
 /**
  * Base Page Object class providing common functionality
@@ -202,7 +202,7 @@ export abstract class BasePage {
    * Click "Bekreft og fortsett" with API wait and optional heading-change retry.
    *
    * Two modes:
-   * - **Simple** (default): Click, wait for API response, wait for networkidle.
+   * - **Simple** (default): Click, wait at least 500 ms and for the API calls that started.
    *   Used by most POMs (lovvalg, medlemskap, trygdeavgift, etc.)
    * - **With heading retry** (verifyHeadingChange: true): Also verifies that the
    *   visible h1 heading changed, retrying the click up to 3 times if not.
@@ -431,8 +431,20 @@ export abstract class BasePage {
           );
         }
       } else {
-        // Simple mode: just click and proceed
-        await button.click();
+        // Enkel modus: vent minst 500 ms som før, og deretter på kallene som startet.
+        // Skjemaet på forrige steg kan autolagre etter klikket (målt: PUT medlemskapsperioder
+        // 246 ms etter klikket, deretter ny henting som nullstiller trygdeavgiftsskjemaet).
+        // Første steg oppfrisker registeropplysningene og kan bruke 2 s; der ventet den
+        // faste søvnen for kort.
+        const { startet, besvart } = await utførOgVentPåApi(this.page, () => button.click(), {
+          minstMs: 500,
+          stilleMs: 200,
+        });
+        if (besvart < startet) {
+          console.log(`  ⚠️  ${startet - besvart} av ${startet} API-kall feilet eller fikk ikke svar innen 30 s`);
+        } else {
+          console.log(`  💾 ${startet} API-kall fullført etter klikket`);
+        }
         break;
       }
     }
@@ -451,8 +463,6 @@ export abstract class BasePage {
       } else {
         console.log(`  💾 ${startet} lagringskall fullført etter stegbytte`);
       }
-    } else {
-      await this.page.waitForTimeout(500);
     }
 
     if (waitForContent) {

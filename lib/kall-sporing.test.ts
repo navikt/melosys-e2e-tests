@@ -9,7 +9,7 @@ import { describe, test } from 'node:test';
 import assert from 'node:assert';
 import { EventEmitter } from 'node:events';
 import type { Request } from '@playwright/test';
-import { erSkrivekallMotApi, sporKall } from '../pages/shared/kall-sporing';
+import { erSkrivekallMotApi, sporKall, utførOgVentPåApi } from '../pages/shared/kall-sporing';
 
 function falskSide() {
   const side = new EventEmitter();
@@ -190,6 +190,76 @@ describe('sporKall', () => {
     await sporing.ventPåStartedeKall();
     assert.strictEqual(side.lyttere(), 0);
     sporing.stopp();
+    assert.strictEqual(side.lyttere(), 0);
+  });
+});
+
+describe('utførOgVentPåApi', () => {
+  const GET = (svarEtterMs: number | null = 0) =>
+    falsktKall('GET', 'http://localhost:3000/melosys/api/behandlinger/1', svarEtterMs);
+
+  test('venter på GET-er og på kjeden handlingen startet', async () => {
+    const side = falskSide();
+    const start = Date.now();
+    const res = await utførOgVentPåApi(
+      side as any,
+      async () => {
+        side.send(PUT(40));
+        // Neste ledd starter etter at lagringen har svart, slik oppfriskingen gjør.
+        setTimeout(() => side.send(GET(40)), 80);
+      },
+      { startvinduMs: 300, stilleMs: 100 },
+    );
+    const brukt = Date.now() - start;
+    assert.deepStrictEqual(res, { startet: 2, besvart: 2 });
+    assert.ok(brukt >= 115 && brukt < 600, `brukte ${brukt} ms`);
+    assert.strictEqual(side.lyttere(), 0);
+  });
+
+  test('uten kall koster den bare startvinduet', async () => {
+    const side = falskSide();
+    const start = Date.now();
+    const res = await utførOgVentPåApi(side as any, async () => {}, { startvinduMs: 80, stilleMs: 200 });
+    const brukt = Date.now() - start;
+    assert.deepStrictEqual(res, { startet: 0, besvart: 0 });
+    assert.ok(brukt >= 75 && brukt < 250, `brukte ${brukt} ms`);
+  });
+
+  test('med minstMs ventes også på en lagring som starter etter handlingen', async () => {
+    const side = falskSide();
+    const start = Date.now();
+    const res = await utførOgVentPåApi(
+      side as any,
+      async () => {
+        side.send(GET(10));
+        // Debouncet lagring på forrige steg starter etter at klikket er ferdig.
+        setTimeout(() => side.send(PUT(100)), 250);
+      },
+      { minstMs: 300, stilleMs: 50 },
+    );
+    const brukt = Date.now() - start;
+    assert.deepStrictEqual(res, { startet: 2, besvart: 2 });
+    assert.ok(brukt >= 345 && brukt < 800, `brukte ${brukt} ms`);
+  });
+
+  test('med minstMs og ingen kall koster den minstMs', async () => {
+    const side = falskSide();
+    const start = Date.now();
+    const res = await utførOgVentPåApi(side as any, async () => {}, { minstMs: 120, stilleMs: 200 });
+    const brukt = Date.now() - start;
+    assert.deepStrictEqual(res, { startet: 0, besvart: 0 });
+    assert.ok(brukt >= 115 && brukt < 300, `brukte ${brukt} ms`);
+  });
+
+  test('kaster handlingen, fjernes lytteren og feilen kastes videre', async () => {
+    const side = falskSide();
+    await assert.rejects(
+      utførOgVentPåApi(side as any, async () => { throw new Error('klikk feilet'); }, {
+        startvinduMs: 100,
+        stilleMs: 100,
+      }),
+      /klikk feilet/,
+    );
     assert.strictEqual(side.lyttere(), 0);
   });
 });

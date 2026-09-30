@@ -464,7 +464,7 @@ BASE_URL=http://localhost:3000
 - **Trace**: Always on (`trace: 'on'`)
 - **Video**: Always recorded (`video: 'on'`)
 - **Screenshots**: Always captured (`screenshot: 'on'`)
-- **Slow motion**: 100ms delay (`slowMo: 100`)
+- **Slow motion**: 0 on CI, 100 ms locally; override with `SLOWMO=<ms>`
 - **Workers**: 1 on CI, unlimited locally
 - **Parallel**: Disabled (`fullyParallel: false`)
 

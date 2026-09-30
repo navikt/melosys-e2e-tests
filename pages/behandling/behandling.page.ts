@@ -114,9 +114,16 @@ export class BehandlingPage extends BasePage {
 
   /**
    * Click "Lagre endringene" button to save changes
+   *
+   * Lagringen laster hele siden på nytt (window.location.reload i melosys-web). Uten slowMo
+   * fylte testen søknadsperioden på den gamle siden, og feltene ble tømt.
    */
   async klikkLagreEndringene(): Promise<void> {
+    const lastetPåNytt = this.page.waitForEvent('load', { timeout: 30_000 });
     await this.page.getByRole('button', { name: 'Lagre endringene' }).click();
+    await lastetPåNytt;
+    // Etter en ekte navigering venter networkidle på at den nye siden har hentet dataene
+    await this.page.waitForLoadState('networkidle', { timeout: 10_000 }).catch(() => {});
   }
 
   /**

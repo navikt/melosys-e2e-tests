@@ -68,26 +68,23 @@ export class TrygdeavgiftPage extends BasePage {
    *
    * The page fires a useEffect on mount that fetches saved trygdeavgift data
    * (GET /trygdeavgift/beregning) and then resets the form fields with
-   * resetSkatteforholdsperioder/resetInntektskilder. We must wait for this
-   * initial fetch to complete before interacting, otherwise the useEffect
-   * response will overwrite any fields we've already filled.
+   * resetSkatteforholdsperioder/resetInntektskilder.
+   *
+   * Metoden venter bare på at skjemaet vises. Hentingen dekkes av ventingen etter
+   * stegklikket: minst 500 ms etter klikket i begge modusene (målt lokalt: hentingen var
+   * ferdig før overskriften byttet). velgSkattepliktig velger på nytt hvis skjemaet likevel
+   * blir nullstilt; datofeltene gjør ikke det.
    */
   async ventPåSideLastet(): Promise<void> {
     try {
       await this.skattepliktigGroup.waitFor({ state: 'visible', timeout: 10000 });
       console.log('✅ Trygdeavgift page loaded - Skattepliktig field visible');
 
-      // The useEffect on mount fires GET /trygdeavgift/beregning and then resets
-      // form fields with resetSkatteforholdsperioder/resetInntektskilder. We must
-      // not interact until that response has been applied. waitForLoadState
-      // covers both cases: response already done (returns instantly) or in flight
-      // (waits until network is idle).
+      // networkidle returnerer straks i en SPA uten navigering (målt 1–2 ms), men venter
+      // hvis siden faktisk lastes på nytt.
       await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {
         console.log('⚠️  Network did not reach idle within 5s (continuing anyway)');
       });
-
-      // Let React process the response and re-render the form
-      await this.page.waitForTimeout(500);
       console.log('✅ Initial trygdeavgift data load complete');
     } catch (error) {
       console.error('❌ Failed to reach Trygdeavgift page');
@@ -166,16 +163,12 @@ export class TrygdeavgiftPage extends BasePage {
     await radioInput.click({ force: true });
     console.log(`   Clicked on radio input with value '${expectedValue}'`);
 
-    // Wait for the DOM to settle after potential React re-render
-    await this.page.waitForTimeout(200);
-
-    // If still not checked, try clicking the label
-    const isChecked = await radioInput.isChecked();
-    if (!isChecked) {
+    // If the click did not register, try clicking the label
+    const erValgt = await expect(radioInput).toBeChecked({ timeout: 1000 }).then(() => true, () => false);
+    if (!erValgt) {
       console.log(`   Radio not checked after click, trying label click...`);
       const labelText = this.skattepliktigGroup.getByText(radioLabel, { exact: true });
       await labelText.click();
-      await this.page.waitForTimeout(200);
     }
 
     // Final verification - poll for the checked state
@@ -183,6 +176,16 @@ export class TrygdeavgiftPage extends BasePage {
     console.log(`   Radio input with value '${expectedValue}' is now checked`);
 
     await ventPåAutolagringHvisDenStarter(autolagring, 'Skattepliktig');
+
+    // En ny henting av beregningen nullstiller skjemaet (målt: etter en autolagring på
+    // forrige steg). Er valget borte etter ventingen, velg på nytt.
+    if (!(await radioInput.isChecked())) {
+      console.log('   ⚠️  Skjemaet nullstilte valget, velger på nytt');
+      const nyLagring = sporKall(this.page, erSkrivekallMotApi);
+      await radioInput.click({ force: true });
+      await expect(radioInput).toBeChecked({ timeout: 5000 });
+      await ventPåAutolagringHvisDenStarter(nyLagring, 'Skattepliktig');
+    }
 
     console.log(`✅ Selected Skattepliktig = ${erSkattepliktig ? 'Ja' : 'Nei'}`);
   }
@@ -354,7 +357,6 @@ export class TrygdeavgiftPage extends BasePage {
    */
   async leggTilSkatteforhold(): Promise<void> {
     await this.leggTilSkatteforholdButton.click();
-    await this.page.waitForTimeout(300);
     console.log('✅ Added new skatteforhold row');
   }
 
@@ -376,7 +378,6 @@ export class TrygdeavgiftPage extends BasePage {
     await dateInputs.first().fill(fom);
     await dateInputs.nth(1).fill(tom);
     await dateInputs.nth(1).press('Tab');
-    await this.page.waitForTimeout(300);
     console.log(`✅ Skatteforhold [${indeks}] dates: ${fom} - ${tom}`);
   }
 
@@ -413,7 +414,6 @@ export class TrygdeavgiftPage extends BasePage {
     await dateInputs.first().fill(fom);
     await dateInputs.nth(1).fill(tom);
     await dateInputs.nth(1).press('Tab');
-    await this.page.waitForTimeout(300);
     console.log(`✅ Inntektsperiode [${indeks}] dates: ${fom} - ${tom}`);
   }
 

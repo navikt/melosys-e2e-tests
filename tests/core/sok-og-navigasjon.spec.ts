@@ -4,6 +4,7 @@ import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import { USER_ID_VALID } from '../../pages/shared/constants';
 import { withDatabase } from '../../helpers/db-helper';
+import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
 
 /**
  * Test suite for search and navigation functionality
@@ -32,7 +33,8 @@ test.describe('Søk og navigasjon', () => {
     // Step 1: First create a case so we have something to search for
     console.log('📝 Step 1: Creating a case to search for...');
     await hovedside.gotoOgOpprettNySak();
-    await opprettSak.opprettStandardSak(USER_ID_VALID);
+    // Saksprosessen lager saken etter innsending; søk og DB-oppslag må komme etter den.
+    await runAndWaitForProcessInstances(page.request, () => opprettSak.opprettStandardSak(USER_ID_VALID));
     await opprettSak.assertions.verifiserBehandlingOpprettet();
 
     // Step 2: Go back to main page
@@ -81,7 +83,8 @@ test.describe('Søk og navigasjon', () => {
     // Step 1: Create a case first
     console.log('📝 Step 1: Creating a case...');
     await hovedside.gotoOgOpprettNySak();
-    await opprettSak.opprettStandardSak(USER_ID_VALID);
+    // Saksprosessen lager saken etter innsending; søk og DB-oppslag må komme etter den.
+    await runAndWaitForProcessInstances(page.request, () => opprettSak.opprettStandardSak(USER_ID_VALID));
     await opprettSak.assertions.verifiserBehandlingOpprettet();
 
     // Step 2: Go back and search
@@ -108,7 +111,8 @@ test.describe('Søk og navigasjon', () => {
     // Step 1: Create a case
     console.log('📝 Step 1: Creating a case...');
     await hovedside.gotoOgOpprettNySak();
-    await opprettSak.opprettStandardSak(USER_ID_VALID);
+    // Saksprosessen lager saken etter innsending; søk og DB-oppslag må komme etter den.
+    await runAndWaitForProcessInstances(page.request, () => opprettSak.opprettStandardSak(USER_ID_VALID));
     await opprettSak.assertions.verifiserBehandlingOpprettet();
 
     // Step 2: Hent saksnummer fra DB (cleanup-fixture ⇒ nyeste rad er denne testens sak)
@@ -147,7 +151,8 @@ test.describe('Søk og navigasjon', () => {
     // Step 1: Create a case
     console.log('📝 Step 1: Creating a case...');
     await hovedside.gotoOgOpprettNySak();
-    await opprettSak.opprettStandardSak(USER_ID_VALID);
+    // Saksprosessen lager saken etter innsending; søk og DB-oppslag må komme etter den.
+    await runAndWaitForProcessInstances(page.request, () => opprettSak.opprettStandardSak(USER_ID_VALID));
     await opprettSak.assertions.verifiserBehandlingOpprettet();
 
     // Step 2: Search and navigate to case

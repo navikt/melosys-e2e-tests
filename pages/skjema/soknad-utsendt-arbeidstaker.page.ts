@@ -93,11 +93,17 @@ export class SoknadUtsendtArbeidstakerPage {
     if (filsti) {
       await svarRadio(page, /annen dokumentasjon/, 'Ja');
       await page.locator('input[type="file"]').setInputFiles(filsti);
-      // Vent på at filnavn-chipen dukker opp — beviser at opplasting + ClamAV-scan er ferdig
-      // (skjema-api lagrer vedlegget). Uten denne ventingen kan «Lagre og fortsett» tråkke
-      // forbi før vedlegget er persistert.
+      // Filnavnet vises som lenke med en gang, også mens opplastingen pågår. Først når
+      // skjema-api har lagret vedlegget, peker lenken på /vedlegg/<id>/innhold, og da teller
+      // steget det som lastet opp. Klikker vi «Lagre og fortsett» før det, viser steget
+      // «Du må laste opp minst ett vedlegg» og blir stående (målt: lenken var synlig 13 ms
+      // etter setInputFiles, opplastingen tok 57 ms).
       const filnavn = filsti.split('/').pop()!;
-      await expect(page.getByRole('link', { name: filnavn })).toBeVisible({ timeout: 15000 });
+      await expect(page.getByRole('link', { name: filnavn })).toHaveAttribute(
+        'href',
+        /\/vedlegg\/[^/]+\/innhold$/,
+        { timeout: 15000 },
+      );
     } else {
       await svarRadio(page, /annen dokumentasjon/, 'Nei');
     }

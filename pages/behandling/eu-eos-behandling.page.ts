@@ -202,8 +202,6 @@ export class EuEosBehandlingPage extends BasePage {
   async velgLand(landNavn: string): Promise<void> {
     await this.landDropdown.click();
     await this.page.getByRole('option', { name: landNavn, exact: true }).click();
-    // Vent litt for at siden skal oppdatere seg (kan trigge visning av andre felter)
-    await this.page.waitForTimeout(500);
     console.log(`✅ Valgte land: ${landNavn}`);
   }
 
@@ -266,9 +264,6 @@ export class EuEosBehandlingPage extends BasePage {
     await this.page.waitForLoadState('networkidle', { timeout: 15000 }).catch(() => {
       console.log('⚠️  Network idle timeout, continuing anyway (employer list might still load)');
     });
-
-    // Extra wait to ensure React has rendered the employer list
-    await this.page.waitForTimeout(1000);
 
     // Debug: Se hva som finnes på siden
     const pageContent = await this.page.content();

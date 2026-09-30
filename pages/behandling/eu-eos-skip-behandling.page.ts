@@ -258,8 +258,7 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
     await this.velgFlaggstat(flaggstat);
     // VIKTIG: Må velge "Skip" først for å aktivere de andre valgene
     await this.velgSkip();
-    // Wait for dependent fields to become enabled after Skip selection
-    await this.page.waitForTimeout(300);
+    // check() under venter selv på at feltene blir aktivert etter Skip-valget
     await this.velgFlagglandSomArbeidsland(flagglandNavn);
     await this.velgSkipRegistrertIEttLand();
     console.log('✅ Fullførte skipdetaljer');
