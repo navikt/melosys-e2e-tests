@@ -202,7 +202,7 @@ export abstract class BasePage {
    * Click "Bekreft og fortsett" with API wait and optional heading-change retry.
    *
    * Two modes:
-   * - **Simple** (default): Click and wait for the API calls the click started.
+   * - **Simple** (default): Click, wait at least 500 ms and for the API calls that started.
    *   Used by most POMs (lovvalg, medlemskap, trygdeavgift, etc.)
    * - **With heading retry** (verifyHeadingChange: true): Also verifies that the
    *   visible h1 heading changed, retrying the click up to 3 times if not.
@@ -431,12 +431,13 @@ export abstract class BasePage {
           );
         }
       } else {
-        // Enkel modus: vent på kallene klikket startet. Første steg lagrer, oppfrisker
-        // registeropplysningene og laster steget på nytt (målt 0,3–2 s); de andre stegene
-        // lagrer og laster neste steg på under 200 ms. Stille-vinduet bygger bro mellom
-        // leddene i kjeden (målt opptil 85 ms).
+        // Enkel modus: vent minst 500 ms som før, og deretter på kallene som startet.
+        // Skjemaet på forrige steg kan autolagre etter klikket (målt: PUT medlemskapsperioder
+        // 246 ms etter klikket, deretter ny henting som nullstiller trygdeavgiftsskjemaet).
+        // Første steg oppfrisker registeropplysningene og kan bruke 2 s; der ventet den
+        // faste søvnen for kort.
         const { startet, besvart } = await utførOgVentPåApi(this.page, () => button.click(), {
-          startvinduMs: 300,
+          minstMs: 500,
           stilleMs: 200,
         });
         if (besvart < startet) {
