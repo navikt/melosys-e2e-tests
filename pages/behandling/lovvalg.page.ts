@@ -180,7 +180,6 @@ export class LovvalgPage extends BasePage {
 
     // Wait for page to load
     await this.page.waitForLoadState('domcontentloaded');
-    await this.page.waitForTimeout(500);
     console.log(`📍 Current URL: ${this.currentUrl()}`);
   }
 

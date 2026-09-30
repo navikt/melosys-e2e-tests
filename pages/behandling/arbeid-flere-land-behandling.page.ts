@@ -1,6 +1,6 @@
 import { Page, type Response as PlaywrightResponse } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
-import { erSkrivekallMotApi, sporKall, ventPåAutolagringHvisDenStarter } from '../shared/kall-sporing';
+import { erSkrivekallMotApi, sporKall, utførOgVentPåApi, ventPåAutolagringHvisDenStarter } from '../shared/kall-sporing';
 import { ArbeidFlereLandBehandlingAssertions } from './arbeid-flere-land-behandling.assertions';
 
 /**
@@ -120,10 +120,6 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
       });
       console.log(`✅ Network idle completed (${Date.now() - networkStart}ms)`);
 
-      // Extra wait to ensure React has rendered the employer list
-      console.log(`⏳ Waiting for React render (1000ms)...`);
-      await this.page.waitForTimeout(1000);
-
       // DIAGNOSTIC 5: Count checkboxes AFTER waits
       const checkboxCountAfter = await this.page.getByRole('checkbox').count();
       console.log(`✓ Checkboxes after waits: ${checkboxCountAfter}`);
@@ -141,9 +137,9 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
         employerApis.forEach(api => console.log(`   - ${api}`));
       }
 
-      // DIAGNOSTIC 7: Check if target checkbox exists
+      // DIAGNOSTIC 7: Check if target checkbox exists (diagnostics only if it is still missing after 5 s)
       const checkbox = this.page.getByRole('checkbox', { name: arbeidsgiverNavn });
-      const isVisible = await checkbox.isVisible().catch(() => false);
+      const isVisible = await checkbox.waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false);
 
       if (!isVisible) {
         console.error(`\n❌ === FAILURE DIAGNOSTICS ===`);
@@ -554,9 +550,10 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
   async leggTilVedlegg(): Promise<void> {
     console.log('📎 Legger til vedlegg...');
 
-    // Wait for page to stabilize after institution selection
-    await this.page.waitForLoadState('networkidle');
-    await this.page.waitForTimeout(1000);
+    // Vent på at steget har tegnet knappen før oppslagene under
+    await this.page.getByRole('button', { name: /Legg til vedlegg/i })
+      .waitFor({ state: 'visible', timeout: 10000 })
+      .catch(() => {});
 
     // Debug: Log current page state
     const currentHeading = await this.page.locator('main h1').first().textContent().catch(() => 'unknown');
@@ -591,8 +588,10 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     await leggTilButton.click();
     console.log('✅ Klikket "Legg til vedlegg"');
 
-    // Vent på at dialogen åpnes
-    await this.page.waitForTimeout(500);
+    // Vent på at dialogen åpnes med dokumentlisten
+    await this.page.locator('dialog, [role="dialog"]').getByRole('checkbox').first()
+      .waitFor({ state: 'visible', timeout: 10000 })
+      .catch(() => {});
 
     // Finn og klikk på første checkbox i "Dokumenter tilknyttet behandlingen" seksjonen
     // Listen viser dokumenter fra journalposter tilknyttet saken
@@ -616,10 +615,11 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     const lukkButton = this.page.locator('dialog, [role="dialog"]').getByRole('button', { name: /Lukk|Velg|OK/i });
     if (await lukkButton.isVisible().catch(() => false)) {
       await lukkButton.click();
+      await dokumentCheckboxer.first()
+        .waitFor({ state: 'hidden', timeout: 5000 })
+        .catch(() => {});
       console.log('✅ Lukket vedlegg-dialogen');
     }
-
-    await this.page.waitForTimeout(500);
   }
 
   /**
@@ -665,9 +665,7 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     const tab = this.page.getByRole('tab', { name: stegNavn }).or(this.page.locator(`text=${stegNavn}`).first());
     if (await tab.isVisible().catch(() => false)) {
       console.log(`📋 Klikker på "${stegNavn}"-fanen...`);
-      await tab.click();
-      await this.page.waitForLoadState('networkidle');
-      await this.page.waitForTimeout(1000);
+      await utførOgVentPåApi(this.page, () => tab.click(), { minstMs: 500, stilleMs: 200 });
     }
   }
 
@@ -710,7 +708,6 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
 
     // Steg 3: Videresending av søknad
     console.log('📋 Steg 3/3: Videresending av søknad');
-    await this.page.waitForTimeout(1000);
 
     // Institution is pre-determined from country selection, skip dropdown
     // Just add vedlegg and send
