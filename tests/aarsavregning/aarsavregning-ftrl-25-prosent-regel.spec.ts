@@ -125,22 +125,26 @@ async function opprettFtrlAarsavregning(
 // under tabellen, inne i ExpansionCard.Content.
 // ---------------------------------------------------------------------------
 
-const SATS_COL = 1;
-const INNTEKTSKILDE_COL = 3;
-const DEKNING_COL_FROM_END = 1; // Dekning er siste eller nest-siste kolonne
-
-/** Åpne "Vis detaljert beregning"-panelet hvis det er lukket. */
+/**
+ * Åpne "Vis detaljert beregning"-panelet hvis det finnes og er lukket.
+ *
+ * Tabellen lå opprinnelig i et ExpansionCard. Den vises nå rett på siden, og da
+ * finnes ikke kortet. Begge tilfeller er greie — det vi krever er at tabellen er
+ * synlig etterpå.
+ */
 async function åpneDetaljertBeregning(page: Page): Promise<void> {
-  // ExpansionCard har aria-label="trygdeavgiftdetaljer" og knappen er inni headeren.
   const card = page.locator('[aria-label="trygdeavgiftdetaljer"]');
-  await card.waitFor({ state: 'visible', timeout: 10000 });
-  const button = card.locator('button').first();
-  const expanded = await button.getAttribute('aria-expanded');
-  if (expanded !== 'true') {
-    await button.click();
-    await page.getByRole('columnheader', { name: 'Trygdeperiode' }).waitFor({ state: 'visible' });
+
+  if (await card.count() > 0) {
+    await card.waitFor({ state: 'visible', timeout: 10000 });
+    const button = card.locator('button').first();
+    if (await button.getAttribute('aria-expanded') !== 'true') {
+      await button.click();
+    }
   }
-  console.log('✅ Åpnet "Vis detaljert beregning"-panelet');
+
+  await page.getByRole('columnheader', { name: 'Trygdeperiode' }).waitFor({ state: 'visible' });
+  console.log('✅ Beregningstabellen er synlig');
 }
 
 /** Hent beregnings-tabellen (inne i ExpansionCard etter at den er åpnet). */
@@ -148,30 +152,47 @@ function beregningstabell(page: Page): Locator {
   return page.locator('table.periode_tabell');
 }
 
-/** Verifiser sats-kolonnen (indeks 1) for en gitt rad. */
+/**
+ * Finn indeksen til en kolonne ut fra overskriften.
+ *
+ * Kolonnerekkefølgen i denne tabellen er endret, og «Dekning» er dessuten en
+ * betinget kolonne som ikke vises for helseutgiftsperioder. Oppslag på overskrift
+ * gjør at testen slipper å vite rekkefølgen.
+ */
+async function kolonneIndeks(page: Page, overskrift: string): Promise<number> {
+  const headere = beregningstabell(page).locator('thead th');
+  await expect(headere.first()).toBeVisible({ timeout: 10000 });
+
+  const tekster = await headere.allTextContents();
+  const indeks = tekster.findIndex((t) => t.trim() === overskrift);
+
+  if (indeks === -1) {
+    throw new Error(`Fant ikke kolonnen «${overskrift}». Kolonner: ${tekster.map((t) => t.trim()).join(' | ')}`);
+  }
+  return indeks;
+}
+
+/** Hent en celle ut fra radindeks og kolonneoverskrift. */
+async function celle(page: Page, radIndex: number, overskrift: string): Promise<Locator> {
+  const indeks = await kolonneIndeks(page, overskrift);
+  return beregningstabell(page).locator('tbody tr').nth(radIndex).locator('td').nth(indeks);
+}
+
+/** Verifiser sats-kolonnen for en gitt rad. */
 async function verifiserSatsKolonne(page: Page, radIndex: number, forventet: string | RegExp): Promise<void> {
-  const row = beregningstabell(page).locator('tbody tr').nth(radIndex);
-  const satsCell = row.locator('td').nth(SATS_COL);
-  await expect(satsCell).toHaveText(forventet);
+  await expect(await celle(page, radIndex, 'Sats')).toHaveText(forventet);
   console.log(`✅ Sats kolonne rad ${radIndex}: ${forventet}`);
 }
 
-/** Verifiser dekning-kolonnen (siste kolonne) for en gitt rad. */
+/** Verifiser dekning-kolonnen for en gitt rad. */
 async function verifiserDekningKolonne(page: Page, radIndex: number, forventet: string | RegExp): Promise<void> {
-  const row = beregningstabell(page).locator('tbody tr').nth(radIndex);
-  // Dekning er siste td i raden (betinget kolonne — vises ikke alltid)
-  const cells = row.locator('td');
-  const count = await cells.count();
-  const dekningCell = cells.nth(count - DEKNING_COL_FROM_END);
-  await expect(dekningCell).toContainText(forventet);
+  await expect(await celle(page, radIndex, 'Dekning')).toContainText(forventet);
   console.log(`✅ Dekning kolonne rad ${radIndex}: ${forventet}`);
 }
 
-/** Verifiser inntektskilde-kolonnen (indeks 3) for en gitt rad. */
+/** Verifiser inntektskilde-kolonnen for en gitt rad. */
 async function verifiserInntektskildeKolonne(page: Page, radIndex: number, forventet: string | RegExp): Promise<void> {
-  const row = beregningstabell(page).locator('tbody tr').nth(radIndex);
-  const inntektskildeCell = row.locator('td').nth(INNTEKTSKILDE_COL);
-  await expect(inntektskildeCell).toContainText(forventet);
+  await expect(await celle(page, radIndex, 'Inntektskilde')).toContainText(forventet);
   console.log(`✅ Inntektskilde kolonne rad ${radIndex}: ${forventet}`);
 }
 
@@ -253,15 +274,15 @@ test.describe('Årsavregning FTRL — 25%-regelen', () => {
     await aarsavregning.velgInntektskilde('ARBEIDSINNTEKT');
     await aarsavregning.fyllInnBruttoinntektMedApiVent(månedsinntekt);
 
-    // Under minstebeløpet: alert vises inne i detaljert beregning-panelet.
-    // Panelet inneholder KUN alertmelding (ingen tabell), så vi åpner det
-    // uten å vente på tabellheader.
+    // Under minstebeløpet: alert vises i stedet for tabellen. Lå tidligere i et
+    // ExpansionCard som måtte åpnes; vises nå rett på siden.
     const card = page.locator('[aria-label="trygdeavgiftdetaljer"]');
-    await card.waitFor({ state: 'visible', timeout: 10000 });
-    const button = card.locator('button').first();
-    const expanded = await button.getAttribute('aria-expanded');
-    if (expanded !== 'true') {
-      await button.click();
+    if (await card.count() > 0) {
+      await card.waitFor({ state: 'visible', timeout: 10000 });
+      const button = card.locator('button').first();
+      if (await button.getAttribute('aria-expanded') !== 'true') {
+        await button.click();
+      }
     }
     await expect(page.getByText(/inntekten er under minstebeløpet/i)).toBeVisible({ timeout: 10000 });
   });

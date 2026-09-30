@@ -65,6 +65,11 @@ export class EuEosBehandlingAssertions {
     // 2» et tydeligere signal om at antakelsen her må revideres.
     await expect(melding).toHaveCount(1, { timeout: 15000 });
     await expect(melding).toBeVisible({ timeout: 15000 });
+
+    // Knappen vises, men er deaktivert, så saksbehandleren kan ikke bekrefte steget.
+    const bekreftKnapp = this.page.getByRole('button', { name: 'Bekreft og fortsett' });
+    await expect(bekreftKnapp).toBeVisible();
+    await expect(bekreftKnapp).toBeDisabled();
   }
 
   /**

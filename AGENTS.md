@@ -223,7 +223,7 @@ import { test, expect } from '../fixtures'; // Default fixture
 import { UnleashHelper } from '../helpers/unleash-helper';
 
 test('my test with unleash', async ({ page, request }) => {
-  // ALL toggles are reset to defaults BEFORE test runs (automatically)
+  // Toggles start in the default state (the fixture resets them automatically)
   // Default state: All toggles ON except 'melosys.arsavregning.uten.flyt' and 'melosys.arsavregning.eos_tjenesteperson', which are OFF
 
   const unleash = new UnleashHelper(request);
@@ -233,15 +233,15 @@ test('my test with unleash', async ({ page, request }) => {
 
   // ... test logic ...
 
-  // NO cleanup after test - state is left for debugging
-  // Next test will reset all toggles to defaults anyway
+  // NO cleanup in the test - the fixture resets the toggles this test changed
 });
 ```
 
 **Key Points:**
-- **All tests start with consistent state**: Default fixture resets ALL toggles BEFORE each test
+- **All tests start with consistent state**: The first test in a worker process resets ALL default toggles; Playwright starts a new worker after every failure and retry. After that the fixture resets the toggles changed through `enableFeature`/`disableFeature` (tracked at module level, across `UnleashHelper` instances), plus any default toggle that one call to the Unleash admin API shows in the wrong state — after each test, also when the process wait fails, and again before the next test.
 - **Default state**: All toggles enabled except `melosys.arsavregning.uten.flyt` and `melosys.arsavregning.eos_tjenesteperson` (disabled)
-- **Cleanup after test**: Toggles reset after test to ensure next test gets clean state (prevents race conditions on CI)
+- **New toggle in a test?** Add it to the default list in `helpers/unleash-helper.ts`. A changed toggle without a default is not reset; the fixture logs `⚠️ ... har ingen standardverdi` and the state leaks to the next test.
+- **Change toggles through `UnleashHelper`**: a toggle without a default that is changed directly against the Unleash API is neither tracked nor reset.
 - **Local debugging**: Set `SKIP_UNLEASH_CLEANUP_AFTER=true` in `.env` to preserve toggle state after failed tests
 - **Simple approach**: Just disable/enable the toggles you need - no need to track changes
 - Feature toggles affect **all services** (melosys-api, faktureringskomponenten, trygdeavgift-beregning)
@@ -253,7 +253,7 @@ test('my test with unleash', async ({ page, request }) => {
 
 Use this when you want to run the **whole suite** with a toggle forced on/off (e.g. validating that a backend branch doesn't break existing tests with a feature toggle disabled). The per-test `disableFeature()` above is for a single test; this pins it for every test.
 
-The cleanup fixture calls `UnleashHelper.resetToDefaults()` before/after each test, and that method honors two comma-separated env vars (also works for toggles not in the default list):
+The cleanup fixture resets toggles before/after each test (`UnleashHelper.resetChangedToggles()`), and the default list it resets to honors two comma-separated env vars (also works for toggles not in the default list):
 
 - `UNLEASH_FORCE_DISABLE` — toggles forced **OFF** for the whole run
 - `UNLEASH_FORCE_ENABLE` — toggles forced **ON** for the whole run

@@ -1,0 +1,346 @@
+name: E2E gate
+
+# Gjenbrukbar gate for kilderepoer (først melosys-api): er nøyaktig denne koden
+# testet grønt før? Hvis ikke, start «E2E Tests» med imaget, vent på svaret, og
+# sett markøren e2e-ok-<tree> på imaget ved grønt.
+#
+# Nøkkelen er git-treet, ikke SHA-en: label-kjøringen på merge-refen, commiten i
+# merge queue og commiten på master har samme tree når koden er den samme.
+# Markøren sparer bare e2e-kjøringen; den gjør aldri et PR-image til et image
+# som deployes.
+#
+# Kalleren gir `permissions: { id-token: write, contents: read }` og sender
+# E2E_TRIGGER_PAT. Jobbene her har ingen egen permissions-blokk og arver den.
+# Plan: melosys-kode-wiki plans/2026-09-27-e2e-merge-queue-melosys-api.mdx
+
+on:
+  workflow_call:
+    inputs:
+      service:
+        description: 'Tjenesten som testes, samme navn som repoet og imaget (melosys-api)'
+        type: string
+        required: true
+      image:
+        description: 'GAR-sti uten tag (europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/<service>)'
+        type: string
+        required: true
+      tag:
+        description: 'Imaget som testes: commit-SHA-en det er bygget fra (40 hex)'
+        type: string
+        required: true
+      queue_ref:
+        description: 'Brukes fra merge queue: gh-readonly-queue-refen. Er den borte, avbrytes kjøringen.'
+        type: string
+        required: false
+        default: ''
+    secrets:
+      E2E_TRIGGER_PAT:
+        description: 'Token med Actions: read and write på navikt/melosys-e2e-tests'
+        required: true
+    # Lar kalleren melde resultatet tilbake, for eksempel som en kommentar i PR-en.
+    outputs:
+      hit:
+        description: 'true når markøren fantes og E2E Tests ikke ble startet'
+        value: ${{ jobs.lookup.outputs.hit }}
+      tree:
+        description: 'Git-treet til tag'
+        value: ${{ jobs.lookup.outputs.tree }}
+      run_id:
+        description: 'ID-en til E2E Tests-kjøringen i melosys-e2e-tests, tom ved treff'
+        value: ${{ jobs.run.outputs.run_id }}
+
+jobs:
+  lookup:
+    name: Slå opp markør
+    runs-on: ubuntu-latest
+    outputs:
+      hit: ${{ steps.marker.outputs.hit }}
+      tree: ${{ steps.tree.outputs.tree }}
+    steps:
+      - name: Valider input og hent tree
+        id: tree
+        env:
+          SERVICE: ${{ inputs.service }}
+          IMAGE: ${{ inputs.image }}
+          TAG: ${{ inputs.tag }}
+          QUEUE_REF: ${{ inputs.queue_ref }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # E2E Tests ignorerer en ukjent tjeneste og tester da latest. En markør
+          # satt på det grunnlaget ville vært falsk, så bare kjente tjenester slipper
+          # gjennom. Listen speiler case-en i e2e-tests.yml.
+          case "$SERVICE" in
+            melosys-api|melosys-web|faktureringskomponenten|melosys-trygdeavgift-beregning|\
+            melosys-trygdeavtale|melosys-inngangsvilkar|melosys-eessi|melosys-mock|\
+            melosys-dokgen|melosys-skjema-api|melosys-skjema-web) ;;
+            *) echo "::error::Ukjent service: $(printf '%q' "$SERVICE")"; exit 1 ;;
+          esac
+          if [ "$IMAGE" != "europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/$SERVICE" ]; then
+            echo "::error::image må være teammelosys-GAR-stien til $SERVICE, uten tag"
+            exit 1
+          fi
+          if ! [[ "$TAG" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::tag må være en commit-SHA (40 hex-tegn)"
+            exit 1
+          fi
+          if [ -n "$QUEUE_REF" ] && ! [[ "$QUEUE_REF" =~ ^(refs/heads/)?gh-readonly-queue/[A-Za-z0-9._/-]+/pr-[0-9]+-[0-9a-f]{40}$ ]]; then
+            echo "::error::queue_ref må være en gh-readonly-queue-ref"
+            exit 1
+          fi
+
+          # Treet hentes her, ikke fra kalleren.
+          TREE=$(gh api "repos/navikt/$SERVICE/commits/$TAG" --jq .commit.tree.sha)
+          if ! [[ "$TREE" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::Fant ikke tree for $SERVICE@$TAG"
+            exit 1
+          fi
+          echo "tree=$TREE" >> "$GITHUB_OUTPUT"
+          echo "🌳 $SERVICE@$TAG har tree $TREE"
+
+      # Feiler innloggingen, feiler også oppslaget under, og det regnes som bom:
+      # da kjører testene. Det er aldri en vei til grønn uten kjøring.
+      - name: Login to NAIS registry
+        uses: nais/login@v0
+        continue-on-error: true
+        with:
+          team: teammelosys
+
+      - name: Finnes e2e-ok-<tree>?
+        id: marker
+        env:
+          IMAGE: ${{ inputs.image }}
+          TREE: ${{ steps.tree.outputs.tree }}
+        run: |
+          if docker manifest inspect "$IMAGE:e2e-ok-$TREE" > /dev/null 2>&1; then
+            echo "hit=true" >> "$GITHUB_OUTPUT"
+            echo "✅ Treff: $IMAGE:e2e-ok-$TREE finnes. E2E hoppes over." | tee -a "$GITHUB_STEP_SUMMARY"
+          else
+            echo "hit=false" >> "$GITHUB_OUTPUT"
+            echo "🔍 Ingen markør for tree $TREE. E2E Tests startes." | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
+
+  run:
+    name: Kjør E2E Tests
+    needs: lookup
+    if: needs.lookup.outputs.hit != 'true'
+    runs-on: ubuntu-latest
+    # E2E Tests har selv 120 min. Resten er kø, dispatch og polling.
+    timeout-minutes: 135
+    outputs:
+      run_id: ${{ steps.dispatch.outputs.run_id || steps.cancel.outputs.run_id }}
+    env:
+      E2E_REPO: navikt/melosys-e2e-tests
+      CORRELATION_ID: ${{ inputs.service }}-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Start E2E Tests
+        id: dispatch
+        env:
+          GH_TOKEN: ${{ secrets.E2E_TRIGGER_PAT }}
+          READ_TOKEN: ${{ github.token }}
+          SERVICE: ${{ inputs.service }}
+          TAG: ${{ inputs.tag }}
+          TREE: ${{ needs.lookup.outputs.tree }}
+          QUEUE_REF: ${{ inputs.queue_ref }}
+          EVENT_NAME: ${{ github.event_name }}
+          ACTOR: ${{ github.triggering_actor }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          MG_HEAD_REF: ${{ github.event.merge_group.head_ref }}
+        run: |
+          case "$EVENT_NAME" in
+            pull_request) TRIGGER=pr-label ;;
+            merge_group)
+              TRIGGER=merge-queue
+              # refs/heads/gh-readonly-queue/<base>/pr-<nr>-<sha>: PR-en som eier
+              # denne køoppføringen. Gruppen inneholder også PR-ene foran.
+              PR_NUMBER=$(printf '%s' "$MG_HEAD_REF" | sed -nE 's#^(refs/heads/)?gh-readonly-queue/.+/pr-([0-9]+)-[0-9a-f]{40}$#\2#p')
+              PR_HEAD_SHA="" ;;
+            *) echo "::error::Gaten kjører bare fra pull_request eller merge_group, ikke $EVENT_NAME"; exit 1 ;;
+          esac
+
+          # Tomme verdier utelates; E2E Tests avviser ukjente nøkler og ugyldige verdier.
+          GATE_CONTEXT=$(jq -cn \
+            --arg source_repo "$SERVICE" --arg source_sha "$TAG" --arg tree "$TREE" \
+            --arg trigger "$TRIGGER" --arg actor "$ACTOR" --arg pr_number "$PR_NUMBER" \
+            --arg head_sha "$PR_HEAD_SHA" --arg queue_ref "${QUEUE_REF#refs/heads/}" \
+            '$ARGS.named | with_entries(select(.value != ""))')
+          echo "🧾 gate_context: $GATE_CONTEXT"
+
+          # Finner kjøringen via tittelen «E2E Tests · <correlation_id>» (run-name i
+          # e2e-tests.yml). Den listes ikke med én gang, så det prøves i ca. 30 s.
+          finn_kjoring() {
+            GH_TOKEN="$READ_TOKEN" gh run list -R "$E2E_REPO" --workflow e2e-tests.yml \
+                --event workflow_dispatch -L 30 --json databaseId,displayTitle \
+              | jq -r --arg t "E2E Tests · $CORRELATION_ID" \
+                  '[.[] | select(.displayTitle == $t)][0].databaseId // empty' || true
+          }
+          vent_paa_kjoring() {
+            for _ in $(seq 1 10); do
+              RUN_ID=$(finn_kjoring)
+              [ -n "$RUN_ID" ] && return 0
+              sleep 3
+            done
+            return 1
+          }
+
+          # gh skriver URL-en til kjøringen når API-et returnerer den. En feil fra
+          # API-et kan komme selv om kjøringen ble opprettet, så før et nytt forsøk
+          # sjekkes tittelen i ca. 30 s. Listes en kjøring senere enn det, kan suiten
+          # starte opptil tre ganger. Gaten følger én av dem, og de andre avbrytes ikke.
+          RUN_ID=""
+          for forsok in 1 2 3; do
+            if OUT=$(gh workflow run e2e-tests.yml -R "$E2E_REPO" --ref main \
+                -f environment="$SERVICE:$TAG" \
+                -f gate_context="$GATE_CONTEXT" \
+                -f correlation_id="$CORRELATION_ID" 2> "$RUNNER_TEMP/dispatch.err"); then
+              echo "$OUT"
+              RUN_ID=$(printf '%s' "$OUT" | sed -nE 's#.*/actions/runs/([0-9]+).*#\1#p' | head -1)
+              [ -n "$RUN_ID" ] || vent_paa_kjoring || true
+              break
+            fi
+            echo "⚠️  gh workflow run feilet (forsøk $forsok): $(tr '\n\r' '  ' < "$RUNNER_TEMP/dispatch.err")"
+            if vent_paa_kjoring; then break; fi
+          done
+          if [ -z "$RUN_ID" ]; then
+            echo "::error::Fant ikke kjøringen etter dispatch (tittel «E2E Tests · ${CORRELATION_ID}»)"
+            exit 1
+          fi
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "🚀 E2E Tests: https://github.com/$E2E_REPO/actions/runs/$RUN_ID" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Vent på E2E Tests
+        id: wait
+        env:
+          # Lesing med kallerens GITHUB_TOKEN: e2e-repoet er offentlig, og det
+          # sparer PAT-ens rate limit. Grensen er 1000 kall i timen, delt med alle
+          # workflows i kallerrepoet; gaten bruker 1–2 i minuttet.
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.dispatch.outputs.run_id }}
+          QUEUE_REF: ${{ inputs.queue_ref }}
+        run: |
+          # Egen polling i stedet for `gh run watch`: den har ingen retry, og én
+          # forbigående API-feil ville gjort gaten rød.
+          FEIL_I_RAD=0
+          while true; do
+            sleep 60
+            if [ -n "$QUEUE_REF" ]; then
+              REF="${QUEUE_REF#refs/heads/}"
+              # Bare 404 betyr «borte»; andre feil er forbigående og prøves igjen.
+              if ! gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/$REF" --silent 2> "$RUNNER_TEMP/ref.err" \
+                 && grep -q "HTTP 404" "$RUNNER_TEMP/ref.err"; then
+                echo "::error::Køoppføringen er borte ($REF). E2E Tests avbrytes."
+                exit 1
+              fi
+            fi
+            # Ett API-kall; `gh run view` bruker to. Et svar som ikke er JSON med
+            # status, telles som en feil og prøves igjen.
+            if SVAR=$(gh api "repos/$E2E_REPO/actions/runs/$RUN_ID" --jq '{status, conclusion}' 2> "$RUNNER_TEMP/view.err") \
+               && STATUS=$(printf '%s' "$SVAR" | jq -er .status 2>> "$RUNNER_TEMP/view.err") \
+               && CONCLUSION=$(printf '%s' "$SVAR" | jq -r '.conclusion // ""'); then
+              FEIL_I_RAD=0
+            else
+              FEIL_I_RAD=$((FEIL_I_RAD + 1))
+              echo "⚠️  Statusoppslaget feilet ($FEIL_I_RAD på rad): $(tr '\n\r' '  ' < "$RUNNER_TEMP/view.err")"
+              if [ "$FEIL_I_RAD" -ge 10 ]; then
+                echo "::error::Statusoppslaget feilet 10 ganger på rad"
+                exit 1
+              fi
+              continue
+            fi
+            echo "$(date -u +%H:%M:%S) status=$STATUS conclusion=$CONCLUSION"
+            if [ "$STATUS" = "completed" ]; then
+              if [ "$CONCLUSION" = "success" ]; then
+                exit 0
+              fi
+              echo "::error::E2E Tests endte med $CONCLUSION"
+              exit 1
+            fi
+          done
+
+      - name: Avbryt E2E Tests
+        id: cancel
+        # Kjører når ventingen ikke ble grønn: gaten er avbrutt (label fjernet,
+        # køoppføring kastet ut), har fått timeout, eller E2E Tests er rød.
+        # En ferdig kjøring gir 409; det er ingen feil. Andre feil gir en advarsel,
+        # for da går suiten videre i opptil 68 minutter.
+        if: always() && steps.dispatch.outcome != 'skipped' && steps.wait.outcome != 'success'
+        env:
+          GH_TOKEN: ${{ secrets.E2E_TRIGGER_PAT }}
+          READ_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.dispatch.outputs.run_id }}
+        run: |
+          finn_kjoring() {
+            GH_TOKEN="$READ_TOKEN" gh run list -R "$E2E_REPO" --workflow e2e-tests.yml \
+                --event workflow_dispatch -L 30 --json databaseId,displayTitle \
+              | jq -r --arg t "E2E Tests · $CORRELATION_ID" \
+                  '[.[] | select(.displayTitle == $t)][0].databaseId // empty' || true
+          }
+          if [ -z "$RUN_ID" ]; then
+            # Avbrutt midt i dispatch-steget: slå opp via tittelen. En kjøring som
+            # nettopp er startet, listes ikke med én gang.
+            for _ in 1 2 3; do
+              RUN_ID=$(finn_kjoring)
+              [ -n "$RUN_ID" ] && break
+              sleep 3
+            done
+          fi
+          if [ -z "$RUN_ID" ]; then
+            echo "Ingen kjøring å avbryte."
+            exit 0
+          fi
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          if gh run cancel "$RUN_ID" -R "$E2E_REPO" 2> "$RUNNER_TEMP/cancel.err"; then
+            echo "Avbrøt E2E Tests $RUN_ID."
+          elif grep -q "completed" "$RUNNER_TEMP/cancel.err"; then
+            echo "E2E Tests $RUN_ID var alt ferdig."
+          else
+            echo "::warning::Klarte ikke avbryte E2E Tests $RUN_ID: $(tr '\n\r' '  ' < "$RUNNER_TEMP/cancel.err")"
+          fi
+
+      - name: Skriv lenke ved rødt
+        # cancelled() dekker også timeout-minutes.
+        if: failure() || cancelled()
+        env:
+          RUN_ID: ${{ steps.dispatch.outputs.run_id || steps.cancel.outputs.run_id }}
+        run: |
+          if [ -n "$RUN_ID" ]; then
+            echo "❌ Gaten ble ikke grønn. E2E Tests: https://github.com/$E2E_REPO/actions/runs/$RUN_ID" >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "❌ Gaten ble ikke grønn, og ingen kjøring med tittelen «E2E Tests · ${CORRELATION_ID}» ble funnet." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  mark:
+    name: Sett markør
+    needs: [lookup, run]
+    if: needs.run.result == 'success'
+    runs-on: ubuntu-latest
+    steps:
+      # Egen innlogging: tokenet fra nais/login varer én time, og E2E Tests tar
+      # ca. 68 minutter. Markøren sparer bare tid, så en feil her gjør ikke gaten
+      # rød etter en grønn kjøring; neste kjøring på samme tree tester på nytt.
+      - name: Login to NAIS registry
+        id: login
+        uses: nais/login@v0
+        continue-on-error: true
+        with:
+          team: teammelosys
+
+      - name: Tagg imaget e2e-ok-<tree>
+        id: tag
+        continue-on-error: true
+        env:
+          IMAGE: ${{ inputs.image }}
+          TAG: ${{ inputs.tag }}
+          TREE: ${{ needs.lookup.outputs.tree }}
+        run: |
+          docker buildx imagetools create -t "$IMAGE:e2e-ok-$TREE" "$IMAGE:$TAG"
+          echo "🏷️  $IMAGE:$TAG er tagget e2e-ok-$TREE" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Varsle om manglende markør
+        # outcome, ikke conclusion: med continue-on-error er conclusion success også
+        # når steget feiler.
+        if: steps.login.outcome == 'failure' || steps.tag.outcome == 'failure'
+        run: |
+          MELDING="E2E Tests var grønn, men markøren e2e-ok-<tree> ble ikke satt. Neste kjøring på samme tree kjører e2e på nytt."
+          echo "::warning::$MELDING"
+          echo "⚠️ $MELDING" >> "$GITHUB_STEP_SUMMARY"

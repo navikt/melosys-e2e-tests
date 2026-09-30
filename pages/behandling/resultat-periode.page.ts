@@ -1,5 +1,11 @@
-import { expect, Page } from '@playwright/test';
+import { expect, Page, Request } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+
+/** PUT/POST av én medlemskapsperiode — autolagringen i Perioder-steget. `/forslag` er ikke med. */
+function erPeriodeLagring(request: Request): boolean {
+  if (request.method() !== 'PUT' && request.method() !== 'POST') return false;
+  return /\/medlemskapsperioder(\/\d+)?$/.test(new URL(request.url()).pathname);
+}
 
 /**
  * Page Object for Resultat Periode (Result Period) page
@@ -23,8 +29,42 @@ export class ResultatPeriodePage extends BasePage {
     name: 'Bekreft og fortsett'
   });
 
+  private aktiveLagringer = 0;
+  private sisteLagringsaktivitet = 0;
+
   constructor(page: Page) {
     super(page);
+    page.on('request', request => {
+      if (!erPeriodeLagring(request)) return;
+      this.aktiveLagringer++;
+      this.sisteLagringsaktivitet = Date.now();
+    });
+    const ferdig = (request: Request) => {
+      if (!erPeriodeLagring(request)) return;
+      this.aktiveLagringer = Math.max(0, this.aktiveLagringer - 1);
+      this.sisteLagringsaktivitet = Date.now();
+    };
+    page.on('requestfinished', ferdig);
+    page.on('requestfailed', ferdig);
+  }
+
+  /**
+   * Vent til autolagringen av perioder er ferdig: ingen PUT/POST underveis og
+   * ingen ny på `stille` ms, regnet fra kallet.
+   *
+   * Steget lagrer alle perioder 500 ms etter at det blir gyldig, én etter én, og
+   * skriver hver respons tilbake i skjemaet (`vurderingPerioder.tsx` i
+   * melosys-web). Velger vi resultat mens den runden pågår, overskriver
+   * responsen valget. Det skjedde i 9 av 62 forsøk på 25 %-testene fra 21.09.
+   */
+  private async ventPåPeriodeLagring(stille = 1000, maks = 15000): Promise<void> {
+    const start = Date.now();
+    while (Date.now() - start < maks) {
+      const sistAktiv = Math.max(this.sisteLagringsaktivitet, start);
+      if (this.aktiveLagringer === 0 && Date.now() - sistAktiv >= stille) return;
+      await this.page.waitForTimeout(100);
+    }
+    console.log(`⚠️ Autolagring av perioder ble ikke stille innen ${maks} ms`);
   }
 
   /**
@@ -200,9 +240,12 @@ export class ResultatPeriodePage extends BasePage {
       return;
     }
 
+    await this.ventPåPeriodeLagring();
+    const forventet: string[] = [];
+
     if (dropdowns.length === 1) {
       // Single period - simple case
-      await dropdowns[0].selectOption(resultat);
+      forventet.push(...(await dropdowns[0].selectOption(resultat)));
       console.log(`✅ Selected resultat for single periode: ${resultat}`);
     } else {
       // Multiple periods - need to check for overlaps
@@ -211,7 +254,7 @@ export class ResultatPeriodePage extends BasePage {
 
       // First, try setting all to requested result
       for (let i = 0; i < dropdowns.length; i++) {
-        await dropdowns[i].selectOption(resultat);
+        forventet.push(...(await dropdowns[i].selectOption(resultat)));
       }
       console.log(`📝 Set all ${dropdowns.length} perioder to ${resultat}`);
 
@@ -226,11 +269,18 @@ export class ResultatPeriodePage extends BasePage {
           console.log('⚠️ Detected overlap error - adjusting periods');
           // Set second period to Avslått (typically Pensjonsdel when Helsedel is first)
           if (dropdowns.length >= 2) {
-            await dropdowns[1].selectOption({ label: 'Avslått' });
+            [forventet[1]] = await dropdowns[1].selectOption({ label: 'Avslått' });
             console.log('✅ Set periode 2 to Avslått to avoid overlap');
           }
         }
       }
+    }
+
+    // Valgene utløser en ny lagringsrunde. Sjekk at ingen respons har overskrevet dem.
+    await this.ventPåPeriodeLagring();
+    for (let i = 0; i < dropdowns.length; i++) {
+      await expect(dropdowns[i], `Resultat periode ${i + 1} ble overskrevet etter valget`)
+        .toHaveValue(forventet[i]);
     }
 
     await this.klikkBekreftOgFortsett();
