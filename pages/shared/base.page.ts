@@ -441,7 +441,7 @@ export abstract class BasePage {
           stilleMs: 200,
         });
         if (besvart < startet) {
-          console.log(`  ⚠️  ${startet - besvart} av ${startet} API-kall uten svar etter 30 s`);
+          console.log(`  ⚠️  ${startet - besvart} av ${startet} API-kall feilet eller fikk ikke svar innen 30 s`);
         } else {
           console.log(`  💾 ${startet} API-kall fullført etter klikket`);
         }

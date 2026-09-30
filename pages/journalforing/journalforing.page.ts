@@ -150,6 +150,8 @@ export class JournalforingPage extends BasePage {
   async fyllSakstype(sakstype: string): Promise<void> {
     await this.sakstypeDropdown.waitFor({ state: 'visible', timeout: 5000 });
     await this.sakstypeDropdown.selectOption({ label: sakstype });
+    // Neste nedtrekksliste fylles fra et API-kall etter valget
+    await this.waitForDropdownToHaveOptions(this.sakstemaDropdown);
   }
 
   /**
@@ -158,6 +160,7 @@ export class JournalforingPage extends BasePage {
   async fyllSakstema(sakstema: string): Promise<void> {
     await this.waitForDropdownToHaveOptions(this.sakstemaDropdown);
     await this.sakstemaDropdown.selectOption({ label: sakstema });
+    await this.waitForDropdownToHaveOptions(this.behandlingstemaDropdown);
   }
 
   /**
@@ -166,6 +169,7 @@ export class JournalforingPage extends BasePage {
   async fyllBehandlingstema(tema: string): Promise<void> {
     await this.waitForDropdownToHaveOptions(this.behandlingstemaDropdown);
     await this.behandlingstemaDropdown.selectOption({ label: tema });
+    await this.waitForDropdownToHaveOptions(this.behandlingstypeDropdown);
   }
 
   /**
@@ -234,8 +238,9 @@ export class JournalforingPage extends BasePage {
     await this.landCombobox.fill(landNavn);
 
     // Click on the first matching option
-    const option = this.page.getByRole('option', { name: new RegExp(landNavn, 'i') });
-    const hasOption = await option.first().waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false);
+    // Skjulte <option>-er i andre nedtrekkslister kan også matche navnet
+    const option = this.page.getByRole('option', { name: new RegExp(landNavn, 'i') }).filter({ visible: true }).first();
+    const hasOption = await option.waitFor({ state: 'visible', timeout: 5000 }).then(() => true, () => false);
     if (hasOption) {
       await option.click();
       console.log(`   ✅ Selected country: ${landNavn}`);
@@ -353,9 +358,7 @@ export class JournalforingPage extends BasePage {
     console.log(`  📝 Selecting sakstype: ${config.sakstype}`);
     await this.fyllSakstype(config.sakstype);
 
-    // Fill sakstema (use first available if not specified). Hver nedtrekksliste fylles
-    // når forrige er valgt, så vent på valgene før de leses.
-    await this.waitForDropdownToHaveOptions(this.sakstemaDropdown);
+    // Fill sakstema (use first available if not specified)
     const sakstemaOptions = await this.getDropdownOptions('sakstema');
     const sakstema = config.sakstema || sakstemaOptions[0];
     if (sakstema) {
@@ -364,7 +367,6 @@ export class JournalforingPage extends BasePage {
     }
 
     // Fill behandlingstema (use first available if not specified)
-    await this.waitForDropdownToHaveOptions(this.behandlingstemaDropdown);
     const behandlingstemaOptions = await this.getDropdownOptions('behandlingstema');
     const behandlingstema = config.behandlingstema || behandlingstemaOptions[0];
     if (behandlingstema) {
@@ -373,7 +375,6 @@ export class JournalforingPage extends BasePage {
     }
 
     // Fill behandlingstype (use first available if not specified)
-    await this.waitForDropdownToHaveOptions(this.behandlingstypeDropdown);
     const behandlingstypeOptions = await this.getDropdownOptions('behandlingstype');
     const behandlingstype = config.behandlingstype || behandlingstypeOptions[0];
     if (behandlingstype) {

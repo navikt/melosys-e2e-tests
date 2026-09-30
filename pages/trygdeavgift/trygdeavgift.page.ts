@@ -68,19 +68,20 @@ export class TrygdeavgiftPage extends BasePage {
    *
    * The page fires a useEffect on mount that fetches saved trygdeavgift data
    * (GET /trygdeavgift/beregning) and then resets the form fields with
-   * resetSkatteforholdsperioder/resetInntektskilder. We must wait for this
-   * initial fetch to complete before interacting, otherwise the useEffect
-   * response will overwrite any fields we've already filled.
+   * resetSkatteforholdsperioder/resetInntektskilder.
+   *
+   * Metoden venter bare på at skjemaet vises. Hentingen dekkes av ventingen etter
+   * stegklikket: minst 500 ms etter klikket i begge modusene (målt lokalt: hentingen var
+   * ferdig før overskriften byttet). velgSkattepliktig velger på nytt hvis skjemaet likevel
+   * blir nullstilt; datofeltene gjør ikke det.
    */
   async ventPåSideLastet(): Promise<void> {
     try {
       await this.skattepliktigGroup.waitFor({ state: 'visible', timeout: 10000 });
       console.log('✅ Trygdeavgift page loaded - Skattepliktig field visible');
 
-      // The useEffect on mount fires GET /trygdeavgift/beregning and then resets
-      // form fields with resetSkatteforholdsperioder/resetInntektskilder. networkidle
-      // returnerer straks her (SPA uten navigering, målt 1–2 ms); det er ventingen etter
-      // stegklikket som dekker hentingen, og velgSkattepliktig velger på nytt ved nullstilling.
+      // networkidle returnerer straks i en SPA uten navigering (målt 1–2 ms), men venter
+      // hvis siden faktisk lastes på nytt.
       await this.page.waitForLoadState('networkidle', { timeout: 5000 }).catch(() => {
         console.log('⚠️  Network did not reach idle within 5s (continuing anyway)');
       });

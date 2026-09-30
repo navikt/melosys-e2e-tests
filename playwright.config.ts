@@ -37,8 +37,9 @@ const bddTestDir = defineBddConfig({
  * Pause etter hver handling. 0 på CI (sparte 4–5 min per kjøring); lokalt 100 ms for å
  * kunne følge med i headed-modus. Overstyr med SLOWMO=<ms>.
  */
-const slowMo = process.env.SLOWMO !== undefined
-  ? Number(process.env.SLOWMO)
+const slowMoFraEnv = Number(process.env.SLOWMO);
+const slowMo = process.env.SLOWMO && Number.isFinite(slowMoFraEnv)
+  ? slowMoFraEnv
   : process.env.CI ? 0 : 100;
 
 /**
