@@ -1,6 +1,6 @@
 import { Page, Locator, Response, expect } from '@playwright/test';
 import { TIMEOUT_MEDIUM } from './constants';
-import { erSkrivekallMotApi, sporKall } from './kall-sporing';
+import { erSkrivekallMotApi, sporKall, utførOgVentPåApi } from './kall-sporing';
 
 /**
  * Base Page Object class providing common functionality
@@ -202,7 +202,7 @@ export abstract class BasePage {
    * Click "Bekreft og fortsett" with API wait and optional heading-change retry.
    *
    * Two modes:
-   * - **Simple** (default): Click, wait for API response, wait for networkidle.
+   * - **Simple** (default): Click and wait for the API calls the click started.
    *   Used by most POMs (lovvalg, medlemskap, trygdeavgift, etc.)
    * - **With heading retry** (verifyHeadingChange: true): Also verifies that the
    *   visible h1 heading changed, retrying the click up to 3 times if not.
@@ -431,8 +431,19 @@ export abstract class BasePage {
           );
         }
       } else {
-        // Simple mode: just click and proceed
-        await button.click();
+        // Enkel modus: vent på kallene klikket startet. Første steg lagrer, oppfrisker
+        // registeropplysningene og laster steget på nytt (målt 0,3–2 s); de andre stegene
+        // lagrer og laster neste steg på under 200 ms. Stille-vinduet bygger bro mellom
+        // leddene i kjeden (målt opptil 85 ms).
+        const { startet, besvart } = await utførOgVentPåApi(this.page, () => button.click(), {
+          startvinduMs: 300,
+          stilleMs: 200,
+        });
+        if (besvart < startet) {
+          console.log(`  ⚠️  ${startet - besvart} av ${startet} API-kall uten svar etter 30 s`);
+        } else {
+          console.log(`  💾 ${startet} API-kall fullført etter klikket`);
+        }
         break;
       }
     }
@@ -451,8 +462,6 @@ export abstract class BasePage {
       } else {
         console.log(`  💾 ${startet} lagringskall fullført etter stegbytte`);
       }
-    } else {
-      await this.page.waitForTimeout(500);
     }
 
     if (waitForContent) {

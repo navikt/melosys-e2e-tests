@@ -33,6 +33,30 @@ export interface KallSporing {
 export const erSkrivekallMotApi: KallFilter = request =>
   request.method() !== 'GET' && request.method() !== 'HEAD' && request.url().includes('/api/');
 
+/** Matcher alle kall mot melosys-api, også GET-ene som laster neste steg. */
+export const erKallMotApi: KallFilter = request => request.url().includes('/api/');
+
+/**
+ * Utfører handlingen og venter på API-kallene den startet, i stedet for en fast søvn.
+ * Starter ingen kall innen `startvinduMs`, går den videre. Med `stilleMs` venter den
+ * også på kall som starter kort etter at de forrige har svart (lagring → oppfrisking →
+ * lasting av neste steg).
+ */
+export async function utførOgVentPåApi(
+  page: Pick<Page, 'on' | 'off'>,
+  handling: () => Promise<unknown>,
+  opts: { startvinduMs: number; stilleMs: number; svartidMs?: number },
+): Promise<Kallresultat> {
+  const sporing = sporKall(page, erKallMotApi);
+  try {
+    await handling();
+  } catch (feil) {
+    sporing.stopp();
+    throw feil;
+  }
+  return sporing.ventPåStartedeKall({ svartidMs: 30_000, ...opts });
+}
+
 /**
  * Skjemaene disse POM-ene fyller i melosys-web, autolagrer med en debounce på inntil
  * 600 ms, og bare når de er gyldige. Starter ingen lagring innen dette vinduet, kommer den
