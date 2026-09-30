@@ -131,8 +131,14 @@ export class SoknadArbeidsgiverPage {
 
   // ---- Arbeidsgiver-spesifikke steg ------------------------------------------------------
 
-  /** Steg 1: utsendingsperiode og land. Går videre til arbeidsgiverens-virksomhet-i-norge. */
-  async fyllUtsendingsperiodeOgLand(land = 'Frankrike'): Promise<void> {
+  /**
+   * Steg 1: utsendingsperiode og land. Går videre til arbeidsgiverens-virksomhet-i-norge, eller
+   * rett til utenlandsoppdraget når arbeidsgiveren er offentlig (steget finnes ikke i flyten).
+   */
+  async fyllUtsendingsperiodeOgLand(
+    land = 'Frankrike',
+    nesteUrl: RegExp = /\/arbeidsgiverens-virksomhet-i-norge/
+  ): Promise<void> {
     const page = this.page;
     await expect(page.getByRole('heading', { name: 'Utsendingsperiode og land' })).toBeVisible();
     await page.getByLabel('I hvilket land skal arbeidet utføres?').selectOption({ label: land });
@@ -141,14 +147,12 @@ export class SoknadArbeidsgiverPage {
     await page.getByRole('textbox', { name: 'Fra dato' }).fill(fraDato);
     await page.getByRole('textbox', { name: 'Til dato' }).fill(tilDato);
 
-    await lagreOgFortsett(page, /\/arbeidsgiverens-virksomhet-i-norge/);
+    await lagreOgFortsett(page, nesteUrl);
   }
 
   /** Steg 2: arbeidsgiverens virksomhet i Norge (privat virksomhet med ordinær drift). */
   async fyllArbeidsgiverensVirksomhet(): Promise<void> {
     const page = this.page;
-    await svarRadio(page, /offentlig virksomhet/, 'Nei');
-    // «bemannings-/vikarbyrå» og «opprettholder vanlig drift» dukker først opp etter «Nei» over.
     await svarRadio(page, /bemannings- eller vikarbyrå/, 'Nei');
     await svarRadio(page, /Opprettholder arbeidsgiveren vanlig drift/, 'Ja');
     await lagreOgFortsett(page, /\/utenlandsoppdraget/);
@@ -188,10 +192,24 @@ export class SoknadArbeidsgiverPage {
     await lagreOgFortsett(this.page, nesteUrl);
   }
 
+  /**
+   * Offentlig arbeidsgiver (MELOSYS-7670): utenlandsoppdraget skal være steg 2 av 10, ikke
+   * 3 av 11. Aksel FormProgress rendrer steglista lazy og sammenslått, så telleren er det
+   * eneste som alltid står i DOM-en.
+   */
+  private async verifiserVirksomhetsstegetErBorte(): Promise<void> {
+    const page = this.page;
+    await expect(page.getByRole('heading', { name: 'Utenlandsoppdraget' })).toBeVisible();
+    await expect(page.getByText('Steg 2 av 10', { exact: true })).toBeVisible();
+  }
+
   // ---- Orkestrering ----------------------------------------------------------------------
 
   /**
    * Full innsending som arbeidsgiver MED fullmakt — fyller ut BEGGE deler (11 steg).
+   * @param opts.offentligArbeidsgiver  true når EREG klassifiserer arbeidsgiveren som offentlig
+   *                                     (STAT/6100, MELOSYS-7670): virksomhetssteget finnes ikke,
+   *                                     og flyten verifiserer at det hoppes over (10 steg).
    * @returns søknads-id (UUID) og referansenummer fra kvitteringen.
    */
   async fyllUtOgSendInnBeggeDeler(opts: {
@@ -199,13 +217,18 @@ export class SoknadArbeidsgiverPage {
     arbeidstakerFnr: string;
     land?: string;
     vedleggFilsti?: string;
+    offentligArbeidsgiver?: boolean;
   }): Promise<{ skjemaId: string; referanse: string }> {
     const skjemaId = await this.velgArbeidsgiverOgStart({
       arbeidsgiverOrgnr: opts.arbeidsgiverOrgnr,
       arbeidstakerFnr: opts.arbeidstakerFnr,
       medFullmakt: true,
     });
-    const referanse = await this.fyllAlleStegBeggeDeler(opts.land, opts.vedleggFilsti);
+    const referanse = await this.fyllAlleStegBeggeDeler(
+      opts.land,
+      opts.vedleggFilsti,
+      opts.offentligArbeidsgiver ?? false
+    );
     return { skjemaId, referanse };
   }
 
@@ -234,9 +257,18 @@ export class SoknadArbeidsgiverPage {
   }
 
   /** Fyll ut alle steg for begge-deler-varianten (steg 1-5 AG + AT-steg + hale) og send inn. */
-  private async fyllAlleStegBeggeDeler(land?: string, vedleggFilsti?: string): Promise<string> {
-    await this.fyllUtsendingsperiodeOgLand(land);
-    await this.fyllArbeidsgiverensVirksomhet();
+  private async fyllAlleStegBeggeDeler(
+    land?: string,
+    vedleggFilsti?: string,
+    offentligArbeidsgiver = false
+  ): Promise<string> {
+    if (offentligArbeidsgiver) {
+      await this.fyllUtsendingsperiodeOgLand(land, /\/utenlandsoppdraget/);
+      await this.verifiserVirksomhetsstegetErBorte();
+    } else {
+      await this.fyllUtsendingsperiodeOgLand(land);
+      await this.fyllArbeidsgiverensVirksomhet();
+    }
     await this.fyllUtenlandsoppdraget();
     await this.fyllArbeidssted();
     await this.fyllArbeidstakerensLonn(/\/arbeidssituasjon/);
