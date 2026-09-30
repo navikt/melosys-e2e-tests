@@ -374,7 +374,7 @@ export async function ventPåManglendeInnbetalingBehandling(
     );
     if (behandling) return behandling;
 
-    await new Promise(resolve => setTimeout(resolve, 2_000));
+    await new Promise(resolve => setTimeout(resolve, 500));
   }
 
   throw new Error(
