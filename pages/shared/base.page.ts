@@ -1,5 +1,6 @@
 import { Page, Locator, Response, expect } from '@playwright/test';
 import { TIMEOUT_MEDIUM } from './constants';
+import { erSkrivekallMotApi, sporKall } from './kall-sporing';
 
 /**
  * Base Page Object class providing common functionality
@@ -229,9 +230,7 @@ export abstract class BasePage {
       apiPatterns = ['/api/avklartefakta/', '/api/vilkaar/'],
       verifyHeadingChange = false,
       // Hvor lenge vi venter på en auto-save-POST etter klikk (heading-change-modus).
-      // Steg som IKKE auto-lagrer (f.eks. resultat-periode, som kun bytter steg
-      // klientsidig) har ingen matchende POST — da er 10s ren dødtid. Slike POM-er
-      // sender en kort timeout; heading-endringen er uansett det reelle signalet.
+      // Bytter overskriften først, slutter ventingen der.
       apiResponseTimeout = 10000,
     } = options || {};
 
@@ -245,6 +244,10 @@ export abstract class BasePage {
     const maxAttempts = verifyHeadingChange ? 3 : 1;
     let disabledWaits = 0;
 
+    // Overskriften bytter før lagringene er ferdige, så etter stegbyttet venter vi på
+    // skrivekallene som faktisk startet. Kaster løkka, feiler testen, og lytteren
+    // forsvinner når siden lukkes.
+    const skrivekall = verifyHeadingChange ? sporKall(this.page, erSkrivekallMotApi) : null;
     for (let attempt = 1; attempt <= maxAttempts; attempt++) {
       if (attempt > 1) {
         console.log(`  🔄 Retry ${attempt}/${maxAttempts}...`);
@@ -305,17 +308,6 @@ export abstract class BasePage {
           { timeout: apiResponseTimeout },
         ).catch(() => null);
 
-        await button.click();
-
-        const apiResponse = await apiResponsePromise;
-        if (apiResponse) {
-          console.log(`  ✅ API: ${apiResponse.url().split('/api/')[1]?.split('?')[0]} → ${apiResponse.status()}`);
-        } else {
-          console.log(`  ⚠️  Ingen API-respons (forsøk ${attempt})`);
-        }
-
-        // Verify UI actually transitioned
-        const transitionStart = Date.now();
         const headingCheckFn = (originalHeading: string) => {
           const headings = document.querySelectorAll('main h1');
           for (const h of headings) {
@@ -328,6 +320,27 @@ export abstract class BasePage {
           return false;
         };
 
+        await button.click();
+
+        // Mange steg sender ingen POST som matcher apiPatterns. Da er overskriftsskiftet
+        // signalet, så vi venter ikke hele apiResponseTimeout på et kall som ikke kommer.
+        const headingEndretTidlig = this.page.waitForFunction(
+          headingCheckFn,
+          headingBefore!,
+          { timeout: apiResponseTimeout },
+        ).then(() => true).catch(() => false);
+        const apiResponse = await Promise.race([
+          apiResponsePromise,
+          headingEndretTidlig.then(endret => (endret ? null : apiResponsePromise)),
+        ]);
+        if (apiResponse) {
+          console.log(`  ✅ API: ${apiResponse.url().split('/api/')[1]?.split('?')[0]} → ${apiResponse.status()}`);
+        } else if (!(await headingEndretTidlig)) {
+          console.log(`  ⚠️  Ingen API-respons (forsøk ${attempt})`);
+        }
+
+        // Verify UI actually transitioned
+        const transitionStart = Date.now();
         const headingChanged = await this.page.waitForFunction(
           headingCheckFn,
           headingBefore!,
@@ -424,7 +437,23 @@ export abstract class BasePage {
       }
     }
 
-    await this.page.waitForTimeout(500);
+    if (skrivekall) {
+      // Stegvelgeren i melosys-web bytter steg først og lagrer deretter, stort sett ett kall
+      // om gangen (avklartefakta, vilkaar, …). Vinduet på 500 ms erstatter den faste søvnen
+      // og forlenges så lenge kjeden fortsetter.
+      const { startet, besvart } = await skrivekall.ventPåStartedeKall({
+        startvinduMs: 500,
+        stilleMs: 500,
+        svartidMs: 30000,
+      });
+      if (besvart < startet) {
+        console.log(`  ⚠️  ${startet - besvart} av ${startet} lagringskall uten svar etter 30 s`);
+      } else {
+        console.log(`  💾 ${startet} lagringskall fullført etter stegbytte`);
+      }
+    } else {
+      await this.page.waitForTimeout(500);
+    }
 
     if (waitForContent) {
       console.log('  ⏳ Venter på innhold på neste steg...');

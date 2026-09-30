@@ -2,6 +2,7 @@ import { Page, expect } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 import { TIMEOUT_API, TIMEOUT_LONG, TIMEOUT_MEDIUM, TIMEOUT_SHORT, TIMEOUT_VEDTAK } from '../shared/constants';
 import { isTrygdeavgiftBeregningResponse } from '../shared/trygdeavgift-api';
+import { erSkrivekallMotApi, sporKall, ventPåAutolagringHvisDenStarter } from '../shared/kall-sporing';
 import { AarsavregningAssertions } from './aarsavregning.assertions';
 
 /**
@@ -220,23 +221,13 @@ export class AarsavregningPage extends BasePage {
     const expectedValue = avviker ? 'true' : 'false';
     const radioInput = this.avvikerInnbetaltGroup.locator(`input[value="${expectedValue}"]`);
 
-    const responsePromise = this.page.waitForResponse(
-      response =>
-        isTrygdeavgiftBeregningResponse(response) &&
-        response.request().method() === 'PUT',
-      { timeout: TIMEOUT_MEDIUM }
-    ).catch(() => null);
+    const autolagring = sporKall(this.page, erSkrivekallMotApi);
 
     await radioInput.waitFor({ state: 'attached', timeout: TIMEOUT_MEDIUM });
     await radioInput.click({ force: true });
     await expect(radioInput).toBeChecked({ timeout: TIMEOUT_MEDIUM });
 
-    const response = await responsePromise;
-    if (response) {
-      console.log('✅ Debounced PUT /trygdeavgift/beregning completed - avviker saved');
-    } else {
-      await this.page.waitForTimeout(1500);
-    }
+    await ventPåAutolagringHvisDenStarter(autolagring, 'Avviker innbetalt');
 
     console.log(`✅ Selected Avviker innbetalt = ${avviker ? 'Ja' : 'Nei'}`);
   }
@@ -250,23 +241,13 @@ export class AarsavregningPage extends BasePage {
   async fyllInnInnbetaltTrygdeavgift(beløp: string): Promise<void> {
     await this.innbetaltTrygdeavgiftField.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
 
-    const responsePromise = this.page.waitForResponse(
-      response =>
-        isTrygdeavgiftBeregningResponse(response) &&
-        response.request().method() === 'PUT',
-      { timeout: TIMEOUT_MEDIUM }
-    ).catch(() => null);
+    const autolagring = sporKall(this.page, erSkrivekallMotApi);
 
     await this.innbetaltTrygdeavgiftField.fill(beløp);
     await this.innbetaltTrygdeavgiftField.press('Tab');
     await expect(this.innbetaltTrygdeavgiftField).toHaveValue(beløp, { timeout: TIMEOUT_MEDIUM });
 
-    const response = await responsePromise;
-    if (response) {
-      console.log('✅ Debounced PUT /trygdeavgift/beregning completed - innbetalt saved');
-    } else {
-      await this.page.waitForTimeout(1500);
-    }
+    await ventPåAutolagringHvisDenStarter(autolagring, 'Innbetalt trygdeavgift');
 
     console.log(`✅ Fylte inn innbetalt trygdeavgift: ${beløp}`);
   }
@@ -411,13 +392,8 @@ export class AarsavregningPage extends BasePage {
 
     const expectedValue = erSkattepliktig ? 'SKATTEPLIKTIG' : 'IKKE_SKATTEPLIKTIG';
 
-    // Set up response listener BEFORE clicking to catch the debounced PUT
-    const responsePromise = this.page.waitForResponse(
-      response =>
-        isTrygdeavgiftBeregningResponse(response) &&
-        response.request().method() === 'PUT',
-      { timeout: TIMEOUT_MEDIUM }
-    ).catch(() => null); // Don't fail if no PUT
+    // Start sporingen FØR klikket, slik at den debouncede lagringen ikke glipper
+    const autolagring = sporKall(this.page, erSkrivekallMotApi);
 
     const radioInput = this.skattepliktigGroup.locator(`input[value="${expectedValue}"]`);
     await radioInput.waitFor({ state: 'attached', timeout: TIMEOUT_MEDIUM });
@@ -435,13 +411,7 @@ export class AarsavregningPage extends BasePage {
 
     await expect(radioInput).toBeChecked({ timeout: TIMEOUT_MEDIUM });
 
-    const response = await responsePromise;
-    if (response) {
-      console.log('✅ Debounced PUT /trygdeavgift/beregning completed - value saved');
-    } else {
-      console.log('⚠️  No PUT detected, waiting for debounce period...');
-      await this.page.waitForTimeout(1500);
-    }
+    await ventPåAutolagringHvisDenStarter(autolagring, 'Skattepliktig');
 
     console.log(`✅ Selected Skattepliktig = ${erSkattepliktig ? 'Ja' : 'Nei'}`);
   }

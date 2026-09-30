@@ -1,5 +1,6 @@
 import { Page, type Response as PlaywrightResponse } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+import { erSkrivekallMotApi, sporKall, ventPåAutolagringHvisDenStarter } from '../shared/kall-sporing';
 import { ArbeidFlereLandBehandlingAssertions } from './arbeid-flere-land-behandling.assertions';
 
 /**
@@ -67,9 +68,6 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
 
   /**
    * Velg arbeidsgiver med checkbox
-   *
-   * IMPORTANT: Checkbox triggers immediate API save when checked!
-   * This method waits for that API call to complete.
    *
    * Enhanced with comprehensive diagnostics to identify why checkbox doesn't appear.
    *
@@ -200,24 +198,11 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
       await checkbox.waitFor({ state: 'visible', timeout: 45000 });
       console.log(`✅ Checkbox visible (${Date.now() - visibilityStart}ms)`);
 
-      // CRITICAL: Set up response listener BEFORE checking
-      // Checkbox triggers immediate API save: POST /api/mottatteopplysninger/{id}
-      const responsePromise = this.page.waitForResponse(
-        response => response.url().includes('/api/mottatteopplysninger/') &&
-                    response.request().method() === 'POST' &&
-                    response.status() === 200,
-        { timeout: 5000 }
-      ).catch(() => null); // Don't fail if API doesn't fire
-
+      // Målt på CI: avkrysningen lagrer ikke (0 av 20); lagringen kommer ved
+      // «Bekreft og fortsett». Vent derfor bare hvis en lagring faktisk starter.
+      const autolagring = sporKall(this.page, erSkrivekallMotApi);
       await checkbox.check();
-
-      // Wait for immediate API save
-      const response = await responsePromise;
-      if (response) {
-        console.log(`✅ Arbeidsgiver selection saved: ${response.url()} -> ${response.status()}`);
-      } else {
-        console.log('⚠️  No immediate API save detected (checkbox might already be checked)');
-      }
+      await ventPåAutolagringHvisDenStarter(autolagring, `Arbeidsgiver ${arbeidsgiverNavn}`);
 
       console.log(`✅ Valgte arbeidsgiver: ${arbeidsgiverNavn}`);
       console.log(`✅ === velgArbeidsgiver completed ===\n`);

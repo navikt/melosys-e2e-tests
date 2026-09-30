@@ -1,6 +1,7 @@
 import { Page, expect } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 import { isTrygdeavgiftBeregningResponse } from '../shared/trygdeavgift-api';
+import { erSkrivekallMotApi, sporKall, ventPåAutolagringHvisDenStarter } from '../shared/kall-sporing';
 import { TrygdeavgiftAssertions } from './trygdeavgift.assertions';
 
 /**
@@ -138,16 +139,8 @@ export class TrygdeavgiftPage extends BasePage {
   /**
    * Select Skattepliktig (tax liable) status
    *
-   * IMPORTANT: This method waits for the debounced PUT API call to complete.
-   * The form uses a 500ms debounce before making the PUT request to save changes.
-   *
-   * Timing breakdown:
-   * - t=0ms: Click radio button
-   * - t=50ms: useEffect triggers 500ms debounce
-   * - t=500ms: Debounce fires, PUT /trygdeavgift/beregning starts
-   * - t=700-1000ms: PUT completes, value saved to database
-   *
-   * We wait 1500ms to ensure the entire sequence completes reliably.
+   * IMPORTANT: This method waits for the debounced PUT API call to complete,
+   * when the form sends one. The form uses a 500ms debounce and only saves when valid.
    *
    * @param erSkattepliktig - true for "Ja", false for "Nei"
    */
@@ -162,13 +155,8 @@ export class TrygdeavgiftPage extends BasePage {
     const radioLabel = erSkattepliktig ? 'Ja' : 'Nei';
     const expectedValue = erSkattepliktig ? 'SKATTEPLIKTIG' : 'IKKE_SKATTEPLIKTIG';
 
-    // Set up response listener BEFORE clicking to catch the debounced PUT
-    const responsePromise = this.page.waitForResponse(
-      response =>
-        isTrygdeavgiftBeregningResponse(response) &&
-        response.request().method() === 'PUT',
-      { timeout: 3000 } // 500ms debounce + 2500ms for API
-    ).catch(() => null); // Don't fail if no PUT (form might prevent it)
+    // Start sporingen FØR klikket, slik at den debouncede lagringen ikke glipper
+    const autolagring = sporKall(this.page, erSkrivekallMotApi);
 
     // Get the radio input directly
     const radioInput = this.skattepliktigGroup.locator(`input[value="${expectedValue}"]`);
@@ -194,18 +182,7 @@ export class TrygdeavgiftPage extends BasePage {
     await expect(radioInput).toBeChecked({ timeout: 5000 });
     console.log(`   Radio input with value '${expectedValue}' is now checked`);
 
-    // CRITICAL: Wait for the debounced PUT request to fire and complete
-    // The form has a 500ms debounce, so we need to wait for that plus the API time
-    const response = await responsePromise;
-
-    if (response) {
-      console.log('✅ Debounced PUT /trygdeavgift/beregning completed - value saved');
-    } else {
-      // If no PUT detected, wait a bit longer to be safe
-      // This can happen if form validation prevents the PUT
-      console.log('⚠️  No PUT detected, waiting for debounce period...');
-      await this.page.waitForTimeout(1500);
-    }
+    await ventPåAutolagringHvisDenStarter(autolagring, 'Skattepliktig');
 
     console.log(`✅ Selected Skattepliktig = ${erSkattepliktig ? 'Ja' : 'Nei'}`);
   }
