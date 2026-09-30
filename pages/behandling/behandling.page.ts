@@ -1,5 +1,6 @@
 import { Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+import { utførOgVentPåApi } from '../shared/kall-sporing';
 
 /**
  * Page Object for navigating between sections in a behandling (case treatment)
@@ -114,9 +115,17 @@ export class BehandlingPage extends BasePage {
 
   /**
    * Click "Lagre endringene" button to save changes
+   *
+   * Lagringen henter behandlingen på nytt, og skjemaet på første steg tegnes om. Uten
+   * slowMo fylte testene søknadsperioden før det, og feltene ble tømt (målt: kjeden
+   * varer ca. 170 ms, med opptil 60 ms mellom kallene).
    */
   async klikkLagreEndringene(): Promise<void> {
-    await this.page.getByRole('button', { name: 'Lagre endringene' }).click();
+    await utførOgVentPåApi(
+      this.page,
+      () => this.page.getByRole('button', { name: 'Lagre endringene' }).click(),
+      { startvinduMs: 1000, stilleMs: 200 },
+    );
   }
 
   /**
