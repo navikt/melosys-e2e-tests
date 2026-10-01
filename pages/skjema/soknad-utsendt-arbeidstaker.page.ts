@@ -10,8 +10,9 @@ import { ddmmyyyy, lagreOgFortsett, standardUtsendingsperiode, startSoknadViaInt
  * Aksel-komponentene genererer dynamiske id-er.
  *
  * Stegrekkefølge for DEG SELV-arbeidstaker (verifisert i live-flyt 2026-06-21):
- *   oversikt → utsendingsperiode-og-land → arbeidssituasjon → skatteforhold-og-inntekt
- *   → familiemedlemmer → tilleggsopplysninger → vedlegg → oppsummering → kvittering
+ *   oversikt → skjema/start (bekreft) → utsendingsperiode-og-land → arbeidssituasjon
+ *   → skatteforhold-og-inntekt → familiemedlemmer → tilleggsopplysninger → vedlegg
+ *   → oppsummering → kvittering
  *
  * Steg-metodene for arbeidssituasjon t.o.m. oppsummering deles med arbeidsgiver-varianten
  * (begge deler) — se soknad-arbeidsgiver.page.ts som komponerer denne POM-en for AT-stegene.
