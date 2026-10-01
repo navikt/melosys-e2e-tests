@@ -61,6 +61,11 @@ on:
         required: false
         type: string
         default: ''
+      shards:
+        description: 'Antall shards (1–8). Hver shard kjører en del av testene mot sin egen stack. 1 = som før sharding.'
+        required: false
+        type: number
+        default: 1
 
   # Kalles fra «E2E før merge» (e2e-for-merge.yml) når en PR står i merge queue.
   # Inputene som ikke er deklarert her, er tomme ved kall og gir samme oppførsel som standardverdiene.
@@ -95,57 +100,41 @@ permissions:
   id-token: write
 
 jobs:
-  e2e-tests:
-    runs-on: ubuntu-latest-8-cores
-    # 2 hour ceiling gives headroom for the ~44 min suite plus, on coverage runs,
-    # the extra melosys-api build (~4 min cached, ~11 min cold).
-    timeout-minutes: 120
-
+  plan:
+    name: Planlegg shards
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    # actions: read trengs for å hente test-summary fra en tidligere kjøring (varigheter).
+    # e2e-for-merge.yml må gi den samme rettigheten, siden den kaller denne workflowen.
+    permissions:
+      contents: read
+      packages: read
+      id-token: write
+      actions: read
+    outputs:
+      shard_count: ${{ steps.shard-plan.outputs.shard_count }}
+      shards: ${{ steps.shard-plan.outputs.shards }}
+      plan: ${{ steps.shard-plan.outputs.plan }}
+      trigger_context: ${{ steps.trigger-context.outputs.json }}
+      # Taggene er pinnet: «<tag>@sha256:…» (se «Pin image-tagger til digest»).
+      melosys_api_tag: ${{ steps.pin.outputs.melosys_api_tag }}
+      melosys_web_tag: ${{ steps.pin.outputs.melosys_web_tag }}
+      faktureringskomponenten_tag: ${{ steps.pin.outputs.faktureringskomponenten_tag }}
+      melosys_trygdeavgift_tag: ${{ steps.pin.outputs.melosys_trygdeavgift_tag }}
+      melosys_trygdeavtale_tag: ${{ steps.pin.outputs.melosys_trygdeavtale_tag }}
+      melosys_inngangsvilkar_tag: ${{ steps.pin.outputs.melosys_inngangsvilkar_tag }}
+      melosys_eessi_tag: ${{ steps.pin.outputs.melosys_eessi_tag }}
+      melosys_mock_tag: ${{ steps.pin.outputs.melosys_mock_tag }}
+      melosys_dokgen_tag: ${{ steps.pin.outputs.melosys_dokgen_tag }}
+      melosys_skjema_api_tag: ${{ steps.pin.outputs.melosys_skjema_api_tag }}
+      melosys_skjema_web_tag: ${{ steps.pin.outputs.melosys_skjema_web_tag }}
+      postgres_felleskodeverk_tag: ${{ steps.pin.outputs.postgres_felleskodeverk_tag }}
+      felles_kodeverk_tag: ${{ steps.pin.outputs.felles_kodeverk_tag }}
+      unleash_tag: ${{ steps.pin.outputs.unleash_tag }}
+      wonderwall_tag: ${{ steps.pin.outputs.wonderwall_tag }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      - name: Install dependencies
-        run: npm ci
-
-      # Tillitsgate: fail-fast på grønn-men-meningsløs-mønstre FØR docker-stacken startes.
-      # Ren node, sekunder. Speiler test-quality.yml (som kun trigges på PR for tests/pages/scripts).
-      - name: Verifiser test-kvalitet (check:tests)
-        run: npm run check:tests
-
-      - name: Get Playwright version
-        id: playwright-version
-        run: echo "version=$(npm list @playwright/test --depth=0 --json | jq -r '.dependencies["@playwright/test"].version')" >> $GITHUB_OUTPUT
-
-      - name: Cache Playwright browsers
-        uses: actions/cache@v4
-        id: playwright-cache
-        with:
-          path: ~/.cache/ms-playwright
-          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
-
-      - name: Install Playwright browsers (if not cached)
-        if: steps.playwright-cache.outputs.cache-hit != 'true'
-        run: npx playwright install --with-deps chromium
-
-      - name: Install only system dependencies (if browsers were cached)
-        if: steps.playwright-cache.outputs.cache-hit == 'true'
-        run: npx playwright install-deps chromium
-
-      - name: Login to NAIS registry
-        uses: nais/login@v0
-        with:
-          team: teammelosys
-
-      - name: Create Docker network
-        run: |
-          docker network create melosys.docker-internal || true
 
       - name: Determine image tags from trigger source
         id: image-tags
@@ -520,7 +509,7 @@ jobs:
           fi
 
           # Tag-verdiene kommer fra payloaden eller fra environment-inputen, og
-          # brukes senere usitert i `docker pull …:${{ steps.image-tags.outputs.* }}`
+          # brukes senere usitert i `docker pull …:<tag>` i shard-jobbene
           # og i $GITHUB_ENV. En verdi med linjeskift kan skrive egne steg-outputs,
           # og en med mellomrom og `;` kan kjøre kommandoer på runneren. Slipp bare
           # gjennom det som faktisk er en lovlig docker-tag.
@@ -565,23 +554,291 @@ jobs:
           [ "$MELOSYS_SKJEMA_API_TAG" != "latest" ] && echo "  melosys-skjema-api: $MELOSYS_SKJEMA_API_TAG" && NON_LATEST_FOUND=true || true
           [ "$MELOSYS_SKJEMA_WEB_TAG" != "latest" ] && echo "  melosys-skjema-web: $MELOSYS_SKJEMA_WEB_TAG" && NON_LATEST_FOUND=true || true
           [ "$NON_LATEST_FOUND" = false ] && echo "  (all services using latest)" || true
+      - name: Del trigger-konteksten med shard-jobbene
+        id: trigger-context
+        # Én linje JSON (jq -c), så verdien kan stå i en vanlig output. Shard-jobbene skriver
+        # den tilbake til $RUNNER_TEMP/trigger-context.json.
+        run: |
+          if [ -f "$RUNNER_TEMP/trigger-context.json" ]; then
+            echo "json=$(jq -c . "$RUNNER_TEMP/trigger-context.json")" >> "$GITHUB_OUTPUT"
+          fi
 
+      - name: Login to NAIS registry
+        uses: nais/login@v0
+        with:
+          team: teammelosys
+
+      - name: Pin image-tagger til digest
+        id: pin
+        # Alle shards skal teste de samme imagene. `latest` og feature-tagger flytter seg, så en
+        # shard som henter litt senere kunne fått et annet image enn de andre. Taggen slås opp én
+        # gang her og sendes videre som `<tag>@sha256:…`; docker henter da på digesten.
+        # Finnes ikke taggen, sendes den uendret videre, og pre-pull i shard-jobben feiler med
+        # samme melding som før.
+        env:
+          MELOSYS_API_TAG: ${{ steps.image-tags.outputs.melosys_api_tag }}
+          MELOSYS_WEB_TAG: ${{ steps.image-tags.outputs.melosys_web_tag }}
+          FAKTURERINGSKOMPONENTEN_TAG: ${{ steps.image-tags.outputs.faktureringskomponenten_tag }}
+          MELOSYS_TRYGDEAVGIFT_TAG: ${{ steps.image-tags.outputs.melosys_trygdeavgift_tag }}
+          MELOSYS_TRYGDEAVTALE_TAG: ${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }}
+          MELOSYS_INNGANGSVILKAR_TAG: ${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }}
+          MELOSYS_EESSI_TAG: ${{ steps.image-tags.outputs.melosys_eessi_tag }}
+          MELOSYS_MOCK_TAG: ${{ steps.image-tags.outputs.melosys_mock_tag }}
+          MELOSYS_DOKGEN_TAG: ${{ steps.image-tags.outputs.melosys_dokgen_tag }}
+          MELOSYS_SKJEMA_API_TAG: ${{ steps.image-tags.outputs.melosys_skjema_api_tag }}
+          MELOSYS_SKJEMA_WEB_TAG: ${{ steps.image-tags.outputs.melosys_skjema_web_tag }}
+        run: |
+          GAR=europe-north1-docker.pkg.dev/nais-management-233d/teammelosys
+          dir=$(mktemp -d)
+          # pin <output> <repository> <tag>: skriver «<output>=<tag>@<digest>» til $dir/<output>.
+          pin() {
+            local digest=""
+            for _ in 1 2; do
+              digest=$(docker buildx imagetools inspect "$2:$3" --format '{{json .Manifest}}' 2>/dev/null | jq -r '.digest // empty') || digest=""
+              [ -n "$digest" ] && break
+              sleep 5
+            done
+            if [[ "$digest" =~ ^sha256:[0-9a-f]{64}$ ]]; then
+              echo "$1=$3@$digest" > "$dir/$1"
+              printf '  %-90s %s\n' "$2:$3" "$digest"
+            else
+              echo "$1=$3" > "$dir/$1"
+              echo "::warning::Fant ikke digest for $2:$3, shardene henter taggen uten pinning"
+            fi
+          }
+          echo "📌 Image-digester alle shards bruker:"
+          pin melosys_api_tag "$GAR/melosys-api" "$MELOSYS_API_TAG" &
+          pin melosys_web_tag "$GAR/melosys-web" "$MELOSYS_WEB_TAG" &
+          pin faktureringskomponenten_tag "$GAR/faktureringskomponenten" "$FAKTURERINGSKOMPONENTEN_TAG" &
+          pin melosys_trygdeavgift_tag "$GAR/melosys-trygdeavgift-beregning" "$MELOSYS_TRYGDEAVGIFT_TAG" &
+          pin melosys_trygdeavtale_tag "$GAR/melosys-trygdeavtale" "$MELOSYS_TRYGDEAVTALE_TAG" &
+          pin melosys_inngangsvilkar_tag "$GAR/melosys-inngangsvilkar" "$MELOSYS_INNGANGSVILKAR_TAG" &
+          pin melosys_eessi_tag "$GAR/melosys-eessi" "$MELOSYS_EESSI_TAG" &
+          pin melosys_mock_tag "$GAR/melosys-docker-compose-mock" "$MELOSYS_MOCK_TAG" &
+          pin melosys_dokgen_tag "$GAR/melosys-dokgen" "$MELOSYS_DOKGEN_TAG" &
+          pin melosys_skjema_api_tag "$GAR/melosys-skjema-api" "$MELOSYS_SKJEMA_API_TAG" &
+          pin melosys_skjema_web_tag "$GAR/melosys-skjema-web" "$MELOSYS_SKJEMA_WEB_TAG" &
+          pin postgres_felleskodeverk_tag "$GAR/postgres-felleskodeverk-prepopulated" latest &
+          pin felles_kodeverk_tag "$GAR/felles-kodeverk" latest &
+          pin unleash_tag unleashorg/unleash-server latest &
+          pin wonderwall_tag ghcr.io/nais/wonderwall latest &
+          wait
+          cat "$dir"/* >> "$GITHUB_OUTPUT"
+
+      - name: Velg antall shards
+        id: mode
+        env:
+          INPUT_SHARDS: ${{ inputs.shards }}
+          RUN_BDD: ${{ inputs.run_bdd == true }}
+          COLLECT_COVERAGE: ${{ inputs.collect_coverage == true }}
+        # repository_dispatch og workflow_call har ingen shards-input og kjører på én shard.
+        run: |
+          requested="${INPUT_SHARDS:-1}"
+          if ! [[ "$requested" =~ ^[1-8]$ ]]; then
+            echo "::error::shards må være et heltall fra 1 til 8, var: $(printf '%q' "$requested")"
+            exit 1
+          fi
+          if [ "$requested" -gt 1 ] && [ "$RUN_BDD" = "true" ]; then
+            echo "::notice::run_bdd kjører på én shard"
+            requested=1
+          fi
+          # Dekningen dumpes fra containerne på slutten av jobben; den slås ikke sammen over shards ennå.
+          if [ "$requested" -gt 1 ] && [ "$COLLECT_COVERAGE" = "true" ]; then
+            echo "::notice::collect_coverage kjører på én shard"
+            requested=1
+          fi
+          echo "requested=$requested" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js
+        if: steps.mode.outputs.requested != '1'
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        if: steps.mode.outputs.requested != '1'
+        run: npm ci
+
+      - name: Hent varigheter fra forrige fulle kjøring
+        id: previous
+        if: steps.mode.outputs.requested != '1'
+        # Siste grønne kjøring på main uten test_grep. Kjøringer med filter mangler varighet for
+        # de andre testene, og en sharded kjøring har ingen `test-summary`-artefakt. Finnes
+        # ingen, får alle testene samme estimat og fordeles etter antall.
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REPO: ${{ github.repository }}
+        run: |
+          candidates=$(gh run list -R "$REPO" --workflow e2e-tests.yml --branch main --status success -L 20 \
+            --json databaseId,event \
+            --jq '[.[] | select(.event == "repository_dispatch" or .event == "workflow_dispatch") | .databaseId][:5][]') || candidates=""
+          for id in $candidates; do
+            dir="$RUNNER_TEMP/previous/$id"
+            gh run download "$id" -R "$REPO" -n test-summary -D "$dir" > /dev/null 2>&1 || continue
+            if [ -f "$dir/test-summary.json" ] && [ -f "$dir/trigger-context.json" ] \
+              && jq -e '(.inputs.test_grep // null) == null and (.inputs.run_bdd // false) != true' "$dir/trigger-context.json" > /dev/null; then
+              cp "$dir/test-summary.json" "$RUNNER_TEMP/previous.json"
+              echo "⏱️  Varigheter fra kjøring $id"
+              echo "run_id=$id" >> "$GITHUB_OUTPUT"
+              exit 0
+            fi
+          done
+          echo "::warning::Fant ingen full kjøring å hente varigheter fra, testene fordeles etter antall"
+
+      - name: Fordel testene på shards
+        id: shard-plan
+        env:
+          REQUESTED: ${{ steps.mode.outputs.requested }}
+          TEST_GREP: ${{ inputs.test_grep }}
+          PREVIOUS_RUN: ${{ steps.previous.outputs.run_id }}
+        run: |
+          plan_file="$RUNNER_TEMP/shard-plan.json"
+          if [ "$REQUESTED" = "1" ]; then
+            # Samme regel som før sharding: skjema-stacken startes når hele suiten kjører eller
+            # test_grep nevner skjema.
+            skjema=false
+            if [ -z "$TEST_GREP" ] || printf '%s' "$TEST_GREP" | grep -qi skjema; then  # printf-utdata går inn i grep, ikke til loggen
+              skjema=true
+            fi
+            jq -cn --argjson skjema "$skjema" '{requestedShards: 1, shardCount: 1, shards: [{shard: 1, files: [], skjema: $skjema}]}' > "$plan_file"
+          else
+            # --list kjører ikke global setup og trenger ingen stack. Filteret er det samme som
+            # shard-jobbene bruker, så planen inneholder nøyaktig testene som skal kjøres.
+            list_args=(test --project=chromium --list --reporter=json --pass-with-no-tests)
+            [ -n "$TEST_GREP" ] && list_args+=(--grep "$TEST_GREP")
+            PLAYWRIGHT_JSON_OUTPUT_FILE="$RUNNER_TEMP/list.json" npx playwright "${list_args[@]}" > /dev/null
+            previous=()
+            [ -f "$RUNNER_TEMP/previous.json" ] && previous=(--previous "$RUNNER_TEMP/previous.json")
+            node scripts/shard-plan.mjs --list "$RUNNER_TEMP/list.json" "${previous[@]}" --shards "$REQUESTED" > "$plan_file"
+          fi
+
+          echo "plan=$(jq -c . "$plan_file")" >> "$GITHUB_OUTPUT"
+          echo "shard_count=$(jq '.shardCount' "$plan_file")" >> "$GITHUB_OUTPUT"
+          echo "shards=$(jq -c '[.shards[].shard]' "$plan_file")" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "## 🧩 Shard-plan"
+            echo ""
+            if [ "$REQUESTED" = "1" ]; then
+              echo "Én shard, ingen fordeling."
+            else
+              jq -r --arg run "$PREVIOUS_RUN" '
+                "\(.shardCount) shards (ba om \(.requestedShards)), \(.totalTests) tester. Varighet fra "
+                  + (if $run == "" then "ingen tidligere kjøring" else "kjøring \($run)" end)
+                  + ", \(.knownDurations) av \(.totalTests) tester med målt tid.",
+                "",
+                "| Shard | Filer | Tester | Estimat | Skjema |",
+                "|---|---|---|---|---|",
+                (.shards[] | "| \(.shard) | \(.files | length) | \(.tests) | \((.estimatedSeconds / 60 * 10 | round) / 10) min | \(if .skjema then "ja" else "nei" end) |")
+              ' "$plan_file"
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  # Én jobb per shard, hver med sin egen stack. Jobben har ingen `name:`: GitHub kaller den da
+  # «e2e-tests (N)», som melosys-console leser. Et `name:` med matrix-verdier ville fjernet «(N)».
+  e2e-tests:
+    needs: plan
+    runs-on: ubuntu-latest-8-cores
+    # 2 hour ceiling gives headroom for the ~44 min suite plus, on coverage runs,
+    # the extra melosys-api build (~4 min cached, ~11 min cold).
+    timeout-minutes: 120
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: ${{ fromJSON(needs.plan.outputs.shards) }}
+    env:
+      SHARD: ${{ matrix.shard }}
+      SHARD_COUNT: ${{ needs.plan.outputs.shard_count }}
+      # Med én shard beholder artefaktene navnene de hadde før sharding, så konsollen og
+      # notify-slack finner `test-summary` som før.
+      ARTIFACT_SUFFIX: ${{ needs.plan.outputs.shard_count != '1' && format('-shard-{0}', matrix.shard) || '' }}
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Hent plan og trigger-kontekst fra plan-jobben
+        env:
+          SHARD_PLAN: ${{ needs.plan.outputs.plan }}
+          TRIGGER_CONTEXT: ${{ needs.plan.outputs.trigger_context }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          printf '%s\n' "$SHARD_PLAN" > "$RUNNER_TEMP/shard-plan.json"
+          echo "🧩 Shard $SHARD av $SHARD_COUNT:"
+          jq --argjson s "$SHARD" '.shards[] | select(.shard == $s)' "$RUNNER_TEMP/shard-plan.json"
+
+          # runAttempt settes her og ikke i plan-jobben: «Re-run failed jobs» kjører bare
+          # shardene på nytt, og konsollen skal se forsøket testene faktisk kjørte i.
+          if [ -n "$TRIGGER_CONTEXT" ] \
+            && printf '%s' "$TRIGGER_CONTEXT" | jq --argjson attempt "$RUN_ATTEMPT" '.runAttempt = $attempt' > "$RUNNER_TEMP/trigger-context.json"; then
+            echo "🧾 Trigger-kontekst skrevet til $RUNNER_TEMP/trigger-context.json"
+          else
+            rm -f "$RUNNER_TEMP/trigger-context.json"
+            echo "⚠️  Ingen trigger-kontekst fra plan-jobben — kjøringen fortsetter uten den."
+          fi
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: Install dependencies
+        run: npm ci
+
+      # Tillitsgate: fail-fast på grønn-men-meningsløs-mønstre FØR docker-stacken startes.
+      # Ren node, sekunder. Speiler test-quality.yml (som kun trigges på PR for tests/pages/scripts).
+      - name: Verifiser test-kvalitet (check:tests)
+        run: npm run check:tests
+
+      - name: Get Playwright version
+        id: playwright-version
+        run: echo "version=$(npm list @playwright/test --depth=0 --json | jq -r '.dependencies["@playwright/test"].version')" >> $GITHUB_OUTPUT
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ steps.playwright-version.outputs.version }}
+
+      - name: Install Playwright browsers (if not cached)
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        run: npx playwright install --with-deps chromium
+
+      - name: Install only system dependencies (if browsers were cached)
+        if: steps.playwright-cache.outputs.cache-hit == 'true'
+        run: npx playwright install-deps chromium
+
+      - name: Login to NAIS registry
+        uses: nais/login@v0
+        with:
+          team: teammelosys
+
+      - name: Create Docker network
+        run: |
+          docker network create melosys.docker-internal || true
 
       - name: Set environment variables for GitHub Actions
         run: |
           echo "MELOSYS_ORACLE_DB_NAME=XEPDB1" >> $GITHUB_ENV
           echo "ORACLE_IMAGE=gvenzl/oracle-xe:18.4.0-slim" >> $GITHUB_ENV
-          echo "MELOSYS_API_TAG=${{ steps.image-tags.outputs.melosys_api_tag }}" >> $GITHUB_ENV
-          echo "MELOSYS_WEB_TAG=${{ steps.image-tags.outputs.melosys_web_tag }}" >> $GITHUB_ENV
-          echo "FAKTURERINGSKOMPONENTEN_TAG=${{ steps.image-tags.outputs.faktureringskomponenten_tag }}" >> $GITHUB_ENV
-          echo "MELOSYS_TRYGDEAVGIFT_TAG=${{ steps.image-tags.outputs.melosys_trygdeavgift_tag }}" >> $GITHUB_ENV
-          echo "MELOSYS_TRYGDEAVTALE_TAG=${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }}" >> $GITHUB_ENV
-          echo "MELOSYS_INNGANGSVILKAR_TAG=${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }}" >> $GITHUB_ENV
-          echo "MELOSYS_EESSI_TAG=${{ steps.image-tags.outputs.melosys_eessi_tag }}" >> $GITHUB_ENV
-          echo "MELOSYS_MOCK_TAG=${{ steps.image-tags.outputs.melosys_mock_tag }}" >> $GITHUB_ENV
-          echo "MELOSYS_DOKGEN_TAG=${{ steps.image-tags.outputs.melosys_dokgen_tag }}" >> $GITHUB_ENV
-          echo "MELOSYS_SKJEMA_API_TAG=${{ steps.image-tags.outputs.melosys_skjema_api_tag }}" >> $GITHUB_ENV
-          echo "MELOSYS_SKJEMA_WEB_TAG=${{ steps.image-tags.outputs.melosys_skjema_web_tag }}" >> $GITHUB_ENV
+          echo "MELOSYS_API_TAG=${{ needs.plan.outputs.melosys_api_tag }}" >> $GITHUB_ENV
+          echo "MELOSYS_WEB_TAG=${{ needs.plan.outputs.melosys_web_tag }}" >> $GITHUB_ENV
+          echo "FAKTURERINGSKOMPONENTEN_TAG=${{ needs.plan.outputs.faktureringskomponenten_tag }}" >> $GITHUB_ENV
+          echo "MELOSYS_TRYGDEAVGIFT_TAG=${{ needs.plan.outputs.melosys_trygdeavgift_tag }}" >> $GITHUB_ENV
+          echo "MELOSYS_TRYGDEAVTALE_TAG=${{ needs.plan.outputs.melosys_trygdeavtale_tag }}" >> $GITHUB_ENV
+          echo "MELOSYS_INNGANGSVILKAR_TAG=${{ needs.plan.outputs.melosys_inngangsvilkar_tag }}" >> $GITHUB_ENV
+          echo "MELOSYS_EESSI_TAG=${{ needs.plan.outputs.melosys_eessi_tag }}" >> $GITHUB_ENV
+          echo "MELOSYS_MOCK_TAG=${{ needs.plan.outputs.melosys_mock_tag }}" >> $GITHUB_ENV
+          echo "MELOSYS_DOKGEN_TAG=${{ needs.plan.outputs.melosys_dokgen_tag }}" >> $GITHUB_ENV
+          echo "MELOSYS_SKJEMA_API_TAG=${{ needs.plan.outputs.melosys_skjema_api_tag }}" >> $GITHUB_ENV
+          echo "MELOSYS_SKJEMA_WEB_TAG=${{ needs.plan.outputs.melosys_skjema_web_tag }}" >> $GITHUB_ENV
+          echo "POSTGRES_FELLESKODEVERK_TAG=${{ needs.plan.outputs.postgres_felleskodeverk_tag }}" >> $GITHUB_ENV
+          echo "FELLES_KODEVERK_TAG=${{ needs.plan.outputs.felles_kodeverk_tag }}" >> $GITHUB_ENV
+          echo "UNLEASH_TAG=${{ needs.plan.outputs.unleash_tag }}" >> $GITHUB_ENV
+          echo "WONDERWALL_TAG=${{ needs.plan.outputs.wonderwall_tag }}" >> $GITHUB_ENV
 
       - name: Download JaCoCo agent for E2E coverage
         if: inputs.collect_coverage
@@ -628,15 +885,15 @@ jobs:
           PASSWORD: ${{ secrets.READER_TOKEN }}
 
       - name: Determine skjema scope
-        env:
-          INPUT_TEST_GREP: ${{ inputs.test_grep }}
         # Skjema-stacken (digital «Utsendt arbeidstaker»-søknad: skjema-api/-web/-web-auth +
         # full-flow-oppvarmingen) er kostbar og trengs bare når skjema-tester faktisk kjører.
-        # Den er i scope når det IKKE er filtrert (full suite kjører skjema) ELLER test_grep
-        # nevner «skjema». Da settes COMPOSE_PROFILES=skjema (aktiverer profiled-tjenestene) for
-        # alle påfølgende `docker compose`-kall. Ellers hoppes pull/start/vent/oppvarming over.
+        # Plan-jobben avgjør det per shard: uten sharding når hele suiten kjører eller test_grep
+        # nevner «skjema», med sharding bare i shardet som har skjema-filene. Da settes
+        # COMPOSE_PROFILES=skjema (aktiverer profiled-tjenestene) for alle påfølgende
+        # `docker compose`-kall. Ellers hoppes pull/start/vent/oppvarming over.
         run: |
-          if [ -z "$INPUT_TEST_GREP" ] || printf '%s' "$INPUT_TEST_GREP" | grep -qi skjema; then  # printf-utdata går inn i grep, ikke til loggen
+          skjema=$(jq -r --argjson s "$SHARD" '.shards[] | select(.shard == $s) | .skjema' "$RUNNER_TEMP/shard-plan.json")
+          if [ "$skjema" = "true" ]; then
             echo "🧩 Skjema-tester i scope → starter skjema-stack + oppvarming"
             echo "SKJEMA_IN_SCOPE=true" >> "$GITHUB_ENV"
             echo "COMPOSE_PROFILES=skjema" >> "$GITHUB_ENV"
@@ -660,28 +917,28 @@ jobs:
               || { sleep 10; docker pull --platform linux/amd64 "$1"; } \
               || echo "$1" >> "$failed"
           }
-          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:${{ steps.image-tags.outputs.melosys_api_tag }} &
-          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-web:${{ steps.image-tags.outputs.melosys_web_tag }} &
-          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:${{ steps.image-tags.outputs.faktureringskomponenten_tag }} &
-          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-dokgen:${{ steps.image-tags.outputs.melosys_dokgen_tag }} &
-          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:${{ steps.image-tags.outputs.melosys_trygdeavgift_tag }} &
-          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }} &
-          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-inngangsvilkar:${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }} &
-          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-eessi:${{ steps.image-tags.outputs.melosys_eessi_tag }} &
-          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:latest &
-          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/felles-kodeverk:latest &
-          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-docker-compose-mock:${{ steps.image-tags.outputs.melosys_mock_tag }} &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:${{ needs.plan.outputs.melosys_api_tag }} &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-web:${{ needs.plan.outputs.melosys_web_tag }} &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:${{ needs.plan.outputs.faktureringskomponenten_tag }} &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-dokgen:${{ needs.plan.outputs.melosys_dokgen_tag }} &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavgift-beregning:${{ needs.plan.outputs.melosys_trygdeavgift_tag }} &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-trygdeavtale:${{ needs.plan.outputs.melosys_trygdeavtale_tag }} &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-inngangsvilkar:${{ needs.plan.outputs.melosys_inngangsvilkar_tag }} &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-eessi:${{ needs.plan.outputs.melosys_eessi_tag }} &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:${{ needs.plan.outputs.postgres_felleskodeverk_tag }} &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/felles-kodeverk:${{ needs.plan.outputs.felles_kodeverk_tag }} &
+          pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-docker-compose-mock:${{ needs.plan.outputs.melosys_mock_tag }} &
           pull gvenzl/oracle-xe:18.4.0-slim &
           pull postgres:13-alpine &
           pull confluentinc/cp-kafka:7.8.0 &
           pull ghcr.io/navikt/mock-oauth2-server:2.3.0 &
           pull ghcr.io/navikt/mock-oauth2-server:0.4.8 &
-          pull unleashorg/unleash-server:latest &
+          pull unleashorg/unleash-server:${{ needs.plan.outputs.unleash_tag }} &
           # Skjema-stack (digital «Utsendt arbeidstaker»-søknad) — kun når skjema er i scope.
           if [ "$SKJEMA_IN_SCOPE" = "true" ]; then
-            pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-skjema-api:${{ steps.image-tags.outputs.melosys_skjema_api_tag }} &
-            pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-skjema-web:${{ steps.image-tags.outputs.melosys_skjema_web_tag }} &
-            pull ghcr.io/nais/wonderwall:latest &
+            pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-skjema-api:${{ needs.plan.outputs.melosys_skjema_api_tag }} &
+            pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-skjema-web:${{ needs.plan.outputs.melosys_skjema_web_tag }} &
+            pull ghcr.io/nais/wonderwall:${{ needs.plan.outputs.wonderwall_tag }} &
           fi
           wait
           if [ -s "$failed" ]; then
@@ -874,17 +1131,17 @@ jobs:
           docker compose up -d
         env:
           MELOSYS_ORACLE_DB_NAME: XEPDB1
-          MELOSYS_API_TAG: ${{ steps.image-tags.outputs.melosys_api_tag }}
-          MELOSYS_WEB_TAG: ${{ steps.image-tags.outputs.melosys_web_tag }}
-          FAKTURERINGSKOMPONENTEN_TAG: ${{ steps.image-tags.outputs.faktureringskomponenten_tag }}
-          MELOSYS_TRYGDEAVGIFT_TAG: ${{ steps.image-tags.outputs.melosys_trygdeavgift_tag }}
-          MELOSYS_TRYGDEAVTALE_TAG: ${{ steps.image-tags.outputs.melosys_trygdeavtale_tag }}
-          MELOSYS_INNGANGSVILKAR_TAG: ${{ steps.image-tags.outputs.melosys_inngangsvilkar_tag }}
-          MELOSYS_EESSI_TAG: ${{ steps.image-tags.outputs.melosys_eessi_tag }}
-          MELOSYS_SKJEMA_API_TAG: ${{ steps.image-tags.outputs.melosys_skjema_api_tag }}
-          MELOSYS_SKJEMA_WEB_TAG: ${{ steps.image-tags.outputs.melosys_skjema_web_tag }}
-          MELOSYS_MOCK_TAG: ${{ steps.image-tags.outputs.melosys_mock_tag }}
-          MELOSYS_DOKGEN_TAG: ${{ steps.image-tags.outputs.melosys_dokgen_tag }}
+          MELOSYS_API_TAG: ${{ needs.plan.outputs.melosys_api_tag }}
+          MELOSYS_WEB_TAG: ${{ needs.plan.outputs.melosys_web_tag }}
+          FAKTURERINGSKOMPONENTEN_TAG: ${{ needs.plan.outputs.faktureringskomponenten_tag }}
+          MELOSYS_TRYGDEAVGIFT_TAG: ${{ needs.plan.outputs.melosys_trygdeavgift_tag }}
+          MELOSYS_TRYGDEAVTALE_TAG: ${{ needs.plan.outputs.melosys_trygdeavtale_tag }}
+          MELOSYS_INNGANGSVILKAR_TAG: ${{ needs.plan.outputs.melosys_inngangsvilkar_tag }}
+          MELOSYS_EESSI_TAG: ${{ needs.plan.outputs.melosys_eessi_tag }}
+          MELOSYS_SKJEMA_API_TAG: ${{ needs.plan.outputs.melosys_skjema_api_tag }}
+          MELOSYS_SKJEMA_WEB_TAG: ${{ needs.plan.outputs.melosys_skjema_web_tag }}
+          MELOSYS_MOCK_TAG: ${{ needs.plan.outputs.melosys_mock_tag }}
+          MELOSYS_DOKGEN_TAG: ${{ needs.plan.outputs.melosys_dokgen_tag }}
           JACOCO_AGENT_OPTS: ${{ inputs.collect_coverage && '-javaagent:/jacoco/jacocoagent.jar=output=tcpserver,address=*,port=6300' || '' }}
 
       - name: Wait for services to be healthy
@@ -1142,6 +1399,19 @@ jobs:
             PLAYWRIGHT_ARGS+=(--grep "$TEST_GREP")
           fi
 
+          # Med flere shards kjører hver shard bare filene plan-jobben ga den. Et tomt resultat
+          # her ville kjørt hele suiten i shardet, så det stopper kjøringen.
+          if [ "$SHARD_COUNT" != "1" ]; then
+            node scripts/shard-plan.mjs --file-args "$RUNNER_TEMP/shard-plan.json" --shard "$SHARD" > "$RUNNER_TEMP/shard-files.txt"
+            mapfile -t SHARD_FILES < "$RUNNER_TEMP/shard-files.txt"
+            if [ "${#SHARD_FILES[@]}" -eq 0 ]; then
+              echo "::error::Shard $SHARD har ingen filer i planen"
+              exit 1
+            fi
+            echo "🧩 Shard $SHARD av $SHARD_COUNT: ${#SHARD_FILES[@]} filer"
+            PLAYWRIGHT_ARGS+=("${SHARD_FILES[@]}")
+          fi
+
           # Add repeat count if specified (for race condition testing)
           if [ "$REPEAT_EACH" -gt 1 ] 2>/dev/null; then
             printf '🔄 Running each test %s times\n' "$(printf '%s' "$REPEAT_EACH" | tr '\n\r' '  ')"
@@ -1212,6 +1482,8 @@ jobs:
           RUN_BDD: ${{ inputs.run_bdd == true && 'true' || '' }}
           UNLEASH_FORCE_DISABLE: ${{ inputs.unleash_force_disable }}
           UNLEASH_FORCE_ENABLE: ${{ inputs.unleash_force_enable }}
+          # Blob-rapporten er det merge-jobben slår sammen til én rapport når det er flere shards.
+          E2E_BLOB_REPORT: ${{ needs.plan.outputs.shard_count != '1' && 'true' || '' }}
 
       - name: Set test status outputs
         id: test-status
@@ -1382,7 +1654,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always() && inputs.collect_coverage
         with:
-          name: e2e-coverage-report
+          name: e2e-coverage-report${{ env.ARTIFACT_SUFFIX }}
           path: |
             e2e-coverage.exec
             melosys-api/**/target/site/jacoco/
@@ -1405,7 +1677,11 @@ jobs:
           PAYLOAD_ACTOR: ${{ github.event.client_payload.actor }}
           COLLECT_COVERAGE: ${{ inputs.collect_coverage }}
         run: |
-          echo "## 🎭 Playwright Test Results" >> $GITHUB_STEP_SUMMARY
+          if [ "$SHARD_COUNT" != "1" ]; then
+            echo "## 🎭 Playwright Test Results — shard $SHARD av $SHARD_COUNT" >> $GITHUB_STEP_SUMMARY
+          else
+            echo "## 🎭 Playwright Test Results" >> $GITHUB_STEP_SUMMARY
+          fi
           echo "" >> $GITHUB_STEP_SUMMARY
 
           # Ikke pek på et spesifikt steg her: årsaken kan være at stacken ikke startet, at
@@ -1848,7 +2124,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-results
+          name: playwright-results${{ env.ARTIFACT_SUFFIX }}
           path: |
             test-results/
             playwright-report/
@@ -1858,7 +2134,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: test-summary
+          name: test-summary${{ env.ARTIFACT_SUFFIX }}
           path: |
             playwright-report/test-summary.md
             playwright-report/test-summary.json
@@ -1872,15 +2148,23 @@ jobs:
         uses: actions/upload-artifact@v4
         if: always()
         with:
-          name: docker-logs
+          name: docker-logs${{ env.ARTIFACT_SUFFIX }}
           path: docker-logs/
+          retention-days: 7
+
+      - name: Upload blob report
+        uses: actions/upload-artifact@v4
+        if: always() && env.SHARD_COUNT != '1'
+        with:
+          name: blob-report${{ env.ARTIFACT_SUFFIX }}
+          path: blob-report/
           retention-days: 7
 
       - name: Upload test videos
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-videos
+          name: playwright-videos${{ env.ARTIFACT_SUFFIX }}
           path: test-results/**/video.webm
           retention-days: 7
 
@@ -1888,7 +2172,7 @@ jobs:
         uses: actions/upload-artifact@v4
         if: failure()
         with:
-          name: playwright-traces
+          name: playwright-traces${{ env.ARTIFACT_SUFFIX }}
           path: test-results/**/trace.zip
           retention-days: 7
 

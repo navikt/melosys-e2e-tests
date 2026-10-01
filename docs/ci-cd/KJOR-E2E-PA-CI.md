@@ -115,6 +115,16 @@ make ci-affected ENV=melosys-api:min-tag RETRIES=1
 
 Variablene leses bare fra kommandolinjen. En `BRANCH` eller `ENV` eksportert i skallet styrer ikke CI.
 
+## Sharding (under utprøving)
+
+E2E Tests har inputen `shards` (1–8, standard 1). Med flere shards fordeler plan-jobben spec-filene etter varigheten fra forrige fulle kjøring på main, og hver shard kjører sin del mot sin egen stack. Skjema-testene havner i samme shard. `make`-målene sender ikke `shards` ennå, så start kjøringen med `gh`:
+
+```bash
+gh workflow run e2e-tests.yml --ref main -f shards=3 -f disable_retries=true
+```
+
+Med flere shards får artefaktene navn som `test-summary-shard-2`, og ingen samlet rapport lages ennå. Konsollen og Slack-varslet leser bare `test-summary`, så de ser ikke sharded kjøringer før merge-jobben kommer.
+
 ## Se rekkevidden før du endrer noe
 
 ```bash

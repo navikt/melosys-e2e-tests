@@ -80,6 +80,10 @@ export default defineConfig({
     ['./reporters/test-summary.ts'],
     // GitHub Actions reporter - creates annotations and summary in CI
     ...(process.env.CI ? [['github']] : []),
+    // Én blob per shard når CI kjører flere shards; merge-jobben slår dem sammen til én rapport.
+    ...(process.env.E2E_BLOB_REPORT
+      ? [['blob', { fileName: `report-shard-${process.env.SHARD ?? '1'}.zip` }] as const]
+      : []),
   ],
 
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
