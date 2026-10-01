@@ -41,3 +41,15 @@ export async function lagreOgFortsett(page: Page, nesteUrl: RegExp): Promise<voi
   await page.getByRole('button', { name: 'Lagre og fortsett' }).click();
   await page.waitForURL(nesteUrl);
 }
+
+/**
+ * Klikk «Start søknad» på oversikten, bekreft på introsiden (/skjema/start) og vent på første
+ * skjema-steg. Utkastet opprettes først når introsiden er bekreftet (skjema-web #671).
+ */
+export async function startSoknadViaIntroside(page: Page): Promise<void> {
+  await page.getByRole('button', { name: 'Start søknad' }).click();
+  await page.waitForURL(/\/skjema\/start(\?|$)/);
+  await page.getByRole('checkbox', { name: /Jeg bekrefter/ }).check();
+  await page.getByRole('button', { name: 'Start søknad' }).click();
+  await page.waitForURL(/\/skjema\/[^/]+\/utsendingsperiode-og-land/);
+}

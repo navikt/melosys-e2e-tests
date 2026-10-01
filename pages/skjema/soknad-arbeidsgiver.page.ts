@@ -3,7 +3,7 @@ import {
   SoknadUtsendtArbeidstakerPage,
   hentSkjemaIdFraUrl,
 } from './soknad-utsendt-arbeidstaker.page';
-import { lagreOgFortsett, standardUtsendingsperiode, svarRadio } from './skjema-utils';
+import { lagreOgFortsett, standardUtsendingsperiode, startSoknadViaIntroside, svarRadio } from './skjema-utils';
 
 /**
  * Page Object for den digitale «Utsendt arbeidstaker»-søknaden, variant ARBEIDSGIVER.
@@ -122,10 +122,7 @@ export class SoknadArbeidsgiverPage {
       await expect(page.getByText(new RegExp(opts.arbeidstakerFnr))).toBeVisible({ timeout: 15000 });
     }
 
-    await page.getByRole('checkbox', { name: /Jeg bekrefter/ }).check();
-    await page.getByRole('button', { name: 'Start søknad' }).click();
-
-    await page.waitForURL(/\/skjema\/[^/]+\/utsendingsperiode-og-land/);
+    await startSoknadViaIntroside(page);
     return hentSkjemaIdFraUrl(page);
   }
 
