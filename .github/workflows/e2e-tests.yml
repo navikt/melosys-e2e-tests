@@ -915,8 +915,18 @@ jobs:
           pull() {
             docker pull --platform linux/amd64 "$1" \
               || { sleep 10; docker pull --platform linux/amd64 "$1"; } \
-              || echo "$1" >> "$failed"
+              || { echo "$1" >> "$failed"; return 1; }
           }
+          # melosys-api venter på at Oracle er healthy, og Oracle brukte ca. 28 s på det etter
+          # compose up (run 36897477333). Imaget er hentet etter ca. 17 av 80 s pull, så
+          # databasene startes her og blir klare mens resten hentes. Feiler dette, starter
+          # compose up dem som før.
+          (
+            pull "$ORACLE_IMAGE" & pull postgres:13-alpine & wait
+            docker image inspect "$ORACLE_IMAGE" postgres:13-alpine > /dev/null 2>&1 \
+              && docker compose up -d melosys-oracle postgres \
+              || echo "⚠️  Fikk ikke startet databasene tidlig — compose up starter dem"
+          ) &
           pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-api:${{ needs.plan.outputs.melosys_api_tag }} &
           pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-web:${{ needs.plan.outputs.melosys_web_tag }} &
           pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/faktureringskomponenten:${{ needs.plan.outputs.faktureringskomponenten_tag }} &
@@ -928,8 +938,6 @@ jobs:
           pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:${{ needs.plan.outputs.postgres_felleskodeverk_tag }} &
           pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/felles-kodeverk:${{ needs.plan.outputs.felles_kodeverk_tag }} &
           pull europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/melosys-docker-compose-mock:${{ needs.plan.outputs.melosys_mock_tag }} &
-          pull gvenzl/oracle-xe:18.4.0-slim &
-          pull postgres:13-alpine &
           pull confluentinc/cp-kafka:7.8.0 &
           pull ghcr.io/navikt/mock-oauth2-server:2.3.0 &
           pull ghcr.io/navikt/mock-oauth2-server:0.4.8 &
@@ -1146,57 +1154,51 @@ jobs:
 
       - name: Wait for services to be healthy
         id: wait-healthy
+        # Sjekker hvert 2. s. Før sjekket den hvert 10. s og ventet 10 s til etterpå, og den
+        # pausen ga tjenester utenfor sjekken tid til å starte. Nå sjekkes alle tjenestene
+        # melosys-api kaller, siden de starter omtrent samtidig med melosys-api når Oracle
+        # alt kjører. En tjeneste regnes som klar første gang den svarer.
         run: |
-          echo "⏳ Waiting for services to be ready..."
+          docker_healthy() { [ "$(docker inspect --format='{{.State.Health.Status}}' "$1" 2>/dev/null)" = "healthy" ]; }
+          http_ok() { curl -sf --max-time 2 "$1" > /dev/null 2>&1; }
 
-          max_attempts=20
-          attempt=0
-
-          # Function to check if a service is healthy
-          check_service() {
-            local service_name=$1
-            local health_check=$2
-            echo "Checking $service_name..."
-            eval $health_check
+          services=(melosys-oracle kafka melosys-api melosys-web unleash melosys-eessi melosys-mock
+            faktureringskomponenten melosys-trygdeavgift-beregning melosys-trygdeavtale
+            melosys-inngangsvilkar melosys-dokgen)
+          check() {
+            case "$1" in
+              melosys-oracle|kafka)           docker_healthy "$1" ;;
+              melosys-api)                    http_ok http://localhost:8080/internal/health ;;
+              melosys-web)                    http_ok http://localhost:3000/melosys/ ;;
+              unleash)                        http_ok http://localhost:4242/health ;;
+              melosys-eessi)                  http_ok http://localhost:8081/internal/health ;;
+              melosys-mock)                   http_ok http://localhost:8083/actuator/health ;;
+              faktureringskomponenten)        http_ok http://localhost:8084/internal/health ;;
+              melosys-trygdeavgift-beregning) http_ok http://localhost:8095/internal/health ;;
+              melosys-trygdeavtale)           http_ok http://localhost:8088/internal/health ;;
+              melosys-inngangsvilkar)         http_ok http://localhost:8089/internal/health ;;
+              melosys-dokgen)                 http_ok http://localhost:8888/internal/health ;;
+            esac
           }
 
-          # Wait for critical services to be ready
-          while [ $attempt -lt $max_attempts ]; do
-            attempt=$((attempt + 1))
-            echo "⏳ Health check attempt $attempt/$max_attempts"
+          # Samme tak som før: 20 forsøk × 10 s.
+          echo "⏳ Venter på tjenestene (sjekker hvert 2. s, maks 200 s)..."
+          start=$SECONDS
+          pending=("${services[@]}")
+          while :; do
+            still=()
+            for s in "${pending[@]}"; do
+              if check "$s"; then
+                echo "  ✅ $s klar etter $((SECONDS - start)) s"
+              else
+                still+=("$s")
+              fi
+            done
+            pending=("${still[@]}")
+            [ ${#pending[@]} -eq 0 ] && break
 
-            # Check Oracle database health (docker health status)
-            oracle_health=$(docker inspect --format='{{.State.Health.Status}}' melosys-oracle 2>/dev/null || echo "unhealthy")
-            echo "  Oracle DB: $oracle_health"
-
-            # Check Kafka health (docker health status)
-            kafka_health=$(docker inspect --format='{{.State.Health.Status}}' kafka 2>/dev/null || echo "unhealthy")
-            echo "  Kafka: $kafka_health"
-
-            # Check melosys-api health endpoint
-            api_health=$(curl -sf http://localhost:8080/internal/health > /dev/null 2>&1 && echo "healthy" || echo "unhealthy")
-            echo "  melosys-api: $api_health"
-
-            # Check melosys-web
-            web_health=$(curl -sf http://localhost:3000/melosys/ > /dev/null 2>&1 && echo "healthy" || echo "unhealthy")
-            echo "  melosys-web: $web_health"
-
-            # Check Unleash health endpoint
-            unleash_health=$(curl -sf http://localhost:4242/health > /dev/null 2>&1 && echo "healthy" || echo "unhealthy")
-            echo "  unleash: $unleash_health"
-
-            # Check melosys-eessi health endpoint
-            eessi_health=$(curl -sf http://localhost:8081/internal/health > /dev/null 2>&1 && echo "healthy" || echo "unhealthy")
-            echo "  melosys-eessi: $eessi_health"
-
-            # Check if all critical services are healthy
-            if [ "$oracle_health" = "healthy" ] && [ "$kafka_health" = "healthy" ] && [ "$api_health" = "healthy" ] && [ "$web_health" = "healthy" ] && [ "$unleash_health" = "healthy" ] && [ "$eessi_health" = "healthy" ]; then
-              echo "✅ All critical services are healthy!"
-              break
-            fi
-
-            if [ $attempt -eq $max_attempts ]; then
-              echo "❌ Services failed to start within timeout"
+            if [ $((SECONDS - start)) -ge 200 ]; then
+              echo "❌ Ikke klare etter $((SECONDS - start)) s: ${pending[*]}"
               echo "📋 Docker compose status:"
               docker compose ps
               echo ""
@@ -1204,20 +1206,11 @@ jobs:
               docker compose logs --tail=100
               exit 1
             fi
-
-            sleep 10
+            sleep 2
           done
 
-          echo ""
-          echo "📊 Final service status:"
+          echo "✅ Alle tjenestene er klare etter $((SECONDS - start)) s"
           docker compose ps
-
-          # Give services a moment to fully stabilize
-          echo ""
-          echo "⏳ Waiting 10 seconds for services to fully stabilize..."
-          sleep 10
-          echo "✅ Ready to run tests!"
-          echo "ℹ️  Note: Feature toggles are automatically created by melosys-api on startup"
 
       - name: Diagnoser feilet oppstart av stacken
         # `docker compose up` skriver feilen fra daemonen uten å si HVILKEN container den
@@ -2184,12 +2177,6 @@ jobs:
         run: |
           echo "📋 Docker compose logs:"
           docker compose logs --tail=100
-
-      - name: Stop Docker Compose services
-        if: always()
-        run: |
-          docker compose down -v
-          docker network rm melosys.docker-internal || true
 
   notify-slack:
     name: Notify #melosys-ci on failure
