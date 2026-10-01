@@ -376,7 +376,7 @@ services:
       LOCAL_AUTH_TOKEN: "eyJhbGciOiJSUzI1NiIsImtpZCI6Imlzc28iLCJ0eXAiOiJKV1QifQ.eyJzdWIiOiJaMTIzNDU2IiwiTkFWaWRlbnQiOiJaMTIzNDU2IiwiaXNzIjoiaHR0cDovL2hvc3QuZG9ja2VyLmludGVybmFsOjgwODIvaXNzbyIsImdyb3VwcyI6WyIwMDAwLUdBLU1FTE9TWVMiXSwibm9uY2UiOiJhYmMxMjMiLCJhdWQiOiJtZWxvc3lzLWxvY2FsaG9zdCIsIm5iZiI6MTc3NTc1MTYxMywiYXpwIjoibWVsb3N5cy1sb2NhbGhvc3QiLCJuYW1lIjoiTG9rYWwgVGVzdGJydWtlciIsImV4cCI6MTk2NDk2NzYxMywiaWF0IjoxNzc1NzUxNjEzfQ.KcnXsmydJ_RINiubpIZXtIpfHf7kRRDROvYnpChGh8KFmzrf1xptlhF1n1nXv5trvH1_yrItMATVmb8eu73DwuWNNx4nkjzKlz6EPIF9qxDkSHmruHW3fgAHTEP8kgIYVVqZXRPtqDv4aWsVjU1COm12blH24HFyNisNEULGuAtYQDJ5mOoYuv6x8BWK6QcADDjPP8UeGswZBQdfAM2cirWT1yo0HacfEK4TrsRTnSSdmREL9GzjVaoxg8Rb8B5EDIbuxyr-NPeGUNGtpOhaSBC5l_2UnEehKqjt4kdkmWF1CIieTvncjh9ActNvCrOrsGhU9y8T9PRCl-vbBAYwcQ"
 
   postgres_felleskodeverk:
-    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:latest
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/postgres-felleskodeverk-prepopulated:${POSTGRES_FELLESKODEVERK_TAG:-latest}
     container_name: postgres_felleskodeverk
     networks:
       melosys.docker-internal:
@@ -386,7 +386,7 @@ services:
       - "5433:5432"
 
   felles-kodeverk:
-    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/felles-kodeverk:latest
+    image: europe-north1-docker.pkg.dev/nais-management-233d/teammelosys/felles-kodeverk:${FELLES_KODEVERK_TAG:-latest}
     environment:
       SPRING_PROFILES_ACTIVE: local
       SPRING_DATASOURCE_URL: "jdbc:postgresql://postgres_felleskodeverk.melosys.docker-internal:5432/felles-kodeverk"
@@ -450,7 +450,7 @@ services:
       retries: 10
 
   unleash:
-    image: unleashorg/unleash-server:latest
+    image: unleashorg/unleash-server:${UNLEASH_TAG:-latest}
     container_name: unleash
     ports:
       - "4242:4242"
@@ -706,7 +706,7 @@ services:
 
   # ID-porten-stil login-proxy foran melosys-skjema-web (wonderwall auto-login).
   melosys-skjema-web-auth:
-    image: ghcr.io/nais/wonderwall:latest
+    image: ghcr.io/nais/wonderwall:${WONDERWALL_TAG:-latest}
     container_name: melosys-skjema-web-auth
     profiles: ["skjema"]
     depends_on:

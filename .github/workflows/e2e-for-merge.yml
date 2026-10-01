@@ -17,6 +17,8 @@ permissions:
   contents: read
   packages: read
   id-token: write
+  # Plan-jobben i E2E Tests henter varigheter fra en tidligere kjøring.
+  actions: read
 
 jobs:
   utvalg:
