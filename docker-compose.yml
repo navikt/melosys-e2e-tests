@@ -712,6 +712,9 @@ services:
     depends_on:
       - melosys-skjema-web
       - mock-oauth2-server
+    # Wonderwall avslutter hvis mock-oauth2-server ikke svarer ennå når den starter
+    # («fetching well known configuration … connection refused»). Den starter da på nytt.
+    restart: on-failure
     ports:
       - "3001:4000"
     environment:
