@@ -97,7 +97,7 @@ test.describe('FTRL Pensjonist - Automatisk årsavregning', () => {
     );
     await expect(aarsavregningLink).toBeVisible({ timeout: 15000 });
 
-    // Åpne årsavregningen for å lese ut behandlingID fra URL-en, og verifiser at
+    // Åpne årsavregningen for å lese ut behandlingID fra lenken, og verifiser at
     // den auto-opprettede behandlingen faktisk eksisterer i riktig DB-tilstand
     // — ikke bare at en lenke ble synlig.
     //
@@ -105,12 +105,7 @@ test.describe('FTRL Pensjonist - Automatisk årsavregning', () => {
     // og venter på saksbehandler. Sluttilstanden er derfor UNDER_BEHANDLING /
     // IKKE_FASTSATT (verifisert live), men auto-opprett- og brev-prosessene er FERDIG
     // og det finnes en AARSAVREGNING-rad for foregående år.
-    await aarsavregningLink.click();
-    await page.waitForURL(/behandlingID=\d+/, { timeout: 15000 });
-    const behandlingId = new URL(page.url()).searchParams.get('behandlingID');
-    if (!behandlingId) {
-      throw new Error(`Fant ikke behandlingID i årsavregnings-URL-en: ${page.url()}`);
-    }
+    const behandlingId = await hovedside.åpneBehandlingslenke(aarsavregningLink);
 
     // Lukk evt. etterslepende auto-prosesser (brev) på den nyopprettede
     // årsavregningen før DB-asserten, slik at «alle prosesser FERDIG» ikke blir
