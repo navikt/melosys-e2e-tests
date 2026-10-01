@@ -116,7 +116,14 @@ export class HovedsidePage extends BasePage {
       .filter({ hasText: /Årsavregning/ });
 
     await expect(lenker).toHaveCount(1, { timeout: TIMEOUT_LONG });
+    // melosys-api endrer status fra OPPRETTET til UNDER_BEHANDLING når web henter behandlingen.
+    // Vent på det kallet, ellers kan en DB-assert rett etterpå lese OPPRETTET.
+    const behandlingHentet = this.page.waitForResponse(
+      r => r.request().method() === 'GET' && /\/api\/behandlinger\/\d+$/.test(new URL(r.url()).pathname) && r.ok(),
+      { timeout: 30000 },
+    );
     await lenker.first().click();
+    await behandlingHentet;
   }
 
   /**
