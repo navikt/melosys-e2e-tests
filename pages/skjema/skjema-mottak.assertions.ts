@@ -95,6 +95,43 @@ export class SkjemaMottakAssertions {
     });
   }
 
+  /**
+   * Poll til melosys-api har lagret mottatte opplysninger for saken, og verifiser feltene i
+   * `juridiskArbeidsgiverNorge` (sidemenyen «Samlet virksomhet i Norge» i melosys-web).
+   */
+  async verifiserJuridiskArbeidsgiverNorge(
+    saksnummer: string,
+    forventet: Record<string, number | boolean>,
+    timeoutMs = 45000
+  ): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    let data: string | null = null;
+    while (Date.now() < deadline && data === null) {
+      data = await withDatabase((db) =>
+        db
+          .queryOne<{ DATA: string }>(
+            `SELECT m.DATA FROM MOTTATTEOPPLYSNINGER m
+             JOIN BEHANDLING b ON b.ID = m.BEHANDLING_ID
+             WHERE b.SAKSNUMMER = :s ORDER BY m.ID DESC FETCH FIRST 1 ROWS ONLY`,
+            { s: saksnummer }
+          )
+          .then((r) => r?.DATA ?? null)
+      );
+      if (data === null) await new Promise((r) => setTimeout(r, 2000));
+    }
+    expect(data, `MOTTATTEOPPLYSNINGER for ${saksnummer} skal finnes`).not.toBeNull();
+
+    const juridiskArbeidsgiverNorge = JSON.parse(data!).juridiskArbeidsgiverNorge ?? {};
+    for (const [felt, verdi] of Object.entries(forventet)) {
+      const faktisk = juridiskArbeidsgiverNorge[felt];
+      expect(
+        typeof verdi === 'number' ? Number(faktisk) : faktisk,
+        `juridiskArbeidsgiverNorge.${felt}`
+      ).toBe(verdi);
+    }
+    console.log(`✅ juridiskArbeidsgiverNorge for ${saksnummer}:`, forventet);
+  }
+
   /** Antall fagsaker totalt (databasen ryddes per test, så dette er saker opprettet i testen). */
   async tellFagsaker(): Promise<number> {
     return withDatabase(async (db) => {
