@@ -1,5 +1,5 @@
 import { Page, expect } from '@playwright/test';
-import { ddmmyyyy, lagreOgFortsett, standardUtsendingsperiode, svarRadio } from './skjema-utils';
+import { ddmmyyyy, lagreOgFortsett, standardUtsendingsperiode, startSoknadViaIntroside, svarRadio } from './skjema-utils';
 
 /**
  * Page Object for den digitale «Utsendt arbeidstaker»-søknaden i melosys-skjema-web,
@@ -29,7 +29,7 @@ export class SoknadUtsendtArbeidstakerPage {
     await page.waitForURL(/\/oversikt/);
 
     // Arbeidsgiveren settes i skjemaet først når ereg-oppslaget har svart. Klikkes
-    // «Start søknad» før det, viser skjemaet en valideringsfeil og oppretter ingen søknad.
+    // «Start søknad» før det, viser oversikten en valideringsfeil og går ikke videre.
     // Oppslaget går mot nettet fordi siden er ny; et cache-treff ville gitt tidsavbrudd her.
     const eregSvar = page.waitForResponse(
       r => r.url().includes(`/api/ereg/organisasjon-med-juridisk-enhet/${arbeidsgiverOrgnr}`) && r.ok(),
@@ -38,10 +38,7 @@ export class SoknadUtsendtArbeidstakerPage {
     await page.getByRole('textbox', { name: 'Arbeidsgivers organisasjonsnummer' }).fill(arbeidsgiverOrgnr);
     const org = await (await eregSvar).json();
     await expect(page.locator('form').getByText(org.juridiskEnhet.navn, { exact: true })).toBeVisible();
-    await page.getByRole('checkbox', { name: /Jeg bekrefter/ }).check();
-    await page.getByRole('button', { name: 'Start søknad' }).click();
-
-    await page.waitForURL(/\/skjema\/[^/]+\/utsendingsperiode-og-land/);
+    await startSoknadViaIntroside(page);
     return hentSkjemaIdFraUrl(page);
   }
 
