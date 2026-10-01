@@ -22,6 +22,16 @@ EU/EØS-saker håndterer tilfeller hvor arbeidstakere sendes ut til EU/EØS-land
 
 **Testresultater:** ✅ Test passerer
 
+### `eu-eos-art12-vedtak-stoppet-av-kontroll.spec.ts`
+
+**MELOSYS-8307.** Et vedtak som vedtakskontrollen stopper, skal ikke etterlate resultattypen `FASTSATT_LOVVALGSLAND` uten vedtaksmetadata:
+1. Behandle en art. 12.1-sak fram til vedtakssteget og vent til forhåndskontrollen har svart
+2. Lagre et brevutkast fra «Send brev»-fanen; «Fatt vedtak» er fortsatt aktiv
+3. Klikk «Fatt vedtak»: /fatt svarer 400 med `ÅPENT_UTKAST`
+4. Resultattypen er uendret (`IKKE_FASTSATT`), behandlingen er under behandling, og det finnes ingen vedtaksmetadata
+
+Testfilen beskriver hvordan du gjør det samme for hånd i q2.
+
 ### `eu-eos-art13-arbeid-flere-land-fullfort-vedtak.spec.ts`
 
 **Komplett arbeidsflyt test for "Arbeid i flere land"** som dekker:

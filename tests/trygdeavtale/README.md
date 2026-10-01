@@ -23,6 +23,10 @@ Trygdeavtale handles cases where Norway has bilateral social security agreements
 - **Detailed test**: Step-by-step actions showing each individual method
 - **Convenience methods test**: Using high-level convenience methods for faster test writing
 
+### `trygdeavtale-vedtak-stoppet-av-kontroll.spec.ts`
+
+**MELOSYS-8307.** Same recipe as `tests/eu-eos/eu-eos-art12-vedtak-stoppet-av-kontroll.spec.ts`: a brevutkast saved on the vedtak step makes /fatt fail with `ÅPENT_UTKAST`, and the test asserts that the resultattype stays `IKKE_FASTSATT` with no vedtaksmetadata.
+
 ## Page Objects Used
 
 ### `TrygdeavtaleBehandlingPage`
