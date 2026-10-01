@@ -672,7 +672,7 @@ jobs:
         run: |
           candidates=$(gh run list -R "$REPO" --workflow e2e-tests.yml --branch main --status success -L 20 \
             --json databaseId,event \
-            --jq '.[] | select(.event == "repository_dispatch" or .event == "workflow_dispatch") | .databaseId' | head -5) || candidates=""
+            --jq '[.[] | select(.event == "repository_dispatch" or .event == "workflow_dispatch") | .databaseId][:5][]') || candidates=""
           for id in $candidates; do
             dir="$RUNNER_TEMP/previous/$id"
             gh run download "$id" -R "$REPO" -n test-summary -D "$dir" > /dev/null 2>&1 || continue

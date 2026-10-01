@@ -100,4 +100,16 @@ test('filargumentet treffer bare sin egen fil', () => {
   assert.ok(!re.test('/home/runner/work/r/r/tests/eu-eos/xa.spec.ts'), 'samme filnavn-hale');
   assert.ok(!re.test('/home/runner/work/r/r/tests/x-eu-eos/a.spec.ts'), 'samme katalog-hale');
   assert.ok(!re.test('/home/runner/work/r/r/tests/eu-eos/aXspec.ts'), 'punktum er bokstavelig');
+  assert.ok(!re.test('/home/runner/work/r/r/tests/eu-eos/a.spec.ts.orig'), 'slutten av stien');
+});
+
+test('samme test flere ganger i test-summary.json summeres', () => {
+  // repeat_each eller like titler i ulike describe-blokker gir samme «fil::tittel».
+  const d = previousDurations({
+    tests: [
+      { file: '/r/tests/a.spec.ts', title: 'x', duration: 1000 },
+      { file: '/r/tests/a.spec.ts', title: 'x', duration: 2500 },
+    ],
+  });
+  assert.equal(d.get('a.spec.ts::x'), 3500);
 });

@@ -19,6 +19,33 @@ import { hasTag } from '../lib/test-tags';
  * Output: playwright-report/test-summary.md
  */
 
+const TAG_ENV_VARS = [
+  { key: 'melosys-api', envVar: 'MELOSYS_API_TAG' },
+  { key: 'melosys-web', envVar: 'MELOSYS_WEB_TAG' },
+  { key: 'faktureringskomponenten', envVar: 'FAKTURERINGSKOMPONENTEN_TAG' },
+  { key: 'melosys-trygdeavgift-beregning', envVar: 'MELOSYS_TRYGDEAVGIFT_TAG' },
+  { key: 'melosys-trygdeavtale', envVar: 'MELOSYS_TRYGDEAVTALE_TAG' },
+  { key: 'melosys-inngangsvilkar', envVar: 'MELOSYS_INNGANGSVILKAR_TAG' },
+  { key: 'melosys-eessi', envVar: 'MELOSYS_EESSI_TAG' },
+  { key: 'melosys-mock', envVar: 'MELOSYS_MOCK_TAG' },
+  { key: 'melosys-dokgen', envVar: 'MELOSYS_DOKGEN_TAG' },
+];
+
+/**
+ * Docker image tags from environment variables, keyed by service. On CI the plan job pins each
+ * tag to `<tag>@sha256:…` for docker compose; the summary and melosys-console show the tag only.
+ */
+export function imageTagsFromEnv(env: NodeJS.ProcessEnv): Record<string, string> {
+  const tags: Record<string, string> = {};
+  for (const { key, envVar } of TAG_ENV_VARS) {
+    const value = env[envVar]?.replace(/@sha256:[0-9a-f]{64}$/, '');
+    if (value) {
+      tags[key] = value;
+    }
+  }
+  return tags;
+}
+
 interface TestInfo {
   test: TestCase;
   results: TestResult[];
@@ -133,26 +160,7 @@ class TestSummaryReporter implements Reporter {
       processErrors: ti.processErrors
     }));
 
-    // Collect Docker image tags from environment variables
-    const tags: Record<string, string> = {};
-    const tagEnvVars = [
-      { key: 'melosys-api', envVar: 'MELOSYS_API_TAG' },
-      { key: 'melosys-web', envVar: 'MELOSYS_WEB_TAG' },
-      { key: 'faktureringskomponenten', envVar: 'FAKTURERINGSKOMPONENTEN_TAG' },
-      { key: 'melosys-trygdeavgift-beregning', envVar: 'MELOSYS_TRYGDEAVGIFT_TAG' },
-      { key: 'melosys-trygdeavtale', envVar: 'MELOSYS_TRYGDEAVTALE_TAG' },
-      { key: 'melosys-inngangsvilkar', envVar: 'MELOSYS_INNGANGSVILKAR_TAG' },
-      { key: 'melosys-eessi', envVar: 'MELOSYS_EESSI_TAG' },
-      { key: 'melosys-mock', envVar: 'MELOSYS_MOCK_TAG' },
-      { key: 'melosys-dokgen', envVar: 'MELOSYS_DOKGEN_TAG' },
-    ];
-
-    for (const { key, envVar } of tagEnvVars) {
-      const value = process.env[envVar];
-      if (value) {
-        tags[key] = value;
-      }
-    }
+    const tags = imageTagsFromEnv(process.env);
 
     // Collect Unleash toggle overrides pinned for this run (UNLEASH_FORCE_DISABLE/ENABLE)
     const parseToggleList = (value?: string): string[] =>
