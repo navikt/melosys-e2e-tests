@@ -1147,12 +1147,13 @@ jobs:
       - name: Wait for services to be healthy
         id: wait-healthy
         # Sjekker hvert 2. s. Før sjekket den hvert 10. s og ventet 10 s til etterpå, og den
-        # pausen ga tjenester utenfor sjekken tid til å starte. Nå sjekkes de i stedet:
-        # Spring-tjenestene melosys-api kaller. OAuth-mockene er ikke med, og skjema-stacken
-        # har eget steg under. En tjeneste regnes som klar første gang den svarer.
+        # pausen ga tjenester utenfor sjekken tid til å starte. Nå sjekkes tjenestene i lista.
+        # Ikke med: OAuth-mockene, postgres-databasene (tjenestene i lista bruker dem) og
+        # skjema-api (skjema-steget under venter bare på wonderwall). En tjeneste regnes som
+        # klar første gang den svarer.
         run: |
           docker_healthy() { [ "$(docker inspect --format='{{.State.Health.Status}}' "$1" 2>/dev/null)" = "healthy" ]; }
-          http_ok() { curl -sf --max-time 2 "$1" > /dev/null 2>&1; }
+          http_ok() { curl -sf --max-time 2 "$1" > /dev/null 2>&1 || return 1; }
 
           services=(melosys-oracle kafka melosys-api melosys-web unleash melosys-eessi melosys-mock
             faktureringskomponenten melosys-trygdeavgift-beregning melosys-trygdeavtale
@@ -1172,7 +1173,8 @@ jobs:
               melosys-dokgen)                 http_ok http://localhost:8888/internal/health ;;
               # /internal/health krever innlogging her (401).
               felles-kodeverk)                http_ok http://localhost:8050/internal/isReady ;;
-              *) echo "::error::Ingen helsesjekk for $1" >&2; return 1 ;;
+              # Et navn uten sjekk er en skrivefeil i lista. Løkka feiler da med en gang.
+              *)                              return 2 ;;
             esac
           }
 
@@ -1185,6 +1187,9 @@ jobs:
             for s in "${pending[@]}"; do
               if check "$s"; then
                 echo "  ✅ $s klar etter $((SECONDS - start)) s"
+              elif [ $? -eq 2 ]; then
+                echo "::error::Ingen helsesjekk for $s"
+                exit 1
               else
                 still+=("$s")
               fi
@@ -1343,7 +1348,7 @@ jobs:
               break
             fi
             echo "  forsøk $i/24: ikke klar ennå"
-            [ "$i" -eq 24 ] && echo "::warning::skjema web (wonderwall :3001) svarte ikke på 2 min"
+            [ "$i" -eq 24 ] && echo "::warning::skjema web (wonderwall :3001) svarte ikke etter 24 forsøk"
             sleep 5
           done
           docker compose ps melosys-skjema-api melosys-skjema-web melosys-skjema-web-auth || true
