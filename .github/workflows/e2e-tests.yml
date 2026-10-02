@@ -770,7 +770,6 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Diskplass er ikke et problem: gratis runner hadde 86 GB ledig av 145 GB (run 37016780064).
       - name: Heap-tak på gratis runner
         if: inputs.runner == 'ubuntu-latest'
         run: echo "COMPOSE_FILE=docker-compose.yml:docker-compose.liten-runner.yml" >> "$GITHUB_ENV"
@@ -1231,6 +1230,9 @@ jobs:
 
       - name: Ressursbruk etter oppstart
         if: steps.wait-healthy.outcome == 'success'
+        # Bare diagnostikk: skal aldri stoppe testene eller gjøre en grønn shard rød.
+        continue-on-error: true
+        timeout-minutes: 2
         run: scripts/ressurs-oversikt.sh "Ressursbruk etter oppstart (shard $SHARD)"
 
       - name: Diagnoser feilet oppstart av stacken
@@ -1504,6 +1506,9 @@ jobs:
 
       - name: Ressursbruk etter testene
         if: always() && steps.compose-up.outcome == 'success'
+        # Bare diagnostikk: skal aldri stoppe testene eller gjøre en grønn shard rød.
+        continue-on-error: true
+        timeout-minutes: 2
         run: scripts/ressurs-oversikt.sh "Ressursbruk etter testene (shard $SHARD)"
 
       - name: Set test status outputs
