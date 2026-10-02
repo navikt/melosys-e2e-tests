@@ -101,3 +101,17 @@ test('prosessfeil fra fiksturens teardown tas med, også når testen timet ut', 
   ]);
   assert.equal(perTest.tt.processErrors, prosessfeil);
 });
+
+test('prosessfeil fra teardown tas med også når testen feilet på en annen måte', () => {
+  const prosessfeil = 'Error: Test failed due to process instance errors: OPPRETT_SAK FEILET';
+  const { perTest } = kjør([{ title: 'ft', forsøk: [{ status: 'failed', feil: 'expect(received).toBe(expected)', teardownFeil: prosessfeil }] }]);
+  assert.equal(perTest.ft.processErrors, prosessfeil);
+});
+
+test('testens egen prosessfeil vinner over teardown-feilen', () => {
+  const egen = 'Timed out waiting for process instance OPPRETT_SAK';
+  const { perTest } = kjør([
+    { title: 'eg', forsøk: [{ status: 'failed', feil: egen, teardownFeil: 'Error: Test failed due to process instance errors: OPPRETT_SAK FEILET' }] },
+  ]);
+  assert.equal(perTest.eg.processErrors, egen);
+});
