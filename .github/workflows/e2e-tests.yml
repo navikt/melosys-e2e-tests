@@ -66,6 +66,14 @@ on:
         required: false
         type: number
         default: 3
+      runner:
+        description: 'Runner for shard-jobbene. ubuntu-latest er gratis (repoet er offentlig), men har 4 kjerner og 16 GB, så JVM-tjenestene får heap-tak (docker-compose.liten-runner.yml).'
+        required: false
+        type: choice
+        options:
+          - ubuntu-latest-8-cores
+          - ubuntu-latest
+        default: ubuntu-latest-8-cores
 
   # Kalles fra «E2E før merge» (e2e-for-merge.yml) når en PR står i merge queue.
   # Inputene som ikke er deklarert her, er tomme ved kall og gir samme oppførsel som standardverdiene.
@@ -742,7 +750,8 @@ jobs:
   # «e2e-tests (N)», som melosys-console leser. Et `name:` med matrix-verdier ville fjernet «(N)».
   e2e-tests:
     needs: plan
-    runs-on: ubuntu-latest-8-cores
+    # Merge-køen og repository_dispatch har ikke inputen og kjører på 8 kjerner.
+    runs-on: ${{ inputs.runner || 'ubuntu-latest-8-cores' }}
     # 2 hour ceiling gives headroom for the ~44 min suite plus, on coverage runs,
     # the extra melosys-api build (~4 min cached, ~11 min cold).
     timeout-minutes: 120
@@ -760,6 +769,21 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      # Er det under 30 GB ledig på /, slettes verktøy testene ikke bruker (.NET, Android, GHC,
+      # CodeQL), så alle imagene får plass.
+      - name: Forbered gratis runner (heap-tak og diskplass)
+        if: inputs.runner == 'ubuntu-latest'
+        run: |
+          echo "COMPOSE_FILE=docker-compose.yml:docker-compose.liten-runner.yml" >> "$GITHUB_ENV"
+          df -h /
+          ledig_gb=$(df -BG --output=avail / | tail -1 | tr -dc '0-9')
+          if [ "$ledig_gb" -lt 30 ]; then
+            start=$(date +%s)
+            sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
+            echo "🧹 Slettet ubrukte verktøy på $(( $(date +%s) - start )) s"
+            df -h /
+          fi
 
       - name: Hent plan og trigger-kontekst fra plan-jobben
         env:
@@ -1215,6 +1239,10 @@ jobs:
           echo "✅ Alle tjenestene er klare etter $((SECONDS - start)) s"
           docker compose ps
 
+      - name: Ressursbruk etter oppstart
+        if: steps.wait-healthy.outcome == 'success'
+        run: scripts/ressurs-oversikt.sh "Ressursbruk etter oppstart (shard $SHARD)"
+
       - name: Diagnoser feilet oppstart av stacken
         # `docker compose up` skriver feilen fra daemonen uten å si HVILKEN container den
         # gjelder — i run 32011161950 måtte «Container X Starting» diffes mot «Container X
@@ -1483,6 +1511,10 @@ jobs:
           UNLEASH_FORCE_ENABLE: ${{ inputs.unleash_force_enable }}
           # Blob-rapporten er det merge-jobben slår sammen til én rapport når det er flere shards.
           E2E_BLOB_REPORT: ${{ needs.plan.outputs.shard_count != '1' && 'true' || '' }}
+
+      - name: Ressursbruk etter testene
+        if: always() && steps.compose-up.outcome == 'success'
+        run: scripts/ressurs-oversikt.sh "Ressursbruk etter testene (shard $SHARD)"
 
       - name: Set test status outputs
         id: test-status
