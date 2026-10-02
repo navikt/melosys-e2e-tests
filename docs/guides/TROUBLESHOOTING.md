@@ -467,13 +467,10 @@ Check workflow logs for:
 **1. Increase timeout:**
 ```yaml
 # .github/workflows/e2e-tests.yml
-timeout-minutes: 60  # Increase from 45
+timeout-minutes: 150  # Increase from 120
 ```
 
-**2. Use 8-core runner:**
-```yaml
-runs-on: ubuntu-latest-8-cores  # Faster startup
-```
+**2. Use 8-core runner:** start the run with `-f runner=ubuntu-latest-8-cores`. Don't hard-code `runs-on`: the plan job picks the runner, and the heap caps depend on it.
 
 **3. Check health check logic:**
 Services must respond:

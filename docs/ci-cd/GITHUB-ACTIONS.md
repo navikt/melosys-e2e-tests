@@ -197,8 +197,9 @@ on:
 
 jobs:
   e2e-tests:
+    needs: plan
     runs-on: ${{ needs.plan.outputs.runner }}  # free ubuntu-latest; 8 cores for coverage
-    timeout-minutes: 45  # Timeout for large stack
+    timeout-minutes: 120
 ```
 
 ### What the Workflow Does
@@ -301,13 +302,11 @@ Failed tests:
 
 ### Key Metrics
 
-- **Workflow timeout**: 45 minutes
+- **Shard job timeout**: 120 minutes
 - **Runner**: free `ubuntu-latest` (4 cores, 16 GB), 6 shards; `ubuntu-latest-8-cores` (paid) for coverage
 - **Images**: 15 (9 NAIS custom + 6 base)
-- **Average run time**: 15-20 minutes
-- **Pre-pull time**: ~5 minutes
-- **Startup time**: ~5 minutes
-- **Test execution**: ~5 minutes
+- **Run time**: 13.3–13.9 minutes for the full suite (4 runs, 02.10.2026)
+- **Per shard** (run 37019471832): pre-pull 69–116 s, `docker compose up` 84–85 s, health check 45–56 s, Playwright 418–462 s
 
 ---
 
@@ -476,7 +475,7 @@ services:
 
 The shard jobs run on the free `ubuntu-latest` runner (the repo is public: 4 cores, 16 GB). Measured 02.10.2026 on the full suite with retries off:
 
-- **6 shards, free runner**: 13.3–14.0 min per run (5 runs; the 4 after #363 were green)
+- **6 shards, free runner**: 13.3–13.9 min per run, 4 of 4 green
 - **3 shards, free runner**: 19.5 min (1 run, green)
 - **3 shards, `ubuntu-latest-8-cores`**: 18–19 min per run
 - **Memory**: about 9 of 16 GB used; `docker-compose.liten-runner.yml` caps the JVM heaps
@@ -523,7 +522,7 @@ melosys-mock:
 **Solutions**:
 - Run on 8 cores with `-f runner=ubuntu-latest-8-cores`
 - Pre-pull images in parallel
-- Increase timeout to 45 minutes
+- Increase the shard job timeout (120 minutes today)
 
 ### Issue: Tests not found
 
@@ -562,13 +561,7 @@ curl http://localhost:8080/internal/health
 
 ### Issue: High costs from 8-core runner
 
-**Solution**: Use conditional runners:
-
-```yaml
-jobs:
-  e2e-tests:
-    runs-on: ${{ github.ref == 'refs/heads/main' && 'ubuntu-latest-8-cores' || 'ubuntu-latest' }}
-```
+The shard jobs run on the free `ubuntu-latest` runner by default. Only `collect_coverage` and runs started with `-f runner=ubuntu-latest-8-cores` use the paid runner. Don't hard-code `runs-on`: the plan job picks the runner, and the heap caps depend on it.
 
 ---
 
@@ -661,12 +654,7 @@ on:
       - main  # Only on main branch
 ```
 
-**2. Conditional runner:**
-```yaml
-runs-on: ${{ github.ref == 'refs/heads/main' && 'ubuntu-latest-8-cores' || 'ubuntu-latest' }}
-```
-
-**3. Test sharding:** E2E Tests runs on 6 shards by default, with a merged report. See [KJOR-E2E-PA-CI.md](KJOR-E2E-PA-CI.md#sharding).
+**2. Test sharding:** E2E Tests runs on 6 shards by default, with a merged report. See [KJOR-E2E-PA-CI.md](KJOR-E2E-PA-CI.md#sharding).
 
 ---
 
