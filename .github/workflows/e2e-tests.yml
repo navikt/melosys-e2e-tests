@@ -1149,8 +1149,8 @@ jobs:
         # Sjekker hvert 2. s. Før sjekket den hvert 10. s og ventet 10 s til etterpå, og den
         # pausen ga tjenester utenfor sjekken tid til å starte. Nå sjekkes tjenestene i lista.
         # Ikke med: OAuth-mockene, postgres-databasene (tjenestene i lista bruker dem) og
-        # skjema-api (skjema-steget under venter bare på wonderwall). En tjeneste regnes som
-        # klar første gang den svarer.
+        # skjema-api og skjema-web (skjema-steget under venter bare på at wonderwall svarer).
+        # En tjeneste regnes som klar første gang den svarer.
         run: |
           docker_healthy() { [ "$(docker inspect --format='{{.State.Health.Status}}' "$1" 2>/dev/null)" = "healthy" ]; }
           http_ok() { curl -sf --max-time 2 "$1" > /dev/null 2>&1 || return 1; }
