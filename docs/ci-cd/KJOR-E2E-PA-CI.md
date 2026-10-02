@@ -108,6 +108,7 @@ make ci-affected ENV=melosys-api:min-tag RETRIES=1
 |---|---|---|
 | `BRANCH=<navn>` | `--branch <navn>` | Kjører mot en annen branch enn den du står på. Uten spør scriptet i terminalen. Virker også for `list-affected`, som henter branchen først |
 | `ENV=<tagger>` | `--env <tagger>` | Egne images, for eksempel `melosys-api:min-tag,melosys-web:min-tag`. Påkrevd for `ci-images` |
+| `SHARDS=<1–8>` | `--shards <1–8>` | Antall shards. Uten sendes ingenting, og workflowen ber om 3. Se [Sharding](#sharding) |
 | `PREVIEW=1` | `--preview` | Skriver ut `gh`-kommandoen som ville blitt sendt, uten å starte kjøringen |
 | `RETRIES=1` | `--retries` | Slår på retries. Standard er av, så flaky tester synes |
 | `VIS_FILTER=1` | `--vis-filter` | Skriver ut hele filteret som sendes |
@@ -115,15 +116,17 @@ make ci-affected ENV=melosys-api:min-tag RETRIES=1
 
 Variablene leses bare fra kommandolinjen. En `BRANCH` eller `ENV` eksportert i skallet styrer ikke CI.
 
-## Sharding (under utprøving)
+## Sharding
 
-E2E Tests har inputen `shards` (1–8, standard 1). Med flere shards fordeler plan-jobben spec-filene etter varigheten fra forrige fulle kjøring på main, og hver shard kjører sin del mot sin egen stack. Skjema-testene havner i samme shard. `make`-målene sender ikke `shards` ennå, så start kjøringen med `gh`:
+E2E Tests deler testene på 3 shards som standard, også når kjøringen startes fra et image-bygg eller fra merge queue. Plan-jobben fordeler spec-filene etter varigheten fra forrige fulle kjøring på main, og hver shard kjører sin del mot sin egen stack. Skjema-testene havner i samme shard.
 
-```bash
-gh workflow run e2e-tests.yml --ref main -f shards=3 -f disable_retries=true
-```
+- Shardene skal i snitt ha minst 5 minutter estimert testtid, fordi oppsettet av en stack tar rundt 4,5 minutter. Et lite utvalg, som de påvirkede testene i merge queue, kjører derfor på færre shards eller på én.
+- `run_bdd` og `collect_coverage` kjører alltid på én shard.
+- Velg antall selv med `SHARDS=` på make-målene, for eksempel `make ci SHARDS=1`, eller med `-f shards=N` på `gh workflow run`.
 
-Med flere shards får artefaktene navn som `test-summary-shard-2`, og ingen samlet rapport lages ennå. Konsollen og Slack-varslet leser bare `test-summary`, så de ser ikke sharded kjøringer før merge-jobben kommer.
+Med én shard ser kjøringen ut som før sharding: jobben `e2e-tests` laster opp `test-summary` og de andre artefaktene.
+
+Med flere shards laster hver shard opp artefaktene sine med suffiks, for eksempel `test-summary-shard-2` og `docker-logs-shard-2`. Jobben «Slå sammen shards» slår sammen blob-rapportene til én rapport og laster den opp som `test-summary` og `playwright-report` (HTML). Den summerer også Prometheus-metrikkene fra shardene. Konsollen, Slack-varslet og plan-jobben leser `test-summary` som før. Mangler rapporten fra en shard, feiler jobben og sier hvilken. Docker-logganalysen står i hver shard-jobb.
 
 ## Se rekkevidden før du endrer noe
 

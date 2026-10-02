@@ -13,6 +13,7 @@
 #   ./scripts/ci-e2e.sh --affected --vis-filter  skriver ut hele filteret
 #   ./scripts/ci-e2e.sh --affected --branch min-branch  en annen branch enn den du står på
 #   ./scripts/ci-e2e.sh --affected -p        skriver ut gh-kommandoen uten å starte noe
+#   ./scripts/ci-e2e.sh --shards 1           antall shards (1–8); uten flagget gjelder workflowens standard
 #
 # Uten --branch spør scriptet om branchen du står på skal brukes, når det kjører i en terminal.
 #
@@ -32,6 +33,7 @@ AFFECTED=0
 WAIT=1
 VIS_FILTER=0
 RETRIES="true"   # disable_retries: uten retries ser du ekte flakiness
+SHARDS=""        # tomt: workflowens standardverdi
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -53,6 +55,12 @@ while [ $# -gt 0 ]; do
     -p|--preview) PREVIEW=1; shift ;;
     --vis-filter) VIS_FILTER=1; shift ;;
     --retries)  RETRIES="false"; shift ;;
+    --shards)
+      if ! [[ "${2:-}" =~ ^[1-8]$ ]]; then
+        echo "❌ --shards krever et tall fra 1 til 8." >&2
+        exit 2
+      fi
+      SHARDS="$2"; shift 2 ;;
     -h|--help)  awk 'NR > 1 && !/^#/ { exit } NR > 1 { sub(/^# ?/, ""); print }' "$0"; exit 0 ;;
     *) echo "Ukjent flagg: $1" >&2; exit 2 ;;
   esac
@@ -143,12 +151,14 @@ else
   echo "   filter:      ${#GREP} tegn, $ANTALL_MONSTRE mønstre (vis med --vis-filter)"
   [ "$VIS_FILTER" -eq 1 ] && printf '%s\n' "$GREP"
 fi
+[ -n "$SHARDS" ] && echo "   shards:      $SHARDS"
 if [ -n "$SAMMENDRAG" ]; then
   printf '%s\n' "$SAMMENDRAG" | sed 's/^/   /'
 fi
 
 ARGS=(--ref "$BRANCH" -f environment="$ENVIRONMENT" -f disable_retries="$RETRIES")
 [ -n "$GREP" ] && ARGS+=(-f test_grep="$GREP")
+[ -n "$SHARDS" ] && ARGS+=(-f shards="$SHARDS")
 
 if [ "$PREVIEW" -eq 1 ]; then
   # %q gir en linje du kan lime rett inn i skallet.

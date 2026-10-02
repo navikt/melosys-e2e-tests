@@ -13,6 +13,9 @@
  *   - Skjema-filene (skjema/) går i samme shard: bare det shardet trenger skjema-stacken.
  *   - Antall shards blir aldri høyere enn antall enheter å fordele, så ingen shard står tom.
  *     Ingen tester gir én shard uten filfilter; da melder shard-jobben «0 tester» som før.
+ *   - Shardene skal i snitt ha minst MIN_SHARD_MS estimert testtid (LPT flytter hele filer, så ett
+ *     shard kan bli kortere). Et lite utvalg, som de påvirkede testene i merge queue, får da én
+ *     shard og slipper å starte flere stacker.
  *
  * Bruk:
  *   node scripts/shard-plan.mjs --list list.json [--previous test-summary.json] --shards 3
@@ -23,6 +26,8 @@ import { fileURLToPath } from 'node:url';
 
 export const SKJEMA_PREFIX = 'skjema/';
 const DEFAULT_TEST_MS = 30_000;
+/** En shard koster ~4,5 min fast oppsett (stack, browsere), så kortere testtid lønner seg ikke. */
+export const MIN_SHARD_MS = 5 * 60_000;
 
 /** Testene i en `--list --reporter=json`-rapport, med fil relativt til testDir. */
 export function listedTests(report) {
@@ -73,17 +78,15 @@ export function planShards(tests, durations, requestedShards) {
     units.set(name, unit);
   }
 
-  const shardCount = Math.max(1, Math.min(requested, units.size));
-  const base = { requestedShards: requested, shardCount, totalTests: tests.length };
+  const totalMs = [...units.values()].reduce((sum, u) => sum + u.ms, 0);
+  const shardCount = Math.max(1, Math.min(requested, units.size, Math.floor(totalMs / MIN_SHARD_MS)));
+  const base = { requestedShards: requested, shardCount, totalTests: tests.length, estimatedSeconds: Math.round(totalMs / 1000) };
 
   // Én shard kjører uten filfilter, nøyaktig som en kjøring uten sharding.
   if (shardCount === 1) {
-    const ms = [...units.values()].reduce((sum, u) => sum + u.ms, 0);
     return {
       ...base,
-      shards: [
-        { shard: 1, files: [], tests: tests.length, estimatedSeconds: Math.round(ms / 1000), skjema: units.has(SKJEMA_PREFIX) },
-      ],
+      shards: [{ shard: 1, files: [], tests: tests.length, estimatedSeconds: base.estimatedSeconds, skjema: units.has(SKJEMA_PREFIX) }],
     };
   }
 

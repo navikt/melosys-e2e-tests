@@ -62,10 +62,10 @@ on:
         type: string
         default: ''
       shards:
-        description: 'Antall shards (1–8). Hver shard kjører en del av testene mot sin egen stack. 1 = som før sharding.'
+        description: 'Antall shards (1–8). Hver shard kjører en del av testene mot sin egen stack. Et lite utvalg får færre. 1 = uten sharding.'
         required: false
         type: number
-        default: 1
+        default: 3
 
   # Kalles fra «E2E før merge» (e2e-for-merge.yml) når en PR står i merge queue.
   # Inputene som ikke er deklarert her, er tomme ved kall og gir samme oppførsel som standardverdiene.
@@ -631,9 +631,10 @@ jobs:
           INPUT_SHARDS: ${{ inputs.shards }}
           RUN_BDD: ${{ inputs.run_bdd == true }}
           COLLECT_COVERAGE: ${{ inputs.collect_coverage == true }}
-        # repository_dispatch og workflow_call har ingen shards-input og kjører på én shard.
+        # repository_dispatch og workflow_call har ingen shards-input og ber om 3, som standardverdien.
+        # shard-plan.mjs gir færre når utvalget er lite (se MIN_SHARD_MS).
         run: |
-          requested="${INPUT_SHARDS:-1}"
+          requested="${INPUT_SHARDS:-3}"
           if ! [[ "$requested" =~ ^[1-8]$ ]]; then
             echo "::error::shards må være et heltall fra 1 til 8, var: $(printf '%q' "$requested")"
             exit 1
@@ -642,7 +643,7 @@ jobs:
             echo "::notice::run_bdd kjører på én shard"
             requested=1
           fi
-          # Dekningen dumpes fra containerne på slutten av jobben; den slås ikke sammen over shards ennå.
+          # Dekningen dumpes fra containerne på slutten av jobben; merge-jobben slår den ikke sammen.
           if [ "$requested" -gt 1 ] && [ "$COLLECT_COVERAGE" = "true" ]; then
             echo "::notice::collect_coverage kjører på én shard"
             requested=1
@@ -664,7 +665,7 @@ jobs:
         id: previous
         if: steps.mode.outputs.requested != '1'
         # Siste grønne kjøring på main uten test_grep. Kjøringer med filter mangler varighet for
-        # de andre testene, og en sharded kjøring har ingen `test-summary`-artefakt. Finnes
+        # de andre testene. En sharded kjøring har `test-summary` fra merge-jobben. Finnes
         # ingen, får alle testene samme estimat og fordeles etter antall.
         env:
           GH_TOKEN: ${{ github.token }}
@@ -724,13 +725,15 @@ jobs:
               echo "Én shard, ingen fordeling."
             else
               jq -r --arg run "$PREVIOUS_RUN" '
-                "\(.shardCount) shards (ba om \(.requestedShards)), \(.totalTests) tester. Varighet fra "
+                (if .shardCount == 1 and .requestedShards > 1
+                  then "Én shard (ba om \(.requestedShards)): \(.totalTests) tester, estimert \((.estimatedSeconds / 60 * 10 | round) / 10) min. Varighet fra "
+                  else "\(.shardCount) shards (ba om \(.requestedShards)), \(.totalTests) tester. Varighet fra " end)
                   + (if $run == "" then "ingen tidligere kjøring" else "kjøring \($run)" end)
                   + ", \(.knownDurations) av \(.totalTests) tester med målt tid.",
                 "",
                 "| Shard | Filer | Tester | Estimat | Skjema |",
                 "|---|---|---|---|---|",
-                (.shards[] | "| \(.shard) | \(.files | length) | \(.tests) | \((.estimatedSeconds / 60 * 10 | round) / 10) min | \(if .skjema then "ja" else "nei" end) |")
+                (.shards[] | "| \(.shard) | \(if (.files | length) == 0 then "alle" else (.files | length) end) | \(.tests) | \((.estimatedSeconds / 60 * 10 | round) / 10) min | \(if .skjema then "ja" else "nei" end) |")
               ' "$plan_file"
             fi
           } >> "$GITHUB_STEP_SUMMARY"
@@ -750,8 +753,8 @@ jobs:
     env:
       SHARD: ${{ matrix.shard }}
       SHARD_COUNT: ${{ needs.plan.outputs.shard_count }}
-      # Med én shard beholder artefaktene navnene de hadde før sharding, så konsollen og
-      # notify-slack finner `test-summary` som før.
+      # Med én shard beholder artefaktene navnene de hadde før sharding, og shard-jobben laster opp
+      # `test-summary` selv. Med flere laster merge-jobben opp den samlede `test-summary`.
       ARTIFACT_SUFFIX: ${{ needs.plan.outputs.shard_count != '1' && format('-shard-{0}', matrix.shard) || '' }}
 
     steps:
@@ -1693,42 +1696,8 @@ jobs:
               ;;
           esac
 
-          # Add trigger information if this was a repository dispatch
-          if [ "$EVENT_NAME" = "repository_dispatch" ]; then
-            REPO="$PAYLOAD_REPOSITORY"
-            COMMIT_SHA="$PAYLOAD_COMMIT_SHA"
-            COMMIT_URL="https://github.com/navikt/${REPO}/commit/${COMMIT_SHA}"
-
-            echo "### 📦 Triggered by: [\`$REPO\`](https://github.com/navikt/$REPO)" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-            echo "- **Image tag:** \`${PAYLOAD_IMAGE_TAG}\`" >> $GITHUB_STEP_SUMMARY
-            echo "- **Commit:** [\`${COMMIT_SHA:0:7}\`]($COMMIT_URL)" >> $GITHUB_STEP_SUMMARY
-            echo "- **Message:** ${PAYLOAD_COMMIT_MESSAGE}" >> $GITHUB_STEP_SUMMARY
-            echo "- **Actor:** @${PAYLOAD_ACTOR}" >> $GITHUB_STEP_SUMMARY
-            echo "" >> $GITHUB_STEP_SUMMARY
-          fi
-
-          # Kjøring fra e2e-gate.yml: GitHub viser e2e-repoets main og eieren av
-          # E2E_TRIGGER_PAT øverst på siden, så kilden skrives her. Gate-feltene i
-          # trigger-context.json er alt validert (tegnsett, 40 hex, heltall).
-          if [ -f "$RUNNER_TEMP/trigger-context.json" ]; then
-            jq -r '
-              select(.sourceRepo != null)
-              | "https://github.com/navikt/\(.sourceRepo)" as $repo
-              | "### 📦 Startet av e2e-gate fra [`\(.sourceRepo)`](\($repo))",
-                "",
-                (if .prNumber != null then "- **PR:** [#\(.prNumber)](\($repo)/pull/\(.prNumber))" else empty end),
-                (if .headSha != null then "- **PR-head:** [`\(.headSha[0:7])`](\($repo)/commit/\(.headSha))" else empty end),
-                "- **Image:** `\(.sourceRepo):\(.sourceSha[0:7])`"
-                  + (if .gateTrigger == "pr-label" then " (PR-en flettet inn i master)" else " (commit fra merge queue)" end),
-                "- **Tree:** `\(.tree[0:7])`",
-                (if .gateActor != null then "- **Startet av:** @\(.gateActor)" else empty end),
-                "",
-                "> Commiten og aktøren øverst på siden er e2e-repoets `main` og eieren av tokenet gaten bruker, ikke kilden.",
-                ""
-            ' "$RUNNER_TEMP/trigger-context.json" >> $GITHUB_STEP_SUMMARY || true
-          fi
-          echo "" >> $GITHUB_STEP_SUMMARY
+          # Hvem som startet kjøringen: repository_dispatch-payload eller e2e-gate. Samme blokk som i merge-jobben.
+          scripts/trigger-summary.sh "$RUNNER_TEMP/trigger-context.json" >> "$GITHUB_STEP_SUMMARY"
 
           # Use custom reporter summary if available
           if [ -f "playwright-report/test-summary.md" ]; then
@@ -2131,6 +2100,8 @@ jobs:
         if: always()
         with:
           name: test-summary${{ env.ARTIFACT_SUFFIX }}
+          # «Re-run failed jobs» laster opp på nytt under samme navn; merge-jobben skal få det nye.
+          overwrite: true
           path: |
             playwright-report/test-summary.md
             playwright-report/test-summary.json
@@ -2153,6 +2124,7 @@ jobs:
         if: always() && env.SHARD_COUNT != '1'
         with:
           name: blob-report${{ env.ARTIFACT_SUFFIX }}
+          overwrite: true
           path: blob-report/
           retention-days: 7
 
@@ -2181,10 +2153,264 @@ jobs:
           echo "📋 Docker compose logs:"
           docker compose logs --tail=100
 
+  # Med flere shards slår denne jobben sammen blob-rapportene til én rapport og laster den opp som
+  # `test-summary` og `playwright-report`. Det er `test-summary` melosys-console, notify-slack og
+  # plan-jobbens varighetsoppslag leser. Med én shard laster shard-jobben opp `test-summary` selv.
+  merge-reports:
+    name: Slå sammen shards
+    needs: [plan, e2e-tests]
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.shard_count != '1' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      SHARD_COUNT: ${{ needs.plan.outputs.shard_count }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # Før npm ci: feiler den, skal «Avgjør status» melde at rapporten mangler, ikke shardene.
+      # En shard som feilet før testene, har ingen blob. «Avgjør status» melder hvilke som mangler.
+      - name: Hent blob-rapportene
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: blob-report-shard-*
+          merge-multiple: true
+          path: all-blob-reports
+
+      - name: Hent test-summary fra shardene
+        uses: actions/download-artifact@v4
+        continue-on-error: true
+        with:
+          pattern: test-summary-shard-*
+          path: shard-summaries
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # merge-reports leser blob-filene og skriver rapporter; den starter ingen nettleser.
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Slå sammen rapportene
+        id: merge
+        env:
+          # Samme miljø som reporteren får i «Run Playwright tests».
+          MELOSYS_API_TAG: ${{ needs.plan.outputs.melosys_api_tag }}
+          MELOSYS_WEB_TAG: ${{ needs.plan.outputs.melosys_web_tag }}
+          FAKTURERINGSKOMPONENTEN_TAG: ${{ needs.plan.outputs.faktureringskomponenten_tag }}
+          MELOSYS_TRYGDEAVGIFT_TAG: ${{ needs.plan.outputs.melosys_trygdeavgift_tag }}
+          MELOSYS_TRYGDEAVTALE_TAG: ${{ needs.plan.outputs.melosys_trygdeavtale_tag }}
+          MELOSYS_INNGANGSVILKAR_TAG: ${{ needs.plan.outputs.melosys_inngangsvilkar_tag }}
+          MELOSYS_EESSI_TAG: ${{ needs.plan.outputs.melosys_eessi_tag }}
+          MELOSYS_MOCK_TAG: ${{ needs.plan.outputs.melosys_mock_tag }}
+          MELOSYS_DOKGEN_TAG: ${{ needs.plan.outputs.melosys_dokgen_tag }}
+          RETRIES_DISABLED: ${{ inputs.disable_retries == true }}
+          RUN_BDD: ${{ inputs.run_bdd == true && 'true' || '' }}
+          UNLEASH_FORCE_DISABLE: ${{ inputs.unleash_force_disable }}
+          UNLEASH_FORCE_ENABLE: ${{ inputs.unleash_force_enable }}
+        run: |
+          shopt -s nullglob
+          blobs=(all-blob-reports/report-shard-*.zip)
+          if [ "${#blobs[@]}" -eq 0 ]; then
+            echo "⚠️  Ingen blob-rapporter å slå sammen"
+            exit 0
+          fi
+          echo "🧩 Slår sammen ${#blobs[@]} av $SHARD_COUNT blob-rapporter"
+          # Samme testDir som playwright.config.ts, så filstiene blir som i en kjøring uten sharding.
+          npx playwright merge-reports --config playwright.merge.config.ts all-blob-reports
+
+      # Etter merge-reports: html-reporteren tømmer playwright-report/ når den er ferdig.
+      - name: Slå sammen metrikker og legg til trigger-kontekst
+        if: always()
+        env:
+          TRIGGER_CONTEXT: ${{ needs.plan.outputs.trigger_context }}
+          RUN_ATTEMPT: ${{ github.run_attempt }}
+        run: |
+          shopt -s nullglob
+          mkdir -p playwright-report
+          npx ts-node scripts/merge-metrics.ts --out playwright-report shard-summaries/*/metrics-coverage.json \
+            || echo "::warning::Klarte ikke å slå sammen metrikkene fra shardene"
+
+          # Opptakene (record_api) har ulike filnavn per test, så de legges side om side.
+          for dir in shard-summaries/*/recordings; do
+            mkdir -p playwright-report/recordings
+            cp -R "$dir"/. playwright-report/recordings/
+          done
+
+          # Samme som «Hent plan og trigger-kontekst» i shard-jobben: runAttempt er forsøket
+          # rapporten ble laget i.
+          if [ -n "$TRIGGER_CONTEXT" ] \
+            && printf '%s' "$TRIGGER_CONTEXT" | jq --argjson attempt "$RUN_ATTEMPT" '.runAttempt = $attempt' > "$RUNNER_TEMP/trigger-context.json"; then
+            cp "$RUNNER_TEMP/trigger-context.json" playwright-report/trigger-context.json
+            echo "🧾 trigger-context.json skrevet til playwright-report/"
+          else
+            rm -f "$RUNNER_TEMP/trigger-context.json"
+            echo "⚠️  Ingen trigger-kontekst fra plan-jobben"
+          fi
+
+      - name: Avgjør status
+        id: status
+        if: always()
+        env:
+          E2E_RESULT: ${{ needs.e2e-tests.result }}
+        run: |
+          SUMMARY=playwright-report/test-summary.json
+          missing=()
+          for n in $(seq 1 "$SHARD_COUNT"); do
+            [ -f "all-blob-reports/report-shard-$n.zip" ] || missing+=("$n")
+          done
+
+          # Samme betydning som «Set test status outputs» i shard-jobben, pluss shards-missing.
+          HAS_FAILURES="false"
+          HAS_FLAKY="false"
+          TOTAL=0
+          if [ -f "$SUMMARY" ]; then
+            STATUS=$(jq -r '.status' "$SUMMARY")
+            TOTAL=$(jq '.tests | length' "$SUMMARY")
+            [ "$(jq '[.tests[] | select(.status == "failed")] | length' "$SUMMARY")" -gt 0 ] && HAS_FAILURES="true"
+            [ "$(jq '[.tests[] | select(.status == "flaky")] | length' "$SUMMARY")" -gt 0 ] && HAS_FLAKY="true"
+          else
+            STATUS="reporter-missing"
+            HAS_FAILURES="true"
+          fi
+          # En rapport uten alle shardene kan være grønn uten å ha kjørt alt.
+          if [ "${#missing[@]}" -gt 0 ]; then
+            STATUS="shards-missing"
+            HAS_FAILURES="true"
+          elif [ "$STATUS" = "passed" ] && [ "$E2E_RESULT" != "success" ]; then
+            # En shard-jobb feilet etter testene, eller «Re-run failed jobs» feilet før testene og
+            # lot blob-en fra forrige forsøk stå. Da er rapporten ikke hele sannheten.
+            STATUS="shard-failed"
+            HAS_FAILURES="true"
+          fi
+
+          {
+            echo "status=$STATUS"
+            echo "has-failures=$HAS_FAILURES"
+            echo "has-flaky=$HAS_FLAKY"
+            echo "total=$TOTAL"
+            echo "missing=${missing[*]}"
+          } >> "$GITHUB_OUTPUT"
+          echo "📊 status=$STATUS has-failures=$HAS_FAILURES has-flaky=$HAS_FLAKY tester=$TOTAL mangler=${missing[*]:-ingen}"
+
+      - name: Generate test summary
+        if: always()
+        # Payload-verdier via env, ikke ${{ }} i skriptet — se «Determine image tags».
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PAYLOAD_REPOSITORY: ${{ github.event.client_payload.repository }}
+          PAYLOAD_IMAGE_TAG: ${{ github.event.client_payload.image_tag }}
+          PAYLOAD_COMMIT_SHA: ${{ github.event.client_payload.commit_sha }}
+          PAYLOAD_COMMIT_MESSAGE: ${{ github.event.client_payload.commit_message }}
+          PAYLOAD_ACTOR: ${{ github.event.client_payload.actor }}
+          STATUS: ${{ steps.status.outputs.status }}
+          MISSING: ${{ steps.status.outputs.missing }}
+        run: |
+          METRICS=playwright-report/metrics-coverage.json
+          {
+            echo "## 🎭 Playwright Test Results — $SHARD_COUNT shards samlet"
+            echo ""
+            if [ -n "$MISSING" ]; then
+              echo "> ⚠️ **Mangler resultater fra shard ${MISSING// /, }.** Tallene under gjelder bare shardene som leverte. Se jobbene «e2e-tests (N)»."
+              echo ""
+            fi
+            if [ "$STATUS" = "shard-failed" ]; then
+              echo "> ⚠️ **En shard-jobb feilet,** selv om testene i rapporten er grønne. Rapporten kan ha resultater fra et tidligere forsøk. Se jobbene «e2e-tests (N)»."
+              echo ""
+            fi
+            if [ "$STATUS" = "reporter-missing" ]; then
+              echo "> ⚠️ **Den samlede rapporten mangler.** Se steget «Slå sammen rapportene» i denne jobben."
+              echo ""
+            fi
+
+            scripts/trigger-summary.sh "$RUNNER_TEMP/trigger-context.json"
+
+            if [ -f playwright-report/test-summary.md ]; then
+              cat playwright-report/test-summary.md
+              echo ""
+            fi
+
+            if [ -f "$METRICS" ]; then
+              echo "## 📊 Metrics Coverage"
+              echo ""
+              echo "| Metric | Value |"
+              echo "|--------|-------|"
+              jq -r '
+                "| Cases created | \(.coverage.summary.sakCreated // 0) |",
+                "| Treatments completed | \(.coverage.summary.behandlingerCompleted // 0) |",
+                "| Process types exercised | \(.coverage.processTypes.exercised | length) (~\(.coverage.processTypes.percentage | floor)%) |",
+                "| Process steps exercised | \(.coverage.processSteps.exercised | length) |"
+              ' "$METRICS"
+              echo ""
+            fi
+
+            echo "📦 Den samlede HTML-rapporten ligger i artefakten \`playwright-report\`. Docker-logganalysen står i hver shard-jobb."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test summary and metrics
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-summary
+          # «Re-run failed jobs» kjører merge-jobben på nytt og laster opp under samme navn.
+          overwrite: true
+          path: |
+            playwright-report/test-summary.md
+            playwright-report/test-summary.json
+            playwright-report/trigger-context.json
+            playwright-report/metrics-summary.md
+            playwright-report/metrics-coverage.json
+            playwright-report/recordings/
+          retention-days: 30
+
+      - name: Upload merged HTML report
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: playwright-report
+          overwrite: true
+          path: playwright-report/
+          retention-days: 7
+
+      - name: Feil jobben ved manglende shards eller testfeil
+        if: always()
+        env:
+          STATUS: ${{ steps.status.outputs.status }}
+          TOTAL: ${{ steps.status.outputs.total }}
+          MISSING: ${{ steps.status.outputs.missing }}
+        run: |
+          if [ -n "$MISSING" ]; then
+            echo "::error::Blob-rapport mangler fra shard ${MISSING// /, } av $SHARD_COUNT. Den samlede rapporten dekker ikke alle testene."
+            exit 1
+          fi
+          case "$STATUS" in
+            passed) ;;
+            shard-failed)
+              echo "::error::En shard-jobb feilet. Se jobbene «e2e-tests (N)»."
+              exit 1 ;;
+            reporter-missing|"")
+              echo "::error::Den samlede test-summary.json mangler (status: ${STATUS:-ukjent}). Se «Slå sammen rapportene»."
+              exit 1 ;;
+            *)
+              echo "::error::Den samlede rapporten har testfeil (status: $STATUS)."
+              exit 1 ;;
+          esac
+          if [ "${TOTAL:-0}" -eq 0 ]; then
+            echo "::error::Den samlede rapporten har 0 tester."
+            exit 1
+          fi
+          echo "✅ $SHARD_COUNT shards, $TOTAL tester, status passed"
+
+  # failure() er sann når en av jobbene over feilet. En hoppet merge-jobb (én shard) teller ikke
+  # som feil og stopper ikke varslet. Med flere shards laster merge-jobben opp `test-summary`.
   notify-slack:
     name: Notify #melosys-ci on failure
     runs-on: ubuntu-latest
-    needs: e2e-tests
+    needs: [e2e-tests, merge-reports]
     if: failure() && github.event_name == 'repository_dispatch'
     env:
       SLACK_USER_MAPPING: ${{ secrets.SLACK_USER_MAPPING }}
@@ -2238,11 +2464,15 @@ jobs:
           RESULTS_BLOCK=""
           SUMMARY_JSON="test-summary/test-summary.json"
           if [ -f "$SUMMARY_JSON" ]; then
-            PASSED=$(jq '[.tests[] | select(.status == "passed" and .totalAttempts == 1)] | length' "$SUMMARY_JSON")
+            # Statusene reporters/test-summary.ts skriver. Et forsøk som timer ut, teller ikke som
+            # feilet der, så timeout-og-så-grønn er «passed» med flere forsøk: det er også flaky.
+            # En known-error-test som timer ut, blir «failed» med isKnownError. Grønne known-error-tester
+            # telles som passed, så summen blir TOTAL.
+            PASSED=$(jq '[.tests[] | select((.status == "passed" and .totalAttempts == 1) or .status == "known-error-passed")] | length' "$SUMMARY_JSON")
             FAILED=$(jq '[.tests[] | select(.status == "failed" and (.isKnownError | not))] | length' "$SUMMARY_JSON")
-            FLAKY=$(jq '[.tests[] | select(.status == "passed" and .totalAttempts > 1)] | length' "$SUMMARY_JSON")
+            FLAKY=$(jq '[.tests[] | select(.status == "flaky" or (.status == "passed" and .totalAttempts > 1))] | length' "$SUMMARY_JSON")
             SKIPPED=$(jq '[.tests[] | select(.status == "skipped")] | length' "$SUMMARY_JSON")
-            KNOWN_FAILED=$(jq '[.tests[] | select(.status == "failed" and .isKnownError)] | length' "$SUMMARY_JSON")
+            KNOWN_FAILED=$(jq '[.tests[] | select(.status == "known-error-failed" or (.status == "failed" and .isKnownError))] | length' "$SUMMARY_JSON")
             TOTAL=$(jq '.tests | length' "$SUMMARY_JSON")
 
             RESULTS_BLOCK="*Resultater:* ✅ ${PASSED} passed · ❌ ${FAILED} failed · 🔄 ${FLAKY} flaky · ⏭️ ${SKIPPED} skipped"
@@ -2268,7 +2498,7 @@ jobs:
 
             # Flaky-tester (passed etter retry), maks 3
             FLAKY_LIST=$(jq -r '
-              [.tests[] | select(.status == "passed" and .totalAttempts > 1) | .title]
+              [.tests[] | select(.status == "flaky" or (.status == "passed" and .totalAttempts > 1)) | .title]
               | .[0:3]
               | map("• " + .)
               | join("\n")
