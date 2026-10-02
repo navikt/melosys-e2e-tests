@@ -116,14 +116,18 @@ class TestSummaryReporter implements Reporter {
       }
     }
 
-    // Collect errors from the last failed attempt (most recent)
+    // Feilene fra siste feilede forsøk som har dem. En timeout-melding nevner aldri prosessinstansen,
+    // så et forsøk som timer ut, skal ikke slette prosessfeilen fra forsøket før.
     if (attemptFailed) {
       const dockerErrors = result.attachments.find(a => a.name === 'docker-logs-errors');
       const errorMessage = result.error?.message || '';
-      const hasProcessError = errorMessage.includes('process instance');
 
-      testInfo.dockerErrors = dockerErrors ? this.parseAttachment(dockerErrors) : null;
-      testInfo.processErrors = hasProcessError ? errorMessage : undefined;
+      if (dockerErrors) {
+        testInfo.dockerErrors = this.parseAttachment(dockerErrors);
+      }
+      if (errorMessage.includes('process instance')) {
+        testInfo.processErrors = errorMessage;
+      }
     }
   }
 

@@ -11,7 +11,9 @@ import TestSummaryReporter from '../reporters/test-summary';
  */
 type Status = 'passed' | 'failed' | 'timedOut' | 'interrupted' | 'skipped';
 
-function kjør(tester: { title: string; knownError?: boolean; forsøk: Status[]; feil?: string }[]) {
+type Forsøk = Status | { status: Status; feil?: string; dockerFeil?: object };
+
+function kjør(tester: { title: string; knownError?: boolean; forsøk: Forsøk[] }[]) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-summary-'));
   const cwd = process.cwd();
   process.chdir(dir);
@@ -24,8 +26,12 @@ function kjør(tester: { title: string; knownError?: boolean; forsøk: Status[];
         annotations: t.knownError ? [{ type: 'known-error' }] : [],
         tags: [],
       };
-      for (const status of t.forsøk) {
-        reporter.onTestEnd(testCase as any, { status, duration: 10, attachments: [], error: t.feil ? { message: t.feil } : undefined } as any);
+      for (const f of t.forsøk) {
+        const { status, feil, dockerFeil } = typeof f === 'string' ? { status: f, feil: undefined, dockerFeil: undefined } : f;
+        const attachments = dockerFeil
+          ? [{ name: 'docker-logs-errors', contentType: 'application/json', body: Buffer.from(JSON.stringify(dockerFeil)) }]
+          : [];
+        reporter.onTestEnd(testCase as any, { status, duration: 10, attachments, error: feil ? { message: feil } : undefined } as any);
       }
     }
     reporter.onEnd({ status: 'passed', startTime: new Date(), duration: 100 } as any);
@@ -64,8 +70,24 @@ test('timeout på alle forsøk er failed og teller hvert forsøk', () => {
   assert.equal(status, 'failed');
 });
 
-test('feilen fra et forsøk som timer ut, tas med i sammendraget', () => {
-  const feil = 'Timed out waiting for process instance OPPRETT_SAK';
-  const { perTest } = kjør([{ title: 'tf', forsøk: ['timedOut'], feil }]);
-  assert.equal(perTest.tf.processErrors, feil);
+test('docker-feil fra et forsøk som timer ut, tas med', () => {
+  const dockerFeil = [{ service: 'melosys-api', errors: [{ timestamp: '2026-10-02T12:00:00Z', message: 'ERROR noe gikk galt' }] }];
+  const { perTest } = kjør([{ title: 'td', forsøk: [{ status: 'timedOut', feil: 'Test timeout of 1500ms exceeded.', dockerFeil }] }]);
+  assert.deepEqual(perTest.td.dockerErrors, dockerFeil);
+});
+
+test('feilene fra et tidligere forsøk overlever at neste forsøk timer ut', () => {
+  const prosessfeil = 'Timed out waiting for process instance OPPRETT_SAK';
+  const dockerFeil = [{ service: 'melosys-api', errors: [{ timestamp: '2026-10-02T12:00:00Z', message: 'ERROR noe gikk galt' }] }];
+  const { perTest } = kjør([
+    {
+      title: 'pt',
+      forsøk: [
+        { status: 'failed', feil: prosessfeil, dockerFeil },
+        { status: 'timedOut', feil: 'Test timeout of 1500ms exceeded.' },
+      ],
+    },
+  ]);
+  assert.equal(perTest.pt.processErrors, prosessfeil);
+  assert.deepEqual(perTest.pt.dockerErrors, dockerFeil);
 });
