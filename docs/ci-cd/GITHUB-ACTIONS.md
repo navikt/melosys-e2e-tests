@@ -305,8 +305,8 @@ Failed tests:
 - **Shard job timeout**: 120 minutes
 - **Runner**: free `ubuntu-latest` (4 cores, 16 GB), 6 shards; `ubuntu-latest-8-cores` (paid) for coverage
 - **Images**: 15 (9 NAIS custom + 6 base)
-- **Run time**: 13.3–13.9 minutes for the full suite (4 runs, 02.10.2026)
-- **Per shard** (run 37019471832): pre-pull 69–116 s, `docker compose up` 84–85 s, health check 45–56 s, Playwright 418–462 s
+- **Run time**: 13–14 minutes for the full suite (4 runs, 02.10.2026)
+- **Per shard** (run 37033530898): pre-pull 69–108 s, `docker compose up` 52–87 s, health check 31–58 s, Playwright 361–460 s
 
 ---
 
@@ -475,7 +475,7 @@ services:
 
 The shard jobs run on the free `ubuntu-latest` runner (the repo is public: 4 cores, 16 GB). Measured 02.10.2026 on the full suite with retries off:
 
-- **6 shards, free runner**: 13.3–13.9 min per run, 4 of 4 green
+- **6 shards, free runner**: 13–14 min per run, 4 of 4 green
 - **3 shards, free runner**: 19.5 min (1 run, green)
 - **3 shards, `ubuntu-latest-8-cores`**: 18–19 min per run
 - **Memory**: about 9 of 16 GB used; `docker-compose.liten-runner.yml` caps the JVM heaps
@@ -522,7 +522,7 @@ melosys-mock:
 **Solutions**:
 - Run on 8 cores with `-f runner=ubuntu-latest-8-cores`
 - Pre-pull images in parallel
-- Increase the shard job timeout (120 minutes today)
+- Raise the 200 s deadline in the «Wait for services to be healthy» step (the job timeout is not what fires)
 
 ### Issue: Tests not found
 

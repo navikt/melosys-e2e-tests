@@ -762,8 +762,8 @@ jobs:
   e2e-tests:
     needs: plan
     runs-on: ${{ needs.plan.outputs.runner }}
-    # 2 hour ceiling gives headroom for the ~44 min suite plus, on coverage runs,
-    # the extra melosys-api build (~4 min cached, ~11 min cold).
+    # 2 timer gir rom for dekningskjøringen: hele suiten på én shard pluss bygget av
+    # melosys-api (~4 min med cache, ~11 min uten).
     timeout-minutes: 120
     strategy:
       fail-fast: false
