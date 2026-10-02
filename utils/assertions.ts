@@ -136,14 +136,15 @@ async function assertErrorSummary(
     '.alertstripe--advarsel, .navds-alert--error, [role="alert"]'
   );
 
-  const summaryCount = await errorSummary.count();
+  // Alle bokser med tekst, ikke bare den første: en tom `role="alert"`-beholder kan stå foran.
+  const summaryTexts = await teksterMedInnhold(errorSummary);
 
-  if (summaryCount === 0) {
+  if (summaryTexts.length === 0) {
     // No summary box - that's ok, field errors are enough
     return;
   }
 
-  const summaryText = await errorSummary.first().textContent() || '';
+  const summaryText = summaryTexts.join('\n');
 
   for (const expectedError of expectedErrors) {
     if (typeof expectedError === 'string') {
