@@ -72,7 +72,7 @@ test('én shard kjører uten filfilter, også når filteret ga ingen tester', ()
   assert.equal(ingen.shards[0].skjema, false);
 });
 
-test('hver shard får minst MIN_SHARD_MS estimert testtid', () => {
+test('shardene får i snitt minst MIN_SHARD_MS estimert testtid', () => {
   // Merge queue-utvalg: noen få korte tester skal kjøre på én stack, uten filfilter.
   const få = tests({ 'a.spec.ts': 1, 'b.spec.ts': 1, 'c.spec.ts': 1 });
   const liten = planShards(få, durations({ 'a.spec.ts::t0': MIN, 'b.spec.ts::t0': 2 * MIN, 'c.spec.ts::t0': MIN }), 3);

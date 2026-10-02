@@ -13,8 +13,9 @@
  *   - Skjema-filene (skjema/) går i samme shard: bare det shardet trenger skjema-stacken.
  *   - Antall shards blir aldri høyere enn antall enheter å fordele, så ingen shard står tom.
  *     Ingen tester gir én shard uten filfilter; da melder shard-jobben «0 tester» som før.
- *   - Hver shard skal ha minst MIN_SHARD_MS estimert testtid. Et lite utvalg, som de påvirkede
- *     testene i merge queue, får da én shard og slipper å starte flere stacker.
+ *   - Shardene skal i snitt ha minst MIN_SHARD_MS estimert testtid (LPT flytter hele filer, så ett
+ *     shard kan bli kortere). Et lite utvalg, som de påvirkede testene i merge queue, får da én
+ *     shard og slipper å starte flere stacker.
  *
  * Bruk:
  *   node scripts/shard-plan.mjs --list list.json [--previous test-summary.json] --shards 3

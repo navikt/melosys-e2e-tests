@@ -120,7 +120,7 @@ Variablene leses bare fra kommandolinjen. En `BRANCH` eller `ENV` eksportert i s
 
 E2E Tests deler testene på 3 shards som standard, også når kjøringen startes fra et image-bygg eller fra merge queue. Plan-jobben fordeler spec-filene etter varigheten fra forrige fulle kjøring på main, og hver shard kjører sin del mot sin egen stack. Skjema-testene havner i samme shard.
 
-- Hver shard skal ha minst 5 minutter estimert testtid, fordi oppsettet av en stack tar rundt 4,5 minutter. Et lite utvalg, som de påvirkede testene i merge queue, kjører derfor på færre shards eller på én.
+- Shardene skal i snitt ha minst 5 minutter estimert testtid, fordi oppsettet av en stack tar rundt 4,5 minutter. Et lite utvalg, som de påvirkede testene i merge queue, kjører derfor på færre shards eller på én.
 - `run_bdd` og `collect_coverage` kjører alltid på én shard.
 - Velg antall selv med `SHARDS=` på make-målene, for eksempel `make ci SHARDS=1`, eller med `-f shards=N` på `gh workflow run`.
 
