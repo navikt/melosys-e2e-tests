@@ -70,6 +70,9 @@ class TestSummaryReporter implements Reporter {
     const isKnownError = test.annotations.some(a => a.type === 'known-error') ||
                         hasTag({ title: test.title, tags: test.tags }, '@known-error');
 
+    // Timeout og avbrudd er feilede forsøk: timeout og så grønt er flaky, ikke passed.
+    const attemptFailed = result.status === 'failed' || result.status === 'timedOut' || result.status === 'interrupted';
+
     // Get or create test info
     let testInfo = this.testsByKey.get(key);
     if (!testInfo) {
@@ -91,7 +94,7 @@ class TestSummaryReporter implements Reporter {
     // Update status - handle known-error tests specially
     if (isKnownError) {
       // Known error tests: track separately, don't fail CI
-      if (result.status === 'failed') {
+      if (attemptFailed) {
         testInfo.failedAttempts++;
         testInfo.finalStatus = 'known-error-failed';
       } else if (result.status === 'passed') {
@@ -101,7 +104,7 @@ class TestSummaryReporter implements Reporter {
       }
     } else {
       // Regular tests: normal status handling
-      if (result.status === 'failed') {
+      if (attemptFailed) {
         testInfo.failedAttempts++;
         testInfo.finalStatus = 'failed';
       } else if (result.status === 'passed' && testInfo.failedAttempts > 0) {
@@ -113,14 +116,21 @@ class TestSummaryReporter implements Reporter {
       }
     }
 
-    // Collect errors from the last failed attempt (most recent)
-    if (result.status === 'failed') {
+    // Hvert felt får verdien fra siste feilede forsøk som har en, så et forsøk som timer ut uten
+    // prosessfeil, sletter ikke prosessfeilen fra forsøket før. Prosessfeilen fra fiksturens
+    // teardown står etter testens egen feil i `errors`, så alle feilene leses.
+    if (attemptFailed) {
       const dockerErrors = result.attachments.find(a => a.name === 'docker-logs-errors');
-      const errorMessage = result.error?.message || '';
-      const hasProcessError = errorMessage.includes('process instance');
+      const processError = (result.errors ?? [])
+        .map(e => e.message ?? '')
+        .find(message => message.includes('process instance'));
 
-      testInfo.dockerErrors = dockerErrors ? this.parseAttachment(dockerErrors) : null;
-      testInfo.processErrors = hasProcessError ? errorMessage : undefined;
+      if (dockerErrors) {
+        testInfo.dockerErrors = this.parseAttachment(dockerErrors);
+      }
+      if (processError) {
+        testInfo.processErrors = processError;
+      }
     }
   }
 

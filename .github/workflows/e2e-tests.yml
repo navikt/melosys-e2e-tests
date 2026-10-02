@@ -2464,15 +2464,13 @@ jobs:
           RESULTS_BLOCK=""
           SUMMARY_JSON="test-summary/test-summary.json"
           if [ -f "$SUMMARY_JSON" ]; then
-            # Statusene reporters/test-summary.ts skriver. Et forsøk som timer ut, teller ikke som
-            # feilet der, så timeout-og-så-grønn er «passed» med flere forsøk: det er også flaky.
-            # En known-error-test som timer ut, blir «failed» med isKnownError. Grønne known-error-tester
-            # telles som passed, så summen blir TOTAL.
-            PASSED=$(jq '[.tests[] | select((.status == "passed" and .totalAttempts == 1) or .status == "known-error-passed")] | length' "$SUMMARY_JSON")
-            FAILED=$(jq '[.tests[] | select(.status == "failed" and (.isKnownError | not))] | length' "$SUMMARY_JSON")
-            FLAKY=$(jq '[.tests[] | select(.status == "flaky" or (.status == "passed" and .totalAttempts > 1))] | length' "$SUMMARY_JSON")
+            # Statusene reporters/test-summary.ts skriver; hver test havner i nøyaktig én av dem.
+            # Grønne known-error-tester telles som passed, så summen blir TOTAL.
+            PASSED=$(jq '[.tests[] | select(.status == "passed" or .status == "known-error-passed")] | length' "$SUMMARY_JSON")
+            FAILED=$(jq '[.tests[] | select(.status == "failed")] | length' "$SUMMARY_JSON")
+            FLAKY=$(jq '[.tests[] | select(.status == "flaky")] | length' "$SUMMARY_JSON")
             SKIPPED=$(jq '[.tests[] | select(.status == "skipped")] | length' "$SUMMARY_JSON")
-            KNOWN_FAILED=$(jq '[.tests[] | select(.status == "known-error-failed" or (.status == "failed" and .isKnownError))] | length' "$SUMMARY_JSON")
+            KNOWN_FAILED=$(jq '[.tests[] | select(.status == "known-error-failed")] | length' "$SUMMARY_JSON")
             TOTAL=$(jq '.tests | length' "$SUMMARY_JSON")
 
             RESULTS_BLOCK="*Resultater:* ✅ ${PASSED} passed · ❌ ${FAILED} failed · 🔄 ${FLAKY} flaky · ⏭️ ${SKIPPED} skipped"
@@ -2483,7 +2481,7 @@ jobs:
 
             # Liste opp feilede tester (ikke known-errors), maks 5
             FAILED_LIST=$(jq -r '
-              [.tests[] | select(.status == "failed" and (.isKnownError | not)) | .title]
+              [.tests[] | select(.status == "failed") | .title]
               | .[0:5]
               | map("• " + .)
               | join("\n")
@@ -2498,7 +2496,7 @@ jobs:
 
             # Flaky-tester (passed etter retry), maks 3
             FLAKY_LIST=$(jq -r '
-              [.tests[] | select(.status == "flaky" or (.status == "passed" and .totalAttempts > 1)) | .title]
+              [.tests[] | select(.status == "flaky") | .title]
               | .[0:3]
               | map("• " + .)
               | join("\n")
