@@ -72,7 +72,7 @@ test('én shard kjører uten filfilter, også når filteret ga ingen tester', ()
   assert.equal(ingen.shards[0].skjema, false);
 });
 
-test('aldri flere shards enn MIN_SHARD_MS estimert testtid per shard', () => {
+test('hver shard får minst MIN_SHARD_MS estimert testtid', () => {
   // Merge queue-utvalg: noen få korte tester skal kjøre på én stack, uten filfilter.
   const få = tests({ 'a.spec.ts': 1, 'b.spec.ts': 1, 'c.spec.ts': 1 });
   const liten = planShards(få, durations({ 'a.spec.ts::t0': MIN, 'b.spec.ts::t0': 2 * MIN, 'c.spec.ts::t0': MIN }), 3);
@@ -81,13 +81,17 @@ test('aldri flere shards enn MIN_SHARD_MS estimert testtid per shard', () => {
   assert.deepEqual(liten.shards[0].files, []);
   assert.equal(liten.estimatedSeconds, 4 * 60);
 
-  // 7 min gir to shards, ikke tre.
-  const middels = planShards(få, durations({ 'a.spec.ts::t0': 3 * MIN, 'b.spec.ts::t0': 2 * MIN, 'c.spec.ts::t0': 2 * MIN }), 3);
-  assert.equal(middels.shardCount, 2);
+  // 9 min gir én shard: to shards ville fått 4,5 min hver.
+  const ni = planShards(få, durations({ 'a.spec.ts::t0': 3 * MIN, 'b.spec.ts::t0': 3 * MIN, 'c.spec.ts::t0': 3 * MIN }), 3);
+  assert.equal(ni.shardCount, 1);
 
-  // Uten målte varigheter teller hver test 30 s: 10 tester = 5 min = én shard, 11 tester = to.
-  assert.equal(planShards(tests({ 'a.spec.ts': 5, 'b.spec.ts': 5 }), new Map(), 3).shardCount, 1);
-  assert.equal(planShards(tests({ 'a.spec.ts': 5, 'b.spec.ts': 6 }), new Map(), 3).shardCount, 2);
+  // 12 min gir to shards, ikke tre på 4 min.
+  const tolv = planShards(få, durations({ 'a.spec.ts::t0': 4 * MIN, 'b.spec.ts::t0': 4 * MIN, 'c.spec.ts::t0': 4 * MIN }), 3);
+  assert.equal(tolv.shardCount, 2);
+
+  // Uten målte varigheter teller hver test 30 s: 19 tester = 9,5 min = én shard, 20 tester = to.
+  assert.equal(planShards(tests({ 'a.spec.ts': 10, 'b.spec.ts': 9 }), new Map(), 3).shardCount, 1);
+  assert.equal(planShards(tests({ 'a.spec.ts': 10, 'b.spec.ts': 10 }), new Map(), 3).shardCount, 2);
 });
 
 test('ukjent test får medianen av de kjente, ikke 0', () => {

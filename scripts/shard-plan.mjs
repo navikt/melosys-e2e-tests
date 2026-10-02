@@ -78,7 +78,7 @@ export function planShards(tests, durations, requestedShards) {
   }
 
   const totalMs = [...units.values()].reduce((sum, u) => sum + u.ms, 0);
-  const shardCount = Math.max(1, Math.min(requested, units.size, Math.ceil(totalMs / MIN_SHARD_MS)));
+  const shardCount = Math.max(1, Math.min(requested, units.size, Math.floor(totalMs / MIN_SHARD_MS)));
   const base = { requestedShards: requested, shardCount, totalTests: tests.length, estimatedSeconds: Math.round(totalMs / 1000) };
 
   // Én shard kjører uten filfilter, nøyaktig som en kjøring uten sharding.

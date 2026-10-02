@@ -2162,26 +2162,13 @@ jobs:
     if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.shard_count != '1' }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
-    outputs:
-      status: ${{ steps.status.outputs.status }}
-      has-failures: ${{ steps.status.outputs.has-failures }}
-      has-flaky: ${{ steps.status.outputs.has-flaky }}
     env:
       SHARD_COUNT: ${{ needs.plan.outputs.shard_count }}
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
-        with:
-          node-version: '20'
-          cache: 'npm'
-
-      # merge-reports leser blob-filene og skriver rapporter; den starter ingen nettleser.
-      - name: Install dependencies
-        run: npm ci
-
+      # Før npm ci: feiler den, skal «Avgjør status» melde at rapporten mangler, ikke shardene.
       # En shard som feilet før testene, har ingen blob. «Avgjør status» melder hvilke som mangler.
       - name: Hent blob-rapportene
         uses: actions/download-artifact@v4
@@ -2197,6 +2184,16 @@ jobs:
         with:
           pattern: test-summary-shard-*
           path: shard-summaries
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      # merge-reports leser blob-filene og skriver rapporter; den starter ingen nettleser.
+      - name: Install dependencies
+        run: npm ci
 
       - name: Slå sammen rapportene
         id: merge
@@ -2258,6 +2255,8 @@ jobs:
       - name: Avgjør status
         id: status
         if: always()
+        env:
+          E2E_RESULT: ${{ needs.e2e-tests.result }}
         run: |
           SUMMARY=playwright-report/test-summary.json
           missing=()
@@ -2281,6 +2280,11 @@ jobs:
           # En rapport uten alle shardene kan være grønn uten å ha kjørt alt.
           if [ "${#missing[@]}" -gt 0 ]; then
             STATUS="shards-missing"
+            HAS_FAILURES="true"
+          elif [ "$STATUS" = "passed" ] && [ "$E2E_RESULT" != "success" ]; then
+            # En shard-jobb feilet etter testene, eller «Re-run failed jobs» feilet før testene og
+            # lot blob-en fra forrige forsøk stå. Da er rapporten ikke hele sannheten.
+            STATUS="shard-failed"
             HAS_FAILURES="true"
           fi
 
@@ -2312,6 +2316,10 @@ jobs:
             echo ""
             if [ -n "$MISSING" ]; then
               echo "> ⚠️ **Mangler resultater fra shard ${MISSING// /, }.** Tallene under gjelder bare shardene som leverte. Se jobbene «e2e-tests (N)»."
+              echo ""
+            fi
+            if [ "$STATUS" = "shard-failed" ]; then
+              echo "> ⚠️ **En shard-jobb feilet,** selv om testene i rapporten er grønne. Rapporten kan ha resultater fra et tidligere forsøk. Se jobbene «e2e-tests (N)»."
               echo ""
             fi
             if [ "$STATUS" = "reporter-missing" ]; then
@@ -2381,6 +2389,9 @@ jobs:
           fi
           case "$STATUS" in
             passed) ;;
+            shard-failed)
+              echo "::error::En shard-jobb feilet. Se jobbene «e2e-tests (N)»."
+              exit 1 ;;
             reporter-missing|"")
               echo "::error::Den samlede test-summary.json mangler (status: ${STATUS:-ukjent}). Se «Slå sammen rapportene»."
               exit 1 ;;
@@ -2455,7 +2466,7 @@ jobs:
           if [ -f "$SUMMARY_JSON" ]; then
             PASSED=$(jq '[.tests[] | select(.status == "passed" and .totalAttempts == 1)] | length' "$SUMMARY_JSON")
             FAILED=$(jq '[.tests[] | select(.status == "failed" and (.isKnownError | not))] | length' "$SUMMARY_JSON")
-            FLAKY=$(jq '[.tests[] | select(.status == "passed" and .totalAttempts > 1)] | length' "$SUMMARY_JSON")
+            FLAKY=$(jq '[.tests[] | select(.status == "flaky")] | length' "$SUMMARY_JSON")
             SKIPPED=$(jq '[.tests[] | select(.status == "skipped")] | length' "$SUMMARY_JSON")
             KNOWN_FAILED=$(jq '[.tests[] | select(.status == "failed" and .isKnownError)] | length' "$SUMMARY_JSON")
             TOTAL=$(jq '.tests | length' "$SUMMARY_JSON")
@@ -2483,7 +2494,7 @@ jobs:
 
             # Flaky-tester (passed etter retry), maks 3
             FLAKY_LIST=$(jq -r '
-              [.tests[] | select(.status == "passed" and .totalAttempts > 1) | .title]
+              [.tests[] | select(.status == "flaky") | .title]
               | .[0:3]
               | map("• " + .)
               | join("\n")

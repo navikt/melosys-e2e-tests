@@ -692,10 +692,10 @@ Post test results as PR comments automatically
 **3. Slack Notifications**
 Notify team of test failures
 
-**5. Scheduled Runs**
+**4. Scheduled Runs**
 Run nightly to catch issues early
 
-**6. Automatic Image Rebuilds**
+**5. Automatic Image Rebuilds**
 Trigger E2E tests when new images are built:
 ```yaml
 on:
