@@ -140,7 +140,7 @@ async function assertErrorSummary(
   const summaryTexts = await teksterMedInnhold(errorSummary);
 
   if (summaryTexts.length === 0) {
-    // No summary box - that's ok, field errors are enough
+    // Ingen boks med tekst: feltfeilene over er nok.
     return;
   }
 

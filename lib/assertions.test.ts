@@ -78,6 +78,13 @@ describe('assertErrors(scope, [forventet])', () => {
     );
   });
 
+  test('finner feilen i en senere boks når den første har annen tekst', async () => {
+    await assertErrors(
+      side({ [FELTFEIL_SAMLET]: ['Ugyldig dato'], [OPPSUMMERING_SAMLET]: ['Lagret', 'Ugyldig dato'] }),
+      [/Ugyldig dato/]
+    );
+  });
+
   test('feiler når ingen oppsummering inneholder feilen', async () => {
     await assert.rejects(
       assertErrors(
