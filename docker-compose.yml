@@ -430,9 +430,6 @@ services:
       timeout: 10s
       retries: 10
       start_period: 60s
-      # melosys-api starter først når Oracle er healthy. Uten dette ble Oracle sjekket hvert
-      # 20. s også under oppstart, og compose up brukte 29–39 s på å vente på den.
-      start_interval: 2s
 
   postgres:
     image: postgres:13-alpine
