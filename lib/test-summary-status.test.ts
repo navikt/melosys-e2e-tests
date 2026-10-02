@@ -11,7 +11,7 @@ import TestSummaryReporter from '../reporters/test-summary';
  */
 type Status = 'passed' | 'failed' | 'timedOut' | 'interrupted' | 'skipped';
 
-function kjør(tester: { title: string; knownError?: boolean; forsøk: Status[] }[]) {
+function kjør(tester: { title: string; knownError?: boolean; forsøk: Status[]; feil?: string }[]) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-summary-'));
   const cwd = process.cwd();
   process.chdir(dir);
@@ -25,7 +25,7 @@ function kjør(tester: { title: string; knownError?: boolean; forsøk: Status[] 
         tags: [],
       };
       for (const status of t.forsøk) {
-        reporter.onTestEnd(testCase as any, { status, duration: 10, attachments: [], error: undefined } as any);
+        reporter.onTestEnd(testCase as any, { status, duration: 10, attachments: [], error: t.feil ? { message: t.feil } : undefined } as any);
       }
     }
     reporter.onEnd({ status: 'passed', startTime: new Date(), duration: 100 } as any);
@@ -62,4 +62,10 @@ test('timeout på alle forsøk er failed og teller hvert forsøk', () => {
   assert.equal(perTest.tt.status, 'failed');
   assert.equal(perTest.tt.failedAttempts, 2);
   assert.equal(status, 'failed');
+});
+
+test('feilen fra et forsøk som timer ut, tas med i sammendraget', () => {
+  const feil = 'Timed out waiting for process instance OPPRETT_SAK';
+  const { perTest } = kjør([{ title: 'tf', forsøk: ['timedOut'], feil }]);
+  assert.equal(perTest.tf.processErrors, feil);
 });
