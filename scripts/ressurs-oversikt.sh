@@ -1,11 +1,12 @@
 #!/usr/bin/env bash
-# Skriver minne, disk og minne per container til jobbsammendraget, så runnertyper kan sammenlignes.
+# Skriver minne, disk og minne per container til jobbsammendraget og jobbloggen, så runnertyper
+# kan sammenlignes. Loggen kan leses med `gh run view --log`; sammendraget krever innlogging.
 # «Topp» er containerens høyeste minnebruk så langt (cgroup v2 memory.peak), ikke bare nå.
 # Bruk: scripts/ressurs-oversikt.sh "<overskrift>"
 set -uo pipefail
 
 overskrift="${1:-Ressursbruk}"
-out="${GITHUB_STEP_SUMMARY:-/dev/stdout}"
+summary="${GITHUB_STEP_SUMMARY:-/dev/null}"
 
 peak_mib() {
   local id="$1" f
@@ -37,4 +38,4 @@ peak_mib() {
   echo ""
   echo "</details>"
   echo ""
-} >> "$out"
+} | tee -a "$summary"

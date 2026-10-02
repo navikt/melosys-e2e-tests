@@ -770,20 +770,10 @@ jobs:
       - name: Checkout code
         uses: actions/checkout@v4
 
-      # Er det under 30 GB ledig på /, slettes verktøy testene ikke bruker (.NET, Android, GHC,
-      # CodeQL), så alle imagene får plass.
-      - name: Forbered gratis runner (heap-tak og diskplass)
+      # Diskplass er ikke et problem: gratis runner hadde 86 GB ledig av 145 GB (run 37016780064).
+      - name: Heap-tak på gratis runner
         if: inputs.runner == 'ubuntu-latest'
-        run: |
-          echo "COMPOSE_FILE=docker-compose.yml:docker-compose.liten-runner.yml" >> "$GITHUB_ENV"
-          df -h /
-          ledig_gb=$(df -BG --output=avail / | tail -1 | tr -dc '0-9')
-          if [ "$ledig_gb" -lt 30 ]; then
-            start=$(date +%s)
-            sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL
-            echo "🧹 Slettet ubrukte verktøy på $(( $(date +%s) - start )) s"
-            df -h /
-          fi
+        run: echo "COMPOSE_FILE=docker-compose.yml:docker-compose.liten-runner.yml" >> "$GITHUB_ENV"
 
       - name: Hent plan og trigger-kontekst fra plan-jobben
         env:
