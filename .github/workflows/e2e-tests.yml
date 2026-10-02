@@ -1146,57 +1146,59 @@ jobs:
 
       - name: Wait for services to be healthy
         id: wait-healthy
+        # Sjekker hvert 2. s. Før sjekket den hvert 10. s og ventet 10 s til etterpå, og den
+        # pausen ga tjenester utenfor sjekken tid til å starte. Nå sjekkes tjenestene i lista.
+        # Ikke med: OAuth-mockene, postgres-databasene (tjenestene i lista bruker dem) og
+        # skjema-api og skjema-web (skjema-steget under venter bare på at wonderwall svarer).
+        # En tjeneste regnes som klar første gang den svarer.
         run: |
-          echo "⏳ Waiting for services to be ready..."
+          docker_healthy() { [ "$(docker inspect --format='{{.State.Health.Status}}' "$1" 2>/dev/null)" = "healthy" ]; }
+          http_ok() { curl -sf --max-time 2 "$1" > /dev/null 2>&1 || return 1; }
 
-          max_attempts=20
-          attempt=0
-
-          # Function to check if a service is healthy
-          check_service() {
-            local service_name=$1
-            local health_check=$2
-            echo "Checking $service_name..."
-            eval $health_check
+          services=(melosys-oracle kafka melosys-api melosys-web unleash melosys-eessi melosys-mock
+            faktureringskomponenten melosys-trygdeavgift-beregning melosys-trygdeavtale
+            melosys-inngangsvilkar melosys-dokgen felles-kodeverk)
+          check() {
+            case "$1" in
+              melosys-oracle|kafka)           docker_healthy "$1" ;;
+              melosys-api)                    http_ok http://localhost:8080/internal/health ;;
+              melosys-web)                    http_ok http://localhost:3000/melosys/ ;;
+              unleash)                        http_ok http://localhost:4242/health ;;
+              melosys-eessi)                  http_ok http://localhost:8081/internal/health ;;
+              melosys-mock)                   http_ok http://localhost:8083/actuator/health ;;
+              faktureringskomponenten)        http_ok http://localhost:8084/internal/health ;;
+              melosys-trygdeavgift-beregning) http_ok http://localhost:8095/internal/health ;;
+              melosys-trygdeavtale)           http_ok http://localhost:8088/internal/health ;;
+              melosys-inngangsvilkar)         http_ok http://localhost:8089/internal/health ;;
+              melosys-dokgen)                 http_ok http://localhost:8888/internal/health ;;
+              # /internal/health krever innlogging her (401).
+              felles-kodeverk)                http_ok http://localhost:8050/internal/isReady ;;
+              # Et navn uten sjekk er en skrivefeil i lista. Løkka feiler da med en gang.
+              *)                              return 2 ;;
+            esac
           }
 
-          # Wait for critical services to be ready
-          while [ $attempt -lt $max_attempts ]; do
-            attempt=$((attempt + 1))
-            echo "⏳ Health check attempt $attempt/$max_attempts"
+          # Samme tak som før: 20 forsøk × 10 s.
+          echo "⏳ Venter på tjenestene (sjekker hvert 2. s, maks 200 s)..."
+          start=$SECONDS
+          pending=("${services[@]}")
+          while :; do
+            still=()
+            for s in "${pending[@]}"; do
+              if check "$s"; then
+                echo "  ✅ $s klar etter $((SECONDS - start)) s"
+              elif [ $? -eq 2 ]; then
+                echo "::error::Ingen helsesjekk for $s"
+                exit 1
+              else
+                still+=("$s")
+              fi
+            done
+            pending=("${still[@]}")
+            [ ${#pending[@]} -eq 0 ] && break
 
-            # Check Oracle database health (docker health status)
-            oracle_health=$(docker inspect --format='{{.State.Health.Status}}' melosys-oracle 2>/dev/null || echo "unhealthy")
-            echo "  Oracle DB: $oracle_health"
-
-            # Check Kafka health (docker health status)
-            kafka_health=$(docker inspect --format='{{.State.Health.Status}}' kafka 2>/dev/null || echo "unhealthy")
-            echo "  Kafka: $kafka_health"
-
-            # Check melosys-api health endpoint
-            api_health=$(curl -sf http://localhost:8080/internal/health > /dev/null 2>&1 && echo "healthy" || echo "unhealthy")
-            echo "  melosys-api: $api_health"
-
-            # Check melosys-web
-            web_health=$(curl -sf http://localhost:3000/melosys/ > /dev/null 2>&1 && echo "healthy" || echo "unhealthy")
-            echo "  melosys-web: $web_health"
-
-            # Check Unleash health endpoint
-            unleash_health=$(curl -sf http://localhost:4242/health > /dev/null 2>&1 && echo "healthy" || echo "unhealthy")
-            echo "  unleash: $unleash_health"
-
-            # Check melosys-eessi health endpoint
-            eessi_health=$(curl -sf http://localhost:8081/internal/health > /dev/null 2>&1 && echo "healthy" || echo "unhealthy")
-            echo "  melosys-eessi: $eessi_health"
-
-            # Check if all critical services are healthy
-            if [ "$oracle_health" = "healthy" ] && [ "$kafka_health" = "healthy" ] && [ "$api_health" = "healthy" ] && [ "$web_health" = "healthy" ] && [ "$unleash_health" = "healthy" ] && [ "$eessi_health" = "healthy" ]; then
-              echo "✅ All critical services are healthy!"
-              break
-            fi
-
-            if [ $attempt -eq $max_attempts ]; then
-              echo "❌ Services failed to start within timeout"
+            if [ $((SECONDS - start)) -ge 200 ]; then
+              echo "❌ Ikke klare etter $((SECONDS - start)) s: ${pending[*]}"
               echo "📋 Docker compose status:"
               docker compose ps
               echo ""
@@ -1204,20 +1206,11 @@ jobs:
               docker compose logs --tail=100
               exit 1
             fi
-
-            sleep 10
+            sleep 2
           done
 
-          echo ""
-          echo "📊 Final service status:"
+          echo "✅ Alle tjenestene er klare etter $((SECONDS - start)) s"
           docker compose ps
-
-          # Give services a moment to fully stabilize
-          echo ""
-          echo "⏳ Waiting 10 seconds for services to fully stabilize..."
-          sleep 10
-          echo "✅ Ready to run tests!"
-          echo "ℹ️  Note: Feature toggles are automatically created by melosys-api on startup"
 
       - name: Diagnoser feilet oppstart av stacken
         # `docker compose up` skriver feilen fra daemonen uten å si HVILKEN container den
@@ -1346,13 +1339,16 @@ jobs:
           # eksisterende suiten). Gi wonderwall/web tid til å svare før testene starter.
           # Ikke-fatalt: skjema-testene har egne ventere (SkjemaAuthHelper).
           echo "⏳ Waiting for skjema web (wonderwall :3001)..."
+          # curl skriver selv «000» når den ikke får svar. Med `|| echo 000` ble det «000000»,
+          # som ble tatt for et svar, så steget ventet aldri.
           for i in $(seq 1 24); do
-            code=$(curl -s -o /dev/null -w '%{http_code}' http://localhost:3001/medlemskap-lovvalg/soknad/ || echo 000)
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 http://localhost:3001/medlemskap-lovvalg/soknad/) || true
             if [ "$code" != "000" ]; then
               echo "✅ skjema web svarer (HTTP $code) etter $i forsøk"
               break
             fi
             echo "  forsøk $i/24: ikke klar ennå"
+            [ "$i" -eq 24 ] && echo "::warning::skjema web (wonderwall :3001) svarte ikke etter 24 forsøk"
             sleep 5
           done
           docker compose ps melosys-skjema-api melosys-skjema-web melosys-skjema-web-auth || true
@@ -2184,12 +2180,6 @@ jobs:
         run: |
           echo "📋 Docker compose logs:"
           docker compose logs --tail=100
-
-      - name: Stop Docker Compose services
-        if: always()
-        run: |
-          docker compose down -v
-          docker network rm melosys.docker-internal || true
 
   notify-slack:
     name: Notify #melosys-ci on failure
