@@ -197,7 +197,7 @@ on:
 
 jobs:
   e2e-tests:
-    runs-on: ubuntu-latest-8-cores  # 8-core runner for performance
+    runs-on: ${{ needs.plan.outputs.runner }}  # free ubuntu-latest; 8 cores for coverage
     timeout-minutes: 45  # Timeout for large stack
 ```
 
@@ -302,7 +302,7 @@ Failed tests:
 ### Key Metrics
 
 - **Workflow timeout**: 45 minutes
-- **Runner**: ubuntu-latest-8-cores (paid)
+- **Runner**: free `ubuntu-latest` (4 cores, 16 GB), 6 shards; `ubuntu-latest-8-cores` (paid) for coverage
 - **Images**: 15 (9 NAIS custom + 6 base)
 - **Average run time**: 15-20 minutes
 - **Pre-pull time**: ~5 minutes
@@ -472,15 +472,16 @@ services:
 
 **Prevents:** "no matching manifest" errors
 
-### 3. 8-Core Runner
+### 3. Free runner
 
-Uses `ubuntu-latest-8-cores` for faster execution:
+The shard jobs run on the free `ubuntu-latest` runner (the repo is public: 4 cores, 16 GB). Measured 02.10.2026 on the full suite with retries off:
 
-- **Standard runner**: 2 cores, ~25-30 min
-- **8-core runner**: 8 cores, ~15-20 min
-- **Cost**: Higher (uses more GitHub Actions minutes)
+- **6 shards, free runner**: 13.3–14.0 min per run (5 runs; the 4 after #363 were green)
+- **3 shards, free runner**: 19.5 min (1 run, green)
+- **3 shards, `ubuntu-latest-8-cores`**: 18–19 min per run
+- **Memory**: about 9 of 16 GB used; `docker-compose.liten-runner.yml` caps the JVM heaps
 
-**Cost optimization:** Use standard runner for development branches, 8-core for main.
+`collect_coverage` always runs on `ubuntu-latest-8-cores`. Pick 8 cores yourself with `-f runner=ubuntu-latest-8-cores`.
 
 ---
 
@@ -520,7 +521,7 @@ melosys-mock:
 **Cause**: Insufficient resources or slow image pulls
 
 **Solutions**:
-- Use `ubuntu-latest-8-cores` runner
+- Run on 8 cores with `-f runner=ubuntu-latest-8-cores`
 - Pre-pull images in parallel
 - Increase timeout to 45 minutes
 
@@ -647,11 +648,7 @@ Docker errors are attached to each test result:
 
 ### Runner Costs
 
-**ubuntu-latest-8-cores** is a paid runner (higher GitHub Actions minutes consumption)
-
-**Average costs:**
-- Standard runner: ~25-30 min/run
-- 8-core runner: ~15-20 min/run (but higher $/min)
+The shard jobs run on the free `ubuntu-latest` runner. Only `collect_coverage` and runs started with `-f runner=ubuntu-latest-8-cores` use the paid **ubuntu-latest-8-cores** runner.
 
 ### Optimization Options
 
@@ -669,7 +666,7 @@ on:
 runs-on: ${{ github.ref == 'refs/heads/main' && 'ubuntu-latest-8-cores' || 'ubuntu-latest' }}
 ```
 
-**3. Test sharding:** E2E Tests runs on 3 shards by default, with a merged report. See [KJOR-E2E-PA-CI.md](KJOR-E2E-PA-CI.md#sharding).
+**3. Test sharding:** E2E Tests runs on 6 shards by default, with a merged report. See [KJOR-E2E-PA-CI.md](KJOR-E2E-PA-CI.md#sharding).
 
 ---
 

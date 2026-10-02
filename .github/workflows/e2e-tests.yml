@@ -65,15 +65,15 @@ on:
         description: 'Antall shards (1–8). Hver shard kjører en del av testene mot sin egen stack. Et lite utvalg får færre. 1 = uten sharding.'
         required: false
         type: number
-        default: 3
+        default: 6
       runner:
-        description: 'Runner for shard-jobbene. ubuntu-latest er gratis (repoet er offentlig), men har 4 kjerner og 16 GB, så JVM-tjenestene får heap-tak (docker-compose.liten-runner.yml).'
+        description: 'Runner for shard-jobbene. ubuntu-latest er gratis (repoet er offentlig) og har 4 kjerner og 16 GB, så JVM-tjenestene får heap-tak (docker-compose.liten-runner.yml). collect_coverage kjører alltid på 8 kjerner.'
         required: false
         type: choice
         options:
-          - ubuntu-latest-8-cores
           - ubuntu-latest
-        default: ubuntu-latest-8-cores
+          - ubuntu-latest-8-cores
+        default: ubuntu-latest
 
   # Kalles fra «E2E før merge» (e2e-for-merge.yml) når en PR står i merge queue.
   # Inputene som ikke er deklarert her, er tomme ved kall og gir samme oppførsel som standardverdiene.
@@ -121,6 +121,7 @@ jobs:
       actions: read
     outputs:
       shard_count: ${{ steps.shard-plan.outputs.shard_count }}
+      runner: ${{ steps.mode.outputs.runner }}
       shards: ${{ steps.shard-plan.outputs.shards }}
       plan: ${{ steps.shard-plan.outputs.plan }}
       trigger_context: ${{ steps.trigger-context.outputs.json }}
@@ -637,12 +638,22 @@ jobs:
         id: mode
         env:
           INPUT_SHARDS: ${{ inputs.shards }}
+          INPUT_RUNNER: ${{ inputs.runner }}
           RUN_BDD: ${{ inputs.run_bdd == true }}
           COLLECT_COVERAGE: ${{ inputs.collect_coverage == true }}
-        # repository_dispatch og workflow_call har ingen shards-input og ber om 3, som standardverdien.
-        # shard-plan.mjs gir færre når utvalget er lite (se MIN_SHARD_MS).
+        # repository_dispatch og workflow_call har ingen shards- eller runner-input og får
+        # standardverdiene: 6 shards på gratis runner. shard-plan.mjs gir færre når utvalget er
+        # lite (se MIN_SHARD_MS).
         run: |
-          requested="${INPUT_SHARDS:-3}"
+          runner="${INPUT_RUNNER:-ubuntu-latest}"
+          # Dekningsbygget av melosys-api er ikke prøvd på gratis runner.
+          if [ "$COLLECT_COVERAGE" = "true" ] && [ "$runner" != "ubuntu-latest-8-cores" ]; then
+            echo "::notice::collect_coverage kjører på ubuntu-latest-8-cores"
+            runner=ubuntu-latest-8-cores
+          fi
+          echo "runner=$runner" >> "$GITHUB_OUTPUT"
+
+          requested="${INPUT_SHARDS:-6}"
           if ! [[ "$requested" =~ ^[1-8]$ ]]; then
             echo "::error::shards må være et heltall fra 1 til 8, var: $(printf '%q' "$requested")"
             exit 1
@@ -750,8 +761,7 @@ jobs:
   # «e2e-tests (N)», som melosys-console leser. Et `name:` med matrix-verdier ville fjernet «(N)».
   e2e-tests:
     needs: plan
-    # Merge-køen og repository_dispatch har ikke inputen og kjører på 8 kjerner.
-    runs-on: ${{ inputs.runner || 'ubuntu-latest-8-cores' }}
+    runs-on: ${{ needs.plan.outputs.runner }}
     # 2 hour ceiling gives headroom for the ~44 min suite plus, on coverage runs,
     # the extra melosys-api build (~4 min cached, ~11 min cold).
     timeout-minutes: 120
@@ -771,7 +781,7 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Heap-tak på gratis runner
-        if: inputs.runner == 'ubuntu-latest'
+        if: needs.plan.outputs.runner == 'ubuntu-latest'
         run: echo "COMPOSE_FILE=docker-compose.yml:docker-compose.liten-runner.yml" >> "$GITHUB_ENV"
 
       - name: Hent plan og trigger-kontekst fra plan-jobben
