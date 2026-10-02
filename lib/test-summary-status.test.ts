@@ -11,7 +11,7 @@ import TestSummaryReporter from '../reporters/test-summary';
  */
 type Status = 'passed' | 'failed' | 'timedOut' | 'interrupted' | 'skipped';
 
-type Forsøk = Status | { status: Status; feil?: string; dockerFeil?: object };
+type Forsøk = Status | { status: Status; feil?: string; teardownFeil?: string; dockerFeil?: object };
 
 function kjør(tester: { title: string; knownError?: boolean; forsøk: Forsøk[] }[]) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'test-summary-'));
@@ -27,11 +27,13 @@ function kjør(tester: { title: string; knownError?: boolean; forsøk: Forsøk[]
         tags: [],
       };
       for (const f of t.forsøk) {
-        const { status, feil, dockerFeil } = typeof f === 'string' ? { status: f, feil: undefined, dockerFeil: undefined } : f;
+        const { status, feil, teardownFeil, dockerFeil } = typeof f === 'string' ? { status: f } as { status: Status; feil?: string; teardownFeil?: string; dockerFeil?: object } : f;
+        // Playwright legger feil fra fiksturens teardown etter testens egen feil i `errors`; `error` er den første.
+        const errors = [feil, teardownFeil].filter((m): m is string => !!m).map((message) => ({ message }));
         const attachments = dockerFeil
           ? [{ name: 'docker-logs-errors', contentType: 'application/json', body: Buffer.from(JSON.stringify(dockerFeil)) }]
           : [];
-        reporter.onTestEnd(testCase as any, { status, duration: 10, attachments, error: feil ? { message: feil } : undefined } as any);
+        reporter.onTestEnd(testCase as any, { status, duration: 10, attachments, errors, error: errors[0] } as any);
       }
     }
     reporter.onEnd({ status: 'passed', startTime: new Date(), duration: 100 } as any);
@@ -90,4 +92,12 @@ test('feilene fra et tidligere forsøk overlever at neste forsøk timer ut', () 
   ]);
   assert.equal(perTest.pt.processErrors, prosessfeil);
   assert.deepEqual(perTest.pt.dockerErrors, dockerFeil);
+});
+
+test('prosessfeil fra fiksturens teardown tas med, også når testen timet ut', () => {
+  const prosessfeil = 'Error: Test failed due to process instance errors: OPPRETT_SAK FEILET';
+  const { perTest } = kjør([
+    { title: 'tt', forsøk: [{ status: 'timedOut', feil: 'Test timeout of 1500ms exceeded.', teardownFeil: prosessfeil }] },
+  ]);
+  assert.equal(perTest.tt.processErrors, prosessfeil);
 });
