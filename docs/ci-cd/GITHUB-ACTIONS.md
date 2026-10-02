@@ -669,15 +669,7 @@ on:
 runs-on: ${{ github.ref == 'refs/heads/main' && 'ubuntu-latest-8-cores' || 'ubuntu-latest' }}
 ```
 
-**3. Test sharding:**
-```yaml
-strategy:
-  matrix:
-    shardIndex: [1, 2, 3, 4]
-    shardTotal: [4]
-```
-
-Split tests across 4 parallel jobs (4x faster, but 4x cost).
+**3. Test sharding:** E2E Tests runs on 3 shards by default, with a merged report. See [KJOR-E2E-PA-CI.md](KJOR-E2E-PA-CI.md#sharding).
 
 ---
 
@@ -685,15 +677,7 @@ Split tests across 4 parallel jobs (4x faster, but 4x cost).
 
 ### Recommended Enhancements
 
-**1. Test Sharding**
-```yaml
-strategy:
-  matrix:
-    shardIndex: [1, 2, 3, 4]
-    shardTotal: [4]
-```
-
-**2. Docker Layer Caching**
+**1. Docker Layer Caching**
 ```yaml
 - name: Cache Docker layers
   uses: actions/cache@v3
@@ -702,10 +686,10 @@ strategy:
     key: ${{ runner.os }}-buildx-${{ github.sha }}
 ```
 
-**3. PR Comments**
+**2. PR Comments**
 Post test results as PR comments automatically
 
-**4. Slack Notifications**
+**3. Slack Notifications**
 Notify team of test failures
 
 **5. Scheduled Runs**

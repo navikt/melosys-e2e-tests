@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 // @ts-expect-error — .mjs uten typedeklarasjon; scriptet er ren node uten avhengigheter.
-import { fileArgs, listedTests, planShards, previousDurations } from '../scripts/shard-plan.mjs';
+import { MIN_SHARD_MS, fileArgs, listedTests, planShards, previousDurations } from '../scripts/shard-plan.mjs';
 
 /**
  * Regresjonstest for fordelingen plan-jobben i e2e-tests.yml lager. En feil her gir enten en
@@ -17,10 +17,14 @@ const durations = (spec: Record<string, number>) => {
   for (const [key, ms] of Object.entries(spec)) m.set(key, ms);
   return m;
 };
+/** Samme varighet for hver test, lang nok til at antall shards ikke begrenses av MIN_SHARD_MS. */
+const lange = (all: T[]) => new Map(all.map((t) => [`${t.file}::${t.title}`, MIN_SHARD_MS] as const));
+const MIN = 60_000;
 
 test('hver test havner i nøyaktig én shard', () => {
   const all = tests({ 'a/x.spec.ts': 3, 'b/y.spec.ts': 2, 'c/z.spec.ts': 1, 'd/w.spec.ts': 4, 'skjema/s1.spec.ts': 1, 'skjema/s2.spec.ts': 2 });
-  const plan = planShards(all, new Map(), 3);
+  const plan = planShards(all, lange(all), 3);
+  assert.equal(plan.shardCount, 3);
   const files = plan.shards.flatMap((s: { files: string[] }) => s.files);
   assert.deepEqual([...files].sort(), [...new Set(all.map((t) => t.file))].sort());
   assert.equal(new Set(files).size, files.length, 'ingen fil i to shards');
@@ -29,7 +33,7 @@ test('hver test havner i nøyaktig én shard', () => {
 
 test('fordeler etter varighet, lengste fil først', () => {
   const all = tests({ 'lang.spec.ts': 1, 'm1.spec.ts': 1, 'm2.spec.ts': 1, 'k.spec.ts': 1 });
-  const d = durations({ 'lang.spec.ts::t0': 100, 'm1.spec.ts::t0': 60, 'm2.spec.ts::t0': 50, 'k.spec.ts::t0': 10 });
+  const d = durations({ 'lang.spec.ts::t0': 100 * MIN, 'm1.spec.ts::t0': 60 * MIN, 'm2.spec.ts::t0': 50 * MIN, 'k.spec.ts::t0': 10 * MIN });
   const plan = planShards(all, d, 2);
   // lang (100) og m1 (60) får hver sin; m2 går til m1 (110), k til lang (110).
   assert.deepEqual(
@@ -40,7 +44,8 @@ test('fordeler etter varighet, lengste fil først', () => {
 
 test('skjema-filene går i samme shard, og bare den shard-en får skjema-flagget', () => {
   const all = tests({ 'skjema/a.spec.ts': 1, 'skjema/b.spec.ts': 1, 'x.spec.ts': 1, 'y.spec.ts': 1, 'z.spec.ts': 1 });
-  const plan = planShards(all, new Map(), 3);
+  const plan = planShards(all, lange(all), 3);
+  assert.equal(plan.shardCount, 3);
   const medSkjema = plan.shards.filter((s: { files: string[] }) => s.files.some((f) => f.startsWith('skjema/')));
   assert.equal(medSkjema.length, 1);
   assert.deepEqual(
@@ -50,7 +55,8 @@ test('skjema-filene går i samme shard, og bare den shard-en får skjema-flagget
 });
 
 test('aldri flere shards enn filer å fordele, og ingen tom shard', () => {
-  const plan = planShards(tests({ 'a.spec.ts': 5, 'b.spec.ts': 1 }), new Map(), 4);
+  const all = tests({ 'a.spec.ts': 5, 'b.spec.ts': 1 });
+  const plan = planShards(all, lange(all), 4);
   assert.equal(plan.shardCount, 2);
   assert.ok(plan.shards.every((s: { files: string[] }) => s.files.length > 0));
 });
@@ -64,6 +70,24 @@ test('én shard kjører uten filfilter, også når filteret ga ingen tester', ()
   assert.equal(ingen.shardCount, 1);
   assert.deepEqual(ingen.shards[0].files, []);
   assert.equal(ingen.shards[0].skjema, false);
+});
+
+test('aldri flere shards enn MIN_SHARD_MS estimert testtid per shard', () => {
+  // Merge queue-utvalg: noen få korte tester skal kjøre på én stack, uten filfilter.
+  const få = tests({ 'a.spec.ts': 1, 'b.spec.ts': 1, 'c.spec.ts': 1 });
+  const liten = planShards(få, durations({ 'a.spec.ts::t0': MIN, 'b.spec.ts::t0': 2 * MIN, 'c.spec.ts::t0': MIN }), 3);
+  assert.equal(liten.shardCount, 1);
+  assert.equal(liten.requestedShards, 3);
+  assert.deepEqual(liten.shards[0].files, []);
+  assert.equal(liten.estimatedSeconds, 4 * 60);
+
+  // 7 min gir to shards, ikke tre.
+  const middels = planShards(få, durations({ 'a.spec.ts::t0': 3 * MIN, 'b.spec.ts::t0': 2 * MIN, 'c.spec.ts::t0': 2 * MIN }), 3);
+  assert.equal(middels.shardCount, 2);
+
+  // Uten målte varigheter teller hver test 30 s: 10 tester = 5 min = én shard, 11 tester = to.
+  assert.equal(planShards(tests({ 'a.spec.ts': 5, 'b.spec.ts': 5 }), new Map(), 3).shardCount, 1);
+  assert.equal(planShards(tests({ 'a.spec.ts': 5, 'b.spec.ts': 6 }), new Map(), 3).shardCount, 2);
 });
 
 test('ukjent test får medianen av de kjente, ikke 0', () => {
