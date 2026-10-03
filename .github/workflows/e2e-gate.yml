@@ -28,6 +28,11 @@ on:
         description: 'Imaget som testes: commit-SHA-en det er bygget fra (40 hex)'
         type: string
         required: true
+      image_tag:
+        description: 'Taggen på imaget som testes og får markøren: tag eller mq-<tag>. Tom betyr tag. Merge queue bruker mq-<tag>, så køens image aldri får en tag som deployes.'
+        type: string
+        required: false
+        default: ''
       queue_ref:
         description: 'Brukes fra merge queue: gh-readonly-queue-refen. Er den borte, avbrytes kjøringen.'
         type: string
@@ -56,6 +61,7 @@ jobs:
     outputs:
       hit: ${{ steps.marker.outputs.hit }}
       tree: ${{ steps.tree.outputs.tree }}
+      image_tag: ${{ steps.tree.outputs.image_tag }}
     steps:
       - name: Valider input og hent tree
         id: tree
@@ -63,6 +69,7 @@ jobs:
           SERVICE: ${{ inputs.service }}
           IMAGE: ${{ inputs.image }}
           TAG: ${{ inputs.tag }}
+          IMAGE_TAG: ${{ inputs.image_tag }}
           QUEUE_REF: ${{ inputs.queue_ref }}
           GH_TOKEN: ${{ github.token }}
         run: |
@@ -83,6 +90,12 @@ jobs:
             echo "::error::tag må være en commit-SHA (40 hex-tegn)"
             exit 1
           fi
+          IMAGE_TAG="${IMAGE_TAG:-$TAG}"
+          if [ "$IMAGE_TAG" != "$TAG" ] && [ "$IMAGE_TAG" != "mq-$TAG" ]; then
+            echo "::error::image_tag må være tag eller mq-<tag>"
+            exit 1
+          fi
+          echo "image_tag=$IMAGE_TAG" >> "$GITHUB_OUTPUT"
           if [ -n "$QUEUE_REF" ] && ! [[ "$QUEUE_REF" =~ ^(refs/heads/)?gh-readonly-queue/[A-Za-z0-9._/-]+/pr-[0-9]+-[0-9a-f]{40}$ ]]; then
             echo "::error::queue_ref må være en gh-readonly-queue-ref"
             exit 1
@@ -139,6 +152,7 @@ jobs:
           READ_TOKEN: ${{ github.token }}
           SERVICE: ${{ inputs.service }}
           TAG: ${{ inputs.tag }}
+          IMAGE_TAG: ${{ needs.lookup.outputs.image_tag }}
           TREE: ${{ needs.lookup.outputs.tree }}
           QUEUE_REF: ${{ inputs.queue_ref }}
           EVENT_NAME: ${{ github.event_name }}
@@ -190,7 +204,7 @@ jobs:
           RUN_ID=""
           for forsok in 1 2 3; do
             if OUT=$(gh workflow run e2e-tests.yml -R "$E2E_REPO" --ref main \
-                -f environment="$SERVICE:$TAG" \
+                -f environment="$SERVICE:$IMAGE_TAG" \
                 -f gate_context="$GATE_CONTEXT" \
                 -f correlation_id="$CORRELATION_ID" 2> "$RUNNER_TEMP/dispatch.err"); then
               echo "$OUT"
@@ -330,11 +344,11 @@ jobs:
         continue-on-error: true
         env:
           IMAGE: ${{ inputs.image }}
-          TAG: ${{ inputs.tag }}
+          IMAGE_TAG: ${{ needs.lookup.outputs.image_tag }}
           TREE: ${{ needs.lookup.outputs.tree }}
         run: |
-          docker buildx imagetools create -t "$IMAGE:e2e-ok-$TREE" "$IMAGE:$TAG"
-          echo "🏷️  $IMAGE:$TAG er tagget e2e-ok-$TREE" | tee -a "$GITHUB_STEP_SUMMARY"
+          docker buildx imagetools create -t "$IMAGE:e2e-ok-$TREE" "$IMAGE:$IMAGE_TAG"
+          echo "🏷️  $IMAGE:$IMAGE_TAG er tagget e2e-ok-$TREE" | tee -a "$GITHUB_STEP_SUMMARY"
 
       - name: Varsle om manglende markør
         # outcome, ikke conclusion: med continue-on-error er conclusion success også
