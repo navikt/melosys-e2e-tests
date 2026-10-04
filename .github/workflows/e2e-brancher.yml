@@ -86,8 +86,8 @@ jobs:
             echo "::error::Skriv repo:branch på én linje, kommaseparert."
             exit 1
           fi
-          # E2E Tests logger testfilteret; ##[ eller et linjeskift kunne blitt en
-          # workflow-kommando.
+          # E2E Tests logger testfilteret, og runneren leser ##[ hvor som helst på en
+          # linje. Linjeskift hører ikke hjemme i et filter.
           if [[ "$TEST_GREP" == *$'\n'* || "$TEST_GREP" == *$'\r'* || "$TEST_GREP" == *'##['* ]]; then
             echo "::error::Testfilteret kan ikke ha linjeskift eller ##[."
             exit 1
@@ -304,8 +304,7 @@ jobs:
     name: Kjør E2E Tests
     needs: [plan, bygg]
     runs-on: ubuntu-latest
-    # E2E Tests: planjobb 15 min, shards 120 min, sammenslåing 15 min og Slack-varsel,
-    # pluss kø.
+    # E2E Tests: planjobb 15 min, shards 120 min og sammenslåing 15 min, pluss kø.
     timeout-minutes: 170
     env:
       GH_TOKEN: ${{ secrets.E2E_TRIGGER_PAT }}
