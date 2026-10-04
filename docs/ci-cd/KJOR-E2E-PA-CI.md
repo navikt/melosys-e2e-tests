@@ -96,6 +96,23 @@ Grafen ser bare statiske importer. Når endringen din når testene via kjøretid
 
 Egne images bygger du med «Build and Push Image»-workflowen i hvert repo. Workflow-fila må finnes på branchen du bygger fra.
 
+## E2E med brancher
+
+«E2E med brancher» (`e2e-brancher.yml`) bygger brancher i ett eller flere repoer og kjører E2E Tests mot dem. Tjenester du ikke velger, kjører som `latest`:
+
+```bash
+gh workflow run e2e-brancher.yml -R navikt/melosys-e2e-tests \
+  -f branches="melosys-api:min-branch,melosys-web:min-branch" \
+  -f test_grep="arsavregning"   # valgfritt
+```
+
+- Hvert repo bygges med sin egen `build-image.yml` (`build-image-mock.yml` i melosys-docker-compose; skriv `melosys-mock` eller `melosys-docker-compose`). Alle får taggen `br-<run_id>`.
+- Branchen må ha workflow-fila. Mangler den, stopper kjøringen og ber deg rebase branchen på main/master.
+- Default-branchen (master/main) avvises: den kjører allerede som `latest`.
+- Feiler et bygg, starter ikke E2E Tests. Jobbsammendraget lenker til hvert bygg og til E2E Tests.
+- En grønn kjøring setter ingen `e2e-ok-<tree>`-markør. Den gjelder kombinasjonen, ikke ett repo mot `latest`.
+- Workflowen bruker `E2E_TRIGGER_PAT` for å starte byggene i de andre repoene.
+
 ## Variabler
 
 `ci`, `ci-affected`, `ci-grep` og `ci-images` tar de samme variablene, og du kan kombinere dem:

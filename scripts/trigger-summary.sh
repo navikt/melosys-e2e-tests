@@ -43,5 +43,16 @@ if [ -n "$CONTEXT_FILE" ] && [ -f "$CONTEXT_FILE" ]; then
       "> Commiten og aktøren øverst på siden er e2e-repoets `main` og eieren av tokenet gaten bruker, ikke kilden.",
       ""
   ' "$CONTEXT_FILE" || true
+
+  # Kjøring fra e2e-brancher.yml. Feltene er validert i e2e-tests.yml (tegnsett, 40 hex).
+  jq -r '
+    select(.branchContext != null) | .branchContext
+    | "### 🌿 Startet med brancher",
+      "",
+      (.branches[] | "- `\(.repo)` ← `\(.branch)` ([`\(.sha[0:7])`](https://github.com/navikt/\(.repo)/commit/\(.sha)))"),
+      (if .requestedBy != null then "- **Bestilt av:** \(.requestedBy)" else empty end),
+      (if .orchestratorRunId != null then "- **Bestilling:** [E2E med brancher](https://github.com/navikt/melosys-e2e-tests/actions/runs/\(.orchestratorRunId))" else empty end),
+      ""
+  ' "$CONTEXT_FILE" || true
 fi
 echo ""
