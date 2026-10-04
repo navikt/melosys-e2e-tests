@@ -50,7 +50,7 @@ For debugging race conditions or running specific tests multiple times, use the 
 | `unleash_force_enable` | Comma-separated Unleash toggles forced ON for the whole run | `` |
 | `gate_context` | Set by the e2e gate, not for manual runs. JSON with `source_repo`, `source_sha`, `tree`, `trigger` (required) and `actor`, `pr_number`, `head_sha`, `queue_ref`, written to new fields in `trigger-context.json`. Other keys are rejected. If the JSON, a key or a value is invalid, the run logs a warning and continues with all gate fields null. | `` |
 | `correlation_id` | Set by the e2e gate, not for manual runs. Gives the run the title `E2E Tests · <id>`, so the gate can find it. Allowed characters: `A-Z a-z 0-9 . _ -`, at most 100. Any other value gives a warning and `correlationId: null`; the title still uses the raw value. | `` |
-| `branch_context` | Set by `e2e-brancher.yml`, not for manual runs. JSON with `branches` (1–8 objects with `repo`, `branch`, `sha`), `requested_by` and `orchestrator_run_id`, written to `branchContext` in `trigger-context.json`. Other keys are rejected; `#` and control characters are removed from `requested_by`. If the JSON, a key or a value is invalid, the run logs a warning and continues with `branchContext: null`. | `` |
+| `branch_context` | Set by `e2e-brancher.yml`, not for manual runs. JSON with `branches` (1–8 objects with `repo`, `branch`, `sha`), `requested_by` and `orchestrator_run_id`, written to `branchContext` in `trigger-context.json`. Other keys are rejected; in `requested_by`, control characters become spaces and `#` is removed. If the JSON, a key or a value is invalid, the run logs a warning and continues with `branchContext: null`. | `` |
 
 ### Using GitHub CLI (`gh`)
 

@@ -64,6 +64,7 @@ jobs:
           GH_TOKEN: ${{ secrets.E2E_TRIGGER_PAT }}
           BRANCHES: ${{ inputs.branches }}
           REQUESTED_BY: ${{ inputs.requested_by }}
+          TEST_GREP: ${{ inputs.test_grep }}
           ACTOR: ${{ github.actor }}
           RUN_ID: ${{ github.run_id }}
         run: |
@@ -83,6 +84,12 @@ jobs:
 
           if [[ "$BRANCHES" == *$'\n'* || "$BRANCHES" == *$'\r'* ]]; then
             echo "::error::Skriv repo:branch på én linje, kommaseparert."
+            exit 1
+          fi
+          # E2E Tests logger testfilteret; ##[ eller et linjeskift kunne blitt en
+          # workflow-kommando.
+          if [[ "$TEST_GREP" == *$'\n'* || "$TEST_GREP" == *$'\r'* || "$TEST_GREP" == *'##['* ]]; then
+            echo "::error::Testfilteret kan ikke ha linjeskift eller ##[."
             exit 1
           fi
 
@@ -151,7 +158,10 @@ jobs:
               FEIL=1; continue
             fi
             # Hvor langt branchen ligger bak default-branchen; røde tester kan skyldes det.
+            # gh skriver feilsvaret til stdout, så bare et tall godtas.
             bak=$(gh api "repos/navikt/$repo/compare/$(jq -rn --arg b "$default" '$b | @uri')...$ref" --jq .behind_by 2> /dev/null || true)
+            [[ "$bak" =~ ^[0-9]+$ ]] || bak=""
+            [ "$bak" = "0" ] && bak=""
             VALGT+=("$(jq -cn --arg repo "$repo" --arg service "$service" --arg workflow "$workflow" \
               --arg branch "$branch" --arg sha "$sha" --arg bak "$bak" --arg default "$default" '$ARGS.named')")
             echo "✅ $repo ← $branch (${sha:0:7}${bak:+, $bak commits bak $default})"
@@ -179,7 +189,7 @@ jobs:
             echo "### 🌿 E2E med brancher · \`$TAG\`"
             echo ""
             jq -r '.[] | "- `\(.repo)` ← `\(.branch)` ([`\(.sha[0:7])`](https://github.com/navikt/\(.repo)/commit/\(.sha)))"
-              + (if .bak != "" and .bak != "0" then ", \(.bak) commits bak `\(.default)`" else "" end)' <<< "$MATRIX"
+              + (if .bak != "" then ", \(.bak) commits bak `\(.default)`" else "" end)' <<< "$MATRIX"
             echo ""
             echo "Alle andre tjenester kjører som \`latest\`."
           } >> "$GITHUB_STEP_SUMMARY"
@@ -207,14 +217,15 @@ jobs:
           START=$(date -u -d '-60 seconds' +%Y-%m-%dT%H:%M:%SZ)
           # Reserve når gh ikke skriver URL-en, bare blant kjøringer startet etter START
           # (taggen er lik i alle forsøk av samme kjøring): først tittelen «… · <tag>»,
-          # så, for en eldre build-image.yml uten tittel, nyeste kjøring på branchen.
+          # så, for en eldre build-image.yml uten tag i tittelen, nyeste kjøring på
+          # branchen. En kjøring med en annen tag i tittelen hører til en annen bestilling.
           finn_kjoring() {
             gh run list -R "$REPO" --workflow "$WORKFLOW" --event workflow_dispatch -L 20 \
                 --json databaseId,displayTitle,headBranch,createdAt \
               | jq -r --arg tag "$TAG" --arg b "$BRANCH" --arg start "$START" \
                   '[.[] | select(.createdAt >= $start)]
                    | ([.[] | select(.displayTitle | endswith(" · " + $tag))][0]
-                      // [.[] | select(.headBranch == $b)][0])
+                      // [.[] | select(.headBranch == $b and (.displayTitle | contains(" · ") | not))][0])
                    | .databaseId // empty' || true
           }
           vent_paa_kjoring() {
@@ -293,7 +304,8 @@ jobs:
     name: Kjør E2E Tests
     needs: [plan, bygg]
     runs-on: ubuntu-latest
-    # E2E Tests: planjobb 15 min, shards 120 min og sammenslåing 15 min, pluss kø.
+    # E2E Tests: planjobb 15 min, shards 120 min, sammenslåing 15 min og Slack-varsel,
+    # pluss kø.
     timeout-minutes: 170
     env:
       GH_TOKEN: ${{ secrets.E2E_TRIGGER_PAT }}
