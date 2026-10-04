@@ -1,0 +1,396 @@
+name: E2E med brancher
+run-name: "E2E med brancher · ${{ inputs.requested_by || github.actor }}: ${{ inputs.branches }}"
+
+# Bygger valgte brancher i ett eller flere repoer og kjører E2E Tests mot dem.
+# Hvert repo bygges med sin egen build-image.yml og taggen br-<run_id>; tjenester
+# som ikke er valgt, kjører som latest.
+#
+#   gh workflow run e2e-brancher.yml -R navikt/melosys-e2e-tests \
+#     -f branches="melosys-api:min-branch,melosys-web:min-branch"
+#
+# Branchen må ha build-image.yml (build-image-mock.yml i melosys-docker-compose).
+# Mangler den, rebase branchen på main/master.
+# En grønn kjøring setter ingen e2e-ok-markør: den gjelder kombinasjonen, ikke ett
+# repo mot latest.
+# Plan: melosys-kode-wiki plans/2026-10-04-e2e-med-brancher-fra-konsollen.mdx
+
+on:
+  workflow_dispatch:
+    inputs:
+      branches:
+        description: 'repo:branch, kommaseparert (f.eks. melosys-api:min-branch,melosys-web:min-branch). melosys-mock = melosys-docker-compose.'
+        required: true
+        type: string
+      test_grep:
+        description: 'Testfilter, som i E2E Tests (valgfritt)'
+        required: false
+        type: string
+        default: ''
+      shards:
+        description: 'Antall shards i E2E Tests (1–8)'
+        required: false
+        type: number
+        default: 6
+      requested_by:
+        description: 'Hvem som bestilte kjøringen. Settes av melosys-console; tom betyr den som startet workflowen.'
+        required: false
+        type: string
+        default: ''
+
+permissions:
+  contents: read
+
+env:
+  E2E_REPO: navikt/melosys-e2e-tests
+  # Refen E2E Tests startes fra. Den må ha inputen branch_context.
+  E2E_REF: main
+  TAG: br-${{ github.run_id }}
+
+jobs:
+  plan:
+    name: Sjekk brancher
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    outputs:
+      matrix: ${{ steps.plan.outputs.matrix }}
+      environment: ${{ steps.plan.outputs.environment }}
+      branch_context: ${{ steps.plan.outputs.branch_context }}
+    steps:
+      - name: Valider og slå opp brancher
+        id: plan
+        env:
+          # Lesing i alle repoene; melosys-trygdeavgift-beregning og
+          # melosys-docker-compose er internal og synes ikke med github.token.
+          GH_TOKEN: ${{ secrets.E2E_TRIGGER_PAT }}
+          BRANCHES: ${{ inputs.branches }}
+          REQUESTED_BY: ${{ inputs.requested_by }}
+          TEST_GREP: ${{ inputs.test_grep }}
+          ACTOR: ${{ github.actor }}
+          RUN_ID: ${{ github.run_id }}
+        run: |
+          # repo → tjenestenavn i E2E Tests og workflow-fil som bygger imaget.
+          tjeneste() {
+            case "$1" in
+              melosys-api | melosys-web | melosys-skjema-api | melosys-skjema-web | melosys-eessi \
+                | faktureringskomponenten | melosys-trygdeavgift-beregning) echo "$1 build-image.yml" ;;
+              melosys-docker-compose) echo "melosys-mock build-image-mock.yml" ;;
+              *) return 1 ;;
+            esac
+          }
+
+          # Feilmeldinger fra gh er GitHubs tekst; :: og ##[ brytes så de ikke blir
+          # workflow-kommandoer.
+          gh_feil() { tr '\n\r' '  ' < "$RUNNER_TEMP/gh.err" | sed 's/::/: :/g; s/##\[/# #[/g'; }
+
+          if [[ "$BRANCHES" == *$'\n'* || "$BRANCHES" == *$'\r'* ]]; then
+            echo "::error::Skriv repo:branch på én linje, kommaseparert."
+            exit 1
+          fi
+          # E2E Tests logger testfilteret, og runneren leser ##[ hvor som helst på en
+          # linje. Linjeskift hører ikke hjemme i et filter.
+          if [[ "$TEST_GREP" == *$'\n'* || "$TEST_GREP" == *$'\r'* || "$TEST_GREP" == *'##['* ]]; then
+            echo "::error::Testfilteret kan ikke ha linjeskift eller ##[."
+            exit 1
+          fi
+
+          FEIL=0
+          VALGT=()
+          IFS=',' read -ra PAR <<< "$BRANCHES"
+          for par in "${PAR[@]}"; do
+            par="${par#"${par%%[![:space:]]*}"}"
+            par="${par%"${par##*[![:space:]]}"}"
+            [ -z "$par" ] && continue
+            repo="${par%%:*}"
+            branch="${par#*:}"
+            [ "$repo" = "melosys-mock" ] && repo="melosys-docker-compose"
+            if [ "$repo" = "$par" ] || [ -z "$branch" ]; then
+              echo "::error::Skriv repo:branch, kommaseparert. Fikk et element uten kolon."
+              FEIL=1; continue
+            fi
+            if ! read -r service workflow < <(tjeneste "$repo"); then
+              echo "::error::Ukjent repo. Tillatt: melosys-api, melosys-web, melosys-skjema-api, melosys-skjema-web, melosys-eessi, faktureringskomponenten, melosys-trygdeavgift-beregning, melosys-docker-compose (melosys-mock)."
+              FEIL=1; continue
+            fi
+            # Gyldig branchnavn kan verken ha mellomrom, kolon eller kontrolltegn, så
+            # det kan logges uten å bli en workflow-kommando. æøå er lov.
+            # Samme regel som branch_context-validatoren i e2e-tests.yml, ellers ville
+            # E2E Tests forkastet branchContext. Den avviser også Unicode-mellomrom.
+            if [ ${#branch} -gt 255 ] || ! git check-ref-format --branch "$branch" > /dev/null 2>&1 \
+               || ! jq -en --arg b "$branch" '$b | test("[[:cntrl:][:space:]]") | not' > /dev/null; then
+              echo "::error::Ugyldig branchnavn for $repo."
+              FEIL=1; continue
+            fi
+            for v in "${VALGT[@]}"; do
+              if [ "$(jq -r .repo <<< "$v")" = "$repo" ]; then
+                echo "::error::$repo er valgt to ganger."
+                FEIL=1; continue 2
+              fi
+            done
+
+            # Default-branchen kjører allerede som latest. Et bygg av den ville også
+            # overskrevet sha-taggen til det deployede imaget med et annet bygg (uten
+            # tester i api og web, uten signatur i de andre repoene).
+            if ! default=$(gh api "repos/navikt/$repo" --jq .default_branch 2> "$RUNNER_TEMP/gh.err"); then
+              echo "::error::Fikk ikke slått opp navikt/$repo: $(gh_feil)"
+              FEIL=1; continue
+            fi
+            if [ "$branch" = "$default" ]; then
+              echo "::error::$branch er default-branchen i $repo og kjører allerede som latest. Ta repoet ut av lista."
+              FEIL=1; continue
+            fi
+            ref=$(jq -rn --arg b "$branch" '$b | @uri')
+            if ! sha=$(gh api "repos/navikt/$repo/branches/$ref" --jq .commit.sha 2> "$RUNNER_TEMP/gh.err"); then
+              if grep -q "HTTP 404" "$RUNNER_TEMP/gh.err"; then
+                echo "::error::Fant ikke branchen $branch i navikt/$repo."
+              else
+                echo "::error::Oppslaget av $branch i navikt/$repo feilet: $(gh_feil)"
+              fi
+              FEIL=1; continue
+            fi
+            # En branch kjører workflow-fila som ligger på branchen. Uten den avviser
+            # GitHub dispatchen med en feilmelding som ikke sier hvorfor.
+            if ! gh api "repos/navikt/$repo/contents/.github%2Fworkflows%2F$workflow?ref=$ref" --silent 2> "$RUNNER_TEMP/gh.err"; then
+              if grep -q "HTTP 404" "$RUNNER_TEMP/gh.err"; then
+                echo "::error::$branch i navikt/$repo har ikke .github/workflows/$workflow. Rebase branchen på main/master og prøv igjen."
+              else
+                echo "::error::Oppslaget av $workflow i navikt/$repo feilet: $(gh_feil)"
+              fi
+              FEIL=1; continue
+            fi
+            # Hvor langt branchen ligger bak default-branchen; røde tester kan skyldes det.
+            # gh skriver feilsvaret til stdout, så bare et tall godtas.
+            bak=$(gh api "repos/navikt/$repo/compare/$(jq -rn --arg b "$default" '$b | @uri')...$ref" --jq .behind_by 2> /dev/null || true)
+            [[ "$bak" =~ ^[0-9]+$ ]] || bak=""
+            [ "$bak" = "0" ] && bak=""
+            VALGT+=("$(jq -cn --arg repo "$repo" --arg service "$service" --arg workflow "$workflow" \
+              --arg branch "$branch" --arg sha "$sha" --arg bak "$bak" --arg default "$default" '$ARGS.named')")
+            echo "✅ $repo ← $branch (${sha:0:7}${bak:+, $bak commits bak $default})"
+          done
+
+          if [ "$FEIL" -ne 0 ]; then exit 1; fi
+          if [ ${#VALGT[@]} -eq 0 ]; then
+            echo "::error::Ingen brancher valgt."
+            exit 1
+          fi
+
+          MATRIX=$(printf '%s\n' "${VALGT[@]}" | jq -cs .)
+          ENVIRONMENT=$(jq -r --arg tag "$TAG" 'map("\(.service):\($tag)") | join(",")' <<< "$MATRIX")
+          # Uten # kan navnet ikke bli en ##[-kommando når E2E Tests logger konteksten.
+          BRANCH_CONTEXT=$(jq -c --arg requested_by "${REQUESTED_BY:-$ACTOR}" --arg run_id "$RUN_ID" \
+            '{requested_by: ($requested_by | gsub("[[:cntrl:]#]"; "") | .[0:100]), orchestrator_run_id: $run_id,
+              branches: map({repo, branch, sha})}' <<< "$MATRIX")
+          {
+            echo "matrix=$MATRIX"
+            echo "environment=$ENVIRONMENT"
+            echo "branch_context=$BRANCH_CONTEXT"
+          } >> "$GITHUB_OUTPUT"
+
+          {
+            echo "### 🌿 E2E med brancher · \`$TAG\`"
+            echo ""
+            jq -r '.[] | "- `\(.repo)` ← `\(.branch)` ([`\(.sha[0:7])`](https://github.com/navikt/\(.repo)/commit/\(.sha)))"
+              + (if .bak != "" then ", \(.bak) commits bak `\(.default)`" else "" end)' <<< "$MATRIX"
+            echo ""
+            echo "Alle andre tjenester kjører som \`latest\`."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+  bygg:
+    name: Bygg ${{ matrix.repo }}
+    needs: plan
+    runs-on: ubuntu-latest
+    # build-image.yml har selv 30 min. Resten er kø, dispatch og polling.
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        include: ${{ fromJSON(needs.plan.outputs.matrix) }}
+    env:
+      GH_TOKEN: ${{ secrets.E2E_TRIGGER_PAT }}
+      REPO: navikt/${{ matrix.repo }}
+      WORKFLOW: ${{ matrix.workflow }}
+      BRANCH: ${{ matrix.branch }}
+    steps:
+      - name: Start bygget
+        id: dispatch
+        run: |
+          # Ett minutt tilbake: klokka på runneren og hos GitHub går ikke helt likt.
+          START=$(date -u -d '-60 seconds' +%Y-%m-%dT%H:%M:%SZ)
+          # Reserve når gh ikke skriver URL-en, bare blant kjøringer startet etter START
+          # (taggen er lik i alle forsøk av samme kjøring): først tittelen «… · <tag>»,
+          # så, for en eldre build-image.yml uten tag i tittelen, nyeste kjøring på
+          # branchen. En kjøring med en annen tag i tittelen hører til en annen bestilling.
+          finn_kjoring() {
+            gh run list -R "$REPO" --workflow "$WORKFLOW" --event workflow_dispatch -L 20 \
+                --json databaseId,displayTitle,headBranch,createdAt \
+              | jq -r --arg tag "$TAG" --arg b "$BRANCH" --arg start "$START" \
+                  '[.[] | select(.createdAt >= $start)]
+                   | ([.[] | select(.displayTitle | endswith(" · " + $tag))][0]
+                      // [.[] | select(.headBranch == $b and (.displayTitle | contains(" · ") | not))][0])
+                   | .databaseId // empty' || true
+          }
+          vent_paa_kjoring() {
+            for _ in $(seq 1 10); do
+              RUN_ID=$(finn_kjoring)
+              [ -n "$RUN_ID" ] && return 0
+              sleep 3
+            done
+            return 1
+          }
+
+          RUN_ID=""
+          for forsok in 1 2 3; do
+            if OUT=$(gh workflow run "$WORKFLOW" -R "$REPO" --ref "$BRANCH" -f image_tag="$TAG" 2> "$RUNNER_TEMP/dispatch.err"); then
+              echo "$OUT"
+              RUN_ID=$(printf '%s' "$OUT" | sed -nE 's#.*/actions/runs/([0-9]+).*#\1#p' | head -1)
+              [ -n "$RUN_ID" ] || vent_paa_kjoring || true
+              break
+            fi
+            echo "⚠️  gh workflow run feilet (forsøk $forsok): $(tr '\n\r' '  ' < "$RUNNER_TEMP/dispatch.err")"
+            if vent_paa_kjoring; then break; fi
+          done
+          if [ -z "$RUN_ID" ]; then
+            echo "::error::Fant ikke byggekjøringen i $REPO etter dispatch."
+            exit 1
+          fi
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "🔨 Bygg: https://github.com/$REPO/actions/runs/$RUN_ID"
+          echo "- 🔨 \`${REPO#navikt/}\` ← \`$BRANCH\`: [byggekjøringen](https://github.com/$REPO/actions/runs/$RUN_ID)" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Vent på bygget
+        id: wait
+        env:
+          RUN_ID: ${{ steps.dispatch.outputs.run_id }}
+        run: |
+          # Egen polling i stedet for `gh run watch`: én forbigående API-feil skal
+          # ikke gjøre jobben rød.
+          FEIL_I_RAD=0
+          while true; do
+            sleep 20
+            if SVAR=$(gh api "repos/$REPO/actions/runs/$RUN_ID" --jq '{status, conclusion}' 2> "$RUNNER_TEMP/view.err") \
+               && STATUS=$(printf '%s' "$SVAR" | jq -er .status 2>> "$RUNNER_TEMP/view.err") \
+               && CONCLUSION=$(printf '%s' "$SVAR" | jq -r '.conclusion // ""'); then
+              FEIL_I_RAD=0
+            else
+              FEIL_I_RAD=$((FEIL_I_RAD + 1))
+              echo "⚠️  Statusoppslaget feilet ($FEIL_I_RAD på rad): $(tr '\n\r' '  ' < "$RUNNER_TEMP/view.err")"
+              if [ "$FEIL_I_RAD" -ge 10 ]; then
+                echo "::error::Statusoppslaget feilet 10 ganger på rad"
+                exit 1
+              fi
+              continue
+            fi
+            echo "$(date -u +%H:%M:%S) status=$STATUS conclusion=$CONCLUSION"
+            if [ "$STATUS" = "completed" ]; then
+              URL="https://github.com/$REPO/actions/runs/$RUN_ID"
+              if [ "$CONCLUSION" = "success" ]; then
+                echo "- ✅ \`${REPO#navikt/}\` bygget som \`$TAG\`" >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+              fi
+              echo "- ❌ \`${REPO#navikt/}\`: bygget endte med \`$CONCLUSION\`" >> "$GITHUB_STEP_SUMMARY"
+              echo "::error::Bygget i $REPO endte med $CONCLUSION: $URL"
+              exit 1
+            fi
+          done
+
+      - name: Avbryt bygget
+        # Ventingen ble ikke grønn: avbrutt, timeout, feilet statusoppslag eller rødt
+        # bygg. Et ferdig bygg gir en feil fra gh som ignoreres.
+        if: always() && steps.dispatch.outputs.run_id != '' && steps.wait.outcome != 'success'
+        env:
+          RUN_ID: ${{ steps.dispatch.outputs.run_id }}
+        run: gh run cancel "$RUN_ID" -R "$REPO" || true
+
+  e2e:
+    name: Kjør E2E Tests
+    needs: [plan, bygg]
+    runs-on: ubuntu-latest
+    # E2E Tests: planjobb 15 min, shards 120 min og sammenslåing 15 min, pluss kø.
+    timeout-minutes: 170
+    env:
+      GH_TOKEN: ${{ secrets.E2E_TRIGGER_PAT }}
+      CORRELATION_ID: br-${{ github.run_id }}-${{ github.run_attempt }}
+    steps:
+      - name: Start E2E Tests
+        id: dispatch
+        env:
+          ENVIRONMENT: ${{ needs.plan.outputs.environment }}
+          BRANCH_CONTEXT: ${{ needs.plan.outputs.branch_context }}
+          TEST_GREP: ${{ inputs.test_grep }}
+          SHARDS: ${{ inputs.shards }}
+        run: |
+          finn_kjoring() {
+            gh run list -R "$E2E_REPO" --workflow e2e-tests.yml --event workflow_dispatch -L 30 \
+                --json databaseId,displayTitle \
+              | jq -r --arg t "E2E Tests · $CORRELATION_ID" \
+                  '[.[] | select(.displayTitle == $t)][0].databaseId // empty' || true
+          }
+          vent_paa_kjoring() {
+            for _ in $(seq 1 10); do
+              RUN_ID=$(finn_kjoring)
+              [ -n "$RUN_ID" ] && return 0
+              sleep 3
+            done
+            return 1
+          }
+
+          ARGS=(-f environment="$ENVIRONMENT" -f correlation_id="$CORRELATION_ID"
+                -f branch_context="$BRANCH_CONTEXT" -f shards="$SHARDS")
+          [ -n "$TEST_GREP" ] && ARGS+=(-f test_grep="$TEST_GREP")
+          echo "🧾 environment: $ENVIRONMENT"
+
+          RUN_ID=""
+          for forsok in 1 2 3; do
+            if OUT=$(gh workflow run e2e-tests.yml -R "$E2E_REPO" --ref "$E2E_REF" "${ARGS[@]}" 2> "$RUNNER_TEMP/dispatch.err"); then
+              echo "$OUT"
+              RUN_ID=$(printf '%s' "$OUT" | sed -nE 's#.*/actions/runs/([0-9]+).*#\1#p' | head -1)
+              [ -n "$RUN_ID" ] || vent_paa_kjoring || true
+              break
+            fi
+            echo "⚠️  gh workflow run feilet (forsøk $forsok): $(tr '\n\r' '  ' < "$RUNNER_TEMP/dispatch.err")"
+            if vent_paa_kjoring; then break; fi
+          done
+          if [ -z "$RUN_ID" ]; then
+            echo "::error::Fant ikke kjøringen etter dispatch (tittel «E2E Tests · ${CORRELATION_ID}»)"
+            exit 1
+          fi
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+          echo "🚀 E2E Tests: https://github.com/$E2E_REPO/actions/runs/$RUN_ID" | tee -a "$GITHUB_STEP_SUMMARY"
+
+      - name: Vent på E2E Tests
+        id: wait
+        env:
+          RUN_ID: ${{ steps.dispatch.outputs.run_id }}
+        run: |
+          FEIL_I_RAD=0
+          while true; do
+            sleep 60
+            if SVAR=$(gh api "repos/$E2E_REPO/actions/runs/$RUN_ID" --jq '{status, conclusion}' 2> "$RUNNER_TEMP/view.err") \
+               && STATUS=$(printf '%s' "$SVAR" | jq -er .status 2>> "$RUNNER_TEMP/view.err") \
+               && CONCLUSION=$(printf '%s' "$SVAR" | jq -r '.conclusion // ""'); then
+              FEIL_I_RAD=0
+            else
+              FEIL_I_RAD=$((FEIL_I_RAD + 1))
+              echo "⚠️  Statusoppslaget feilet ($FEIL_I_RAD på rad): $(tr '\n\r' '  ' < "$RUNNER_TEMP/view.err")"
+              if [ "$FEIL_I_RAD" -ge 10 ]; then
+                echo "::error::Statusoppslaget feilet 10 ganger på rad"
+                exit 1
+              fi
+              continue
+            fi
+            echo "$(date -u +%H:%M:%S) status=$STATUS conclusion=$CONCLUSION"
+            if [ "$STATUS" = "completed" ]; then
+              if [ "$CONCLUSION" = "success" ]; then
+                echo "✅ E2E Tests grønn." >> "$GITHUB_STEP_SUMMARY"
+                exit 0
+              fi
+              echo "❌ E2E Tests endte med \`$CONCLUSION\`." >> "$GITHUB_STEP_SUMMARY"
+              echo "::error::E2E Tests endte med $CONCLUSION"
+              exit 1
+            fi
+          done
+
+      - name: Avbryt E2E Tests
+        if: always() && steps.dispatch.outputs.run_id != '' && steps.wait.outcome != 'success'
+        env:
+          RUN_ID: ${{ steps.dispatch.outputs.run_id }}
+        run: gh run cancel "$RUN_ID" -R "$E2E_REPO" || true

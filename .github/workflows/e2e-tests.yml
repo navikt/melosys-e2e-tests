@@ -61,6 +61,11 @@ on:
         required: false
         type: string
         default: ''
+      branch_context:
+        description: 'Settes av e2e-brancher.yml: JSON med requested_by, orchestrator_run_id og branches (repo, branch, sha). Tom for manuelle kjøringer.'
+        required: false
+        type: string
+        default: ''
       shards:
         description: 'Antall shards (1–8). Hver shard kjører en del av testene mot sin egen stack. Et lite utvalg får færre. 1 = uten sharding.'
         required: false
@@ -171,6 +176,7 @@ jobs:
           INPUT_UNLEASH_FORCE_ENABLE: ${{ inputs.unleash_force_enable }}
           INPUT_GATE_CONTEXT: ${{ inputs.gate_context }}
           INPUT_CORRELATION_ID: ${{ inputs.correlation_id }}
+          INPUT_BRANCH_CONTEXT: ${{ inputs.branch_context }}
         run: |
           # Verdier utenfra (payload og workflow_dispatch-input) får linjeskiftene
           # fjernet før de logges. En workflow-kommando
@@ -439,6 +445,50 @@ jobs:
             fi
           fi
 
+          # ---- Brancher fra e2e-brancher.yml ----
+          # Hvilke brancher som ble bygget og hvem som bestilte; melosys-console viser
+          # det. Samme regel som for gate_context: ugyldig input gir en advarsel og
+          # null, og feilmeldingen er vår egen tekst. Branchnavn uten kontrolltegn,
+          # mellomrom og kolon kan ikke bli en workflow-kommando når fila logges.
+          BRANCH_FIELDS='{"branchContext":null}'
+          if [ -n "$INPUT_BRANCH_CONTEXT" ]; then
+            if BRANCH_PARSED=$(printf '%s' "$INPUT_BRANCH_CONTEXT" | jq -c -s "$JQ_HELPERS"'
+                if length != 1 or (.[0] | type) != "object"
+                then error("er ikke ett JSON-objekt") else .[0] end
+                | if (keys - ["requested_by", "orchestrator_run_id", "branches"]) != []
+                  then error("har ukjente felt") else . end
+                | if (.branches | type) != "array" or (.branches | length) < 1 or (.branches | length) > 8
+                  then error("branches er ikke en liste med 1–8 brancher") else . end
+                | {branchContext: {
+                    requestedBy: (.requested_by
+                      | if . == null then null
+                        # Uten # kan navnet ikke bli en ##[-kommando; runneren leser
+                        # ##[ hvor som helst på linja, ikke bare først.
+                        elif type == "string" then gsub("[[:cntrl:]]"; " ") | gsub("#"; "") | .[0:100] | nz
+                        else error("requested_by er ikke tekst") end),
+                    orchestratorRunId: (.orchestrator_run_id
+                      | if . == null or . == "" then null
+                        elif type == "string" and test("^[1-9][0-9]{0,15}\\z") then tonumber
+                        else error("orchestrator_run_id er ikke et positivt heltall") end),
+                    branches: [.branches[]
+                      | if type != "object" or (keys - ["repo", "branch", "sha"]) != []
+                        then error("en branch er ikke et objekt med repo, branch og sha") else . end
+                      | {
+                          repo: (.repo | if type == "string" and test("^[A-Za-z0-9._-]{1,100}\\z") then .
+                                         else error("repo har ugyldige tegn") end),
+                          branch: (.branch | if type == "string" and length >= 1 and length <= 255
+                                               and (test("[[:cntrl:][:space:]~^:?*\\[\\\\]") | not) then .
+                                             else error("branch er ugyldig") end),
+                          sha: (.sha | if type == "string" and test("^[0-9a-f]{40}\\z") then .
+                                       else error("sha er ikke 40 hex-tegn") end)
+                        }]
+                  }}' 2>"$RUNNER_TEMP/branch-context.err"); then
+              BRANCH_FIELDS="$BRANCH_PARSED"
+            else
+              echo "::warning::Ugyldig branch_context, kjøringen fortsetter uten branch-felt: $(tr '\n\r' '  ' < "$RUNNER_TEMP/branch-context.err")"
+            fi
+          fi
+
           if [ -z "$RESOLVED_TAGS" ]; then
             TRIGGER_JSON=""
           elif [ "$EVENT_NAME" = "repository_dispatch" ]; then
@@ -453,6 +503,7 @@ jobs:
               --arg runAttempt "$RUN_ATTEMPT" \
               --argjson resolvedTags "$RESOLVED_TAGS" \
               --argjson gate "$GATE_FIELDS" \
+              --argjson branch "$BRANCH_FIELDS" \
               "$JQ_HELPERS"'
               {
                 schemaVersion: 1,
@@ -467,7 +518,7 @@ jobs:
                 runAttempt: ($runAttempt | as_num),
                 resolvedTags: $resolvedTags,
                 inputs: null
-              } + $gate') || TRIGGER_JSON=""
+              } + $gate + $branch') || TRIGGER_JSON=""
           else
             TRIGGER_JSON=$(jq -n \
               --arg actor "$GITHUB_ACTOR_NAME" \
@@ -483,6 +534,7 @@ jobs:
               --arg unleashForceEnable "$INPUT_UNLEASH_FORCE_ENABLE" \
               --argjson resolvedTags "$RESOLVED_TAGS" \
               --argjson gate "$GATE_FIELDS" \
+              --argjson branch "$BRANCH_FIELDS" \
               "$JQ_HELPERS"'
               {
                 schemaVersion: 1,
@@ -506,7 +558,7 @@ jobs:
                   unleash_force_disable: ($unleashForceDisable | nz),
                   unleash_force_enable: ($unleashForceEnable | nz)
                 }
-              } + $gate') || TRIGGER_JSON=""
+              } + $gate + $branch') || TRIGGER_JSON=""
           fi
 
           echo ""
