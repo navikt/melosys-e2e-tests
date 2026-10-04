@@ -1,7 +1,11 @@
 import { test, expect } from '../../fixtures';
 import { AuthHelper } from '../../helpers/auth-helper';
 import { SedHelper, SED_SCENARIOS } from '../../helpers/sed-helper';
-import { waitForProcessInstances } from '../../helpers/api-helper';
+import {
+  getProcessMarker,
+  runAndWaitForProcessInstances,
+  waitForNewProcessInstances,
+} from '../../helpers/api-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import { MedlemskapPage } from '../../pages/behandling/medlemskap.page';
@@ -48,14 +52,20 @@ test.describe('Token-basert arkivsak-tilgang (MELOSYS-7821)', () => {
   test('skal rute + journalføre inngående A003 og koble saken til arkivsak (EESSI)', async ({
     request,
   }) => {
+    // Serveren venter opptil 60 s; uten høyere test-timeout drepes testen før den feilmeldingen.
+    test.setTimeout(120_000);
+
     console.log('📨 Scenario 1: inngående A003 → ruting + journalføring + arkivsak-kobling');
     const sedHelper = new SedHelper(request);
 
+    // Markør FØR sendSed: MOTTAK_SED registreres først når melosys-api har konsumert
+    // Kafka-meldingen. Uten markør svarer ventingen COMPLETED på 0 instanser, og asserten
+    // finner ingen behandling (flaky på CI, run 37187643978).
+    const markør = await getProcessMarker(request);
     const result = await sedHelper.sendSed(SED_SCENARIOS.A003_MINIMAL);
     expect(result.success, `Send SED feilet: ${result.message}`).toBe(true);
 
-    // Globalt poll FØR sluttilstands-assertene (jf. CI-race-lærdom).
-    await waitForProcessInstances(request, 60);
+    await waitForNewProcessInstances(request, markør, { expectedNew: 1, timeoutSeconds: 60 });
 
     // S1 «behandling rutet til riktig tema uten feilede prosesser» + EESSI-saksflyt uendret.
     const ruting = await verifiserSedRutetTilTema({
@@ -130,9 +140,10 @@ test.describe('Token-basert arkivsak-tilgang (MELOSYS-7821)', () => {
     const behandlingId = new URL(page.url()).searchParams.get('behandlingID');
     expect(behandlingId, 'behandlingID skal finnes i URL').not.toBeNull();
 
-    await vedtak.klikkFattVedtak();
     console.log('📝 Venter på iverksetting (FTRL)...');
-    await waitForProcessInstances(page.request, 60);
+    await runAndWaitForProcessInstances(page.request, () => vedtak.klikkFattVedtak(), {
+      timeoutSeconds: 60,
+    });
 
     // S2 «behandling avsluttet med korrekt resultat via IVERKSETT_VEDTAK_FTRL».
     await vedtak.assertions.verifiserBehandlingAvsluttet({
