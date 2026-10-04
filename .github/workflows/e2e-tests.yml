@@ -462,7 +462,9 @@ jobs:
                 | {branchContext: {
                     requestedBy: (.requested_by
                       | if . == null then null
-                        elif type == "string" then gsub("[[:cntrl:]]"; " ") | .[0:100] | nz
+                        # Uten # kan navnet ikke bli en ##[-kommando; runneren leser
+                        # ##[ hvor som helst på linja, ikke bare først.
+                        elif type == "string" then gsub("[[:cntrl:]]"; " ") | gsub("#"; "") | .[0:100] | nz
                         else error("requested_by er ikke tekst") end),
                     orchestratorRunId: (.orchestrator_run_id
                       | if . == null or . == "" then null

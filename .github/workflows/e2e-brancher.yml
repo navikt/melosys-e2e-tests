@@ -77,6 +77,15 @@ jobs:
             esac
           }
 
+          # Feilmeldinger fra gh er GitHubs tekst; :: og ##[ brytes så de ikke blir
+          # workflow-kommandoer.
+          gh_feil() { tr '\n\r' '  ' < "$RUNNER_TEMP/gh.err" | sed 's/::/: :/g; s/##\[/# #[/g'; }
+
+          if [[ "$BRANCHES" == *$'\n'* || "$BRANCHES" == *$'\r'* ]]; then
+            echo "::error::Skriv repo:branch på én linje, kommaseparert."
+            exit 1
+          fi
+
           FEIL=0
           VALGT=()
           IFS=',' read -ra PAR <<< "$BRANCHES"
@@ -97,7 +106,10 @@ jobs:
             fi
             # Gyldig branchnavn kan verken ha mellomrom, kolon eller kontrolltegn, så
             # det kan logges uten å bli en workflow-kommando. æøå er lov.
-            if [ ${#branch} -gt 255 ] || ! git check-ref-format --branch "$branch" > /dev/null 2>&1; then
+            # Samme regel som branch_context-validatoren i e2e-tests.yml, ellers ville
+            # E2E Tests forkastet branchContext. Den avviser også Unicode-mellomrom.
+            if [ ${#branch} -gt 255 ] || ! git check-ref-format --branch "$branch" > /dev/null 2>&1 \
+               || ! jq -en --arg b "$branch" '$b | test("[[:cntrl:][:space:]]") | not' > /dev/null; then
               echo "::error::Ugyldig branchnavn for $repo."
               FEIL=1; continue
             fi
@@ -109,9 +121,10 @@ jobs:
             done
 
             # Default-branchen kjører allerede som latest. Et bygg av den ville også
-            # overskrevet sha-taggen til det deployede imaget med et usignert image.
+            # overskrevet sha-taggen til det deployede imaget med et annet bygg (uten
+            # tester i api og web, uten signatur i de andre repoene).
             if ! default=$(gh api "repos/navikt/$repo" --jq .default_branch 2> "$RUNNER_TEMP/gh.err"); then
-              echo "::error::Fikk ikke slått opp navikt/$repo."
+              echo "::error::Fikk ikke slått opp navikt/$repo: $(gh_feil)"
               FEIL=1; continue
             fi
             if [ "$branch" = "$default" ]; then
@@ -120,18 +133,28 @@ jobs:
             fi
             ref=$(jq -rn --arg b "$branch" '$b | @uri')
             if ! sha=$(gh api "repos/navikt/$repo/branches/$ref" --jq .commit.sha 2> "$RUNNER_TEMP/gh.err"); then
-              echo "::error::Fant ikke branchen $branch i navikt/$repo."
+              if grep -q "HTTP 404" "$RUNNER_TEMP/gh.err"; then
+                echo "::error::Fant ikke branchen $branch i navikt/$repo."
+              else
+                echo "::error::Oppslaget av $branch i navikt/$repo feilet: $(gh_feil)"
+              fi
               FEIL=1; continue
             fi
             # En branch kjører workflow-fila som ligger på branchen. Uten den avviser
             # GitHub dispatchen med en feilmelding som ikke sier hvorfor.
-            if ! gh api "repos/navikt/$repo/contents/.github%2Fworkflows%2F$workflow?ref=$ref" --silent 2> /dev/null; then
-              echo "::error::$branch i navikt/$repo har ikke .github/workflows/$workflow. Rebase branchen på main/master og prøv igjen."
+            if ! gh api "repos/navikt/$repo/contents/.github%2Fworkflows%2F$workflow?ref=$ref" --silent 2> "$RUNNER_TEMP/gh.err"; then
+              if grep -q "HTTP 404" "$RUNNER_TEMP/gh.err"; then
+                echo "::error::$branch i navikt/$repo har ikke .github/workflows/$workflow. Rebase branchen på main/master og prøv igjen."
+              else
+                echo "::error::Oppslaget av $workflow i navikt/$repo feilet: $(gh_feil)"
+              fi
               FEIL=1; continue
             fi
+            # Hvor langt branchen ligger bak default-branchen; røde tester kan skyldes det.
+            bak=$(gh api "repos/navikt/$repo/compare/$(jq -rn --arg b "$default" '$b | @uri')...$ref" --jq .behind_by 2> /dev/null || true)
             VALGT+=("$(jq -cn --arg repo "$repo" --arg service "$service" --arg workflow "$workflow" \
-              --arg branch "$branch" --arg sha "$sha" '$ARGS.named')")
-            echo "✅ $repo ← $branch (${sha:0:7})"
+              --arg branch "$branch" --arg sha "$sha" --arg bak "$bak" --arg default "$default" '$ARGS.named')")
+            echo "✅ $repo ← $branch (${sha:0:7}${bak:+, $bak commits bak $default})"
           done
 
           if [ "$FEIL" -ne 0 ]; then exit 1; fi
@@ -142,9 +165,9 @@ jobs:
 
           MATRIX=$(printf '%s\n' "${VALGT[@]}" | jq -cs .)
           ENVIRONMENT=$(jq -r --arg tag "$TAG" 'map("\(.service):\($tag)") | join(",")' <<< "$MATRIX")
-          BESTILT_AV=$(printf '%s' "${REQUESTED_BY:-$ACTOR}" | tr -d '\000-\037' | cut -c1-100)
-          BRANCH_CONTEXT=$(jq -c --arg requested_by "$BESTILT_AV" --arg run_id "$RUN_ID" \
-            '{requested_by: $requested_by, orchestrator_run_id: $run_id,
+          # Uten # kan navnet ikke bli en ##[-kommando når E2E Tests logger konteksten.
+          BRANCH_CONTEXT=$(jq -c --arg requested_by "${REQUESTED_BY:-$ACTOR}" --arg run_id "$RUN_ID" \
+            '{requested_by: ($requested_by | gsub("[[:cntrl:]#]"; "") | .[0:100]), orchestrator_run_id: $run_id,
               branches: map({repo, branch, sha})}' <<< "$MATRIX")
           {
             echo "matrix=$MATRIX"
@@ -155,7 +178,8 @@ jobs:
           {
             echo "### 🌿 E2E med brancher · \`$TAG\`"
             echo ""
-            jq -r '.[] | "- `\(.repo)` ← `\(.branch)` ([`\(.sha[0:7])`](https://github.com/navikt/\(.repo)/commit/\(.sha)))"' <<< "$MATRIX"
+            jq -r '.[] | "- `\(.repo)` ← `\(.branch)` ([`\(.sha[0:7])`](https://github.com/navikt/\(.repo)/commit/\(.sha)))"
+              + (if .bak != "" and .bak != "0" then ", \(.bak) commits bak `\(.default)`" else "" end)' <<< "$MATRIX"
             echo ""
             echo "Alle andre tjenester kjører som \`latest\`."
           } >> "$GITHUB_STEP_SUMMARY"
@@ -179,15 +203,19 @@ jobs:
       - name: Start bygget
         id: dispatch
         run: |
-          START=$(date -u +%Y-%m-%dT%H:%M:%SZ)
-          # Reserve når gh ikke skriver URL-en: tittelen «… · <tag>», eller for en
-          # eldre build-image.yml uten tittel, en kjøring på branchen startet etter START.
+          # Ett minutt tilbake: klokka på runneren og hos GitHub går ikke helt likt.
+          START=$(date -u -d '-60 seconds' +%Y-%m-%dT%H:%M:%SZ)
+          # Reserve når gh ikke skriver URL-en, bare blant kjøringer startet etter START
+          # (taggen er lik i alle forsøk av samme kjøring): først tittelen «… · <tag>»,
+          # så, for en eldre build-image.yml uten tittel, nyeste kjøring på branchen.
           finn_kjoring() {
             gh run list -R "$REPO" --workflow "$WORKFLOW" --event workflow_dispatch -L 20 \
                 --json databaseId,displayTitle,headBranch,createdAt \
               | jq -r --arg tag "$TAG" --arg b "$BRANCH" --arg start "$START" \
-                  '[.[] | select((.displayTitle | endswith(" · " + $tag))
-                                 or (.headBranch == $b and .createdAt >= $start))][0].databaseId // empty' || true
+                  '[.[] | select(.createdAt >= $start)]
+                   | ([.[] | select(.displayTitle | endswith(" · " + $tag))][0]
+                      // [.[] | select(.headBranch == $b)][0])
+                   | .databaseId // empty' || true
           }
           vent_paa_kjoring() {
             for _ in $(seq 1 10); do
@@ -215,6 +243,7 @@ jobs:
           fi
           echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
           echo "🔨 Bygg: https://github.com/$REPO/actions/runs/$RUN_ID"
+          echo "- 🔨 \`${REPO#navikt/}\` ← \`$BRANCH\`: [byggekjøringen](https://github.com/$REPO/actions/runs/$RUN_ID)" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Vent på bygget
         id: wait
@@ -243,18 +272,19 @@ jobs:
             if [ "$STATUS" = "completed" ]; then
               URL="https://github.com/$REPO/actions/runs/$RUN_ID"
               if [ "$CONCLUSION" = "success" ]; then
-                echo "- ✅ \`${REPO#navikt/}\` bygget: [$TAG]($URL)" >> "$GITHUB_STEP_SUMMARY"
+                echo "- ✅ \`${REPO#navikt/}\` bygget som \`$TAG\`" >> "$GITHUB_STEP_SUMMARY"
                 exit 0
               fi
-              echo "- ❌ \`${REPO#navikt/}\`: bygget endte med \`$CONCLUSION\` ([kjøringen]($URL))" >> "$GITHUB_STEP_SUMMARY"
+              echo "- ❌ \`${REPO#navikt/}\`: bygget endte med \`$CONCLUSION\`" >> "$GITHUB_STEP_SUMMARY"
               echo "::error::Bygget i $REPO endte med $CONCLUSION: $URL"
               exit 1
             fi
           done
 
       - name: Avbryt bygget
-        # Kjøringen er avbrutt eller har fått timeout mens bygget går.
-        if: cancelled() && steps.dispatch.outputs.run_id != ''
+        # Ventingen ble ikke grønn: avbrutt, timeout, feilet statusoppslag eller rødt
+        # bygg. Et ferdig bygg gir en feil fra gh som ignoreres.
+        if: always() && steps.dispatch.outputs.run_id != '' && steps.wait.outcome != 'success'
         env:
           RUN_ID: ${{ steps.dispatch.outputs.run_id }}
         run: gh run cancel "$RUN_ID" -R "$REPO" || true
@@ -263,8 +293,8 @@ jobs:
     name: Kjør E2E Tests
     needs: [plan, bygg]
     runs-on: ubuntu-latest
-    # E2E Tests har selv 120 min.
-    timeout-minutes: 135
+    # E2E Tests: planjobb 15 min, shards 120 min og sammenslåing 15 min, pluss kø.
+    timeout-minutes: 170
     env:
       GH_TOKEN: ${{ secrets.E2E_TRIGGER_PAT }}
       CORRELATION_ID: br-${{ github.run_id }}-${{ github.run_attempt }}
@@ -349,7 +379,7 @@ jobs:
           done
 
       - name: Avbryt E2E Tests
-        if: cancelled() && steps.dispatch.outputs.run_id != ''
+        if: always() && steps.dispatch.outputs.run_id != '' && steps.wait.outcome != 'success'
         env:
           RUN_ID: ${{ steps.dispatch.outputs.run_id }}
         run: gh run cancel "$RUN_ID" -R "$E2E_REPO" || true
