@@ -9,7 +9,7 @@ import { SkjemaMottakAssertions } from '../../pages/skjema/skjema-mottak.asserti
  * Enhetsregisteret og legger det i skjemaets metadata.
  *
  * Flyt som verifiseres:
- *  1. skjema-web viser infoboksen «… er registrert med færre enn 20 ansatte» og de seks feltene på
+ *  1. skjema-web viser de seks feltene i stedet for spørsmålet om vanlig drift på
  *     steget «Arbeidsgiverens virksomhet i Norge», selv om arbeidsgiveren ikke er bemanningsbyrå.
  *  2. melosys-api mapper feltene og antall ansatte fra EREG til `juridiskArbeidsgiverNorge` i
  *     mottatte opplysninger (sidemenyen «Samlet virksomhet i Norge»).

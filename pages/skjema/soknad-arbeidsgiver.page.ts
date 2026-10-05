@@ -167,20 +167,21 @@ export class SoknadArbeidsgiverPage {
   async fyllArbeidsgiverensVirksomhet(samletVirksomhet?: SamletVirksomhet): Promise<void> {
     const page = this.page;
     await svarRadio(page, /bemannings- eller vikarbyrå/, 'Nei');
-    await svarRadio(page, /Opprettholder arbeidsgiveren vanlig drift/, 'Ja');
     if (samletVirksomhet) {
       await this.fyllSamletVirksomhet(samletVirksomhet);
+    } else {
+      await svarRadio(page, /Opprettholder arbeidsgiveren vanlig drift/, 'Ja');
     }
     await lagreOgFortsett(page, /\/utenlandsoppdraget/);
   }
 
   /**
    * MELOSYS-8251: virksomheten er registrert med færre enn 20 ansatte i EREG-mocken, så steget
-   * viser infoboksen og de seks feltene om foretakets samlede virksomhet.
+   * viser de seks feltene om foretakets samlede virksomhet i stedet for spørsmålet om vanlig drift.
    */
   private async fyllSamletVirksomhet(data: SamletVirksomhet): Promise<void> {
     const page = this.page;
-    await expect(page.getByText(/er registrert med færre enn 20 ansatte/)).toBeVisible();
+    await expect(page.getByRole('radiogroup', { name: /Opprettholder arbeidsgiveren vanlig drift/ })).toHaveCount(0);
     await expect(
       page.getByRole('heading', { name: 'Opplysninger om foretakets samlede virksomhet' })
     ).toBeVisible();
