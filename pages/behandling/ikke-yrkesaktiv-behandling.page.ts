@@ -129,8 +129,10 @@ export class IkkeYrkesaktivBehandlingPage extends BasePage {
    * lagringen etter radioknappen før bestemmelsen velges, ellers kan den første
    * lagringen (uten bestemmelse) bli den siste.
    *
-   * På en ny vurdering er begge valgene kopiert fra forrige behandling. Da lagrer
-   * ikke et nytt klikk noe, så vi hopper over valg som allerede står riktig.
+   * På en ny vurdering er radioknappen kopiert fra forrige behandling. `check()` på
+   * en avkrysset radioknapp gjør ingenting og lagrer ikke, så da hopper vi over den.
+   * Bestemmelsen velges alltid: nedtrekkslisten lagrer ved hvert valg, også når
+   * verdien er den samme.
    *
    * @param bestemmelse - Bestemmelseskode, f.eks. 'FO_883_2004_ART11_2' eller 'AUS_ART11'.
    *                      Ikke FO_883_2004_ART11_3E: den krever «Velg brukers situasjon»,
@@ -138,26 +140,17 @@ export class IkkeYrkesaktivBehandlingPage extends BasePage {
    */
   async innvilgOgVelgBestemmelse(bestemmelse: string): Promise<void> {
     await this.innvilgRadio.waitFor({ state: 'visible', timeout: 15000 });
-    const kopiert = await this.innvilgRadio.isChecked();
-    if (kopiert) {
+    if (await this.innvilgRadio.isChecked()) {
       console.log('✅ «Jeg vil innvilge søknaden» er kopiert fra forrige behandling');
     } else {
-      const radioLagret = this.ventPåLagretLovvalgsperiode();
-      await this.innvilgRadio.check();
-      await radioLagret;
+      await this.lagreLovvalgsperiode(() => this.innvilgRadio.check());
       console.log('✅ Valgte «Jeg vil innvilge søknaden»');
     }
 
     await this.bestemmelseDropdown.waitFor({ state: 'visible', timeout: 15000 });
     await this.waitForDropdownToPopulate(this.bestemmelseDropdown);
-    if (kopiert && (await this.bestemmelseDropdown.inputValue()) === bestemmelse) {
-      console.log(`✅ Bestemmelse ${bestemmelse} er kopiert fra forrige behandling`);
-    } else {
-      const bestemmelseLagret = this.ventPåLagretLovvalgsperiode();
-      await this.bestemmelseDropdown.selectOption(bestemmelse);
-      await bestemmelseLagret;
-      console.log(`✅ Valgte bestemmelse: ${bestemmelse}`);
-    }
+    await this.lagreLovvalgsperiode(() => this.bestemmelseDropdown.selectOption(bestemmelse));
+    console.log(`✅ Valgte bestemmelse: ${bestemmelse}`);
 
     // Vedtakssteget kjører forhåndskontrollen når det åpnes, så sporingen må starte før klikket
     this.forhåndskontroll = sporForhåndskontroll(this.page);
@@ -173,12 +166,13 @@ export class IkkeYrkesaktivBehandlingPage extends BasePage {
    */
   async velgGrunnForNyttVedtak(grunn: string): Promise<void> {
     await this.grunnForNyttVedtakDropdown.waitFor({ state: 'visible', timeout: 15000 });
-    const lagret = this.page.waitForResponse(
-      r => r.url().includes('/resultat/nyvurderingbakgrunn') && r.request().method() === 'POST',
-      { timeout: 15000 }
-    );
-    await this.grunnForNyttVedtakDropdown.selectOption(grunn);
-    const svar = await lagret;
+    const [svar] = await Promise.all([
+      this.page.waitForResponse(
+        r => r.url().includes('/resultat/nyvurderingbakgrunn') && r.request().method() === 'POST',
+        { timeout: 15000 }
+      ),
+      this.grunnForNyttVedtakDropdown.selectOption(grunn),
+    ]);
     expect(
       svar.ok(),
       `Lagring av grunn for nytt vedtak svarte ${svar.status()}: ${await svar.text().catch(() => '')}`
@@ -198,30 +192,37 @@ export class IkkeYrkesaktivBehandlingPage extends BasePage {
       'innvilgOgVelgBestemmelse() må åpne vedtakssteget før fattVedtak()'
     ).not.toBeNull();
     await ventPåForhåndskontroll(this.forhåndskontroll!);
+    // Neste vedtak på samme side skal ikke vente på tellingene fra dette
+    this.forhåndskontroll = null;
     await expect(
       this.kontrollfeilStripe,
       'Forhåndskontrollen på vedtakssteget skal ikke vise feil'
     ).toHaveCount(0);
     await expect(this.fattVedtakButton).toBeEnabled({ timeout: 15000 });
 
-    const fattSvar = this.page.waitForResponse(
-      r =>
-        r.url().includes('/api/saksflyt/vedtak/') &&
-        r.url().includes('/fatt') &&
-        r.request().method() === 'POST',
-      { timeout: 60000 }
-    );
-    await this.fattVedtakButton.click();
-    const svar = await fattSvar;
+    const [svar] = await Promise.all([
+      this.page.waitForResponse(
+        r =>
+          r.url().includes('/api/saksflyt/vedtak/') &&
+          r.url().includes('/fatt') &&
+          r.request().method() === 'POST',
+        { timeout: 60000 }
+      ),
+      this.fattVedtakButton.click(),
+    ]);
     expect(svar.ok(), `/fatt svarte ${svar.status()}: ${await svar.text().catch(() => '')}`).toBeTruthy();
     console.log(`✅ Vedtak fattet: ${svar.url()} -> ${svar.status()}`);
   }
 
-  private async ventPåLagretLovvalgsperiode(): Promise<void> {
-    const svar = await this.page.waitForResponse(
-      r => r.url().includes('/lovvalgsperioder') && ['POST', 'PUT'].includes(r.request().method()),
-      { timeout: 15000 }
-    );
+  /** Utfør `handling` og krev at lovvalgsperioden den lagrer, svarer OK. */
+  private async lagreLovvalgsperiode(handling: () => Promise<unknown>): Promise<void> {
+    const [svar] = await Promise.all([
+      this.page.waitForResponse(
+        r => r.url().includes('/lovvalgsperioder') && ['POST', 'PUT'].includes(r.request().method()),
+        { timeout: 15000 }
+      ),
+      handling(),
+    ]);
     expect(
       svar.ok(),
       `Lagring av lovvalgsperiode svarte ${svar.status()}: ${await svar.text().catch(() => '')}`

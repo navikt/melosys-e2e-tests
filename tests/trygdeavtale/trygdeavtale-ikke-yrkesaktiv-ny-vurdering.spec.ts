@@ -1,7 +1,7 @@
-import { expect, test } from '../../fixtures';
+import { test } from '../../fixtures';
 import { AuthHelper } from '../../helpers/auth-helper';
 import { runAndWaitForProcessInstances } from '../../helpers/api-helper';
-import { withDatabase } from '../../helpers/db-helper';
+import { hentNyVurdering } from '../../helpers/db-helper';
 import { HovedsidePage } from '../../pages/hovedside.page';
 import { OpprettNySakPage } from '../../pages/opprett-ny-sak/opprett-ny-sak.page';
 import { IkkeYrkesaktivBehandlingPage } from '../../pages/behandling/ikke-yrkesaktiv-behandling.page';
@@ -33,6 +33,7 @@ const BESTEMMELSE = 'AUS_ART11';
 
 test.describe('Trygdeavtale - ikke-yrkesaktiv ny vurdering (MELOSYS-8337)', () => {
   test('vedtak i ny vurdering lagres som ENDRINGSVEDTAK', async ({ page }) => {
+    // To vedtak, en ny vurdering og to iverksettinger
     test.setTimeout(240000);
 
     const auth = new AuthHelper(page);
@@ -84,7 +85,7 @@ test.describe('Trygdeavtale - ikke-yrkesaktiv ny vurdering (MELOSYS-8337)', () =
       { timeoutSeconds: 30 }
     );
 
-    const nyVurderingId = await hentNyVurderingId(førsteBehandlingId);
+    const nyVurderingId = await hentNyVurdering(førsteBehandlingId);
     await hovedside.goto();
     await hovedside.åpneBehandlingMedId(nyVurderingId);
 
@@ -104,25 +105,3 @@ test.describe('Trygdeavtale - ikke-yrkesaktiv ny vurdering (MELOSYS-8337)', () =
     await verifiserVedtaksmetadata(nyVurderingId, { vedtakstype: 'ENDRINGSVEDTAK' });
   });
 });
-
-/**
- * Finn ny vurdering av `opprinneligId` og krev at den er nyeste behandling, så testen
- * åpner og sjekker riktig behandling.
- */
-async function hentNyVurderingId(opprinneligId: string): Promise<string> {
-  return await withDatabase(async (db) => {
-    const rader = await db.query<{ ID: number }>(
-      `SELECT ID FROM BEHANDLING
-        WHERE BEH_TYPE = 'NY_VURDERING' AND OPPRINNELIG_BEHANDLING_ID = :id`,
-      { id: opprinneligId }
-    );
-    expect(rader, `Én ny vurdering av behandling ${opprinneligId}`).toHaveLength(1);
-
-    const nyeste = await db.queryOne<{ ID: number }>(
-      `SELECT ID FROM BEHANDLING ORDER BY ID DESC FETCH FIRST 1 ROWS ONLY`
-    );
-    expect(nyeste!.ID, 'Ny vurdering skal være nyeste behandling').toBe(rader[0].ID);
-    console.log(`✅ Ny vurdering: behandling ${rader[0].ID} (opprinnelig ${opprinneligId})`);
-    return String(rader[0].ID);
-  });
-}
