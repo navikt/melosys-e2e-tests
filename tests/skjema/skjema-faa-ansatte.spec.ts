@@ -33,7 +33,7 @@ test.describe('skjema-web → melosys-api: arbeidsgiver med færre enn 20 ansatt
       antallUtsendteArbeidstakere: 1,
       andelAnsatteRekruttertINorge: 80,
       andelOmsetningINorge: 60,
-      andelOppdragUtfortINorge: 70,
+      andelOppdragUtfortINorge: 0,
       andelOppdragskontrakterInngattINorge: 90,
     };
 

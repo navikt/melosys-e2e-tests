@@ -124,6 +124,8 @@ export class SkjemaMottakAssertions {
     const juridiskArbeidsgiverNorge = JSON.parse(data!).juridiskArbeidsgiverNorge ?? {};
     for (const [felt, verdi] of Object.entries(forventet)) {
       const faktisk = juridiskArbeidsgiverNorge[felt];
+      expect(faktisk, `juridiskArbeidsgiverNorge.${felt} skal være oppgitt`).not.toBeNull();
+      expect(faktisk, `juridiskArbeidsgiverNorge.${felt} skal finnes`).not.toBeUndefined();
       expect(
         typeof verdi === 'number' ? Number(faktisk) : faktisk,
         `juridiskArbeidsgiverNorge.${felt}`
