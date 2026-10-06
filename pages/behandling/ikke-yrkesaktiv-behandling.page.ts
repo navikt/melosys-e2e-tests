@@ -18,6 +18,12 @@ import { sporForhåndskontroll, ventPåForhåndskontroll } from '../shared/stopp
  * await ikkeYrkesaktiv.bekreftOgFortsett();
  * await ikkeYrkesaktiv.innvilgOgVelgBestemmelse('FO_883_2004_ART11_2');
  * await ikkeYrkesaktiv.fattVedtak();
+ *
+ * // Ny vurdering: inngang og bestemmelse er kopiert fra forrige behandling
+ * await ikkeYrkesaktiv.bekreftKopierteSøknadsopplysninger('01.01.2024', '31.12.2025', 'AU');
+ * await ikkeYrkesaktiv.innvilgOgVelgBestemmelse('AUS_ART11');
+ * await ikkeYrkesaktiv.velgGrunnForNyttVedtak('NYE_OPPLYSNINGER');
+ * await ikkeYrkesaktiv.fattVedtak();
  */
 export class IkkeYrkesaktivBehandlingPage extends BasePage {
   // ── Steg 1: Inngang ──────────────────────────────────────────────────
@@ -55,6 +61,11 @@ export class IkkeYrkesaktivBehandlingPage extends BasePage {
   private readonly kontrollfeilStripe = this.page.locator('.feilmelding .varselstripe');
 
   private readonly fattVedtakButton = this.page.getByRole('button', { name: 'Fatt vedtak' });
+
+  // Vises bare på en ny vurdering; «Fatt vedtak» er deaktivert til en grunn er valgt
+  private readonly grunnForNyttVedtakDropdown = this.page.getByRole('combobox', {
+    name: /Oppgi grunn for nytt vedtak/,
+  });
 
   // ── Felles ───────────────────────────────────────────────────────────
   private readonly bekreftOgFortsettButton = this.page.getByRole('button', { name: 'Bekreft og fortsett' });
@@ -99,34 +110,80 @@ export class IkkeYrkesaktivBehandlingPage extends BasePage {
   }
 
   /**
+   * Ny vurdering: inngangssteget er kopiert fra forrige behandling. Krev at periode
+   * og land står der, og bekreft uten å endre dem.
+   */
+  async bekreftKopierteSøknadsopplysninger(fraOgMed: string, tilOgMed: string, land: string): Promise<void> {
+    await this.inngangHeading.waitFor({ state: 'visible', timeout: 30000 });
+    await expect(this.fraOgMedField).toHaveValue(fraOgMed);
+    await expect(this.tilOgMedField).toHaveValue(tilOgMed);
+    await expect(this.landDropdown).toHaveValue(land);
+    console.log(`✅ Kopierte søknadsopplysninger: ${fraOgMed}–${tilOgMed}, ${land}`);
+    await this.bekreftOgFortsett();
+  }
+
+  /**
    * Velg «Jeg vil innvilge søknaden» og bestemmelse, og gå til vedtakssteget.
    *
    * Radioknappen og bestemmelsen lagrer hver sin lovvalgsperiode. Vi venter på
    * lagringen etter radioknappen før bestemmelsen velges, ellers kan den første
    * lagringen (uten bestemmelse) bli den siste.
    *
+   * På en ny vurdering er begge valgene kopiert fra forrige behandling. Da lagrer
+   * ikke et nytt klikk noe, så vi hopper over valg som allerede står riktig.
+   *
    * @param bestemmelse - Bestemmelseskode, f.eks. 'FO_883_2004_ART11_2' eller 'AUS_ART11'.
    *                      Ikke FO_883_2004_ART11_3E: den krever «Velg brukers situasjon»,
    *                      som denne metoden ikke fyller ut.
    */
   async innvilgOgVelgBestemmelse(bestemmelse: string): Promise<void> {
-    const radioLagret = this.ventPåLagretLovvalgsperiode();
-    await this.innvilgRadio.check();
-    await radioLagret;
-    console.log('✅ Valgte «Jeg vil innvilge søknaden»');
+    await this.innvilgRadio.waitFor({ state: 'visible', timeout: 15000 });
+    const kopiert = await this.innvilgRadio.isChecked();
+    if (kopiert) {
+      console.log('✅ «Jeg vil innvilge søknaden» er kopiert fra forrige behandling');
+    } else {
+      const radioLagret = this.ventPåLagretLovvalgsperiode();
+      await this.innvilgRadio.check();
+      await radioLagret;
+      console.log('✅ Valgte «Jeg vil innvilge søknaden»');
+    }
 
     await this.bestemmelseDropdown.waitFor({ state: 'visible', timeout: 15000 });
     await this.waitForDropdownToPopulate(this.bestemmelseDropdown);
-    const bestemmelseLagret = this.ventPåLagretLovvalgsperiode();
-    await this.bestemmelseDropdown.selectOption(bestemmelse);
-    await bestemmelseLagret;
-    console.log(`✅ Valgte bestemmelse: ${bestemmelse}`);
+    if (kopiert && (await this.bestemmelseDropdown.inputValue()) === bestemmelse) {
+      console.log(`✅ Bestemmelse ${bestemmelse} er kopiert fra forrige behandling`);
+    } else {
+      const bestemmelseLagret = this.ventPåLagretLovvalgsperiode();
+      await this.bestemmelseDropdown.selectOption(bestemmelse);
+      await bestemmelseLagret;
+      console.log(`✅ Valgte bestemmelse: ${bestemmelse}`);
+    }
 
     // Vedtakssteget kjører forhåndskontrollen når det åpnes, så sporingen må starte før klikket
     this.forhåndskontroll = sporForhåndskontroll(this.page);
     await this.clickStepButtonWithRetry(this.bekreftOgFortsettButton);
     await this.vedtakHeading.waitFor({ state: 'visible', timeout: 30000 });
     console.log('✅ Vedtakssteget vises');
+  }
+
+  /**
+   * Ny vurdering: velg grunn for nytt vedtak på vedtakssteget og vent på at den lagres.
+   *
+   * @param grunn - f.eks. 'NYE_OPPLYSNINGER' eller 'FEIL_I_BEHANDLING'
+   */
+  async velgGrunnForNyttVedtak(grunn: string): Promise<void> {
+    await this.grunnForNyttVedtakDropdown.waitFor({ state: 'visible', timeout: 15000 });
+    const lagret = this.page.waitForResponse(
+      r => r.url().includes('/resultat/nyvurderingbakgrunn') && r.request().method() === 'POST',
+      { timeout: 15000 }
+    );
+    await this.grunnForNyttVedtakDropdown.selectOption(grunn);
+    const svar = await lagret;
+    expect(
+      svar.ok(),
+      `Lagring av grunn for nytt vedtak svarte ${svar.status()}: ${await svar.text().catch(() => '')}`
+    ).toBeTruthy();
+    console.log(`✅ Valgte grunn for nytt vedtak: ${grunn}`);
   }
 
   /**
