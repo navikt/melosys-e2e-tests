@@ -6,6 +6,19 @@ import {
 import { lagreOgFortsett, standardUtsendingsperiode, startSoknadViaIntroside, svarRadio } from './skjema-utils';
 
 /**
+ * Opplysninger om foretakets samlede virksomhet (MELOSYS-8251). Kreves når arbeidsgiveren har
+ * færre enn 20 ansatte i Enhetsregisteret eller er et bemannings-/vikarbyrå. Andelene er prosent.
+ */
+export interface SamletVirksomhet {
+  antallAdministrativtAnsatte: number;
+  antallUtsendteArbeidstakere: number;
+  andelAnsatteRekruttertINorge: number;
+  andelOmsetningINorge: number;
+  andelOppdragUtfortINorge: number;
+  andelOppdragskontrakterInngattINorge: number;
+}
+
+/**
  * Page Object for den digitale «Utsendt arbeidstaker»-søknaden, variant ARBEIDSGIVER.
  *
  * Dekker de to arbeidsgiver-variantene (verifisert live 2026-06-28):
@@ -148,11 +161,38 @@ export class SoknadArbeidsgiverPage {
   }
 
   /** Steg 2: arbeidsgiverens virksomhet i Norge (privat virksomhet med ordinær drift). */
-  async fyllArbeidsgiverensVirksomhet(): Promise<void> {
+  async fyllArbeidsgiverensVirksomhet(samletVirksomhet?: SamletVirksomhet): Promise<void> {
     const page = this.page;
     await svarRadio(page, /bemannings- eller vikarbyrå/, 'Nei');
-    await svarRadio(page, /Opprettholder arbeidsgiveren vanlig drift/, 'Ja');
+    if (samletVirksomhet) {
+      await this.fyllSamletVirksomhet(samletVirksomhet);
+    } else {
+      await svarRadio(page, /Opprettholder arbeidsgiveren vanlig drift/, 'Ja');
+    }
     await lagreOgFortsett(page, /\/utenlandsoppdraget/);
+  }
+
+  /**
+   * MELOSYS-8251: virksomheten er registrert med færre enn 20 ansatte i EREG-mocken, så steget
+   * viser de seks feltene om foretakets samlede virksomhet i stedet for spørsmålet om vanlig drift.
+   */
+  private async fyllSamletVirksomhet(data: SamletVirksomhet): Promise<void> {
+    const page = this.page;
+    await expect(page.getByRole('radiogroup', { name: /Opprettholder arbeidsgiveren vanlig drift/ })).toHaveCount(0);
+    await expect(
+      page.getByRole('heading', { name: 'Opplysninger om foretakets samlede virksomhet' })
+    ).toBeVisible();
+    const felter: [string, number][] = [
+      ['Antall administrativt ansatte', data.antallAdministrativtAnsatte],
+      ['Antall utsendte arbeidstakere', data.antallUtsendteArbeidstakere],
+      ['Andel ansatte rekruttert i Norge', data.andelAnsatteRekruttertINorge],
+      ['Andel omsetning opptjent i Norge', data.andelOmsetningINorge],
+      ['Andel oppdrag utført i Norge', data.andelOppdragUtfortINorge],
+      ['Andel oppdragskontrakter inngått i Norge', data.andelOppdragskontrakterInngattINorge],
+    ];
+    for (const [label, verdi] of felter) {
+      await page.getByRole('textbox', { name: label, exact: true }).fill(String(verdi));
+    }
   }
 
   /** Steg 3: utenlandsoppdraget. */
@@ -207,6 +247,8 @@ export class SoknadArbeidsgiverPage {
    * @param opts.offentligArbeidsgiver  true når EREG klassifiserer arbeidsgiveren som offentlig
    *                                     (STAT/6100, MELOSYS-7670): virksomhetssteget finnes ikke,
    *                                     og flyten verifiserer at det hoppes over (10 steg).
+   * @param opts.samletVirksomhet       fylles ut når arbeidsgiveren har færre enn 20 ansatte i
+   *                                     EREG (MELOSYS-8251), f.eks. Steinars Stein 888888888.
    * @returns søknads-id (UUID) og referansenummer fra kvitteringen.
    */
   async fyllUtOgSendInnBeggeDeler(opts: {
@@ -215,6 +257,7 @@ export class SoknadArbeidsgiverPage {
     land?: string;
     vedleggFilsti?: string;
     offentligArbeidsgiver?: boolean;
+    samletVirksomhet?: SamletVirksomhet;
   }): Promise<{ skjemaId: string; referanse: string }> {
     const skjemaId = await this.velgArbeidsgiverOgStart({
       arbeidsgiverOrgnr: opts.arbeidsgiverOrgnr,
@@ -224,7 +267,8 @@ export class SoknadArbeidsgiverPage {
     const referanse = await this.fyllAlleStegBeggeDeler(
       opts.land,
       opts.vedleggFilsti,
-      opts.offentligArbeidsgiver ?? false
+      opts.offentligArbeidsgiver ?? false,
+      opts.samletVirksomhet
     );
     return { skjemaId, referanse };
   }
@@ -257,14 +301,15 @@ export class SoknadArbeidsgiverPage {
   private async fyllAlleStegBeggeDeler(
     land?: string,
     vedleggFilsti?: string,
-    offentligArbeidsgiver = false
+    offentligArbeidsgiver = false,
+    samletVirksomhet?: SamletVirksomhet
   ): Promise<string> {
     if (offentligArbeidsgiver) {
       await this.fyllUtsendingsperiodeOgLand(land, /\/utenlandsoppdraget/);
       await this.verifiserVirksomhetsstegetErBorte();
     } else {
       await this.fyllUtsendingsperiodeOgLand(land);
-      await this.fyllArbeidsgiverensVirksomhet();
+      await this.fyllArbeidsgiverensVirksomhet(samletVirksomhet);
     }
     await this.fyllUtenlandsoppdraget();
     await this.fyllArbeidssted();
