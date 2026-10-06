@@ -459,13 +459,13 @@ test('affected-tests --head står i rapporten og i feilmeldingen', () => {
 const make = (env: Record<string, string>, ...a: string[]) =>
   execFileSync('make', ['-n', ...a], { cwd: REPO, env: { ...process.env, ...env }, encoding: 'utf8' });
 
-const MAKE_VARIABLER = ['BRANCH=min-branch', 'PREVIEW=1', 'RETRIES=1', 'VIS_FILTER=1', 'NO_WAIT=1', 'ENV=melosys-api:min-tag'];
-const SCRIPT_FLAGG = [/--branch "min-branch"/, /--preview/, /--retries/, /--vis-filter/, /--no-wait/, /--env "melosys-api:min-tag"/];
+const MAKE_VARIABLER = ['BRANCH=min-branch', 'PREVIEW=1', 'RETRIES=1', 'VIS_FILTER=1', 'NO_WAIT=1', 'ENV=melosys-api:min-tag', 'SHARDS=2'];
+const SCRIPT_FLAGG = [/--branch "min-branch"/, /--preview/, /--retries/, /--vis-filter/, /--no-wait/, /--env "melosys-api:min-tag"/, /--shards "2"/];
 
 test('make leser variablene bare fra kommandolinjen, ikke fra miljøet', () => {
-  const miljo = { BRANCH: 'fra-miljoet', PREVIEW: '1', RETRIES: '1', VIS_FILTER: '1', NO_WAIT: '1', ENV: 'melosys-api:fra-miljoet' };
+  const miljo = { BRANCH: 'fra-miljoet', PREVIEW: '1', RETRIES: '1', VIS_FILTER: '1', NO_WAIT: '1', ENV: 'melosys-api:fra-miljoet', SHARDS: '5' };
   const ut = make(miljo, 'ci', 'ci-affected', 'ci-grep', 'list-affected', 'GREP=x');
-  assert.doesNotMatch(ut, /fra-miljoet|--preview|--retries|--vis-filter|--no-wait|--env/);
+  assert.doesNotMatch(ut, /fra-miljoet|--preview|--retries|--vis-filter|--no-wait|--env|--shards/);
 });
 
 for (const mål of ['ci', 'ci-affected', 'ci-grep']) {
@@ -493,6 +493,29 @@ test('make ci ci-images uten ENV stopper før noe mål kjører', () => {
   assert.notEqual(r.status, 0);
   assert.match(r.stderr, /ENV=/);
   assert.doesNotMatch(r.stdout, /ci-e2e\.sh/);
+});
+
+test('--shards sendes som shards-input, og uten flagget sendes ingen', () => {
+  const repo = lagRepo(TO_SPECS);
+  const kommando = (...a: string[]) => {
+    const r = spawnSync('bash', ['scripts/ci-e2e.sh', '--grep', 'abc', '--branch', 'feature', '--preview', ...a], {
+      cwd: repo.arbeid,
+      encoding: 'utf8',
+    });
+    assert.equal(r.status, 0, r.stderr);
+    return r.stdout.split('\n').find((l) => l.startsWith('gh workflow run ')) ?? '';
+  };
+  assert.match(kommando('--shards', '2'), / -f shards=2$/);
+  assert.doesNotMatch(kommando(), /shards/);
+});
+
+test('--shards avviser verdier utenfor 1–8', () => {
+  const repo = lagRepo(TO_SPECS);
+  for (const verdi of ['0', '9', 'tre', '']) {
+    const r = spawnSync('bash', ['scripts/ci-e2e.sh', '--branch', 'feature', '--preview', '--shards', verdi], { cwd: repo.arbeid, encoding: 'utf8' });
+    assert.equal(r.status, 2, `--shards ${verdi}`);
+    assert.match(r.stderr, /--shards krever et tall fra 1 til 8/);
+  }
 });
 
 test('VIS_FILTER i miljøet skriver ikke ut filteret', () => {

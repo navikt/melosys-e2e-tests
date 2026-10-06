@@ -211,9 +211,9 @@ route unless melosys-web ships prod sourcemaps for other reasons.
 5. Runtime overhead: ~5-10% slower execution
 6. Generate reports: +15-30s
 
-**Total overhead: ~5 minutes warm, ~12 minutes cold.** Because of this, the job
-`timeout-minutes` is raised to **120 min** when `collect_coverage=true` (normal
-runs keep the tight 60-min ceiling). The melosys-api build uses **JDK 21** — the
+**Total overhead: ~5 minutes warm, ~12 minutes cold.** The shard job's
+`timeout-minutes` is **120 min** for all runs, which covers it. Coverage runs on one
+shard on `ubuntu-latest-8-cores`. The melosys-api build uses **JDK 21** — the
 project moved to Java 21 / Spring Boot 4, and building on the runner default JDK
 17 fails maven-enforcer. The build step is `continue-on-error`, so if it ever
 breaks again the test suite still runs (only the `jacoco:report` is lost) rather

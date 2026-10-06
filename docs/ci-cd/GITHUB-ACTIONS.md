@@ -50,6 +50,7 @@ For debugging race conditions or running specific tests multiple times, use the 
 | `unleash_force_enable` | Comma-separated Unleash toggles forced ON for the whole run | `` |
 | `gate_context` | Set by the e2e gate, not for manual runs. JSON with `source_repo`, `source_sha`, `tree`, `trigger` (required) and `actor`, `pr_number`, `head_sha`, `queue_ref`, written to new fields in `trigger-context.json`. Other keys are rejected. If the JSON, a key or a value is invalid, the run logs a warning and continues with all gate fields null. | `` |
 | `correlation_id` | Set by the e2e gate, not for manual runs. Gives the run the title `E2E Tests · <id>`, so the gate can find it. Allowed characters: `A-Z a-z 0-9 . _ -`, at most 100. Any other value gives a warning and `correlationId: null`; the title still uses the raw value. | `` |
+| `branch_context` | Set by `e2e-brancher.yml`, not for manual runs. JSON with `branches` (1–8 objects with `repo`, `branch`, `sha`), `requested_by` and `orchestrator_run_id`, written to `branchContext` in `trigger-context.json`. Other keys are rejected; in `requested_by`, control characters become spaces and `#` is removed. If the JSON, a key or a value is invalid, the run logs a warning and continues with `branchContext: null`. | `` |
 
 ### Using GitHub CLI (`gh`)
 
@@ -197,8 +198,9 @@ on:
 
 jobs:
   e2e-tests:
-    runs-on: ubuntu-latest-8-cores  # 8-core runner for performance
-    timeout-minutes: 45  # Timeout for large stack
+    needs: plan
+    runs-on: ${{ needs.plan.outputs.runner }}  # free ubuntu-latest; 8 cores for coverage
+    timeout-minutes: 120
 ```
 
 ### What the Workflow Does
@@ -301,13 +303,11 @@ Failed tests:
 
 ### Key Metrics
 
-- **Workflow timeout**: 45 minutes
-- **Runner**: ubuntu-latest-8-cores (paid)
+- **Shard job timeout**: 120 minutes
+- **Runner**: free `ubuntu-latest` (4 cores, 16 GB), 6 shards; `ubuntu-latest-8-cores` (paid) for coverage
 - **Images**: 15 (9 NAIS custom + 6 base)
-- **Average run time**: 15-20 minutes
-- **Pre-pull time**: ~5 minutes
-- **Startup time**: ~5 minutes
-- **Test execution**: ~5 minutes
+- **Run time**: 13–14 minutes for the full suite (4 runs, 02.10.2026)
+- **Per shard** (run 37033530898): pre-pull 69–108 s, `docker compose up` 52–87 s, health check 31–58 s, Playwright 361–460 s
 
 ---
 
@@ -472,15 +472,16 @@ services:
 
 **Prevents:** "no matching manifest" errors
 
-### 3. 8-Core Runner
+### 3. Free runner
 
-Uses `ubuntu-latest-8-cores` for faster execution:
+The shard jobs run on the free `ubuntu-latest` runner (the repo is public: 4 cores, 16 GB). Measured 02.10.2026 on the full suite with retries off:
 
-- **Standard runner**: 2 cores, ~25-30 min
-- **8-core runner**: 8 cores, ~15-20 min
-- **Cost**: Higher (uses more GitHub Actions minutes)
+- **6 shards, free runner**: 13–14 min per run, 4 of 4 green
+- **3 shards, free runner**: 19.5 min (1 run, green)
+- **3 shards, `ubuntu-latest-8-cores`**: 18–19 min per run
+- **Memory**: about 9 of 16 GB used; `docker-compose.liten-runner.yml` caps the JVM heaps
 
-**Cost optimization:** Use standard runner for development branches, 8-core for main.
+`collect_coverage` always runs on `ubuntu-latest-8-cores`. Pick 8 cores yourself with `-f runner=ubuntu-latest-8-cores`.
 
 ---
 
@@ -520,9 +521,9 @@ melosys-mock:
 **Cause**: Insufficient resources or slow image pulls
 
 **Solutions**:
-- Use `ubuntu-latest-8-cores` runner
+- Run on 8 cores with `-f runner=ubuntu-latest-8-cores`
 - Pre-pull images in parallel
-- Increase timeout to 45 minutes
+- Raise the 200 s deadline in the «Wait for services to be healthy» step (the job timeout is not what fires)
 
 ### Issue: Tests not found
 
@@ -561,13 +562,7 @@ curl http://localhost:8080/internal/health
 
 ### Issue: High costs from 8-core runner
 
-**Solution**: Use conditional runners:
-
-```yaml
-jobs:
-  e2e-tests:
-    runs-on: ${{ github.ref == 'refs/heads/main' && 'ubuntu-latest-8-cores' || 'ubuntu-latest' }}
-```
+The shard jobs run on the free `ubuntu-latest` runner by default. Only `collect_coverage` and runs started with `-f runner=ubuntu-latest-8-cores` use the paid runner. Don't hard-code `runs-on`: the plan job picks the runner, and the heap caps depend on it.
 
 ---
 
@@ -647,11 +642,7 @@ Docker errors are attached to each test result:
 
 ### Runner Costs
 
-**ubuntu-latest-8-cores** is a paid runner (higher GitHub Actions minutes consumption)
-
-**Average costs:**
-- Standard runner: ~25-30 min/run
-- 8-core runner: ~15-20 min/run (but higher $/min)
+The shard jobs run on the free `ubuntu-latest` runner. Only `collect_coverage` and runs started with `-f runner=ubuntu-latest-8-cores` use the paid **ubuntu-latest-8-cores** runner.
 
 ### Optimization Options
 
@@ -664,20 +655,7 @@ on:
       - main  # Only on main branch
 ```
 
-**2. Conditional runner:**
-```yaml
-runs-on: ${{ github.ref == 'refs/heads/main' && 'ubuntu-latest-8-cores' || 'ubuntu-latest' }}
-```
-
-**3. Test sharding:**
-```yaml
-strategy:
-  matrix:
-    shardIndex: [1, 2, 3, 4]
-    shardTotal: [4]
-```
-
-Split tests across 4 parallel jobs (4x faster, but 4x cost).
+**2. Test sharding:** E2E Tests runs on 6 shards by default, with a merged report. See [KJOR-E2E-PA-CI.md](KJOR-E2E-PA-CI.md#sharding).
 
 ---
 
@@ -685,15 +663,7 @@ Split tests across 4 parallel jobs (4x faster, but 4x cost).
 
 ### Recommended Enhancements
 
-**1. Test Sharding**
-```yaml
-strategy:
-  matrix:
-    shardIndex: [1, 2, 3, 4]
-    shardTotal: [4]
-```
-
-**2. Docker Layer Caching**
+**1. Docker Layer Caching**
 ```yaml
 - name: Cache Docker layers
   uses: actions/cache@v3
@@ -702,16 +672,16 @@ strategy:
     key: ${{ runner.os }}-buildx-${{ github.sha }}
 ```
 
-**3. PR Comments**
+**2. PR Comments**
 Post test results as PR comments automatically
 
-**4. Slack Notifications**
+**3. Slack Notifications**
 Notify team of test failures
 
-**5. Scheduled Runs**
+**4. Scheduled Runs**
 Run nightly to catch issues early
 
-**6. Automatic Image Rebuilds**
+**5. Automatic Image Rebuilds**
 Trigger E2E tests when new images are built:
 ```yaml
 on:

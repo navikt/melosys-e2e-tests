@@ -1,0 +1,42 @@
+# Heap-tak for JVM-tjenestene når shard-jobbene kjører på gratis `ubuntu-latest` (4 kjerner, 16 GB).
+# Uten tak kan hver JVM ta 25 % av minnet (4 GB). e2e-tests.yml legger fila til via COMPOSE_FILE.
+# Kafka har eget tak (1 GB), og Oracle XE tar maks 2 GB.
+x-heap-med-jacoco: &heap-med-jacoco "${JACOCO_AGENT_OPTS:-} -Xmx512m"
+
+services:
+  melosys-api:
+    environment:
+      JAVA_TOOL_OPTIONS: "${JACOCO_AGENT_OPTS:-} -Xmx1g"
+  faktureringskomponenten:
+    environment:
+      JAVA_TOOL_OPTIONS: *heap-med-jacoco
+  melosys-dokgen:
+    environment:
+      JAVA_TOOL_OPTIONS: *heap-med-jacoco
+  melosys-trygdeavgift-beregning:
+    environment:
+      JAVA_TOOL_OPTIONS: *heap-med-jacoco
+  melosys-trygdeavtale:
+    environment:
+      JAVA_TOOL_OPTIONS: *heap-med-jacoco
+  melosys-inngangsvilkar:
+    environment:
+      JAVA_TOOL_OPTIONS: *heap-med-jacoco
+  melosys-eessi:
+    environment:
+      JAVA_TOOL_OPTIONS: *heap-med-jacoco
+  melosys-mock:
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx512m
+  felles-kodeverk:
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx512m
+  melosys-skjema-api:
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx512m
+  mock-oauth2-server:
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx256m
+  mock-oauth2-server-sts:
+    environment:
+      JAVA_TOOL_OPTIONS: -Xmx256m

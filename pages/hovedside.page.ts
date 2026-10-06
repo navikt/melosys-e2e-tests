@@ -1,6 +1,6 @@
 import { Page, Locator, expect } from '@playwright/test';
 import { BasePage } from './shared/base.page';
-import { MELOSYS_URL, TIMEOUT_LONG } from './shared/constants';
+import { MELOSYS_URL, TIMEOUT_API, TIMEOUT_LONG } from './shared/constants';
 
 /**
  * Page Object for the Melosys main page (hovedside)
@@ -116,7 +116,29 @@ export class HovedsidePage extends BasePage {
       .filter({ hasText: /Årsavregning/ });
 
     await expect(lenker).toHaveCount(1, { timeout: TIMEOUT_LONG });
-    await lenker.first().click();
+    await this.åpneBehandlingslenke(lenker.first());
+  }
+
+  /**
+   * Klikk en behandlingslenke og vent til web har hentet behandlingen. melosys-api endrer
+   * status fra OPPRETTET til UNDER_BEHANDLING i det kallet når oppgaven er tildelt
+   * saksbehandleren, så en DB-assert før kallet er ferdig kan lese OPPRETTET.
+   *
+   * @returns behandlingID fra lenken
+   */
+  async åpneBehandlingslenke(lenke: Locator): Promise<string> {
+    const href = await lenke.getAttribute('href');
+    const behandlingId = href?.match(/behandlingID=(\d+)/)?.[1];
+    expect(behandlingId, `Fant ikke behandlingID i lenken: ${href}`).toBeTruthy();
+
+    const behandlingHentet = this.page.waitForResponse(
+      r => r.request().method() === 'GET' && new URL(r.url()).pathname.endsWith(`/api/behandlinger/${behandlingId}`),
+      { timeout: TIMEOUT_API },
+    );
+    await lenke.click();
+    const svar = await behandlingHentet;
+    expect(svar.ok(), `GET ${svar.url()} svarte ${svar.status()}`).toBeTruthy();
+    return behandlingId!;
   }
 
   /**

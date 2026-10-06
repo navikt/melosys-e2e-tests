@@ -96,6 +96,23 @@ Grafen ser bare statiske importer. Når endringen din når testene via kjøretid
 
 Egne images bygger du med «Build and Push Image»-workflowen i hvert repo. Workflow-fila må finnes på branchen du bygger fra.
 
+## E2E med brancher
+
+«E2E med brancher» (`e2e-brancher.yml`) bygger brancher i ett eller flere repoer og kjører E2E Tests mot dem. Tjenester du ikke velger, kjører som `latest`:
+
+```bash
+gh workflow run e2e-brancher.yml -R navikt/melosys-e2e-tests \
+  -f branches="melosys-api:min-branch,melosys-web:min-branch" \
+  -f test_grep="arsavregning"   # valgfritt
+```
+
+- Hvert repo bygges med sin egen `build-image.yml` (`build-image-mock.yml` i melosys-docker-compose; skriv `melosys-mock` eller `melosys-docker-compose`). Alle får taggen `br-<run_id>`.
+- Branchen må ha workflow-fila. Mangler den, stopper kjøringen og ber deg rebase branchen på main/master.
+- Default-branchen (master/main) avvises: den kjører allerede som `latest`.
+- Feiler et bygg, starter ikke E2E Tests. Jobbsammendraget lenker til hvert bygg og til E2E Tests.
+- En grønn kjøring setter ingen `e2e-ok-<tree>`-markør. Den gjelder kombinasjonen, ikke ett repo mot `latest`.
+- Workflowen bruker `E2E_TRIGGER_PAT` for å starte byggene i de andre repoene.
+
 ## Variabler
 
 `ci`, `ci-affected`, `ci-grep` og `ci-images` tar de samme variablene, og du kan kombinere dem:
@@ -108,12 +125,27 @@ make ci-affected ENV=melosys-api:min-tag RETRIES=1
 |---|---|---|
 | `BRANCH=<navn>` | `--branch <navn>` | Kjører mot en annen branch enn den du står på. Uten spør scriptet i terminalen. Virker også for `list-affected`, som henter branchen først |
 | `ENV=<tagger>` | `--env <tagger>` | Egne images, for eksempel `melosys-api:min-tag,melosys-web:min-tag`. Påkrevd for `ci-images` |
+| `SHARDS=<1–8>` | `--shards <1–8>` | Antall shards. Uten sendes ingenting, og workflowen ber om 6. Se [Sharding](#sharding) |
 | `PREVIEW=1` | `--preview` | Skriver ut `gh`-kommandoen som ville blitt sendt, uten å starte kjøringen |
 | `RETRIES=1` | `--retries` | Slår på retries. Standard er av, så flaky tester synes |
 | `VIS_FILTER=1` | `--vis-filter` | Skriver ut hele filteret som sendes |
 | `NO_WAIT=1` | `--no-wait` | Starter kjøringen og returnerer med én gang |
 
 Variablene leses bare fra kommandolinjen. En `BRANCH` eller `ENV` eksportert i skallet styrer ikke CI.
+
+## Sharding
+
+E2E Tests deler testene på 6 shards som standard, også når kjøringen startes fra et image-bygg eller fra merge queue. Plan-jobben fordeler spec-filene etter varigheten fra forrige fulle kjøring på main, og hver shard kjører sin del mot sin egen stack. Skjema-testene havner i samme shard.
+
+- Shardene skal i snitt ha minst 5 minutter estimert testtid, fordi oppsettet av en stack tar rundt 4,5 minutter. Et lite utvalg, som de påvirkede testene i merge queue, kjører derfor på færre shards eller på én.
+- `run_bdd` og `collect_coverage` kjører alltid på én shard.
+- Shardene kjører på gratis `ubuntu-latest` (4 kjerner, 16 GB; repoet er offentlig), med heap-tak på JVM-tjenestene fra `docker-compose.liten-runner.yml`. `collect_coverage` kjører alltid på `ubuntu-latest-8-cores`. Velg 8 kjerner selv med `-f runner=ubuntu-latest-8-cores` på `gh workflow run`.
+- Hver shard skriver minne, disk og minne per container til jobbsammendraget og jobbloggen (`scripts/ressurs-oversikt.sh`).
+- Velg antall selv med `SHARDS=` på make-målene, for eksempel `make ci SHARDS=1`, eller med `-f shards=N` på `gh workflow run`.
+
+Med én shard ser kjøringen ut som før sharding: jobben `e2e-tests` laster opp `test-summary` og de andre artefaktene.
+
+Med flere shards laster hver shard opp artefaktene sine med suffiks, for eksempel `test-summary-shard-2` og `docker-logs-shard-2`. Jobben «Slå sammen shards» slår sammen blob-rapportene til én rapport og laster den opp som `test-summary` og `playwright-report` (HTML). Den summerer også Prometheus-metrikkene fra shardene. Konsollen, Slack-varslet og plan-jobben leser `test-summary` som før. Mangler rapporten fra en shard, feiler jobben og sier hvilken. Docker-logganalysen står i hver shard-jobb.
 
 ## Se rekkevidden før du endrer noe
 

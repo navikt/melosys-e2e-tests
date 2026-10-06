@@ -58,19 +58,15 @@ async function assertNoErrors(scope: Page | Locator): Promise<void> {
     '.feilmelding',
   ];
 
+  // Én lesing per selektor, og bare elementer med tekst teller. melosys-web har tomme
+  // `role="alert"`-beholdere (MultiSelect), og siden kan navigere bort mellom count() og
+  // textContent(), som da venter til timeout på et element som er borte.
   for (const selector of fieldErrorSelectors) {
-    const errors = scope.locator(selector);
-    const count = await errors.count();
+    const errorTexts = await teksterMedInnhold(scope.locator(selector));
 
-    if (count > 0) {
-      const errorTexts = await Promise.all(
-        Array.from({ length: count }, (_, i) =>
-          errors.nth(i).textContent()
-        )
-      );
-
+    if (errorTexts.length > 0) {
       throw new Error(
-        `Expected no errors, but found ${count} field error(s):\n` +
+        `Expected no errors, but found ${errorTexts.length} field error(s):\n` +
         errorTexts.map((text, i) => `  ${i + 1}. ${text}`).join('\n')
       );
     }
@@ -85,16 +81,18 @@ async function assertNoErrors(scope: Page | Locator): Promise<void> {
   ];
 
   for (const selector of errorSummarySelectors) {
-    const errorSummary = scope.locator(selector);
-    const summaryCount = await errorSummary.count();
+    const summaryTexts = await teksterMedInnhold(scope.locator(selector));
 
-    if (summaryCount > 0) {
-      const summaryText = await errorSummary.first().textContent();
+    if (summaryTexts.length > 0) {
       throw new Error(
-        `Expected no errors, but found error summary:\n${summaryText}`
+        `Expected no errors, but found error summary:\n${summaryTexts[0]}`
       );
     }
   }
+}
+
+async function teksterMedInnhold(locator: Locator): Promise<string[]> {
+  return (await locator.allTextContents()).map((t) => t.trim()).filter((t) => t.length > 0);
 }
 
 /**
@@ -138,14 +136,15 @@ async function assertErrorSummary(
     '.alertstripe--advarsel, .navds-alert--error, [role="alert"]'
   );
 
-  const summaryCount = await errorSummary.count();
+  // Alle bokser med tekst, ikke bare den første: en tom `role="alert"`-beholder kan stå foran.
+  const summaryTexts = await teksterMedInnhold(errorSummary);
 
-  if (summaryCount === 0) {
-    // No summary box - that's ok, field errors are enough
+  if (summaryTexts.length === 0) {
+    // Ingen boks med tekst: feltfeilene over er nok.
     return;
   }
 
-  const summaryText = await errorSummary.first().textContent() || '';
+  const summaryText = summaryTexts.join('\n');
 
   for (const expectedError of expectedErrors) {
     if (typeof expectedError === 'string') {
