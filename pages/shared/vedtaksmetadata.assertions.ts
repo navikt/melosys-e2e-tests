@@ -16,8 +16,16 @@ export async function verifiserVedtaksmetadata(
   forventet: { vedtakstype: string }
 ): Promise<void> {
   await withDatabase(async (db) => {
-    const rader = await db.query<{ VEDTAK_DATO: Date | null; VEDTAK_TYPE: string; DAGER: number | null }>(
-      `SELECT VEDTAK_DATO, VEDTAK_TYPE, VEDTAK_KLAGEFRIST - TRUNC(VEDTAK_DATO) AS DAGER
+    // VEDTAK_DATO_TEKST er bare for loggen: oracledb leser TIMESTAMP som lokal tid,
+    // så Date-verdien er forskjøvet med tidssoneforskjellen
+    const rader = await db.query<{
+      VEDTAK_DATO: Date | null;
+      VEDTAK_DATO_TEKST: string | null;
+      VEDTAK_TYPE: string;
+      DAGER: number | null;
+    }>(
+      `SELECT VEDTAK_DATO, TO_CHAR(VEDTAK_DATO, 'YYYY-MM-DD HH24:MI:SS') AS VEDTAK_DATO_TEKST,
+              VEDTAK_TYPE, VEDTAK_KLAGEFRIST - TRUNC(VEDTAK_DATO) AS DAGER
          FROM VEDTAK_METADATA WHERE BEHANDLINGSRESULTAT_ID = :id`,
       { id: behandlingId }
     );
@@ -30,7 +38,7 @@ export async function verifiserVedtaksmetadata(
     expect(Number(rad.DAGER), 'Klagefristen skal være 41–43 dager etter vedtaksdatoen').toBeGreaterThanOrEqual(41);
     expect(Number(rad.DAGER), 'Klagefristen skal være 41–43 dager etter vedtaksdatoen').toBeLessThanOrEqual(43);
     console.log(
-      `✅ VEDTAK_METADATA: ${rad.VEDTAK_TYPE}, vedtaksdato ${rad.VEDTAK_DATO?.toISOString()}, klagefrist +${rad.DAGER} dager`
+      `✅ VEDTAK_METADATA: ${rad.VEDTAK_TYPE}, vedtaksdato ${rad.VEDTAK_DATO_TEKST} (som lagret i DB), klagefrist +${rad.DAGER} dager`
     );
   });
 }

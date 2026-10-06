@@ -45,8 +45,6 @@ export class IkkeYrkesaktivBehandlingPage extends BasePage {
 
   private readonly bestemmelseDropdown = this.page.getByLabel('Velg bestemmelse');
 
-  private readonly brukersSituasjonGruppe = this.page.getByRole('group', { name: 'Velg brukers situasjon' });
-
   // ── Steg 3: Vedtak ───────────────────────────────────────────────────
   private readonly vedtakHeading = this.page.getByRole('heading', {
     name: /^Omfattet av norsk trygdelovgivning/,
@@ -107,10 +105,11 @@ export class IkkeYrkesaktivBehandlingPage extends BasePage {
    * lagringen etter radioknappen før bestemmelsen velges, ellers kan den første
    * lagringen (uten bestemmelse) bli den siste.
    *
-   * @param bestemmelse       - Bestemmelseskode, f.eks. 'FO_883_2004_ART11_2' eller 'AUS_ART11'
-   * @param brukersSituasjon  - Kode for «Velg brukers situasjon». Kreves bare for FO_883_2004_ART11_3E.
+   * @param bestemmelse - Bestemmelseskode, f.eks. 'FO_883_2004_ART11_2' eller 'AUS_ART11'.
+   *                      Ikke FO_883_2004_ART11_3E: den krever «Velg brukers situasjon»,
+   *                      som denne metoden ikke fyller ut.
    */
-  async innvilgOgVelgBestemmelse(bestemmelse: string, brukersSituasjon?: string): Promise<void> {
+  async innvilgOgVelgBestemmelse(bestemmelse: string): Promise<void> {
     const radioLagret = this.ventPåLagretLovvalgsperiode();
     await this.innvilgRadio.check();
     await radioLagret;
@@ -122,11 +121,6 @@ export class IkkeYrkesaktivBehandlingPage extends BasePage {
     await this.bestemmelseDropdown.selectOption(bestemmelse);
     await bestemmelseLagret;
     console.log(`✅ Valgte bestemmelse: ${bestemmelse}`);
-
-    if (brukersSituasjon) {
-      await this.brukersSituasjonGruppe.locator(`input[type="radio"][value="${brukersSituasjon}"]`).check();
-      console.log(`✅ Valgte brukers situasjon: ${brukersSituasjon}`);
-    }
 
     // Vedtakssteget kjører forhåndskontrollen når det åpnes, så sporingen må starte før klikket
     this.forhåndskontroll = sporForhåndskontroll(this.page);
@@ -166,13 +160,14 @@ export class IkkeYrkesaktivBehandlingPage extends BasePage {
     console.log(`✅ Vedtak fattet: ${svar.url()} -> ${svar.status()}`);
   }
 
-  private ventPåLagretLovvalgsperiode() {
-    return this.page.waitForResponse(
-      r =>
-        r.url().includes('/lovvalgsperioder') &&
-        ['POST', 'PUT'].includes(r.request().method()) &&
-        r.ok(),
+  private async ventPåLagretLovvalgsperiode(): Promise<void> {
+    const svar = await this.page.waitForResponse(
+      r => r.url().includes('/lovvalgsperioder') && ['POST', 'PUT'].includes(r.request().method()),
       { timeout: 15000 }
     );
+    expect(
+      svar.ok(),
+      `Lagring av lovvalgsperiode svarte ${svar.status()}: ${await svar.text().catch(() => '')}`
+    ).toBeTruthy();
   }
 }
