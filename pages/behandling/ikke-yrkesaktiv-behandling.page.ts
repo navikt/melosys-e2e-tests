@@ -1,0 +1,178 @@
+import { Page, expect } from '@playwright/test';
+import { BasePage } from '../shared/base.page';
+import { KallSporing } from '../shared/kall-sporing';
+import { sporForhåndskontroll, ventPåForhåndskontroll } from '../shared/stoppet-vedtak.assertions';
+
+/**
+ * Page Object for behandlingstema IKKE_YRKESAKTIV, felles for EU/EØS og trygdeavtale
+ * (rute: /melosys/{EU_EOS|TRYGDEAVTALE}/ikkeYrkesaktiv/{saksnr}/?behandlingID={id}).
+ *
+ * Tre steg (melosys-web `src/sider/ikkeYrkesaktiv/`):
+ * 1. «Oppgi opplysninger fra søknaden»: periode og land
+ * 2. «Bestemmelse og vurdering»: innvilgelse og bestemmelse
+ * 3. Vedtak («Omfattet av norsk trygdelovgivning - …»): periode, fritekster og «Fatt vedtak»
+ *
+ * @example
+ * const ikkeYrkesaktiv = new IkkeYrkesaktivBehandlingPage(page);
+ * await ikkeYrkesaktiv.fyllUtSøknadsopplysninger('01.01.2024', '31.12.2025', 'SE');
+ * await ikkeYrkesaktiv.bekreftOgFortsett();
+ * await ikkeYrkesaktiv.innvilgOgVelgBestemmelse('FO_883_2004_ART11_2');
+ * await ikkeYrkesaktiv.fattVedtak();
+ */
+export class IkkeYrkesaktivBehandlingPage extends BasePage {
+  // ── Steg 1: Inngang ──────────────────────────────────────────────────
+  private readonly inngang = this.page.locator('.vurderingInngang_ikkeYrkesaktiv');
+
+  private readonly inngangHeading = this.page.getByRole('heading', {
+    name: 'Oppgi opplysninger fra søknaden',
+    level: 1,
+  });
+
+  private readonly fraOgMedField = this.inngang.getByRole('textbox', { name: /^Fra og med/ });
+
+  // «Til og med» har hjelpetekst i etiketten, så navnet er lengre enn selve etiketten
+  private readonly tilOgMedField = this.inngang.getByRole('textbox', { name: /^Til og med/ });
+
+  private readonly landDropdown = this.inngang.getByLabel('Land', { exact: true });
+
+  // ── Steg 2: Bestemmelse og vurdering ─────────────────────────────────
+  private readonly bestemmelseHeading = this.page.getByRole('heading', {
+    name: 'Bestemmelse og vurdering',
+    level: 1,
+  });
+
+  private readonly innvilgRadio = this.page.getByRole('radio', { name: 'Jeg vil innvilge søknaden' });
+
+  private readonly bestemmelseDropdown = this.page.getByLabel('Velg bestemmelse');
+
+  private readonly brukersSituasjonGruppe = this.page.getByRole('group', { name: 'Velg brukers situasjon' });
+
+  // ── Steg 3: Vedtak ───────────────────────────────────────────────────
+  private readonly vedtakHeading = this.page.getByRole('heading', {
+    name: /^Omfattet av norsk trygdelovgivning/,
+    level: 1,
+  });
+
+  // Feilmeldinger-komponenten viser kontrollfeil i en feilstripe over stegknappene
+  private readonly kontrollfeilStripe = this.page.locator('.feilmelding .varselstripe');
+
+  private readonly fattVedtakButton = this.page.getByRole('button', { name: 'Fatt vedtak' });
+
+  // ── Felles ───────────────────────────────────────────────────────────
+  private readonly bekreftOgFortsettButton = this.page.getByRole('button', { name: 'Bekreft og fortsett' });
+
+  private forhåndskontroll: KallSporing | null = null;
+
+  constructor(page: Page) {
+    super(page);
+  }
+
+  /**
+   * Fyll ut «Oppgi opplysninger fra søknaden».
+   *
+   * @param fraOgMed - Startdato DD.MM.YYYY
+   * @param tilOgMed - Sluttdato DD.MM.YYYY. Fyll den ut: uten sluttdato stopper
+   *                   kontrollen periodeManglerSluttdato vedtaket.
+   * @param land     - Landkode, f.eks. 'SE' (EU/EØS) eller 'AU' (trygdeavtale)
+   */
+  async fyllUtSøknadsopplysninger(fraOgMed: string, tilOgMed: string, land: string): Promise<void> {
+    await this.inngangHeading.waitFor({ state: 'visible', timeout: 30000 });
+
+    await this.fraOgMedField.click();
+    await this.fraOgMedField.fill(fraOgMed);
+    console.log(`✅ Fylte "Fra og med": ${fraOgMed}`);
+
+    await this.tilOgMedField.click();
+    await this.tilOgMedField.fill(tilOgMed);
+    console.log(`✅ Fylte "Til og med": ${tilOgMed}`);
+
+    await this.landDropdown.selectOption(land);
+    console.log(`✅ Valgte land: ${land}`);
+  }
+
+  /**
+   * Bekreft inngangssteget. Første klikk lagrer periode og land, oppfrisker
+   * registeropplysningene i en dialog og går videre til neste steg av seg selv.
+   */
+  async bekreftOgFortsett(): Promise<void> {
+    await this.clickStepButtonWithRetry(this.bekreftOgFortsettButton);
+    await this.bestemmelseHeading.waitFor({ state: 'visible', timeout: 60000 });
+    console.log('✅ Steg «Bestemmelse og vurdering» vises');
+  }
+
+  /**
+   * Velg «Jeg vil innvilge søknaden» og bestemmelse, og gå til vedtakssteget.
+   *
+   * Radioknappen og bestemmelsen lagrer hver sin lovvalgsperiode. Vi venter på
+   * lagringen etter radioknappen før bestemmelsen velges, ellers kan den første
+   * lagringen (uten bestemmelse) bli den siste.
+   *
+   * @param bestemmelse       - Bestemmelseskode, f.eks. 'FO_883_2004_ART11_2' eller 'AUS_ART11'
+   * @param brukersSituasjon  - Kode for «Velg brukers situasjon». Kreves bare for FO_883_2004_ART11_3E.
+   */
+  async innvilgOgVelgBestemmelse(bestemmelse: string, brukersSituasjon?: string): Promise<void> {
+    const radioLagret = this.ventPåLagretLovvalgsperiode();
+    await this.innvilgRadio.check();
+    await radioLagret;
+    console.log('✅ Valgte «Jeg vil innvilge søknaden»');
+
+    await this.bestemmelseDropdown.waitFor({ state: 'visible', timeout: 15000 });
+    await this.waitForDropdownToPopulate(this.bestemmelseDropdown);
+    const bestemmelseLagret = this.ventPåLagretLovvalgsperiode();
+    await this.bestemmelseDropdown.selectOption(bestemmelse);
+    await bestemmelseLagret;
+    console.log(`✅ Valgte bestemmelse: ${bestemmelse}`);
+
+    if (brukersSituasjon) {
+      await this.brukersSituasjonGruppe.locator(`input[type="radio"][value="${brukersSituasjon}"]`).check();
+      console.log(`✅ Valgte brukers situasjon: ${brukersSituasjon}`);
+    }
+
+    // Vedtakssteget kjører forhåndskontrollen når det åpnes, så sporingen må starte før klikket
+    this.forhåndskontroll = sporForhåndskontroll(this.page);
+    await this.clickStepButtonWithRetry(this.bekreftOgFortsettButton);
+    await this.vedtakHeading.waitFor({ state: 'visible', timeout: 30000 });
+    console.log('✅ Vedtakssteget vises');
+  }
+
+  /**
+   * Klikk «Fatt vedtak» og vent på at /fatt svarer OK.
+   *
+   * Venter først på forhåndskontrollen og krever at den ikke fant feil. Ellers
+   * stopper vedtaket før iverksettingen, og testen feiler av feil grunn.
+   */
+  async fattVedtak(): Promise<void> {
+    expect(
+      this.forhåndskontroll,
+      'innvilgOgVelgBestemmelse() må åpne vedtakssteget før fattVedtak()'
+    ).not.toBeNull();
+    await ventPåForhåndskontroll(this.forhåndskontroll!);
+    await expect(
+      this.kontrollfeilStripe,
+      'Forhåndskontrollen på vedtakssteget skal ikke vise feil'
+    ).toHaveCount(0);
+    await expect(this.fattVedtakButton).toBeEnabled({ timeout: 15000 });
+
+    const fattSvar = this.page.waitForResponse(
+      r =>
+        r.url().includes('/api/saksflyt/vedtak/') &&
+        r.url().includes('/fatt') &&
+        r.request().method() === 'POST',
+      { timeout: 60000 }
+    );
+    await this.fattVedtakButton.click();
+    const svar = await fattSvar;
+    expect(svar.ok(), `/fatt svarte ${svar.status()}: ${await svar.text().catch(() => '')}`).toBeTruthy();
+    console.log(`✅ Vedtak fattet: ${svar.url()} -> ${svar.status()}`);
+  }
+
+  private ventPåLagretLovvalgsperiode() {
+    return this.page.waitForResponse(
+      r =>
+        r.url().includes('/lovvalgsperioder') &&
+        ['POST', 'PUT'].includes(r.request().method()) &&
+        r.ok(),
+      { timeout: 15000 }
+    );
+  }
+}
