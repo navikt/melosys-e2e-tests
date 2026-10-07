@@ -736,8 +736,9 @@ jobs:
         id: previous
         if: steps.mode.outputs.requested != '1'
         # Siste grønne kjøring på main uten test_grep og repeat_each. Kjøringer med filter mangler
-        # varighet for de andre testene, og med repeat_each summeres hver test flere ganger. En sharded kjøring har `test-summary` fra merge-jobben. Finnes
-        # ingen, får alle testene samme estimat og fordeles etter antall.
+        # varighet for de andre testene, og med repeat_each summeres hver test flere ganger. En
+        # sharded kjøring har `test-summary` fra merge-jobben. Finnes ingen, får alle testene samme
+        # estimat og fordeles etter antall.
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}

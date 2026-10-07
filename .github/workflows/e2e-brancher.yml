@@ -390,12 +390,17 @@ jobs:
             return 1
           }
 
-          # E2E Tests kjører fra branchens head ved dispatch, ikke fra sha-en i branch_context.
+          # E2E Tests kjører fra branchens head ved dispatch. Har den flyttet seg siden planen,
+          # får branch_context den nye sha-en, så konsollen viser commiten som ble testet.
+          # gh skriver feilsvaret til stdout, så bare en sha godtas.
           PLANLAGT=$(jq -r '.branches[] | select(.repo == "melosys-e2e-tests") | .sha' <<< "$BRANCH_CONTEXT")
           if [ -n "$PLANLAGT" ]; then
             NAA=$(gh api "repos/$E2E_REPO/branches/$(jq -rn --arg b "$E2E_REF" '$b | @uri')" --jq .commit.sha 2> /dev/null || true)
-            if [ "$NAA" != "$PLANLAGT" ]; then
+            if ! [[ "$NAA" =~ ^[0-9a-f]{40}$ ]]; then
+              echo "::warning::Fikk ikke sjekket om melosys-e2e-tests-branchen har flyttet seg; branch_context har sha-en fra planen."
+            elif [ "$NAA" != "$PLANLAGT" ]; then
               echo "::warning::melosys-e2e-tests-branchen har flyttet seg siden planen (${PLANLAGT:0:7} → ${NAA:0:7}). Testene kjører fra den nye commiten."
+              BRANCH_CONTEXT=$(jq -c --arg sha "$NAA" '(.branches[] | select(.repo == "melosys-e2e-tests") | .sha) = $sha' <<< "$BRANCH_CONTEXT")
             fi
           fi
 
