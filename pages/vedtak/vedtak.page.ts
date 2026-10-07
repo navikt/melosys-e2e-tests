@@ -29,9 +29,9 @@ export class VedtakPage extends BasePage {
   // Locators for Quill editors
   private readonly quillEditors = this.page.locator('.ql-editor');
 
-  private readonly grunnNyttVedtakDropdown = this.page.getByLabel(
-    'Oppgi grunn for nytt vedtak (Obligatorisk)Oppgi grunn for nytt vedtak ('
-  );
+  private readonly grunnNyttVedtakDropdown = this.page.getByRole('combobox', {
+    name: /^Oppgi grunn for nytt vedtak/
+  });
 
   private readonly fattVedtakButton = this.page.getByRole('button', {
     name: 'Fatt vedtak'
