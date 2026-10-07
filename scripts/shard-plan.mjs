@@ -13,12 +13,13 @@
  *   - Skjema-filene (skjema/) går i samme shard: bare det shardet trenger skjema-stacken.
  *   - Antall shards blir aldri høyere enn antall enheter å fordele, så ingen shard står tom.
  *     Ingen tester gir én shard uten filfilter; da melder shard-jobben «0 tester» som før.
+ *   - Med `--repeat-each N` kjører hver test N ganger, så estimatet og antall tester ganges med N.
  *   - Shardene skal i snitt ha minst MIN_SHARD_MS estimert testtid (LPT flytter hele filer, så ett
  *     shard kan bli kortere). Et lite utvalg, som de påvirkede testene i merge queue, får da én
  *     shard og slipper å starte flere stacker.
  *
  * Bruk:
- *   node scripts/shard-plan.mjs --list list.json [--previous test-summary.json] --shards 3
+ *   node scripts/shard-plan.mjs --list list.json [--previous test-summary.json] --shards 3 [--repeat-each 1]
  * Planen skrives som JSON på stdout.
  */
 import { readFileSync, existsSync, realpathSync } from 'node:fs';
@@ -64,8 +65,9 @@ function median(values) {
 }
 
 /** LPT-fordeling. Gir samme plan for samme inndata: like lange enheter sorteres på navn. */
-export function planShards(tests, durations, requestedShards) {
+export function planShards(tests, durations, requestedShards, repeatEach = 1) {
   const requested = Math.max(1, Math.floor(Number(requestedShards) || 1));
+  const repeat = Math.max(1, Math.floor(Number(repeatEach) || 1));
   const fallback = median([...durations.values()]);
 
   const units = new Map();
@@ -73,20 +75,20 @@ export function planShards(tests, durations, requestedShards) {
     const name = t.file.startsWith(SKJEMA_PREFIX) ? SKJEMA_PREFIX : t.file;
     const unit = units.get(name) ?? { name, files: new Set(), tests: 0, ms: 0 };
     unit.files.add(t.file);
-    unit.tests += 1;
-    unit.ms += durations.get(`${t.file}::${t.title}`) ?? fallback;
+    unit.tests += repeat;
+    unit.ms += (durations.get(`${t.file}::${t.title}`) ?? fallback) * repeat;
     units.set(name, unit);
   }
 
   const totalMs = [...units.values()].reduce((sum, u) => sum + u.ms, 0);
   const shardCount = Math.max(1, Math.min(requested, units.size, Math.floor(totalMs / MIN_SHARD_MS)));
-  const base = { requestedShards: requested, shardCount, totalTests: tests.length, estimatedSeconds: Math.round(totalMs / 1000) };
+  const base = { requestedShards: requested, shardCount, totalTests: tests.length * repeat, estimatedSeconds: Math.round(totalMs / 1000) };
 
   // Én shard kjører uten filfilter, nøyaktig som en kjøring uten sharding.
   if (shardCount === 1) {
     return {
       ...base,
-      shards: [{ shard: 1, files: [], tests: tests.length, estimatedSeconds: base.estimatedSeconds, skjema: units.has(SKJEMA_PREFIX) }],
+      shards: [{ shard: 1, files: [], tests: base.totalTests, estimatedSeconds: base.estimatedSeconds, skjema: units.has(SKJEMA_PREFIX) }],
     };
   }
 
@@ -144,7 +146,7 @@ function main() {
   const tests = listedTests(JSON.parse(readFileSync(listPath, 'utf8')));
   const durations =
     previousPath && existsSync(previousPath) ? previousDurations(JSON.parse(readFileSync(previousPath, 'utf8'))) : new Map();
-  const plan = planShards(tests, durations, valueOf('--shards') ?? 1);
+  const plan = planShards(tests, durations, valueOf('--shards') ?? 1, valueOf('--repeat-each') ?? 1);
   plan.knownDurations = tests.filter((t) => durations.has(`${t.file}::${t.title}`)).length;
   process.stdout.write(JSON.stringify(plan) + '\n');
 }

@@ -457,8 +457,8 @@ jobs:
                 then error("er ikke ett JSON-objekt") else .[0] end
                 | if (keys - ["requested_by", "orchestrator_run_id", "branches"]) != []
                   then error("har ukjente felt") else . end
-                | if (.branches | type) != "array" or (.branches | length) < 1 or (.branches | length) > 8
-                  then error("branches er ikke en liste med 1–8 brancher") else . end
+                | if (.branches | type) != "array" or (.branches | length) < 1 or (.branches | length) > 9
+                  then error("branches er ikke en liste med 1–9 brancher") else . end
                 | {branchContext: {
                     requestedBy: (.requested_by
                       | if . == null then null
@@ -763,6 +763,7 @@ jobs:
         env:
           REQUESTED: ${{ steps.mode.outputs.requested }}
           TEST_GREP: ${{ inputs.test_grep }}
+          REPEAT_EACH: ${{ inputs.repeat_each }}
           PREVIOUS_RUN: ${{ steps.previous.outputs.run_id }}
         run: |
           plan_file="$RUNNER_TEMP/shard-plan.json"
@@ -782,7 +783,8 @@ jobs:
             PLAYWRIGHT_JSON_OUTPUT_FILE="$RUNNER_TEMP/list.json" npx playwright "${list_args[@]}" > /dev/null
             previous=()
             [ -f "$RUNNER_TEMP/previous.json" ] && previous=(--previous "$RUNNER_TEMP/previous.json")
-            node scripts/shard-plan.mjs --list "$RUNNER_TEMP/list.json" "${previous[@]}" --shards "$REQUESTED" > "$plan_file"
+            node scripts/shard-plan.mjs --list "$RUNNER_TEMP/list.json" "${previous[@]}" --shards "$REQUESTED" \
+              --repeat-each "${REPEAT_EACH:-1}" > "$plan_file"
           fi
 
           echo "plan=$(jq -c . "$plan_file")" >> "$GITHUB_OUTPUT"

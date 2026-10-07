@@ -94,6 +94,19 @@ test('shardene får i snitt minst MIN_SHARD_MS estimert testtid', () => {
   assert.equal(planShards(tests({ 'a.spec.ts': 10, 'b.spec.ts': 10 }), new Map(), 3).shardCount, 2);
 });
 
+test('repeat_each ganger estimatet, så få tester med mange gjentak fordeles', () => {
+  const få = tests({ 'a.spec.ts': 1, 'b.spec.ts': 1, 'c.spec.ts': 1 });
+  const d = durations({ 'a.spec.ts::t0': MIN, 'b.spec.ts::t0': 2 * MIN, 'c.spec.ts::t0': MIN });
+  // 4 min uten gjentak gir én shard; 20 gjentak gir 80 min, nok til tre.
+  const tjue = planShards(få, d, 3, 20);
+  assert.equal(tjue.shardCount, 3);
+  assert.equal(tjue.totalTests, 60);
+  assert.equal(tjue.estimatedSeconds, 80 * 60);
+  assert.equal(tjue.shards.reduce((n: number, s: { tests: number }) => n + s.tests, 0), 60);
+  // Ugyldig verdi (tom input fra workflow_call) teller som 1.
+  assert.equal(planShards(få, d, 3, '').shardCount, 1);
+});
+
 test('ukjent test får medianen av de kjente, ikke 0', () => {
   const all = tests({ 'ny.spec.ts': 1, 'kjent.spec.ts': 3 });
   const d = durations({ 'kjent.spec.ts::t0': 10_000, 'kjent.spec.ts::t1': 20_000, 'kjent.spec.ts::t2': 90_000 });
