@@ -45,10 +45,10 @@ export class EuEosSkipBehandlingAssertions extends EuEosBehandlingAssertions {
       console.error('📸 Screenshot lagret: debug-vedtak-navigation-failed.png');
 
       // Sjekk om det er feilmeldinger på siden
-      const errors = await this.page.locator('.navds-alert--error, .navds-error-message').count();
+      const errors = await this.page.locator('.aksel-alert--error, .aksel-error-message').count();
       if (errors > 0) {
         console.error(`   Fant ${errors} feilmelding(er) på siden`);
-        const errorTexts = await this.page.locator('.navds-alert--error, .navds-error-message').allTextContents();
+        const errorTexts = await this.page.locator('.aksel-alert--error, .aksel-error-message').allTextContents();
         errorTexts.forEach((text, i) => console.error(`   Feil ${i + 1}: ${text}`));
       }
 

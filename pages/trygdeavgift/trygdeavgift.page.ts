@@ -31,7 +31,7 @@ export class TrygdeavgiftPage extends BasePage {
   readonly assertions: TrygdeavgiftAssertions;
 
   // Locators
-  private readonly skattepliktigGroup = this.page.getByRole('group', { name: 'Skattepliktig' });
+  private readonly skattepliktigGroup = this.page.getByRole('radiogroup', { name: 'Skattepliktig' });
 
   private readonly inntektskildeDropdown = this.page.getByLabel('Inntektskilde');
 
@@ -44,7 +44,7 @@ export class TrygdeavgiftPage extends BasePage {
   });
 
   // Locator for "Betales aga?" radio group (appears for some income sources)
-  private readonly betalesAgaGroup = this.page.getByRole('group', {
+  private readonly betalesAgaGroup = this.page.getByRole('radiogroup', {
     name: 'Betales aga.?'
   });
 

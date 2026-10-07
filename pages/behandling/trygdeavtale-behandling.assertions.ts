@@ -38,7 +38,7 @@ export class TrygdeavtaleBehandlingAssertions {
    * Verify arbeidsland dropdown is visible
    */
   async verifiserArbeidslandDropdown(): Promise<void> {
-    const arbeidslandDropdown = this.page.getByLabel('ArbeidslandArbeidsland');
+    const arbeidslandDropdown = this.page.getByRole('combobox', { name: /^Arbeidsland\b/ });
     await expect(arbeidslandDropdown).toBeVisible();
   }
 

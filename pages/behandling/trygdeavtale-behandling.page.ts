@@ -43,7 +43,7 @@ export class TrygdeavtaleBehandlingPage extends BasePage {
     name: 'Til og med Til og med'
   });
 
-  private readonly arbeidslandDropdown = this.page.getByLabel('ArbeidslandArbeidsland');
+  private readonly arbeidslandDropdown = this.page.getByRole('combobox', { name: /^Arbeidsland\b/ });
 
   // Locators - Søknad result section
   private readonly innvilgeSøknadRadio = this.page.getByRole('radio', {

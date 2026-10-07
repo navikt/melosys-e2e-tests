@@ -53,7 +53,7 @@ async function assertNoErrors(scope: Page | Locator): Promise<void> {
   // Check for field errors
   const fieldErrorSelectors = [
     '.skjemaelement__feilmelding',
-    '.navds-error-message',
+    '.aksel-error-message',
     '[class*="error-message"]',
     '.feilmelding',
   ];
@@ -75,8 +75,8 @@ async function assertNoErrors(scope: Page | Locator): Promise<void> {
   // Check for error summary box
   const errorSummarySelectors = [
     '.alertstripe--advarsel',
-    '.navds-alert--error',
-    '.navds-alert--warning',
+    '.aksel-alert--error',
+    '.aksel-alert--warning',
     '[role="alert"]',
   ];
 
@@ -103,7 +103,7 @@ async function assertFieldErrors(
   expectedErrors: (string | RegExp)[]
 ): Promise<void> {
   const errorLocator = scope.locator(
-    '.skjemaelement__feilmelding, .navds-error-message, .feilmelding'
+    '.skjemaelement__feilmelding, .aksel-error-message, .feilmelding'
   );
 
   for (const expectedError of expectedErrors) {
@@ -133,7 +133,7 @@ async function assertErrorSummary(
   expectedErrors: (string | RegExp)[]
 ): Promise<void> {
   const errorSummary = scope.locator(
-    '.alertstripe--advarsel, .navds-alert--error, [role="alert"]'
+    '.alertstripe--advarsel, .aksel-alert--error, [role="alert"]'
   );
 
   // Alle bokser med tekst, ikke bare den første: en tom `role="alert"`-beholder kan stå foran.
