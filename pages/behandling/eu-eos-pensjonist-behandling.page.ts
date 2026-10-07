@@ -22,7 +22,7 @@ export class EuEosPensjonistBehandlingPage extends BasePage {
     name: 'Bekreft og send',
   });
 
-  private readonly skattepliktigGroup = this.page.getByRole('group', { name: 'Skattepliktig' });
+  private readonly skattepliktigGroup = this.page.getByRole('radiogroup', { name: 'Skattepliktig' });
 
   constructor(page: Page) {
     super(page);

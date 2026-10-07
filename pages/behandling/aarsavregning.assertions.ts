@@ -97,7 +97,7 @@ export class AarsavregningAssertions {
       )
     ).toBeVisible({ timeout: 10000 });
     await expect(
-      this.page.getByRole('group', { name: /Avviker innbetalt/ })
+      this.page.getByRole('radiogroup', { name: /Avviker innbetalt/ })
     ).toBeHidden();
     console.log('✅ Uten-grunnlag-flyt: info-alert vises og avvik-radioen er skjult');
   }

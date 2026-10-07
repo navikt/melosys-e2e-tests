@@ -98,7 +98,7 @@ export class TrygdeavgiftAssertions {
    * This happens for Norwegian income sources where AGA is automatically paid
    */
   async verifiserBetalesAgaDisabled(): Promise<void> {
-    const betalesAgaGroup = this.page.getByRole('group', { name: 'Betales aga.?' });
+    const betalesAgaGroup = this.page.getByRole('radiogroup', { name: 'Betales aga.?' });
     await expect(betalesAgaGroup).toBeVisible({ timeout: 5000 });
 
     // Check that both radio buttons are disabled
