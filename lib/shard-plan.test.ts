@@ -1,5 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 // @ts-expect-error — .mjs uten typedeklarasjon; scriptet er ren node uten avhengigheter.
 import { MIN_SHARD_MS, fileArgs, listedTests, planShards, previousDurations } from '../scripts/shard-plan.mjs';
 
@@ -103,8 +107,28 @@ test('repeat_each ganger estimatet, så få tester med mange gjentak fordeles', 
   assert.equal(tjue.totalTests, 60);
   assert.equal(tjue.estimatedSeconds, 80 * 60);
   assert.equal(tjue.shards.reduce((n: number, s: { tests: number }) => n + s.tests, 0), 60);
+  // Få gjentak holder seg på én shard, og den ene shardens tall er også ganget.
+  const to = planShards(få, d, 3, 2);
+  assert.equal(to.shardCount, 1);
+  assert.equal(to.shards[0].tests, 6);
+  assert.equal(to.shards[0].estimatedSeconds, 8 * 60);
   // Ugyldig verdi (tom input fra workflow_call) teller som 1.
   assert.equal(planShards(få, d, 3, '').shardCount, 1);
+});
+
+test('CLI: --repeat-each ganger totalTests og knownDurations likt', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'shard-plan-'));
+  const list = join(dir, 'list.json');
+  const prev = join(dir, 'prev.json');
+  writeFileSync(list, JSON.stringify({ suites: [{ specs: [{ file: 'a.spec.ts', title: 'x' }, { file: 'b.spec.ts', title: 'y' }] }] }));
+  writeFileSync(prev, JSON.stringify({ tests: [{ file: '/r/tests/a.spec.ts', title: 'x', duration: 1000 }] }));
+  // Fra repo-rota, som npm run test:unit.
+  const script = join(process.cwd(), 'scripts/shard-plan.mjs');
+  const ut = execFileSync(process.execPath, [script, '--list', list, '--previous', prev, '--shards', '2', '--repeat-each', '4']);
+  const plan = JSON.parse(ut.toString());
+  assert.equal(plan.repeatEach, 4);
+  assert.equal(plan.totalTests, 8);
+  assert.equal(plan.knownDurations, 4);
 });
 
 test('ukjent test får medianen av de kjente, ikke 0', () => {

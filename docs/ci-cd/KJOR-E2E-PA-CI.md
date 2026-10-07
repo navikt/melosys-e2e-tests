@@ -112,6 +112,8 @@ gh workflow run e2e-brancher.yml -R navikt/melosys-e2e-tests \
 - Feiler et bygg, starter ikke E2E Tests. Jobbsammendraget lenker til hvert bygg og til E2E Tests.
 - En grønn kjøring setter ingen `e2e-ok-<tree>`-markør. Den gjelder kombinasjonen, ikke ett repo mot `latest`.
 - Workflowen bruker `E2E_TRIGGER_PAT` for å starte byggene i de andre repoene.
+- `melosys-e2e-tests:<branch>` bygges ikke: E2E Tests startes fra den branchen. Den kan stå alene; da kjører alle tjenester som `latest`. `e2e-tests.yml` på branchen må ha inputene `branch_context`, `shards`, `repeat_each` og `disable_retries`, ellers ber kjøringen deg rebase på main.
+- `-f repeat_each=N` (1–30) kjører hver test N ganger, og `-f disable_retries=true` slår av retries. Bruk dem sammen med `test_grep` for å sjekke flaky tester. Shardene deler hele filer, så én fil med N gjentak kjører på én shard (maks 120 min).
 
 ## Variabler
 

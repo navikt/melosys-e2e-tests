@@ -735,8 +735,8 @@ jobs:
       - name: Hent varigheter fra forrige fulle kjøring
         id: previous
         if: steps.mode.outputs.requested != '1'
-        # Siste grønne kjøring på main uten test_grep. Kjøringer med filter mangler varighet for
-        # de andre testene. En sharded kjøring har `test-summary` fra merge-jobben. Finnes
+        # Siste grønne kjøring på main uten test_grep og repeat_each. Kjøringer med filter mangler
+        # varighet for de andre testene, og med repeat_each summeres hver test flere ganger. En sharded kjøring har `test-summary` fra merge-jobben. Finnes
         # ingen, får alle testene samme estimat og fordeles etter antall.
         env:
           GH_TOKEN: ${{ github.token }}
@@ -749,7 +749,7 @@ jobs:
             dir="$RUNNER_TEMP/previous/$id"
             gh run download "$id" -R "$REPO" -n test-summary -D "$dir" > /dev/null 2>&1 || continue
             if [ -f "$dir/test-summary.json" ] && [ -f "$dir/trigger-context.json" ] \
-              && jq -e '(.inputs.test_grep // null) == null and (.inputs.run_bdd // false) != true' "$dir/trigger-context.json" > /dev/null; then
+              && jq -e '(.inputs.test_grep // null) == null and (.inputs.run_bdd // false) != true and (.inputs.repeat_each // 1) <= 1' "$dir/trigger-context.json" > /dev/null; then
               cp "$dir/test-summary.json" "$RUNNER_TEMP/previous.json"
               echo "⏱️  Varigheter fra kjøring $id"
               echo "run_id=$id" >> "$GITHUB_OUTPUT"

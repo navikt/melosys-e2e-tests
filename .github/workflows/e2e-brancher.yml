@@ -154,7 +154,11 @@ jobs:
               FEIL=1; continue
             fi
             if [ "$branch" = "$default" ]; then
-              echo "::error::$branch er default-branchen i $repo og kjører allerede som latest. Ta repoet ut av lista."
+              if [ "$repo" = "melosys-e2e-tests" ]; then
+                echo "::error::$branch er default-branchen i $repo, og E2E Tests kjører derfra uten valg. Ta repoet ut av lista."
+              else
+                echo "::error::$branch er default-branchen i $repo og kjører allerede som latest. Ta repoet ut av lista."
+              fi
               FEIL=1; continue
             fi
             ref=$(jq -rn --arg b "$branch" '$b | @uri')
@@ -385,6 +389,15 @@ jobs:
             done
             return 1
           }
+
+          # E2E Tests kjører fra branchens head ved dispatch, ikke fra sha-en i branch_context.
+          PLANLAGT=$(jq -r '.branches[] | select(.repo == "melosys-e2e-tests") | .sha' <<< "$BRANCH_CONTEXT")
+          if [ -n "$PLANLAGT" ]; then
+            NAA=$(gh api "repos/$E2E_REPO/branches/$(jq -rn --arg b "$E2E_REF" '$b | @uri')" --jq .commit.sha 2> /dev/null || true)
+            if [ "$NAA" != "$PLANLAGT" ]; then
+              echo "::warning::melosys-e2e-tests-branchen har flyttet seg siden planen (${PLANLAGT:0:7} → ${NAA:0:7}). Testene kjører fra den nye commiten."
+            fi
+          fi
 
           ARGS=(-f environment="$ENVIRONMENT" -f correlation_id="$CORRELATION_ID"
                 -f branch_context="$BRANCH_CONTEXT" -f shards="$SHARDS"

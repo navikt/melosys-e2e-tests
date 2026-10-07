@@ -82,7 +82,7 @@ export function planShards(tests, durations, requestedShards, repeatEach = 1) {
 
   const totalMs = [...units.values()].reduce((sum, u) => sum + u.ms, 0);
   const shardCount = Math.max(1, Math.min(requested, units.size, Math.floor(totalMs / MIN_SHARD_MS)));
-  const base = { requestedShards: requested, shardCount, totalTests: tests.length * repeat, estimatedSeconds: Math.round(totalMs / 1000) };
+  const base = { requestedShards: requested, shardCount, repeatEach: repeat, totalTests: tests.length * repeat, estimatedSeconds: Math.round(totalMs / 1000) };
 
   // Én shard kjører uten filfilter, nøyaktig som en kjøring uten sharding.
   if (shardCount === 1) {
@@ -147,7 +147,8 @@ function main() {
   const durations =
     previousPath && existsSync(previousPath) ? previousDurations(JSON.parse(readFileSync(previousPath, 'utf8'))) : new Map();
   const plan = planShards(tests, durations, valueOf('--shards') ?? 1, valueOf('--repeat-each') ?? 1);
-  plan.knownDurations = tests.filter((t) => durations.has(`${t.file}::${t.title}`)).length;
+  // Ganget med repeat-each, som totalTests, så oppsummeringen sammenligner like tall.
+  plan.knownDurations = tests.filter((t) => durations.has(`${t.file}::${t.title}`)).length * plan.repeatEach;
   process.stdout.write(JSON.stringify(plan) + '\n');
 }
 
