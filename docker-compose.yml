@@ -87,7 +87,8 @@ services:
                   "aud": "melosys-localhost",
                   "azp": "melosys-api",
                   "iss": "http://host.docker.internal:8082/isso",
-                  "tid": "isso"
+                  "tid": "isso",
+                  "groups": ["0000-GA-MELOSYS"]
                 }
               },
               {
