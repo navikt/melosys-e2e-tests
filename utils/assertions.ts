@@ -172,7 +172,7 @@ async function assertErrorSummary(
  * @param expectedUrl - RegExp pattern for expected destination URL
  *
  * @example
- * await assertWorkflowCompleted(page, /\/melosys\/$/);
+ * await assertWorkflowCompleted(page, /\/melosys\/?$/);
  */
 export async function assertWorkflowCompleted(
   page: Page,
@@ -197,7 +197,7 @@ export async function assertWorkflowCompleted(
  * await assertFormSubmitted(
  *   page,
  *   /\/opprettnysak/,
- *   /\/melosys\/$/
+ *   /\/melosys\/?$/
  * );
  */
 export async function assertFormSubmitted(

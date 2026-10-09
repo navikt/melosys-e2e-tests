@@ -74,7 +74,7 @@ export class JournalforingAssertions {
     }
 
     // Success if we're back on forside (task completed)
-    if (currentUrl.endsWith('/melosys/') || currentUrl.includes('/forside')) {
+    if (/\/melosys\/?$/.test(new URL(currentUrl).pathname) || currentUrl.includes('/forside')) {
       console.log('✅ Navigated back to forside (task completed)');
       return;
     }
