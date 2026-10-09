@@ -26,7 +26,7 @@ export class SoknadUtsendtArbeidstakerPage {
    */
   async startSoknadSomDegSelv(arbeidsgiverOrgnr = '999999999'): Promise<string> {
     const page = this.page;
-    await page.getByRole('button', { name: 'DEG SELV' }).click();
+    await page.getByRole('link', { name: 'DEG SELV' }).click();
     await page.waitForURL(/\/oversikt/);
 
     // Arbeidsgiveren settes i skjemaet først når ereg-oppslaget har svart. Klikkes

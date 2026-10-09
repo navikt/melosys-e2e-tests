@@ -91,7 +91,7 @@ async function warmUpSkjema(): Promise<void> {
     });
     const page = await browser.newPage();
     const auth = new SkjemaAuthHelper(page);
-    await auth.login(); // browser → wonderwall → mock-oauth2 → skjema-web → /representasjon
+    await auth.login(); // browser → wonderwall → mock-oauth2 → skjema-web → rollevalg
     // Kjør én KOMPLETT innsending, slik at alle skjema-api-endepunktene (opprett utkast, lagre
     // hvert steg, send inn) og step-renderne er JVM-varme før første ekte test. En login-only
     // oppvarming holdt ikke: første test stallet på "Start søknad" (kald create-draft-POST).
