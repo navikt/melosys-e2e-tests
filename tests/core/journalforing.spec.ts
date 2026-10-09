@@ -92,7 +92,7 @@ test.describe('Journalføring @manual', () => {
     await opprettSak.opprettStandardSak(USER_ID_VALID);
     await opprettSak.assertions.verifiserBehandlingOpprettet();
 
-    // TODO: etter verifiserBehandlingOpprettet står vi på forsiden (/melosys/$), så saksnummer-regexen
+    // TODO: etter verifiserBehandlingOpprettet står vi på forsiden (/melosys/?$), så saksnummer-regexen
     // mot page.url() blir alltid null — happy-path var derfor tidligere unåbar. Hent saksnummer fra DB
     // (withDatabase SELECT på FAGSAK for USER_ID_VALID) før KNYTT for å gjøre dette robust.
     const url = page.url();
