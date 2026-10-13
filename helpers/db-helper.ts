@@ -382,3 +382,25 @@ export async function ventPåManglendeInnbetalingBehandling(
       `${opprinneligBehandlingId} innen ${timeoutMs}ms - kom Kafka-meldingen frem til melosys-api?`
   );
 }
+
+/**
+ * Hent ID-en til den nye vurderingen av `opprinneligBehandlingId`. Krever nøyaktig én.
+ */
+export async function hentNyVurdering(opprinneligBehandlingId: string): Promise<string> {
+  const rader = await withDatabase(async db =>
+    db.query<{ ID: number }>(
+      `SELECT ID
+       FROM BEHANDLING
+       WHERE BEH_TYPE = 'NY_VURDERING'
+         AND OPPRINNELIG_BEHANDLING_ID = :id`,
+      { id: opprinneligBehandlingId }
+    )
+  );
+  if (rader.length !== 1) {
+    throw new Error(
+      `Forventet én ny vurdering av behandling ${opprinneligBehandlingId}, fant ${rader.length}`
+    );
+  }
+  console.log(`✅ Ny vurdering: behandling ${rader[0].ID} (opprinnelig ${opprinneligBehandlingId})`);
+  return String(rader[0].ID);
+}
