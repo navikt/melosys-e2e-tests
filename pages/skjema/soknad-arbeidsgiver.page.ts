@@ -60,7 +60,7 @@ export class SoknadArbeidsgiverPage {
     medFullmakt: boolean;
     arbeidstakerEtternavn?: string;
   }): Promise<string> {
-    await this.page.getByRole('button', { name: /^ARBEIDSGIVER/ }).click();
+    await this.page.getByRole('link', { name: /^ARBEIDSGIVER/ }).click();
     await this.page.waitForURL(/\/oversikt/);
     return this.velgVirksomhetArbeidstakerOgStart(opts);
   }
@@ -84,7 +84,7 @@ export class SoknadArbeidsgiverPage {
     arbeidstakerEtternavn?: string;
   }): Promise<string> {
     const page = this.page;
-    await page.getByRole('button', { name: /^RÅDGIVER/ }).click();
+    await page.getByRole('link', { name: /^RÅDGIVER/ }).click();
     await page.waitForURL(/\/velg-radgiverfirma/);
     await page.getByRole('textbox', { name: /Søk på virksomhet/ }).fill(opts.radgiverfirmaOrgnr);
     // Vent på at EREG-oppslaget rendrer firmanavnet før vi bekrefter.

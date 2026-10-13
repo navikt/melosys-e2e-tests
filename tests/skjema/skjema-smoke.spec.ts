@@ -27,15 +27,13 @@ test.describe('skjema-web røyktest', () => {
 
     // Steg 2: rollevalget viser de fire representasjonstypene.
     await expect(page.getByRole('heading', { name: 'Hvem skal du opptre som?' })).toBeVisible();
-    await expect(page.getByRole('button', { name: 'DEG SELV' })).toBeVisible();
-    await expect(
-      page.getByRole('button', { name: /ARBEIDSGIVER/ })
-    ).toBeVisible();
-    await expect(page.getByRole('button', { name: /RÅDGIVER/ })).toBeVisible();
-    await expect(page.getByRole('button', { name: /PRIVATPERSON/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: 'DEG SELV' })).toBeVisible();
+    await expect(page.getByRole('link', { name: /ARBEIDSGIVER/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /RÅDGIVER/ })).toBeVisible();
+    await expect(page.getByRole('link', { name: /PRIVATPERSON/ })).toBeVisible();
 
     // Steg 3: velg "DEG SELV" → oversiktssiden for søknader.
-    await page.getByRole('button', { name: 'DEG SELV' }).click();
+    await page.getByRole('link', { name: 'DEG SELV' }).click();
     await page.waitForURL(/\/oversikt/, { timeout: 30000 });
 
     // Oversikten lastes (henter utkast/innsendte fra skjema-api via BFF) og viser

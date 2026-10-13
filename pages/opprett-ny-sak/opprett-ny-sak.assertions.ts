@@ -71,7 +71,7 @@ export class OpprettNySakAssertions {
     }
 
     // Wait for navigation to main page
-    await assertWorkflowCompleted(this.page, /\/melosys\/$/);
+    await assertWorkflowCompleted(this.page, /\/melosys\/?$/);
   }
 
   /**

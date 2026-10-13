@@ -52,9 +52,9 @@ export class AarsavregningPage extends BasePage {
     .getByLabel('Til og med periode')
     .getByRole('textbox');
 
-  private readonly skattepliktigGroup = this.page.getByRole('group', { name: 'Skattepliktig' });
+  private readonly skattepliktigGroup = this.page.getByRole('radiogroup', { name: 'Skattepliktig' });
 
-  private readonly avvikerInnbetaltGroup = this.page.getByRole('group', {
+  private readonly avvikerInnbetaltGroup = this.page.getByRole('radiogroup', {
     name: 'Avviker innbetalt'
   });
 
@@ -160,7 +160,7 @@ export class AarsavregningPage extends BasePage {
    *   - toggle av  → «Skal du legge til trygdeavgift fra Avgiftssystemet …?»
    * Vi matcher derfor begge etikettene.
    */
-  private readonly trygdeavgiftAvvikGroup = this.page.getByRole('group', {
+  private readonly trygdeavgiftAvvikGroup = this.page.getByRole('radiogroup', {
     name: /Avviker innbetalt|Skal du legge til trygdeavgift/,
   });
 
@@ -454,7 +454,7 @@ export class AarsavregningPage extends BasePage {
    * @param betalesAga - true for "Ja", false for "Nei"
    */
   async velgBetalesAga(betalesAga: boolean): Promise<void> {
-    const agaGroup = this.page.getByRole('group', { name: /Betales aga/ });
+    const agaGroup = this.page.getByRole('radiogroup', { name: /Betales aga/ });
     await agaGroup.waitFor({ state: 'visible', timeout: TIMEOUT_MEDIUM });
     const radio = agaGroup.getByRole('radio', { name: betalesAga ? 'Ja' : 'Nei' });
     await radio.check();

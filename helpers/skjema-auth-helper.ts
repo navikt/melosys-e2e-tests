@@ -23,7 +23,7 @@ export class SkjemaAuthHelper {
   constructor(private page: Page) {}
 
   /**
-   * Logg inn som innbygger og lande på rollevalg-siden (/representasjon).
+   * Logg inn som innbygger og gå til rollevalget via situasjonsvalget i dev.
    *
    * @param fnr Fødselsnummeret til testbrukeren (default LANSEN — arbeidstaker).
    */
@@ -45,8 +45,10 @@ export class SkjemaAuthHelper {
       await signInButton.click();
     }
 
-    // Appen redirecter via /oauth2/callback til rollevalg-siden.
-    await this.page.waitForURL(/\/representasjon/, { timeout: 30000 });
+    // Appen redirecter via /oauth2/callback til situasjonsvalget i dev.
+    await this.page.waitForURL(/\/velg-situasjon\/?$/, { timeout: 30000 });
+    await this.page.getByRole('link', { name: 'Er sendt ut av norsk arbeidsgiver' }).click();
+    await this.page.waitForURL(/\/representasjon\/?$/, { timeout: 30000 });
     await expect(
       this.page.getByRole('heading', { name: 'Hvem skal du opptre som?' })
     ).toBeVisible();

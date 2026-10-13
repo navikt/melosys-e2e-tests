@@ -116,7 +116,7 @@ export class LovvalgPage extends BasePage {
    * await lovvalg.svarJaPaaSpørsmålIGruppe('Er søkers arbeidsoppdrag i');
    */
   async svarJaPaaSpørsmålIGruppe(gruppeNavn: string): Promise<void> {
-    const gruppe = this.page.getByRole('group', { name: new RegExp(gruppeNavn, 'i') });
+    const gruppe = this.page.getByRole('radiogroup', { name: new RegExp(gruppeNavn, 'i') });
     const jaRadio = gruppe.getByLabel('Ja');
     await jaRadio.check();
   }
@@ -127,7 +127,7 @@ export class LovvalgPage extends BasePage {
    * @param gruppeNavn - Partial group name
    */
   async svarNeiPaaSpørsmålIGruppe(gruppeNavn: string): Promise<void> {
-    const gruppe = this.page.getByRole('group', { name: new RegExp(gruppeNavn, 'i') });
+    const gruppe = this.page.getByRole('radiogroup', { name: new RegExp(gruppeNavn, 'i') });
     const neiRadio = gruppe.getByLabel('Nei');
     await neiRadio.check();
   }

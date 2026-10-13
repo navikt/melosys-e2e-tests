@@ -29,9 +29,9 @@ export class VedtakPage extends BasePage {
   // Locators for Quill editors
   private readonly quillEditors = this.page.locator('.ql-editor');
 
-  private readonly grunnNyttVedtakDropdown = this.page.getByLabel(
-    'Oppgi grunn for nytt vedtak (Obligatorisk)Oppgi grunn for nytt vedtak ('
-  );
+  private readonly grunnNyttVedtakDropdown = this.page.getByRole('combobox', {
+    name: /^Oppgi grunn for nytt vedtak/
+  });
 
   private readonly fattVedtakButton = this.page.getByRole('button', {
     name: 'Fatt vedtak'
@@ -185,8 +185,8 @@ export class VedtakPage extends BasePage {
         '.varselstripe',           // From melosys-web Feilmeldinger component
         '.feilmelding',            // Container class
         '[role="alert"]',          // Standard alert role
-        '.navds-alert--error',     // Nav design system
-        '.navds-alert--warning'    // Nav design system warnings
+        '.aksel-alert--error',     // Nav design system
+        '.aksel-alert--warning'    // Nav design system warnings
       ];
 
       const errorMessages: string[] = [];

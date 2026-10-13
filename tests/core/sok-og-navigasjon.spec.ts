@@ -105,7 +105,7 @@ test.describe('Søk og navigasjon', () => {
   });
 
   // Tidligere @manual: happy-path var unåbar fordi saksnummer ble forsøkt lest fra forside-URL-en
-  // (/melosys/$), som alltid ga null. Nå hentes saksnummer pålitelig fra DB (cleanup-fixture ⇒
+  // (/melosys/?$), som alltid ga null. Nå hentes saksnummer pålitelig fra DB (cleanup-fixture ⇒
   // nyeste FAGSAK-rad er denne testens sak), så søket faktisk kjøres og verifiseres. Tag fjernet.
   test('skal søke etter sak med saksnummer', async ({ page }) => {
     // Step 1: Create a case

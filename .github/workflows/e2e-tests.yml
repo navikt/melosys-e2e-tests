@@ -457,8 +457,8 @@ jobs:
                 then error("er ikke ett JSON-objekt") else .[0] end
                 | if (keys - ["requested_by", "orchestrator_run_id", "branches"]) != []
                   then error("har ukjente felt") else . end
-                | if (.branches | type) != "array" or (.branches | length) < 1 or (.branches | length) > 8
-                  then error("branches er ikke en liste med 1–8 brancher") else . end
+                | if (.branches | type) != "array" or (.branches | length) < 1 or (.branches | length) > 9
+                  then error("branches er ikke en liste med 1–9 brancher") else . end
                 | {branchContext: {
                     requestedBy: (.requested_by
                       | if . == null then null
@@ -735,9 +735,10 @@ jobs:
       - name: Hent varigheter fra forrige fulle kjøring
         id: previous
         if: steps.mode.outputs.requested != '1'
-        # Siste grønne kjøring på main uten test_grep. Kjøringer med filter mangler varighet for
-        # de andre testene. En sharded kjøring har `test-summary` fra merge-jobben. Finnes
-        # ingen, får alle testene samme estimat og fordeles etter antall.
+        # Siste grønne kjøring på main uten test_grep og repeat_each. Kjøringer med filter mangler
+        # varighet for de andre testene, og med repeat_each summeres hver test flere ganger. En
+        # sharded kjøring har `test-summary` fra merge-jobben. Finnes ingen, får alle testene samme
+        # estimat og fordeles etter antall.
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -749,7 +750,7 @@ jobs:
             dir="$RUNNER_TEMP/previous/$id"
             gh run download "$id" -R "$REPO" -n test-summary -D "$dir" > /dev/null 2>&1 || continue
             if [ -f "$dir/test-summary.json" ] && [ -f "$dir/trigger-context.json" ] \
-              && jq -e '(.inputs.test_grep // null) == null and (.inputs.run_bdd // false) != true' "$dir/trigger-context.json" > /dev/null; then
+              && jq -e '(.inputs.test_grep // null) == null and (.inputs.run_bdd // false) != true and (.inputs.repeat_each // 1) <= 1' "$dir/trigger-context.json" > /dev/null; then
               cp "$dir/test-summary.json" "$RUNNER_TEMP/previous.json"
               echo "⏱️  Varigheter fra kjøring $id"
               echo "run_id=$id" >> "$GITHUB_OUTPUT"
@@ -763,6 +764,7 @@ jobs:
         env:
           REQUESTED: ${{ steps.mode.outputs.requested }}
           TEST_GREP: ${{ inputs.test_grep }}
+          REPEAT_EACH: ${{ inputs.repeat_each }}
           PREVIOUS_RUN: ${{ steps.previous.outputs.run_id }}
         run: |
           plan_file="$RUNNER_TEMP/shard-plan.json"
@@ -782,7 +784,8 @@ jobs:
             PLAYWRIGHT_JSON_OUTPUT_FILE="$RUNNER_TEMP/list.json" npx playwright "${list_args[@]}" > /dev/null
             previous=()
             [ -f "$RUNNER_TEMP/previous.json" ] && previous=(--previous "$RUNNER_TEMP/previous.json")
-            node scripts/shard-plan.mjs --list "$RUNNER_TEMP/list.json" "${previous[@]}" --shards "$REQUESTED" > "$plan_file"
+            node scripts/shard-plan.mjs --list "$RUNNER_TEMP/list.json" "${previous[@]}" --shards "$REQUESTED" \
+              --repeat-each "${REPEAT_EACH:-1}" > "$plan_file"
           fi
 
           echo "plan=$(jq -c . "$plan_file")" >> "$GITHUB_OUTPUT"
@@ -1275,6 +1278,18 @@ jobs:
             pending=("${still[@]}")
             [ ${#pending[@]} -eq 0 ] && break
 
+            # En tjeneste i lista som har brukt opp restart-policyen, kommer ikke tilbake. Da er
+            # det ingen grunn til å vente ut taket. Diagnose-steget under navngir den som døde
+            # først. Tjenester utenfor lista (som skjema, som er best-effort) stopper ikke steget.
+            doede=$(scripts/doede-containere.sh --tjenester || true)
+            for s in "${pending[@]}"; do
+              if grep -qxF "$s" <<< "$doede"; then
+                echo "❌ $s døde under oppstart etter $((SECONDS - start)) s. Døde containere, den første er trolig årsaken:"
+                scripts/doede-containere.sh | sed 's/^/  /'
+                exit 1
+              fi
+            done
+
             if [ $((SECONDS - start)) -ge 200 ]; then
               echo "❌ Ikke klare etter $((SECONDS - start)) s: ${pending[*]}"
               echo "📋 Docker compose status:"
@@ -1289,6 +1304,19 @@ jobs:
 
           echo "✅ Alle tjenestene er klare etter $((SECONDS - start)) s"
           docker compose ps
+
+          # Restart-policyen med tak (on-failure:N) er bare ment for oppstarten. Den slås av her,
+          # så en krasj under testene ikke skjules av en stille omstart, som før denne policyen.
+          # En omstart under oppstart er en feil som rettet seg selv, og varselet gjør den
+          # synlig. melosys-web har omstart uten tak og er ikke med.
+          for c in $(docker compose ps -q); do
+            read -r navn antall maks <<< "$(docker inspect -f '{{.Name}} {{.RestartCount}} {{.HostConfig.RestartPolicy.MaximumRetryCount}}' "$c")"
+            [ "$maks" -gt 0 ] || continue
+            docker update --restart=no "$c" > /dev/null || echo "::warning::Kunne ikke slå av omstart for ${navn#/}"
+            if [ "$antall" -gt 0 ]; then
+              echo "::warning::${navn#/} startet på nytt $antall gang(er) under oppstart av stacken (shard $SHARD)"
+            fi
+          done
 
       - name: Ressursbruk etter oppstart
         if: steps.wait-healthy.outcome == 'success'
@@ -1410,6 +1438,27 @@ jobs:
 
           [ -n "$broken" ] && echo "::error::Startet ikke:$broken"
           [ -n "$unhealthy" ] && echo "::error::Ble aldri healthy:$unhealthy"
+
+          # Den som døde først, er som regel årsaken, og de andre følgefeil. Annotasjonen står
+          # øverst på kjøresiden, så årsaken kan leses uten å åpne jobbloggen.
+          doede=$(scripts/doede-containere.sh || true)
+          if [ -n "$doede" ]; then
+            # % må kodes i annotasjoner, ellers tolkes det som et escape.
+            annotasjon=$(printf '%s\n' "$doede" | sed 's/%/%25/g')
+            echo "::error title=Døde først (shard $SHARD)::$(printf '%s\n' "$annotasjon" | head -1)"
+            if [ "$(printf '%s\n' "$annotasjon" | wc -l)" -gt 1 ]; then
+              echo "::error title=Døde etterpå (shard $SHARD)::$(printf '%s\n' "$annotasjon" | tail -n +2 | awk 'NR>1{printf " | "}{printf "%s",$0}')"
+            fi
+            {
+              echo "**Døde containere, den første er trolig årsaken:**"
+              echo ""
+              # < må kodes: Java-navn som <init> forsvinner ellers som HTML-tagger.
+              printf '%s\n' "$doede" | sed 's/&/\&amp;/g; s/</\&lt;/g; s/^/- /'
+              echo ""
+              echo "En forbigående oppstartsfeil (timeout mot en annen tjeneste) går som regel bort med «Re-run failed jobs»."
+              echo ""
+            } | tee -a "$GITHUB_STEP_SUMMARY"
+          fi
           if [ -z "$broken" ] && [ -z "$unhealthy" ]; then
             echo "Ingen container-feil funnet — feilen ligger utenfor containerne. Se compose-tabellen over." | tee -a "$GITHUB_STEP_SUMMARY"
           fi

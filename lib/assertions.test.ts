@@ -11,10 +11,10 @@ import type { Locator, Page } from '@playwright/test';
 import { assertErrors } from '../utils/assertions';
 
 const ALERT = '[role="alert"]';
-const FELTFEIL = '.navds-error-message';
+const FELTFEIL = '.aksel-error-message';
 // Selektorene assertFieldErrors og assertErrorSummary bruker når feil forventes.
-const FELTFEIL_SAMLET = '.skjemaelement__feilmelding, .navds-error-message, .feilmelding';
-const OPPSUMMERING_SAMLET = '.alertstripe--advarsel, .navds-alert--error, [role="alert"]';
+const FELTFEIL_SAMLET = '.skjemaelement__feilmelding, .aksel-error-message, .feilmelding';
+const OPPSUMMERING_SAMLET = '.alertstripe--advarsel, .aksel-alert--error, [role="alert"]';
 
 /** Side der hver selektor treffer elementer med de gitte tekstene. */
 function side(treffPerSelektor: Record<string, string[]>, forsvinnerFørLesing = false): Page {
