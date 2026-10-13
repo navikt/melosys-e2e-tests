@@ -281,6 +281,8 @@ services:
       - "6300:6300"  # JaCoCo coverage port
     volumes:
       - ./jacoco:/jacoco:ro  # Mount JaCoCo agent (optional, for E2E coverage)
+    # Henter kodeverk ved oppstart og dør hvis felles-kodeverk ikke svarer ennå.
+    restart: on-failure:3
     depends_on:
       melosys-oracle:
         condition: service_healthy
@@ -399,6 +401,9 @@ services:
       SPRING_FLYWAY_ENABLED: "false"  # Flyway disabled since data is already in the image
       SPRING_LOGGING_LEVEL_ROOT: TRACE
     entrypoint: "/app/entrypoint.sh"
+    # Dør ved oppstart hvis OAuth-mocken svarer for sent. Uten omstart dør melosys-api
+    # også, fordi den slår opp kodeverk ved oppstart.
+    restart: on-failure:3
     depends_on:
       - postgres_felleskodeverk
     volumes:
