@@ -1306,9 +1306,9 @@ jobs:
           docker compose ps
 
           # Restart-policyen med tak (on-failure:N) er bare ment for oppstarten. Den slås av her,
-          # så en krasj under testene ikke skjules av en stille omstart som også nullstiller
-          # dekningsdataene. En omstart under oppstart er en feil som rettet seg selv, og
-          # varselet gjør den synlig. melosys-web har omstart uten tak og er ikke med.
+          # så en krasj under testene ikke skjules av en stille omstart, som før denne policyen.
+          # En omstart under oppstart er en feil som rettet seg selv, og varselet gjør den
+          # synlig. melosys-web har omstart uten tak og er ikke med.
           for c in $(docker compose ps -q); do
             read -r navn antall maks <<< "$(docker inspect -f '{{.Name}} {{.RestartCount}} {{.HostConfig.RestartPolicy.MaximumRetryCount}}' "$c")"
             [ "$maks" -gt 0 ] || continue
