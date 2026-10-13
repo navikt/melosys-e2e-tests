@@ -1,5 +1,5 @@
 name: E2E med brancher
-run-name: "E2E med brancher · ${{ inputs.requested_by || github.actor }}: ${{ inputs.branches }}"
+run-name: "E2E med brancher · ${{ inputs.requested_by || github.actor }}: ${{ inputs.branches || 'latest' }}"
 
 # Bygger valgte brancher i ett eller flere repoer og kjører E2E Tests mot dem.
 # Hvert repo bygges med sin egen build-image.yml og taggen br-<run_id>; tjenester
@@ -12,6 +12,9 @@ run-name: "E2E med brancher · ${{ inputs.requested_by || github.actor }}: ${{ i
 # Mangler den, rebase branchen på main/master.
 # melosys-e2e-tests:<branch> bygges ikke: E2E Tests startes fra den branchen. Den kan
 # stå alene; da kjører alle tjenester som latest.
+# Uten branches kjører alt som latest og testene fra main, for å måle hvor flaky en
+# test er før den fikses. Kjøringen får ingen branch_context og er en vanlig manuell
+# kjøring for melosys-console.
 # En grønn kjøring setter ingen e2e-ok-markør: den gjelder kombinasjonen, ikke ett
 # repo mot latest.
 # Plan: melosys-kode-wiki plans/2026-10-04-e2e-med-brancher-fra-konsollen.mdx
@@ -20,9 +23,10 @@ on:
   workflow_dispatch:
     inputs:
       branches:
-        description: 'repo:branch, kommaseparert (f.eks. melosys-api:min-branch,melosys-web:min-branch). melosys-mock = melosys-docker-compose. melosys-e2e-tests:<branch> kjører testene fra den branchen.'
-        required: true
+        description: 'repo:branch, kommaseparert (f.eks. melosys-api:min-branch,melosys-web:min-branch). melosys-mock = melosys-docker-compose. melosys-e2e-tests:<branch> kjører testene fra den branchen. Tom: alt kjører som latest.'
+        required: false
         type: string
+        default: ''
       test_grep:
         description: 'Testfilter, som i E2E Tests (valgfritt)'
         required: false
@@ -207,11 +211,8 @@ jobs:
           done
 
           if [ "$FEIL" -ne 0 ]; then exit 1; fi
-          if [ ${#VALGT[@]} -eq 0 ]; then
-            echo "::error::Ingen brancher valgt."
-            exit 1
-          fi
 
+          # Uten brancher skriver printf én tom linje, og jq gir [].
           VALGT_JSON=$(printf '%s\n' "${VALGT[@]}" | jq -cs .)
           MATRIX=$(jq -c 'map(select(.service != "-"))' <<< "$VALGT_JSON")
           E2E_REF=$(jq -r 'map(select(.repo == "melosys-e2e-tests"))[0].branch // "main"' <<< "$VALGT_JSON")
@@ -221,6 +222,8 @@ jobs:
           BRANCH_CONTEXT=$(jq -c --arg requested_by "${REQUESTED_BY:-$ACTOR}" --arg run_id "$RUN_ID" \
             '{requested_by: ($requested_by | gsub("[[:cntrl:]#]"; "") | .[0:100]), orchestrator_run_id: $run_id,
               branches: map({repo, branch, sha})}' <<< "$VALGT_JSON")
+          # E2E Tests godtar ikke en tom branchliste; uten brancher er kjøringen manuell.
+          [ "$VALGT_JSON" = "[]" ] && BRANCH_CONTEXT=""
           {
             echo "matrix=$MATRIX"
             echo "environment=$ENVIRONMENT"
@@ -231,6 +234,7 @@ jobs:
           {
             echo "### 🌿 E2E med brancher · \`$TAG\`"
             echo ""
+            [ "$VALGT_JSON" = "[]" ] && echo "Ingen brancher valgt."
             jq -r '.[] | "- `\(.repo)` ← `\(.branch)` ([`\(.sha[0:7])`](https://github.com/navikt/\(.repo)/commit/\(.sha)))"
               + (if .bak != "" then ", \(.bak) commits bak `\(.default)`" else "" end)' <<< "$VALGT_JSON"
             echo ""
@@ -393,7 +397,8 @@ jobs:
           # E2E Tests kjører fra branchens head ved dispatch. Har den flyttet seg siden planen,
           # får branch_context den nye sha-en, så konsollen viser commiten som ble testet.
           # gh skriver feilsvaret til stdout, så bare en sha godtas.
-          PLANLAGT=$(jq -r '.branches[] | select(.repo == "melosys-e2e-tests") | .sha' <<< "$BRANCH_CONTEXT")
+          PLANLAGT=""
+          [ -n "$BRANCH_CONTEXT" ] && PLANLAGT=$(jq -r '.branches[] | select(.repo == "melosys-e2e-tests") | .sha' <<< "$BRANCH_CONTEXT")
           if [ -n "$PLANLAGT" ]; then
             NAA=$(gh api "repos/$E2E_REPO/branches/$(jq -rn --arg b "$E2E_REF" '$b | @uri')" --jq .commit.sha 2> /dev/null || true)
             if ! [[ "$NAA" =~ ^[0-9a-f]{40}$ ]]; then
@@ -404,9 +409,9 @@ jobs:
             fi
           fi
 
-          ARGS=(-f environment="$ENVIRONMENT" -f correlation_id="$CORRELATION_ID"
-                -f branch_context="$BRANCH_CONTEXT" -f shards="$SHARDS"
+          ARGS=(-f environment="$ENVIRONMENT" -f correlation_id="$CORRELATION_ID" -f shards="$SHARDS"
                 -f repeat_each="$REPEAT_EACH" -f disable_retries="$DISABLE_RETRIES")
+          [ -n "$BRANCH_CONTEXT" ] && ARGS+=(-f branch_context="$BRANCH_CONTEXT")
           [ -n "$TEST_GREP" ] && ARGS+=(-f test_grep="$TEST_GREP")
           echo "🧾 environment: $ENVIRONMENT · ref: $E2E_REF"
 
