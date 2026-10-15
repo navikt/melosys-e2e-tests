@@ -20,6 +20,7 @@ import { withDatabase } from '../../helpers/db-helper';
 import { hentBrevForSak } from '../../helpers/brev-helper';
 import { hentSaksnummerFraUrl } from '../../helpers/url-helper';
 import { verifiserAarsavregningBehandling } from '../../pages/behandling/aarsavregning.assertions';
+import { UnleashHelper } from '../../helpers/unleash-helper';
 
 /**
  * Komplett saksflyt for EØS Medlemskap Lovvalg - Offentlig tjenesteperson art.11(3)(b)
@@ -34,16 +35,20 @@ import { verifiserAarsavregningBehandling } from '../../pages/behandling/aarsavr
  *
  * NB (faglig, MELOSYS-8163): Vedtaket oppretter årsavregningen og sender innhentingsbrevet med
  * lovvalgsperioden for året. Det skjer uavhengig av melosys.arsavregning.eos_tjenesteperson.
- * Togglen styrer bare selve årsavregningsflyten. Den er av i produksjon, så saksbehandleren
- * møter en blokkerende melding og kommer ikke videre. Testen verifiserer den tilstanden.
- * Tilstanden med togglen på står som test.fixme nederst.
+ * Togglen styrer bare selve årsavregningsflyten: når den er på, møter saksbehandleren en
+ * blokkerende melding og kommer ikke videre. Togglen er av som standard i testmiljøet, så
+ * testen slår den på og verifiserer den blokkerte tilstanden. Tilstanden der årsavregningen
+ * kan fullføres står som test.fixme nederst.
  */
 test.describe('EØS Medlemskap Lovvalg - Offentlig tjenesteperson 11.3b', () => {
-  test('vedtak for foregående år oppretter årsavregning og sender innhentingsbrev med lovvalgsperioden, men årsavregningen er blokkert', async ({ page }) => {
+  test('vedtak for foregående år oppretter årsavregning og sender innhentingsbrev med lovvalgsperioden, men årsavregningen er blokkert', async ({ page, request }) => {
     test.setTimeout(120000);
 
     // Setup
     const auth = new AuthHelper(page);
+    const unleash = new UnleashHelper(request);
+    // Togglen på gir den blokkerende meldingen i årsavregningsflyten (av som standard).
+    await unleash.enableFeature('melosys.arsavregning.eos_tjenesteperson');
     await auth.login();
 
     // Page Objects
@@ -116,7 +121,7 @@ test.describe('EØS Medlemskap Lovvalg - Offentlig tjenesteperson 11.3b', () => 
 
     await hovedside.åpneBehandling(behandlingLenke);
 
-    // Årsavregningen opprettes nå automatisk, men er blokkert til togglen rulles ut.
+    // Årsavregningen opprettes automatisk, men er blokkert fordi togglen er på.
     // Meldingen rendres i dag bare fra årsavregningsstegene, så den impliserer isolert sett at
     // behandlingen finnes. DB-sjekken er en regresjonspinne: flyttes meldingen senere til et
     // steg som vises uten en årsavregning, fanger den at behandlingen faktisk ble opprettet.
@@ -183,14 +188,14 @@ test.describe('EØS Medlemskap Lovvalg - Offentlig tjenesteperson 11.3b', () => 
     console.log('✅ Innhentingsbrevet er sendt til bruker med lovvalgsperioden for året');
   });
 
-  // Med melosys.arsavregning.eos_tjenesteperson på skal årsavregningen kunne fullføres. Det går
+  // Når årsavregningen ikke lenger er blokkert, skal den kunne fullføres. Det går
   // ikke ennå, fordi skjemaet «Endelig beregnet trygdeavgift» ikke støtter lovvalgsperioder
   // (melosys-web logger «Lovvalgsperioder er ikke støttet enda» ved innlasting). Sett lokalt
-  // 15.09.2026 med togglen på:
+  // 15.09.2026 uten blokkering (da betydde togglen på at flyten var støttet):
   // - «Innbetalt trygdeavgift» er tomt, og «Tidligere grunnlag» finner ingen informasjon.
   // - «Beregn trygdeavgiften»: «Bestemmelse» har bare «Velg…», og steget kommer ikke videre.
   // - «Oppgi beløp for beregnet trygdeavgift»: vedtaket fattes, og årsavregningen blir AVSLUTTET
   //   uten feil.
   // Støtten kommer i MELOSYS-6837 og MELOSYS-6815 (epic MELOSYS-6834). Skriv testen da.
-  test.fixme('skal kunne fullføre årsavregningen når togglen for tjenesteperson er på', async () => {});
+  test.fixme('skal kunne fullføre årsavregningen når togglen for tjenesteperson er av', async () => {});
 });

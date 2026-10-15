@@ -49,10 +49,11 @@ export class EuEosBehandlingAssertions {
    *
    * Erstattet det tidligere varselet «Du kan ikke årsavregne disse type saker i Melosys
    * enda». MELOSYS-8163 opprettet årsavregningen automatisk også for EØS tjenesteperson og
-   * fjernet det varselet fra melosys-web (#3108); det som står igjen til flyten rulles ut er
-   * denne blokkerende meldingen, styrt av melosys.arsavregning.eos_tjenesteperson.
+   * fjernet det varselet fra melosys-web (#3108); det som står igjen er denne blokkerende
+   * meldingen. Den vises når melosys.arsavregning.eos_tjenesteperson (tjenesteperson) eller
+   * melosys.arsavregning.eos_pensjonist (pensjonist) er på.
    *
-   * Når togglen settes i produksjon skal denne erstattes med en verifisering av at
+   * Når blokkeringen fjernes skal denne erstattes med en verifisering av at
    * årsavregningen kan fullføres, slik FTRL-pensjonist-testen gjør.
    */
   async verifiserÅrsavregningIkkeStøttet(): Promise<void> {
