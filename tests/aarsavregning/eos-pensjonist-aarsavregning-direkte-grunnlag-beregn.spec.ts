@@ -7,12 +7,7 @@ import {
 } from './pensjonist-aarsavregning-setup';
 
 test.describe('EU/EØS Trygdeavgift - Pensjonist med årsavregning', () => {
-  // MELOSYS-8163: melosys-web blokkerer årsavregningsflyten for EØS pensjonist når
-  // melosys.arsavregning.eos_pensjonist er på (useErÅrsavregningIkkeStøttetSakstype). Togglen er på
-  // som standard, så flyten kan ikke fullføres. Blokkeringen verifiseres i
-  // tests/eu-eos/aarsavregning-automatisk-eos-pensjonist.spec.ts. Ta testen i bruk igjen når
-  // blokkeringen fjernes.
-  test.fixme('skal fullføre pensjonistbehandling og opprette årsavregning for samme sak', async ({ page, request }) => {
+  test('skal fullføre pensjonistbehandling og opprette årsavregning for samme sak', async ({ page, request }) => {
     test.setTimeout(180000);
 
     const auth = new AuthHelper(page);

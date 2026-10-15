@@ -170,12 +170,7 @@ async function verifiserAarsavregningIDatabase(
 }
 
 test.describe('EU/EØS Trygdeavgift - Pensjonist årsavregning uten grunnlag', () => {
-  // MELOSYS-8163: melosys-web blokkerer årsavregningsflyten for EØS pensjonist når
-  // melosys.arsavregning.eos_pensjonist er på (useErÅrsavregningIkkeStøttetSakstype). Togglen er på
-  // som standard, så flyten kan ikke fullføres. Blokkeringen verifiseres i
-  // tests/eu-eos/aarsavregning-automatisk-eos-pensjonist.spec.ts. Ta testen i bruk igjen når
-  // blokkeringen fjernes.
-  test.fixme('skal beregne endelig trygdeavgift i uten-grunnlag-flyten (OPPLYSNINGER_ENDRET)', async ({ page }) => {
+  test('skal beregne endelig trygdeavgift i uten-grunnlag-flyten (OPPLYSNINGER_ENDRET)', async ({ page }) => {
     test.setTimeout(240000);
 
     const auth = new AuthHelper(page);
@@ -230,12 +225,7 @@ test.describe('EU/EØS Trygdeavgift - Pensjonist årsavregning uten grunnlag', (
     console.log('✅ Uten-grunnlag-årsavregning (Beregn) fullført og verifisert i DB');
   });
 
-  // MELOSYS-8163: melosys-web blokkerer årsavregningsflyten for EØS pensjonist når
-  // melosys.arsavregning.eos_pensjonist er på (useErÅrsavregningIkkeStøttetSakstype). Togglen er på
-  // som standard, så flyten kan ikke fullføres. Blokkeringen verifiseres i
-  // tests/eu-eos/aarsavregning-automatisk-eos-pensjonist.spec.ts. Ta testen i bruk igjen når
-  // blokkeringen fjernes.
-  test.fixme('skal oppgi endelig trygdeavgift manuelt med obligatorisk begrunnelse (MANUELL_ENDELIG_AVGIFT)', async ({ page }) => {
+  test('skal oppgi endelig trygdeavgift manuelt med obligatorisk begrunnelse (MANUELL_ENDELIG_AVGIFT)', async ({ page }) => {
     test.setTimeout(240000);
 
     const auth = new AuthHelper(page);
