@@ -386,9 +386,9 @@ export class UnleashHelper {
       // Denne oppføringen er den eneste grunnen til at togglen finnes i Unleash. Den står ikke i
       // melosys-api sin ToggleName.kt, så api oppretter den aldri — og lokalt regner api en
       // toggle den ikke finner i Unleash som på (DefaultEnabledUnleash, bare koblet inn under
-      // profilen «!nais & !test»; i prod er ukjent toggle av). Uten linja under ser altså
-      // art11-3b-testen en påslått flyt i stedet for den blokkerende meldingen. Verdien er av
-      // fordi flyten ikke er rullet ut. Det samme gjelder melosys.11_3_a_Norge_er_utpekt og
+      // profilen «!nais & !test»; i prod er ukjent toggle av). Uten linja under ville togglen
+      // altså vært på, og melosys-web blokkerer årsavregningsflyten for tjenesteperson når den er
+      // på. Verdien er av, så tester som trenger blokkeringen (art11-3b) slår den på selv. Det samme gjelder melosys.11_3_a_Norge_er_utpekt og
       // melosys.trygdeavgift.25-prosentregel: heller ikke de finnes i ToggleName.kt, så ingen
       // av de tre kan fjernes herfra i den tro at api synkroniserer dem.
       { name: 'melosys.arsavregning.eos_tjenesteperson', enabled: false },

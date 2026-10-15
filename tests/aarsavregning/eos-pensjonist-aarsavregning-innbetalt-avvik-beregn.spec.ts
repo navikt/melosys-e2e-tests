@@ -1,13 +1,16 @@
-import { test } from '../../fixtures';
+import { expect, test } from '../../fixtures';
 import { AuthHelper } from '../../helpers/auth-helper';
 import { UnleashHelper } from '../../helpers/unleash-helper';
-import {
-  PENSJONIST_AARSAVREGNING_TEST_DATA,
-  setupPensjonistMedAarsavregning,
-} from './pensjonist-aarsavregning-setup';
+import { EuEosBehandlingPage } from '../../pages/behandling/eu-eos-behandling.page';
+import { setupPensjonistMedAarsavregning } from './pensjonist-aarsavregning-setup';
 
+/**
+ * MELOSYS-8163: melosys-web blokkerer årsavregningsflyten for EØS pensjonist når
+ * melosys.arsavregning.eos_pensjonist er på (standard i testmiljøet). Saksbehandleren kommer
+ * ikke til «Innbetalt trygdeavgift», så avvik kan ikke registreres.
+ */
 test.describe('EU/EØS Trygdeavgift - Pensjonist årsavregning med avvik', () => {
-  test('skal fullføre pensjonistbehandling og årsavregning med innbetalt avvik', async ({ page, request }) => {
+  test('innbetalt avvik kan ikke registreres når årsavregningen er blokkert', async ({ page, request }) => {
     test.setTimeout(180000);
 
     const auth = new AuthHelper(page);
@@ -15,22 +18,14 @@ test.describe('EU/EØS Trygdeavgift - Pensjonist årsavregning med avvik', () =>
     await unleash.disableFeature('melosys.faktureringskomponenten.ikke-tidligere-perioder');
     await auth.login();
 
-    const { aarsavregning, vedtak } = await setupPensjonistMedAarsavregning(page);
+    const { aarsavregning } = await setupPensjonistMedAarsavregning(page);
 
     await aarsavregning.ventPåSideLastet();
-    await aarsavregning.velgÅr(PENSJONIST_AARSAVREGNING_TEST_DATA.år);
-    await aarsavregning.velgAvvikerInnbetalt(true);
-    await aarsavregning.fyllInnInnbetaltTrygdeavgift(
-      PENSJONIST_AARSAVREGNING_TEST_DATA.innbetaltAvvik
-    );
-    await aarsavregning.velgSkattepliktig(false);
-    await aarsavregning.velgInntektskilde(PENSJONIST_AARSAVREGNING_TEST_DATA.inntektskilde);
-    await aarsavregning.fyllInnBruttoinntektMedApiVent(
-      PENSJONIST_AARSAVREGNING_TEST_DATA.aarsavregningBruttoinntekt
-    );
-    await aarsavregning.klikkBekreftPåResultatside();
-
-    await vedtak.assertions.verifiserFattVedtakKnapp();
-    await vedtak.klikkFattVedtak();
+    await new EuEosBehandlingPage(page).assertions.verifiserÅrsavregningIkkeStøttet();
+    await expect(page.locator('#aarVelger'), 'Årsvelgeren skal være deaktivert').toBeDisabled();
+    await expect(
+      page.locator('.innbetaltTrygdeavgiftRadioGroup'),
+      'Spørsmålet om innbetalt trygdeavgift skal ikke vises'
+    ).toHaveCount(0);
   });
 });

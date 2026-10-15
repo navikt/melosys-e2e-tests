@@ -10,12 +10,13 @@ import { setupPensjonistUtenGrunnlagMedAutoAarsavregning } from '../aarsavregnin
  *
  * Spec: specs/aarsavregning-automatisk-eos-tjenesteperson-pensjonist.md
  *
- * Vedtak for et tidligere år oppretter årsavregningen automatisk, uten innhentingsbrev. Frem til
- * melosys.arsavregning.eos_pensjonist er satt i produksjon viser årsavregningsflyten en
- * blokkerende melding. I testmiljøet er togglen på, så testen slår den av.
+ * Vedtak for et tidligere år oppretter årsavregningen automatisk, uten innhentingsbrev. Når
+ * melosys.arsavregning.eos_pensjonist er på, viser årsavregningsflyten en blokkerende melding.
+ * Togglen er på som standard i testmiljøet, men testen slår den på eksplisitt så den ikke er
+ * avhengig av standardverdien.
  *
  * Tjenesteperson-scenariet (art. 11.3b) ligger i eu-eos-art11-3b-medlemskap-offentlig-tjenesteperson.spec.ts.
- * Der er togglen av som standard, slik som i produksjon.
+ * Der er togglen av som standard, så den testen slår togglen på selv.
  */
 
 const BLOKKERENDE_MELDING_TESTID = 'aarsavregning-ikke-stottet-sakstype';
@@ -24,8 +25,8 @@ const BLOKKERENDE_MELDING_TEKST =
 
 /**
  * melosys-web henter featuretoggles én gang per SPA-økt fra melosys-api, som igjen ligger bak
- * sin egen Unleash-poll. Et `disableFeature`-kall rett før sjekken kan derfor treffe et vindu der
- * web fortsatt ser togglen som på. Vi reloader i en løkke i stedet for å stole på én reload.
+ * sin egen Unleash-poll. Et `enableFeature`-kall rett før sjekken kan derfor treffe et vindu der
+ * web fortsatt ser togglen som av. Vi reloader i en løkke i stedet for å stole på én reload.
  */
 async function ventPåBlokkerendeMelding(page: import('@playwright/test').Page): Promise<void> {
   const melding = page.getByTestId(BLOKKERENDE_MELDING_TESTID);
@@ -52,7 +53,7 @@ async function ventPåBlokkerendeMelding(page: import('@playwright/test').Page):
 }
 
 test.describe('Automatisk årsavregning for EU/EØS pensjonist (MELOSYS-8163)', () => {
-  test('EØS pensjonist: auto-opprettet årsavregning viser blokkerende melding før togglen er satt i produksjon', async ({
+  test('EØS pensjonist: auto-opprettet årsavregning viser blokkerende melding når togglen er på', async ({
     page,
     request,
   }) => {
@@ -62,7 +63,7 @@ test.describe('Automatisk årsavregning for EU/EØS pensjonist (MELOSYS-8163)', 
 
     // Brev-fraværet dekkes av scenario 4 i aarsavregning-innhentingsbrev-saksbehandlingsflyt.spec.ts.
     // Den blokkerende meldingen for pensjonist asserteres bare her.
-    await unleash.disableFeature('melosys.arsavregning.eos_pensjonist');
+    await unleash.enableFeature('melosys.arsavregning.eos_pensjonist');
     await auth.login();
 
     console.log('📝 EØS-pensjonist saksbehandlingsflyt → auto-opprettet årsavregning...');
