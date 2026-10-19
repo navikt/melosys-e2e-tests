@@ -71,12 +71,31 @@ jobs:
       branch_context: ${{ steps.plan.outputs.branch_context }}
       e2e_ref: ${{ steps.plan.outputs.e2e_ref }}
     steps:
+      # Lesing i alle repoene; melosys-trygdeavgift-beregning og
+      # melosys-docker-compose er internal og synes ikke med github.token.
+      - name: Hent app-token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: |
+            melosys-api
+            melosys-web
+            melosys-skjema-api
+            melosys-skjema-web
+            melosys-eessi
+            faktureringskomponenten
+            melosys-trygdeavgift-beregning
+            melosys-docker-compose
+            melosys-e2e-tests
+          permission-contents: read
+
       - name: Valider og slå opp brancher
         id: plan
         env:
-          # Lesing i alle repoene; melosys-trygdeavgift-beregning og
-          # melosys-docker-compose er internal og synes ikke med github.token.
-          GH_TOKEN: ${{ secrets.E2E_TRIGGER_PAT }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           BRANCHES: ${{ inputs.branches }}
           REQUESTED_BY: ${{ inputs.requested_by }}
           TEST_GREP: ${{ inputs.test_grep }}
@@ -263,14 +282,38 @@ jobs:
       matrix:
         include: ${{ fromJSON(needs.plan.outputs.matrix) }}
     env:
-      GH_TOKEN: ${{ secrets.E2E_TRIGGER_PAT }}
       REPO: navikt/${{ matrix.repo }}
       WORKFLOW: ${{ matrix.workflow }}
       BRANCH: ${{ matrix.branch }}
     steps:
+      # Jobben har 45 min, så tokenet (én time) holder til og med avbrytingen.
+      - name: Hent app-token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: ${{ matrix.repo }}
+          permission-actions: write
+          permission-contents: read
+
       - name: Start bygget
         id: dispatch
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REQUESTED_BY: ${{ inputs.requested_by || github.actor }}
         run: |
+          # GitHub viser app-en som den som startet bygget, så bestilleren står i
+          # tittelen. Bare når workflow-fila på branchen har inputen: en ukjent
+          # input avvises, og eldre brancher har den ikke.
+          ARGS=(-f image_tag="$TAG")
+          if gh api -H "Accept: application/vnd.github.raw" \
+              "repos/$REPO/contents/.github%2Fworkflows%2F$WORKFLOW?ref=$(jq -rn --arg b "$BRANCH" '$b | @uri')" 2> /dev/null \
+              | grep -qE "^[[:space:]]+requested_by:[[:space:]]*$"; then
+            ARGS+=(-f requested_by="$REQUESTED_BY")
+          fi
+
           # Ett minutt tilbake: klokka på runneren og hos GitHub går ikke helt likt.
           START=$(date -u -d '-60 seconds' +%Y-%m-%dT%H:%M:%SZ)
           # Reserve når gh ikke skriver URL-en, bare blant kjøringer startet etter START
@@ -297,7 +340,7 @@ jobs:
 
           RUN_ID=""
           for forsok in 1 2 3; do
-            if OUT=$(gh workflow run "$WORKFLOW" -R "$REPO" --ref "$BRANCH" -f image_tag="$TAG" 2> "$RUNNER_TEMP/dispatch.err"); then
+            if OUT=$(gh workflow run "$WORKFLOW" -R "$REPO" --ref "$BRANCH" "${ARGS[@]}" 2> "$RUNNER_TEMP/dispatch.err"); then
               echo "$OUT"
               RUN_ID=$(printf '%s' "$OUT" | sed -nE 's#.*/actions/runs/([0-9]+).*#\1#p' | head -1)
               [ -n "$RUN_ID" ] || vent_paa_kjoring || true
@@ -317,6 +360,7 @@ jobs:
       - name: Vent på bygget
         id: wait
         env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RUN_ID: ${{ steps.dispatch.outputs.run_id }}
         run: |
           # Egen polling i stedet for `gh run watch`: én forbigående API-feil skal
@@ -355,6 +399,7 @@ jobs:
         # bygg. Et ferdig bygg gir en feil fra gh som ignoreres.
         if: always() && steps.dispatch.outputs.run_id != '' && steps.wait.outcome != 'success'
         env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
           RUN_ID: ${{ steps.dispatch.outputs.run_id }}
         run: gh run cancel "$RUN_ID" -R "$REPO" || true
 
@@ -368,12 +413,26 @@ jobs:
     runs-on: ubuntu-latest
     # E2E Tests: planjobb 15 min, shards 120 min og sammenslåing 15 min, pluss kø.
     timeout-minutes: 170
+    # Lesing med github.token: jobben varer lenger enn app-tokenet (én time).
+    permissions:
+      actions: read
+      contents: read
     env:
-      GH_TOKEN: ${{ secrets.E2E_TRIGGER_PAT }}
+      GH_TOKEN: ${{ github.token }}
       CORRELATION_ID: br-${{ github.run_id }}-${{ github.run_attempt }}
       # main, eller branchen valgt for melosys-e2e-tests.
       E2E_REF: ${{ needs.plan.outputs.e2e_ref }}
     steps:
+      - name: Hent app-token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: melosys-e2e-tests
+          permission-actions: write
+
       - name: Start E2E Tests
         id: dispatch
         env:
@@ -383,6 +442,7 @@ jobs:
           SHARDS: ${{ inputs.shards }}
           REPEAT_EACH: ${{ inputs.repeat_each }}
           DISABLE_RETRIES: ${{ inputs.disable_retries }}
+          DISPATCH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
           finn_kjoring() {
             gh run list -R "$E2E_REPO" --workflow e2e-tests.yml --event workflow_dispatch -L 30 \
@@ -422,7 +482,7 @@ jobs:
 
           RUN_ID=""
           for forsok in 1 2 3; do
-            if OUT=$(gh workflow run e2e-tests.yml -R "$E2E_REPO" --ref "$E2E_REF" "${ARGS[@]}" 2> "$RUNNER_TEMP/dispatch.err"); then
+            if OUT=$(GH_TOKEN="$DISPATCH_TOKEN" gh workflow run e2e-tests.yml -R "$E2E_REPO" --ref "$E2E_REF" "${ARGS[@]}" 2> "$RUNNER_TEMP/dispatch.err"); then
               echo "$OUT"
               RUN_ID=$(printf '%s' "$OUT" | sed -nE 's#.*/actions/runs/([0-9]+).*#\1#p' | head -1)
               [ -n "$RUN_ID" ] || vent_paa_kjoring || true
@@ -471,8 +531,22 @@ jobs:
             fi
           done
 
+      # E2E Tests kan ha gått i over en time, så avbrytingen henter sitt eget token.
+      - name: Hent app-token for avbryting
+        id: cancel-token
+        if: always() && steps.dispatch.outputs.run_id != '' && steps.wait.outcome != 'success'
+        continue-on-error: true
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: melosys-e2e-tests
+          permission-actions: write
+
       - name: Avbryt E2E Tests
         if: always() && steps.dispatch.outputs.run_id != '' && steps.wait.outcome != 'success'
         env:
+          GH_TOKEN: ${{ steps.cancel-token.outputs.token }}
           RUN_ID: ${{ steps.dispatch.outputs.run_id }}
         run: gh run cancel "$RUN_ID" -R "$E2E_REPO" || true

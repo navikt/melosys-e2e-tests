@@ -333,7 +333,7 @@ jobs:
 
           # ---- Trigger-kontekst for melosys-console ----
           # Konsollen leser trigger-konteksten fra test-summary-artefakten: runs-API-et
-          # eksponerer ikke client_payload, og triggering_actor er PAT-eieren, ikke
+          # eksponerer ikke client_payload, og triggering_actor er app-en eller PAT-eieren, ikke
           # personen som trigget. Fila skrives her — før docker compose, health checks og
           # Playwright — slik at den finnes også når kjøringen dør tidlig.
           #
