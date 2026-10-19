@@ -9,7 +9,8 @@ name: E2E gate
 # Markøren sparer bare e2e-kjøringen; den gjør aldri et PR-image til et image
 # som deployes.
 #
-# Kalleren gir `permissions: { id-token: write, contents: read }` og sender
+# Kalleren gir `permissions: { id-token: write, contents: read }` og sender enten
+# app-en Melosys CI (melosys_ci_client_id og MELOSYS_CI_PRIVATE_KEY) eller
 # E2E_TRIGGER_PAT. Jobbene her har ingen egen permissions-blokk og arver den.
 # Plan: melosys-kode-wiki plans/2026-09-27-e2e-merge-queue-melosys-api.mdx
 
@@ -38,10 +39,18 @@ on:
         type: string
         required: false
         default: ''
+      melosys_ci_client_id:
+        description: 'Client ID til app-en Melosys CI. Med MELOSYS_CI_PRIVATE_KEY brukes app-token i stedet for E2E_TRIGGER_PAT.'
+        type: string
+        required: false
+        default: ''
     secrets:
+      MELOSYS_CI_PRIVATE_KEY:
+        description: 'Privatnøkkelen til app-en Melosys CI, som trenger Actions: read and write på navikt/melosys-e2e-tests'
+        required: false
       E2E_TRIGGER_PAT:
-        description: 'Token med Actions: read and write på navikt/melosys-e2e-tests'
-        required: true
+        description: 'Token med Actions: read and write på navikt/melosys-e2e-tests. Brukes når melosys_ci_client_id er tom.'
+        required: false
     # Lar kalleren melde resultatet tilbake, for eksempel som en kommentar i PR-en.
     outputs:
       hit:
@@ -145,10 +154,23 @@ jobs:
       E2E_REPO: navikt/melosys-e2e-tests
       CORRELATION_ID: ${{ inputs.service }}-${{ github.run_id }}-${{ github.run_attempt }}
     steps:
+      # Tokenet varer én time, og E2E Tests tar ca. 68 minutter, så avbrytingen
+      # henter sitt eget.
+      - name: Hent app-token
+        id: app-token
+        if: inputs.melosys_ci_client_id != ''
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ inputs.melosys_ci_client_id }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: melosys-e2e-tests
+          permission-actions: write
+
       - name: Start E2E Tests
         id: dispatch
         env:
-          GH_TOKEN: ${{ secrets.E2E_TRIGGER_PAT }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token || secrets.E2E_TRIGGER_PAT }}
           READ_TOKEN: ${{ github.token }}
           SERVICE: ${{ inputs.service }}
           TAG: ${{ inputs.tag }}
@@ -161,6 +183,10 @@ jobs:
           PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
           MG_HEAD_REF: ${{ github.event.merge_group.head_ref }}
         run: |
+          if [ -z "$GH_TOKEN" ]; then
+            echo "::error::Mangler token: send melosys_ci_client_id og MELOSYS_CI_PRIVATE_KEY, eller E2E_TRIGGER_PAT"
+            exit 1
+          fi
           case "$EVENT_NAME" in
             pull_request) TRIGGER=pr-label ;;
             merge_group)
@@ -226,8 +252,8 @@ jobs:
         id: wait
         env:
           # Lesing med kallerens GITHUB_TOKEN: e2e-repoet er offentlig, og det
-          # sparer PAT-ens rate limit. Grensen er 1000 kall i timen, delt med alle
-          # workflows i kallerrepoet; gaten bruker 1–2 i minuttet.
+          # sparer rate limiten til app-en eller PAT-en. Grensen er 1000 kall i
+          # timen, delt med alle workflows i kallerrepoet; gaten bruker 1–2 i minuttet.
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ steps.dispatch.outputs.run_id }}
           QUEUE_REF: ${{ inputs.queue_ref }}
@@ -271,6 +297,19 @@ jobs:
             fi
           done
 
+      # Feiler dette, feiler også avbrytingen med en advarsel.
+      - name: Hent app-token for avbryting
+        id: cancel-token
+        if: always() && steps.dispatch.outcome != 'skipped' && steps.wait.outcome != 'success' && inputs.melosys_ci_client_id != ''
+        continue-on-error: true
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ inputs.melosys_ci_client_id }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: melosys-e2e-tests
+          permission-actions: write
+
       - name: Avbryt E2E Tests
         id: cancel
         # Kjører når ventingen ikke ble grønn: gaten er avbrutt (label fjernet,
@@ -279,7 +318,7 @@ jobs:
         # for da går suiten videre i opptil 68 minutter.
         if: always() && steps.dispatch.outcome != 'skipped' && steps.wait.outcome != 'success'
         env:
-          GH_TOKEN: ${{ secrets.E2E_TRIGGER_PAT }}
+          GH_TOKEN: ${{ steps.cancel-token.outputs.token || secrets.E2E_TRIGGER_PAT }}
           READ_TOKEN: ${{ github.token }}
           RUN_ID: ${{ steps.dispatch.outputs.run_id }}
         run: |
