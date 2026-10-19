@@ -38,9 +38,9 @@ Sjekken `e2e-for-merge` er grønn på en PR før den står i kø, og betyr bare 
 
 Treet er nøkkelen, ikke SHA-en: merge-refen på PR-en, commiten i køen og commiten på master har samme tree når koden er den samme. Markøren sparer bare e2e-kjøringen; den gjør aldri et PR-image til et image som deployes.
 
-Kalleren sender `service`, `image` (GAR-sti uten tag), `tag` (commit-SHA-en imaget er bygget fra) og fra merge queue `queue_ref`. Den gir `permissions: { id-token: write, contents: read }` og sender `E2E_TRIGGER_PAT` (Actions: read and write på dette repoet) under `secrets:`. Gaten gir tilbake outputs `hit`, `tree` og `run_id` (ID-en til «E2E Tests», tom ved treff).
+Kalleren sender `service`, `image` (GAR-sti uten tag), `tag` (commit-SHA-en imaget er bygget fra) og fra merge queue `queue_ref`. Den gir `permissions: { id-token: write, contents: read }` og sender enten app-en Melosys CI, med `melosys_ci_client_id` under `with:` og `MELOSYS_CI_PRIVATE_KEY` under `secrets:`, eller `E2E_TRIGGER_PAT` under `secrets:`. Begge trenger Actions: read and write på dette repoet. Med app-en henter gaten et nytt token for avbrytingen, fordi et app-token varer én time. Gaten gir tilbake outputs `hit`, `tree` og `run_id` (ID-en til «E2E Tests», tom ved treff).
 
-En gate-kjøring er `workflow_dispatch` på `main`, så GitHub viser dette repoets siste commit og eieren av `E2E_TRIGGER_PAT` øverst på siden. Kilderepo, PR, PR-head og tree står i jobbsammendraget.
+En gate-kjøring er `workflow_dispatch` på `main`, så GitHub viser dette repoets siste commit og app-en eller eieren av `E2E_TRIGGER_PAT` øverst på siden. Kilderepo, PR, PR-head og tree står i jobbsammendraget.
 
 Gate-kjøringer sender ikke varsel til Slack; det gjør bare `repository_dispatch`-kjøringer. Svaret står i PR-en eller i køen.
 
