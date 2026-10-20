@@ -102,6 +102,26 @@ export function generateMarkdownSummary(
     }
   }
 
+  // Regel 6: plan-jobben hoppet over testene fordi tjenesten er pinnet med en koblet endring.
+  if (data.skipped) {
+    md += `## ⏭️ Testene er hoppet over\n\n`;
+    md += `- Tjenesten i dispatchen er pinnet med en koblet endring i \`.github/e2e-pins.json\`, og merge queue testet den fra e2e-branchen. Kjøringen teller ikke i pass rate.\n\n`;
+  }
+
+  // Pinner fra .github/e2e-pins.json. En tjeneste under test bruker ikke pinnen.
+  if (data.pins && Object.keys(data.pins).length > 0) {
+    md += `## 📌 Pinnede tjenester\n\n`;
+    for (const [service, pin] of Object.entries(data.pins).sort((a, b) => a[0].localeCompare(b[0]))) {
+      const details = [pin.jira, `utløper ${pin.utloper}`];
+      if (pin.e2e_branch) details.push(`e2e-branch \`${pin.e2e_branch}\``);
+      if (pin.service_pr) details.push(`PR #${pin.service_pr}`);
+      const usedTag = data.tags?.[service];
+      const underTest = usedTag !== undefined && usedTag !== pin.tag ? ' — under test, pinnen gjelder ikke' : '';
+      md += `- **${service}:** \`${pin.tag.slice(0, 7)}\` (${details.join(', ')})${underTest}\n`;
+    }
+    md += '\n';
+  }
+
   // Display Unleash toggle overrides if any toggles were pinned for this run
   const overrides = data.unleashOverrides;
   if (overrides && ((overrides.forceDisable?.length ?? 0) > 0 || (overrides.forceEnable?.length ?? 0) > 0)) {

@@ -125,11 +125,14 @@ jobs:
       id-token: write
       actions: read
     outputs:
-      shard_count: ${{ steps.shard-plan.outputs.shard_count }}
+      # 0 når regel 6 hopper over testene; da kjører verken shard- eller merge-jobben.
+      shard_count: ${{ steps.shard-plan.outputs.shard_count || steps.regel6.outputs.shard_count }}
       runner: ${{ steps.mode.outputs.runner }}
       shards: ${{ steps.shard-plan.outputs.shards }}
       plan: ${{ steps.shard-plan.outputs.plan }}
       trigger_context: ${{ steps.trigger-context.outputs.json }}
+      # Pinnene fra .github/e2e-pins.json som JSON, når minst én er brukt. Reporteren viser dem.
+      pins: ${{ steps.image-tags.outputs.pins }}
       # Taggene er pinnet: «<tag>@sha256:…» (se «Pin image-tagger til digest»).
       melosys_api_tag: ${{ steps.pin.outputs.melosys_api_tag }}
       melosys_web_tag: ${{ steps.pin.outputs.melosys_web_tag }}
@@ -149,6 +152,32 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+
+      # Regel 6 i docs/ci-cd/KOBLEDE-ENDRINGER.md: dispatch etter merge fra en tjeneste med koblet
+      # pin hoppes over når service_pr er merget og merge-commiten er forfar til sha-en i
+      # dispatchen. Køkjøringen testet samme tre fra e2e-branchen. Oppslagene går mot de seks
+      # offentlige repoene med gate, så GITHUB_TOKEN holder. Feiler et oppslag, kjøres testene.
+      - name: Hopp over testene for en koblet pinnet tjeneste? (regel 6)
+        id: regel6
+        if: github.event_name == 'repository_dispatch'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EVENT_TYPE: ${{ github.event.action }}
+          PAYLOAD_IMAGE_TAG: ${{ github.event.client_payload.image_tag }}
+        run: |
+          HOPP=false
+          GRUNN="regel 6 kunne ikke avgjøres, testene kjøres"
+          if SVAR=$(node lib/e2e-pins.mjs regel6 --fil .github/e2e-pins.json --hendelse repository_dispatch \
+              --event-type "$EVENT_TYPE" --sha "$PAYLOAD_IMAGE_TAG"); then
+            HOPP=$(jq -r '.hopp == true' <<<"$SVAR") || HOPP=false
+            GRUNN=$(jq -r '.grunn' <<<"$SVAR" | tr '\n\r' '  ') || GRUNN="ukjent grunn"
+          fi
+          echo "📌 Regel 6: $GRUNN"
+          {
+            echo "hopp=$HOPP"
+            echo "grunn=$GRUNN"
+            if [ "$HOPP" = true ]; then echo "shard_count=0"; fi
+          } >> "$GITHUB_OUTPUT"
 
       - name: Determine image tags from trigger source
         id: image-tags
@@ -177,6 +206,7 @@ jobs:
           INPUT_GATE_CONTEXT: ${{ inputs.gate_context }}
           INPUT_CORRELATION_ID: ${{ inputs.correlation_id }}
           INPUT_BRANCH_CONTEXT: ${{ inputs.branch_context }}
+          HOPP_OVER: ${{ steps.regel6.outputs.hopp }}
         run: |
           # Verdier utenfra (payload og workflow_dispatch-input) får linjeskiftene
           # fjernet før de logges. En workflow-kommando
@@ -185,6 +215,24 @@ jobs:
           # annotasjon) eller ::add-mask:: (skjuler tekst i resten av jobbloggen).
           # Enlinjede verdier, altså alle normale, logges ordrett som før.
           log_payload() { printf '%s %s\n' "$1" "$(printf '%s' "$2" | tr '\n\r' '  ')"; }
+
+          # sett_tag <tjeneste> <tag>: setter tag-variabelen for tjenesten. Ukjent tjeneste gir 1.
+          sett_tag() {
+            case "$1" in
+              melosys-api) MELOSYS_API_TAG="$2" ;;
+              melosys-web) MELOSYS_WEB_TAG="$2" ;;
+              faktureringskomponenten) FAKTURERINGSKOMPONENTEN_TAG="$2" ;;
+              melosys-trygdeavgift-beregning) MELOSYS_TRYGDEAVGIFT_TAG="$2" ;;
+              melosys-trygdeavtale) MELOSYS_TRYGDEAVTALE_TAG="$2" ;;
+              melosys-inngangsvilkar) MELOSYS_INNGANGSVILKAR_TAG="$2" ;;
+              melosys-eessi) MELOSYS_EESSI_TAG="$2" ;;
+              melosys-mock) MELOSYS_MOCK_TAG="$2" ;;
+              melosys-dokgen) MELOSYS_DOKGEN_TAG="$2" ;;
+              melosys-skjema-api) MELOSYS_SKJEMA_API_TAG="$2" ;;
+              melosys-skjema-web) MELOSYS_SKJEMA_WEB_TAG="$2" ;;
+              *) return 1 ;;
+            esac
+          }
 
           if [ "$EVENT_NAME" = "repository_dispatch" ]; then
             # Triggered by another repository pushing an image
@@ -284,44 +332,7 @@ jobs:
                 tag="${pair#*:}"
                 echo "  📦 $service -> $tag"
 
-                case "$service" in
-                  melosys-api)
-                    MELOSYS_API_TAG="$tag"
-                    ;;
-                  melosys-web)
-                    MELOSYS_WEB_TAG="$tag"
-                    ;;
-                  faktureringskomponenten)
-                    FAKTURERINGSKOMPONENTEN_TAG="$tag"
-                    ;;
-                  melosys-trygdeavgift-beregning)
-                    MELOSYS_TRYGDEAVGIFT_TAG="$tag"
-                    ;;
-                  melosys-trygdeavtale)
-                    MELOSYS_TRYGDEAVTALE_TAG="$tag"
-                    ;;
-                  melosys-inngangsvilkar)
-                    MELOSYS_INNGANGSVILKAR_TAG="$tag"
-                    ;;
-                  melosys-eessi)
-                    MELOSYS_EESSI_TAG="$tag"
-                    ;;
-                  melosys-mock)
-                    MELOSYS_MOCK_TAG="$tag"
-                    ;;
-                  melosys-dokgen)
-                    MELOSYS_DOKGEN_TAG="$tag"
-                    ;;
-                  melosys-skjema-api)
-                    MELOSYS_SKJEMA_API_TAG="$tag"
-                    ;;
-                  melosys-skjema-web)
-                    MELOSYS_SKJEMA_WEB_TAG="$tag"
-                    ;;
-                  *)
-                    echo "  ⚠️  Unknown service: $service (ignored)"
-                    ;;
-                esac
+                sett_tag "$service" "$tag" || echo "  ⚠️  Unknown service: $service (ignored)"
               done
             else
               # Simple format: just a tag for melosys-api (backwards compatible)
@@ -329,6 +340,32 @@ jobs:
               echo "🏷️  Using tag for other services: latest"
               MELOSYS_API_TAG="$INPUT_ENV"
             fi
+          fi
+
+          # ---- Pinner fra .github/e2e-pins.json (regel 1, 2 og 7) ----
+          # Fila leses fra samme ref som testene. Tjenester som står i fila og ikke er under test,
+          # får taggen i pinnen i stedet for latest. Tjenesten under test vinner over pinnen.
+          # Hvilke tjenester som er under test, avgjør lib/e2e-pins.mjs ut fra samme input som over.
+          # En ugyldig fil stopper kjøringen: å falle tilbake til latest ville testet feil image.
+          if ! PIN_SVAR=$(node lib/e2e-pins.mjs anvend --fil .github/e2e-pins.json --hendelse "$EVENT_NAME" \
+              --event-type "$EVENT_TYPE" --environment "$INPUT_ENVIRONMENT" 2>"$RUNNER_TEMP/pins.err"); then
+            while IFS= read -r linje; do echo "::error::$linje"; done < "$RUNNER_TEMP/pins.err"
+            echo "::error::.github/e2e-pins.json er ugyldig, se docs/ci-cd/KOBLEDE-ENDRINGER.md"
+            exit 1
+          fi
+          # Verdiene er validert (kjent tjeneste, 40 hex, MELOSYS-nøkkel, dato), så de kan logges.
+          while IFS=$'\t' read -r tjeneste tag; do
+            sett_tag "$tjeneste" "$tag"
+            echo "📌 $tjeneste holdes på $tag (pinnet i .github/e2e-pins.json)"
+          done < <(jq -r '.anvendt | to_entries[] | "\(.key)\t\(.value)"' <<<"$PIN_SVAR")
+          jq -r '.underTest[] | "📌 \(.) er under test, pinnen gjelder ikke denne kjøringen"' <<<"$PIN_SVAR"
+          jq -r '.utlopt[] | "::warning::Pinnen for \(.tjeneste) (\(.jira)) utløp \(.utloper). Fjern den eller sett ny utloper i .github/e2e-pins.json."' <<<"$PIN_SVAR"
+          # Trigger-konteksten får pins når minst én pin er brukt, eller når regel 6 hoppet over testene.
+          if [ "$(jq '.anvendt | length' <<<"$PIN_SVAR")" -gt 0 ] || [ "$HOPP_OVER" = "true" ]; then
+            PIN_FELT=$(jq -c '{pins: .pins}' <<<"$PIN_SVAR")
+            echo "pins=$(jq -c '.pins' <<<"$PIN_SVAR")" >> "$GITHUB_OUTPUT"
+          else
+            PIN_FELT='{}'
           fi
 
           # ---- Trigger-kontekst for melosys-console ----
@@ -357,6 +394,8 @@ jobs:
             --arg eessi "$MELOSYS_EESSI_TAG" \
             --arg mock "$MELOSYS_MOCK_TAG" \
             --arg dokgen "$MELOSYS_DOKGEN_TAG" \
+            --arg skjemaApi "$MELOSYS_SKJEMA_API_TAG" \
+            --arg skjemaWeb "$MELOSYS_SKJEMA_WEB_TAG" \
             '{
               "melosys-api": $melosysApi,
               "melosys-web": $melosysWeb,
@@ -366,7 +405,9 @@ jobs:
               "melosys-inngangsvilkar": $inngangsvilkar,
               "melosys-eessi": $eessi,
               "melosys-mock": $mock,
-              "melosys-dokgen": $dokgen
+              "melosys-dokgen": $dokgen,
+              "melosys-skjema-api": $skjemaApi,
+              "melosys-skjema-web": $skjemaWeb
             }
             | with_entries(select(.value != ""))') || RESOLVED_TAGS=""
 
@@ -504,6 +545,7 @@ jobs:
               --argjson resolvedTags "$RESOLVED_TAGS" \
               --argjson gate "$GATE_FIELDS" \
               --argjson branch "$BRANCH_FIELDS" \
+              --argjson pins "$PIN_FELT" \
               "$JQ_HELPERS"'
               {
                 schemaVersion: 1,
@@ -518,7 +560,7 @@ jobs:
                 runAttempt: ($runAttempt | as_num),
                 resolvedTags: $resolvedTags,
                 inputs: null
-              } + $gate + $branch') || TRIGGER_JSON=""
+              } + $gate + $branch + $pins') || TRIGGER_JSON=""
           else
             TRIGGER_JSON=$(jq -n \
               --arg actor "$GITHUB_ACTOR_NAME" \
@@ -535,6 +577,7 @@ jobs:
               --argjson resolvedTags "$RESOLVED_TAGS" \
               --argjson gate "$GATE_FIELDS" \
               --argjson branch "$BRANCH_FIELDS" \
+              --argjson pins "$PIN_FELT" \
               "$JQ_HELPERS"'
               {
                 schemaVersion: 1,
@@ -558,7 +601,7 @@ jobs:
                   unleash_force_disable: ($unleashForceDisable | nz),
                   unleash_force_enable: ($unleashForceEnable | nz)
                 }
-              } + $gate + $branch') || TRIGGER_JSON=""
+              } + $gate + $branch + $pins') || TRIGGER_JSON=""
           fi
 
           echo ""
@@ -629,8 +672,60 @@ jobs:
         with:
           team: teammelosys
 
+      # En pin til en tag som ikke finnes, gir rød plan-jobb her, ikke en advarsel og latest.
+      # Fila er alt validert i «Determine image tags»; e2e-køen sjekker det samme før merge.
+      - name: Sjekk at pinnede tagger finnes i GAR
+        run: |
+          if ! node lib/e2e-pins.mjs sjekk-gar --fil .github/e2e-pins.json 2>"$RUNNER_TEMP/gar.err"; then
+            while IFS= read -r linje; do echo "::error::$linje"; done < "$RUNNER_TEMP/gar.err"
+            echo "::error::Pinnet tag mangler i GAR. Sett tag med scripts/pin-sha.sh <tjeneste>, se docs/ci-cd/KOBLEDE-ENDRINGER.md"
+            exit 1
+          fi
+
+      # Regel 6: ingen shards. Plan-jobben laster opp `test-summary` selv, så konsollen ser
+      # kjøringen som hoppet over (skipped: true) og ikke teller den i pass rate. Kjøringen er grønn
+      # og gir ikke Slack-varsel: notify-slack varsler bare når en jobb feiler.
+      - name: Skriv sammendrag for kjøring uten tester (regel 6)
+        if: steps.regel6.outputs.hopp == 'true'
+        env:
+          GRUNN: ${{ steps.regel6.outputs.grunn }}
+        run: |
+          dir=playwright-report
+          mkdir -p "$dir"
+          tags='{}'
+          if [ -f "$RUNNER_TEMP/trigger-context.json" ]; then
+            cp "$RUNNER_TEMP/trigger-context.json" "$dir/trigger-context.json"
+            tags=$(jq -c '.resolvedTags // {}' "$RUNNER_TEMP/trigger-context.json")
+          fi
+          jq -n --arg start "$(date -u +%Y-%m-%dT%H:%M:%S.000Z)" --argjson tags "$tags" \
+            '{status: "skipped", skipped: true, skipReason: "pinned-service", startTime: $start, duration: 0, tags: $tags, tests: []}' \
+            > "$dir/test-summary.json"
+          {
+            echo "# E2E Test Summary"
+            echo ""
+            echo "## ⏭️ Testene er hoppet over"
+            echo ""
+            echo "$GRUNN"
+            echo ""
+            echo "Kjøringen teller ikke i pass rate. Se regel 6 i docs/ci-cd/KOBLEDE-ENDRINGER.md."
+          } > "$dir/test-summary.md"
+          cat "$dir/test-summary.md" >> "$GITHUB_STEP_SUMMARY"
+          echo "::notice title=Testene er hoppet over (regel 6)::$GRUNN"
+
+      - name: Last opp test-summary for kjøring uten tester
+        if: steps.regel6.outputs.hopp == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-summary
+          path: |
+            playwright-report/test-summary.md
+            playwright-report/test-summary.json
+            playwright-report/trigger-context.json
+          retention-days: 30
+
       - name: Pin image-tagger til digest
         id: pin
+        if: steps.regel6.outputs.hopp != 'true'
         # Alle shards skal teste de samme imagene. `latest` og feature-tagger flytter seg, så en
         # shard som henter litt senere kunne fått et annet image enn de andre. Taggen slås opp én
         # gang her og sendes videre som `<tag>@sha256:…`; docker henter da på digesten.
@@ -688,6 +783,7 @@ jobs:
 
       - name: Velg antall shards
         id: mode
+        if: steps.regel6.outputs.hopp != 'true'
         env:
           INPUT_SHARDS: ${{ inputs.shards }}
           INPUT_RUNNER: ${{ inputs.runner }}
@@ -722,19 +818,19 @@ jobs:
           echo "requested=$requested" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js
-        if: steps.mode.outputs.requested != '1'
+        if: steps.regel6.outputs.hopp != 'true' && steps.mode.outputs.requested != '1'
         uses: actions/setup-node@v4
         with:
           node-version: '20'
           cache: 'npm'
 
       - name: Install dependencies
-        if: steps.mode.outputs.requested != '1'
+        if: steps.regel6.outputs.hopp != 'true' && steps.mode.outputs.requested != '1'
         run: npm ci
 
       - name: Hent varigheter fra forrige fulle kjøring
         id: previous
-        if: steps.mode.outputs.requested != '1'
+        if: steps.regel6.outputs.hopp != 'true' && steps.mode.outputs.requested != '1'
         # Siste grønne kjøring på main uten test_grep og repeat_each. Kjøringer med filter mangler
         # varighet for de andre testene, og med repeat_each summeres hver test flere ganger. En
         # sharded kjøring har `test-summary` fra merge-jobben. Finnes ingen, får alle testene samme
@@ -761,6 +857,7 @@ jobs:
 
       - name: Fordel testene på shards
         id: shard-plan
+        if: steps.regel6.outputs.hopp != 'true'
         env:
           REQUESTED: ${{ steps.mode.outputs.requested }}
           TEST_GREP: ${{ inputs.test_grep }}
@@ -816,6 +913,8 @@ jobs:
   # «e2e-tests (N)», som melosys-console leser. Et `name:` med matrix-verdier ville fjernet «(N)».
   e2e-tests:
     needs: plan
+    # shard_count er 0 når regel 6 hopper over testene, og en tom matrise feiler.
+    if: needs.plan.outputs.shard_count > 0
     runs-on: ${{ needs.plan.outputs.runner }}
     # 2 timer gir rom for dekningskjøringen: hele suiten på én shard pluss bygget av
     # melosys-api (~4 min med cache, ~11 min uten).
@@ -1614,6 +1713,7 @@ jobs:
           UNLEASH_FORCE_ENABLE: ${{ inputs.unleash_force_enable }}
           # Blob-rapporten er det merge-jobben slår sammen til én rapport når det er flere shards.
           E2E_BLOB_REPORT: ${{ needs.plan.outputs.shard_count != '1' && 'true' || '' }}
+          E2E_PINS: ${{ needs.plan.outputs.pins }}
 
       - name: Ressursbruk etter testene
         if: always() && steps.compose-up.outcome == 'success'
@@ -2297,7 +2397,7 @@ jobs:
   merge-reports:
     name: Slå sammen shards
     needs: [plan, e2e-tests]
-    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.shard_count != '1' }}
+    if: ${{ !cancelled() && needs.plan.result == 'success' && needs.plan.outputs.shard_count > 1 }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     env:
@@ -2346,6 +2446,9 @@ jobs:
           MELOSYS_EESSI_TAG: ${{ needs.plan.outputs.melosys_eessi_tag }}
           MELOSYS_MOCK_TAG: ${{ needs.plan.outputs.melosys_mock_tag }}
           MELOSYS_DOKGEN_TAG: ${{ needs.plan.outputs.melosys_dokgen_tag }}
+          MELOSYS_SKJEMA_API_TAG: ${{ needs.plan.outputs.melosys_skjema_api_tag }}
+          MELOSYS_SKJEMA_WEB_TAG: ${{ needs.plan.outputs.melosys_skjema_web_tag }}
+          E2E_PINS: ${{ needs.plan.outputs.pins }}
           RETRIES_DISABLED: ${{ inputs.disable_retries == true }}
           RUN_BDD: ${{ inputs.run_bdd == true && 'true' || '' }}
           UNLEASH_FORCE_DISABLE: ${{ inputs.unleash_force_disable }}

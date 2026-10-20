@@ -955,6 +955,58 @@ describe('Summary Generator', () => {
 
   });
 
+  describe('Pinnede tjenester', () => {
+    const pin = { tag: 'a'.repeat(40), e2e_branch: 'MELOSYS-9000-ny-knapp', service_pr: 3300, jira: 'MELOSYS-9000', utloper: '2026-11-03' };
+
+    test('viser pinnen med jira, utløp, e2e-branch og PR', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [createTest({ status: 'passed' })],
+        tags: { 'melosys-web': pin.tag },
+        pins: { 'melosys-web': pin },
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      assert(result.includes('## 📌 Pinnede tjenester'));
+      assert(result.includes('- **melosys-web:** `aaaaaaa` (MELOSYS-9000, utløper 2026-11-03, e2e-branch `MELOSYS-9000-ny-knapp`, PR #3300)\n'));
+    });
+
+    test('sier fra når tjenesten er under test og pinnen ikke gjelder', () => {
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [createTest({ status: 'passed' })],
+        tags: { 'melosys-web': 'mq-' + 'b'.repeat(40) },
+        pins: { 'melosys-web': pin },
+      };
+
+      assert(generateMarkdownSummary(data).includes('under test, pinnen gjelder ikke'));
+    });
+
+    test('viser ingen seksjon uten pinner', () => {
+      const data: TestSummaryData = { status: 'passed', duration: 10000, tests: [createTest({ status: 'passed' })] };
+      assert(!generateMarkdownSummary(data).includes('Pinnede tjenester'));
+    });
+
+    test('viser at testene er hoppet over (regel 6)', () => {
+      const data: TestSummaryData = {
+        status: 'skipped',
+        skipped: true,
+        skipReason: 'pinned-service',
+        duration: 0,
+        tests: [],
+        pins: { 'melosys-web': pin },
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      assert(result.includes('## ⏭️ Testene er hoppet over'));
+      assert(result.includes('## 📌 Pinnede tjenester'));
+    });
+  });
+
   describe('BDD-only Run', () => {
 
     test('should render BDD banner when bddRun is true', () => {

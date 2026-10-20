@@ -35,10 +35,25 @@ export interface TestData {
 }
 
 /**
+ * En pin fra .github/e2e-pins.json: tjenesten holdes på `tag` i stedet for `latest`.
+ * Se docs/ci-cd/KOBLEDE-ENDRINGER.md.
+ */
+export interface E2EPin {
+  tag: string;
+  e2e_branch?: string;
+  service_pr?: number;
+  jira: string;
+  utloper: string;
+}
+
+/**
  * Complete test summary data (matches test-summary.json format)
  */
 export interface TestSummaryData {
-  status: 'passed' | 'failed';
+  // 'skipped' skrives bare av plan-jobben når regel 6 hopper over testene.
+  status: 'passed' | 'failed' | 'skipped';
+  skipped?: boolean;
+  skipReason?: 'pinned-service';
   startTime?: Date;
   duration: number;
   tests: TestData[];
@@ -49,6 +64,7 @@ export interface TestSummaryData {
     forceDisable?: string[]; // Toggles forced OFF for the whole run
     forceEnable?: string[]; // Toggles forced ON for the whole run
   };
+  pins?: Record<string, E2EPin>; // Pinnene i .github/e2e-pins.json, når minst én er brukt
 }
 
 /**

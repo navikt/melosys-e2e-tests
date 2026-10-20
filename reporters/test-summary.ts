@@ -4,7 +4,7 @@ import type {
 import * as fs from 'fs';
 import * as path from 'path';
 import { generateMarkdownSummary } from '../lib/summary-generator';
-import { TestSummaryData, TestData } from '../lib/types';
+import { TestSummaryData, TestData, E2EPin } from '../lib/types';
 import { hasTag } from '../lib/test-tags';
 
 /**
@@ -29,6 +29,8 @@ const TAG_ENV_VARS = [
   { key: 'melosys-eessi', envVar: 'MELOSYS_EESSI_TAG' },
   { key: 'melosys-mock', envVar: 'MELOSYS_MOCK_TAG' },
   { key: 'melosys-dokgen', envVar: 'MELOSYS_DOKGEN_TAG' },
+  { key: 'melosys-skjema-api', envVar: 'MELOSYS_SKJEMA_API_TAG' },
+  { key: 'melosys-skjema-web', envVar: 'MELOSYS_SKJEMA_WEB_TAG' },
 ];
 
 /**
@@ -44,6 +46,22 @@ export function imageTagsFromEnv(env: NodeJS.ProcessEnv): Record<string, string>
     }
   }
   return tags;
+}
+
+/**
+ * Pinnene plan-jobben brukte (E2E_PINS, JSON fra .github/e2e-pins.json). Plan-jobben har alt
+ * validert fila; tom eller uleselig verdi gir ingen pinner i sammendraget.
+ */
+export function pinsFromEnv(env: NodeJS.ProcessEnv): Record<string, E2EPin> | undefined {
+  try {
+    const pins = JSON.parse(env.E2E_PINS || 'null');
+    if (pins && typeof pins === 'object' && !Array.isArray(pins) && Object.keys(pins).length > 0) {
+      return pins;
+    }
+  } catch {
+    // Ugyldig JSON: sammendraget viser ingen pinner.
+  }
+  return undefined;
 }
 
 interface TestInfo {
@@ -192,7 +210,8 @@ class TestSummaryReporter implements Reporter {
             forceDisable: forceDisable.length > 0 ? forceDisable : undefined,
             forceEnable: forceEnable.length > 0 ? forceEnable : undefined,
           }
-        : undefined
+        : undefined,
+      pins: pinsFromEnv(process.env)
     };
 
     // Generate summary using shared module
