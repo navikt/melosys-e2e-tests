@@ -11,6 +11,7 @@ Workflowen «E2E før merge» (`.github/workflows/e2e-for-merge.yml`) gir sjekke
 - På en PR svarer sjekken grønt med én gang. Den kjører ingen tester, så en push koster sekunder.
 - Når du trykker **Merge when ready**, lager GitHub en midlertidig commit av `main` med PR-en lagt på. Knappen i nettleseren virker; `gh pr merge` mot køen feilet med intern GitHub-feil da dette ble satt opp. Workflowen velger testene med `scripts/affected-tests.mjs` mellom `base_sha` og `head_sha` i køen, og kjører «E2E Tests» mot `latest` med det filteret. Utvalget følger de samme reglene som `make ci-affected`, beskrevet under.
 - Endrer PR-en bare dokumentasjon eller verktøy, kjører ingenting, og sjekken blir grønn.
+- Endrer PR-en `.github/e2e-pins.json`, validerer jobben `pinner` fila først. Se [KOBLEDE-ENDRINGER.md](KOBLEDE-ENDRINGER.md).
 - Blir kjøringen rød, tas PR-en ut av køen. Fiks, push og sett den i kø igjen.
 - Retries er på, som i `playwright.config.ts`. En flaky test stopper derfor ikke merge, men vises som flaky i jobbsammendraget.
 - Du skriver ikke squash-meldingen selv i køen. GitHub setter tittelen fra PR-tittelen pluss `(#nummer)`, og brødteksten fra PR-beskrivelsen. Rett beskrivelsen før du setter PR-en i kø.
