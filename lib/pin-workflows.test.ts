@@ -90,8 +90,9 @@ function lagRepo() {
 const endretSteg = () => steg('e2e-for-merge.yml', 'Er pin-fila endret?');
 
 test('køen: en PR som bare endrer pin-fila, bak en annen PR i køen, regnes som bare pin-fila', () => {
-  // GitHub lager hver køoppføring som én squash-commit på forrige oppføring, og base_sha er den
-  // forrige oppføringen (melosys-web kjøring 39368635780: base_sha 1d05b2e er pr-3258 i køen).
+  // Køer som bygger flere oppføringer, lager hver som én squash-commit på oppføringen foran, og
+  // base_sha er den oppføringen (melosys-web kjøring 39368635780: base_sha 1d05b2e er pr-3258 i
+  // køen). Køen i dette repoet bygger én om gangen, så der er base_sha main.
   const r = lagRepo();
   r.skriv('tests/a.spec.ts', 'endret');
   const forrige = r.commit('forrige oppføring');

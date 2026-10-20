@@ -225,9 +225,6 @@ export function generateMarkdownSummary(
 }
 
 /**
- * Format a millisecond duration as a compact human string ("8s", "4m 12s").
- */
-/**
  * Markdown-kodespenn rundt tekst som kan ha bakoverfnutter, for eksempel et branchnavn. Gjerdet er
  * lengre enn den lengste rekken fnutter i teksten, så teksten kan ikke avslutte spennet.
  */
@@ -237,6 +234,9 @@ function kodespenn(tekst: string): string {
   return `${gjerde} ${tekst} ${gjerde}`;
 }
 
+/**
+ * Format a millisecond duration as a compact human string ("8s", "4m 12s").
+ */
 function formatDuration(ms: number): string {
   const s = Math.round(ms / 1000);
   if (s < 60) return `${s}s`;

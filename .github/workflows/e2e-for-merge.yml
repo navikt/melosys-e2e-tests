@@ -42,9 +42,9 @@ jobs:
           HEAD_SHA: ${{ github.event.merge_group.head_sha || github.event.pull_request.head.sha }}
         run: |
           # Endringen denne PR-en gjør. På PR-en er det diffen fra merge-basen. I køen er hver
-          # oppføring én squash-commit på forrige oppføring (eller main), og base_sha er den
-          # forrige oppføringen, ikke main. Merge-basen er da base_sha, og diffen er bare denne
-          # PR-en, ikke PR-ene foran i køen.
+          # oppføring én squash-commit på base_sha. Her bygger køen én oppføring om gangen
+          # (max_entries_to_build: 1), så base_sha er main. Bygger køen flere, er base_sha
+          # oppføringen foran, og diffen er fortsatt bare denne PR-en.
           # --no-renames: en flyttet pin-fil gir både gammel og ny sti, så den ikke ser uendret ut.
           MB=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
           FILER=$(git diff --no-renames --name-only "$MB" "$HEAD_SHA")

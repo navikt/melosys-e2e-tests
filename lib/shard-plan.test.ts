@@ -280,7 +280,10 @@ test('varigheter: bare de 15 nyeste dispatch-kjøringene er kandidater', () => {
 });
 
 test('varigheter: gh run list henter de 50 nyeste kjøringene, før filteret på hendelse', () => {
-  // Køen kaller E2E Tests med workflow_call, så kjøringene har køens hendelse og filtreres bort.
+  // Lista har bare kjøringer av e2e-tests.yml selv. Køens workflow_call-kjøringer hører til
+  // e2e-for-merge.yml og står ikke der; i dag er alle repository_dispatch eller workflow_dispatch.
+  // Filteret på hendelse er vern hvis workflowen får flere triggere. Hendelsen merge_group her
+  // er bare en kjøring filteret avviser, så testen viser at -L 50 gjelder før filteret.
   const kø = (n: number) => Array.from({ length: n }, (_, i) => ({ id: 300 - i, summary: fullSummary, trigger: dispatch, event: 'merge_group' }));
   assert.equal(hentVarigheter([...kø(49), { id: 1, summary: fullSummary, trigger: dispatch }]).runId, 1, 'nummer 50 er med');
   assert.equal(hentVarigheter([...kø(50), { id: 1, summary: fullSummary, trigger: dispatch }]).runId, undefined, 'nummer 51 er ikke med');
