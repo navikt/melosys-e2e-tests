@@ -243,116 +243,37 @@ jobs:
             log_payload "📝 Commit:" "$PAYLOAD_COMMIT_SHA"
             log_payload "💬 Commit message:" "$PAYLOAD_COMMIT_MESSAGE"
             log_payload "👤 Actor:" "$PAYLOAD_ACTOR"
-
-            # Default all services to latest
-            MELOSYS_API_TAG="latest"
-            FAKTURERINGSKOMPONENTEN_TAG="latest"
-            MELOSYS_WEB_TAG="latest"
-            MELOSYS_TRYGDEAVGIFT_TAG="latest"
-            MELOSYS_TRYGDEAVTALE_TAG="latest"
-            MELOSYS_INNGANGSVILKAR_TAG="latest"
-            MELOSYS_EESSI_TAG="latest"
-            MELOSYS_MOCK_TAG="latest"
-            MELOSYS_DOKGEN_TAG="latest"
-            MELOSYS_SKJEMA_API_TAG="latest"
-            MELOSYS_SKJEMA_WEB_TAG="latest"
-
-            # Override with specific tag based on which service triggered
-            if [ "$EVENT_TYPE" = "melosys-api-published" ]; then
-              MELOSYS_API_TAG="$PAYLOAD_IMAGE_TAG"
-            fi
-
-            if [ "$EVENT_TYPE" = "melosys-skjema-api-published" ]; then
-              MELOSYS_SKJEMA_API_TAG="$PAYLOAD_IMAGE_TAG"
-            fi
-
-            if [ "$EVENT_TYPE" = "melosys-skjema-web-published" ]; then
-              MELOSYS_SKJEMA_WEB_TAG="$PAYLOAD_IMAGE_TAG"
-            fi
-
-            if [ "$EVENT_TYPE" = "faktureringskomponenten-published" ]; then
-              FAKTURERINGSKOMPONENTEN_TAG="$PAYLOAD_IMAGE_TAG"
-            fi
-
-            if [ "$EVENT_TYPE" = "melosys-web-published" ]; then
-              MELOSYS_WEB_TAG="$PAYLOAD_IMAGE_TAG"
-            fi
-
-            if [ "$EVENT_TYPE" = "melosys-trygdeavgift-beregning-published" ]; then
-              MELOSYS_TRYGDEAVGIFT_TAG="$PAYLOAD_IMAGE_TAG"
-            fi
-
-            if [ "$EVENT_TYPE" = "melosys-trygdeavtale-published" ]; then
-              MELOSYS_TRYGDEAVTALE_TAG="$PAYLOAD_IMAGE_TAG"
-            fi
-
-            if [ "$EVENT_TYPE" = "melosys-inngangsvilkar-published" ]; then
-              MELOSYS_INNGANGSVILKAR_TAG="$PAYLOAD_IMAGE_TAG"
-            fi
-
-            if [ "$EVENT_TYPE" = "melosys-eessi-published" ]; then
-              MELOSYS_EESSI_TAG="$PAYLOAD_IMAGE_TAG"
-            fi
-
-            if [ "$EVENT_TYPE" = "melosys-mock-published" ]; then
-              MELOSYS_MOCK_TAG="$PAYLOAD_IMAGE_TAG"
-            fi
-
-            if [ "$EVENT_TYPE" = "melosys-dokgen-published" ]; then
-              MELOSYS_DOKGEN_TAG="$PAYLOAD_IMAGE_TAG"
-            fi
           else
-            # Manual trigger via workflow_dispatch
             echo "👆 Manually triggered via workflow_dispatch"
-            INPUT_ENV="$INPUT_ENVIRONMENT"
-
-            # Default all services to latest
-            MELOSYS_API_TAG="latest"
-            FAKTURERINGSKOMPONENTEN_TAG="latest"
-            MELOSYS_WEB_TAG="latest"
-            MELOSYS_TRYGDEAVGIFT_TAG="latest"
-            MELOSYS_TRYGDEAVTALE_TAG="latest"
-            MELOSYS_INNGANGSVILKAR_TAG="latest"
-            MELOSYS_EESSI_TAG="latest"
-            MELOSYS_MOCK_TAG="latest"
-            MELOSYS_DOKGEN_TAG="latest"
-            MELOSYS_SKJEMA_API_TAG="latest"
-            MELOSYS_SKJEMA_WEB_TAG="latest"
-
-            # Check if input contains service:tag format (has colon)
-            if [[ "$INPUT_ENV" == *":"* ]]; then
-              log_payload "🏷️  Parsing multi-service tag format:" "$INPUT_ENV"
-              # Split by comma and process each service:tag pair
-              IFS=',' read -ra PAIRS <<< "$INPUT_ENV"
-              for pair in "${PAIRS[@]}"; do
-                # Trim whitespace
-                pair=$(echo "$pair" | xargs)
-                # Split by colon
-                service="${pair%%:*}"
-                tag="${pair#*:}"
-                echo "  📦 $service -> $tag"
-
-                sett_tag "$service" "$tag" || echo "  ⚠️  Unknown service: $service (ignored)"
-              done
-            else
-              # Simple format: just a tag for melosys-api (backwards compatible)
-              log_payload "🏷️  Using tag for melosys-api:" "$INPUT_ENV"
-              echo "🏷️  Using tag for other services: latest"
-              MELOSYS_API_TAG="$INPUT_ENV"
-            fi
+            log_payload "🏷️  environment:" "$INPUT_ENVIRONMENT"
           fi
 
-          # ---- Pinner fra .github/e2e-pins.json (regel 1, 2 og 7) ----
+          for tjeneste in melosys-api melosys-web faktureringskomponenten melosys-trygdeavgift-beregning \
+                          melosys-trygdeavtale melosys-inngangsvilkar melosys-eessi melosys-mock melosys-dokgen \
+                          melosys-skjema-api melosys-skjema-web; do
+            sett_tag "$tjeneste" latest
+          done
+
+          # ---- Eksplisitte tagger og pinner fra .github/e2e-pins.json (regel 1, 2 og 7) ----
+          # lib/e2e-pins.mjs tolker event-typen, payload-taggen og environment («tag» for melosys-api
+          # eller «tjeneste:tag,…»), og avgjør med samme tolkning hvilke tjenester som er under test.
           # Fila leses fra samme ref som testene. Tjenester som står i fila og ikke er under test,
           # får taggen i pinnen i stedet for latest. Tjenesten under test vinner over pinnen.
-          # Hvilke tjenester som er under test, avgjør lib/e2e-pins.mjs ut fra samme input som over.
           # En ugyldig fil stopper kjøringen: å falle tilbake til latest ville testet feil image.
           if ! PIN_SVAR=$(node lib/e2e-pins.mjs anvend --fil .github/e2e-pins.json --hendelse "$EVENT_NAME" \
-              --event-type "$EVENT_TYPE" --environment "$INPUT_ENVIRONMENT" 2>"$RUNNER_TEMP/pins.err"); then
+              --event-type "$EVENT_TYPE" --image-tag "$PAYLOAD_IMAGE_TAG" --environment "$INPUT_ENVIRONMENT" \
+              2>"$RUNNER_TEMP/pins.err"); then
             while IFS= read -r linje; do echo "::error::$linje"; done < "$RUNNER_TEMP/pins.err"
             echo "::error::.github/e2e-pins.json er ugyldig, se docs/ci-cd/KOBLEDE-ENDRINGER.md"
             exit 1
           fi
+          # NUL mellom verdiene: en tag fra payloaden eller environment kan ha linjeskift og tab, og
+          # skal komme uendret til tag-sjekken under, som avviser den.
+          while IFS= read -r -d '' tjeneste && IFS= read -r -d '' tag; do
+            sett_tag "$tjeneste" "$tag"
+            log_payload "  📦 $tjeneste ->" "$tag"
+          done < <(jq -j '.tagger | to_entries[] | "\(.key)\u0000\(.value)\u0000"' <<<"$PIN_SVAR")
+          jq -r '.ignorert[] | "  ⚠️  Ukjent tjeneste eller par uten kolon (ignorert): \(.)"' <<<"$PIN_SVAR"
           # Verdiene er validert (kjent tjeneste, 40 hex, MELOSYS-nøkkel, dato), så de kan logges.
           while IFS=$'\t' read -r tjeneste tag; do
             sett_tag "$tjeneste" "$tag"

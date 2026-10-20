@@ -1,11 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
-import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 // @ts-expect-error — .mjs uten typedeklarasjon; scriptet er ren node uten avhengigheter.
 import { changedFiles } from '../scripts/affected-tests.mjs';
+// @ts-expect-error — .mjs uten typedeklarasjon; fila er ren node uten avhengigheter.
+import { TJENESTER, eksplisitteTagger, tjenesterUnderTest } from './e2e-pins.mjs';
 
 /**
  * Stegene i e2e-for-merge.yml og e2e-pins-utlop.yml som avgjør om pin-fila skal valideres,
@@ -172,6 +174,112 @@ test('utløpsjobben: ingen fil, tom fil og {} betyr ingen pinner', () => {
 
 test('utløpsjobben: en gyldig pin valideres', () => {
   assert.equal(finnesPinner(EN_PIN), 'true');
+});
+
+// ---- «Determine image tags from trigger source» i e2e-tests.yml ----
+
+const TJENESTENE = Object.keys(TJENESTER);
+/** En karantenepin på hver tjeneste, med hver sin tag. */
+const ALLE_PINNET = Object.fromEntries(
+  TJENESTENE.map((t, i) => [t, { tag: '0123456789a'[i].repeat(40), jira: 'MELOSYS-9000', utloper: '2026-11-03' }])
+);
+
+/**
+ * Kjører steget slik det står i workflowen og gir taggen hver tjeneste fikk. Taggene leses fra
+ * resolvedTags i trigger-konteksten, som skrives før steget avviser ugyldige tagger; en tom tag
+ * står ikke der og blir ''.
+ */
+function bestemTaggerISteget(env: Record<string, string>, pinner?: object) {
+  const dir = mkdtempSync(join(tmpdir(), 'image-tags-'));
+  try {
+    mkdirSync(join(dir, 'lib'));
+    mkdirSync(join(dir, '.github'));
+    mkdirSync(join(dir, 'temp'));
+    writeFileSync(join(dir, 'lib/e2e-pins.mjs'), readFileSync(join(ROT, 'lib/e2e-pins.mjs')));
+    if (pinner) writeFileSync(join(dir, PIN), JSON.stringify(pinner));
+    writeFileSync(join(dir, 'steg.sh'), steg('e2e-tests.yml', 'Determine image tags from trigger source'));
+    writeFileSync(join(dir, 'output'), '');
+    const r = spawnSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', join(dir, 'steg.sh')], {
+      cwd: dir,
+      env: { ...process.env, RUNNER_TEMP: join(dir, 'temp'), GITHUB_OUTPUT: join(dir, 'output'), ...env },
+      encoding: 'utf8',
+    });
+    const kontekst = join(dir, 'temp', 'trigger-context.json');
+    assert.ok(existsSync(kontekst), `steget skrev ingen trigger-kontekst: ${r.stdout}${r.stderr}`);
+    const resolved = JSON.parse(readFileSync(kontekst, 'utf8')).resolvedTags;
+    return { kode: r.status, tagger: Object.fromEntries(TJENESTENE.map((t) => [t, resolved[t] ?? ''])) };
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+type Rad = { env: Record<string, string>; tagger: Record<string, string>; underTest: string[] };
+const manuell = (environment: string) => ({ EVENT_NAME: 'workflow_dispatch', INPUT_ENVIRONMENT: environment });
+const dispatch = (eventType: string, tag: string) => ({ EVENT_NAME: 'repository_dispatch', EVENT_TYPE: eventType, PAYLOAD_IMAGE_TAG: tag });
+
+/**
+ * Én tolkning av inputen: de eksplisitte taggene og tjenestene under test. Taggene gjelder før
+ * pinnene; tjenester som ikke står i `tagger`, får latest.
+ */
+const TOLKNING: Rad[] = [
+  { env: manuell('latest'), tagger: {}, underTest: [] },
+  { env: manuell('melosys-api:latest'), tagger: {}, underTest: [] },
+  { env: manuell('e2e-logging'), tagger: { 'melosys-api': 'e2e-logging' }, underTest: ['melosys-api'] },
+  { env: manuell('  e2e-logging  '), tagger: { 'melosys-api': 'e2e-logging' }, underTest: ['melosys-api'] },
+  { env: manuell(''), tagger: { 'melosys-api': '' }, underTest: ['melosys-api'] },
+  { env: manuell("melosys-web:'latest'"), tagger: { 'melosys-web': "'latest'" }, underTest: ['melosys-web'] },
+  { env: manuell("'melosys-mock':abc"), tagger: {}, underTest: [] },
+  { env: manuell('melosys-api:x,melosys-web'), tagger: { 'melosys-api': 'x' }, underTest: ['melosys-api'] },
+  { env: manuell('melosys-web:abc,melosys-web:latest'), tagger: {}, underTest: [] },
+  { env: manuell('melosys-web:latest,melosys-web:abc'), tagger: { 'melosys-web': 'abc' }, underTest: ['melosys-web'] },
+  { env: manuell('melosys-web:mq-abc, melosys-api:latest,ukjent:x'), tagger: { 'melosys-web': 'mq-abc' }, underTest: ['melosys-web'] },
+  { env: manuell(' melosys-web : abc '), tagger: { 'melosys-web': 'abc' }, underTest: ['melosys-web'] },
+  { env: manuell('melosys-web:abc,'), tagger: { 'melosys-web': 'abc' }, underTest: ['melosys-web'] },
+  { env: manuell('melosys-web:'), tagger: { 'melosys-web': '' }, underTest: ['melosys-web'] },
+  { env: dispatch('melosys-web-published', 'abc'), tagger: { 'melosys-web': 'abc' }, underTest: ['melosys-web'] },
+  { env: dispatch('melosys-web-published', 'latest'), tagger: {}, underTest: ['melosys-web'] },
+  { env: dispatch('noe-annet-published', 'abc'), tagger: {}, underTest: [] },
+  // Linjeskift og tab i taggen gjør den ikke til en tag for en annen tjeneste.
+  { env: dispatch('melosys-api-published', 'a\nmelosys-web\tb'), tagger: { 'melosys-api': 'a\nmelosys-web\tb' }, underTest: ['melosys-api'] },
+];
+
+const gyldigTag = (t: string) => /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/.test(t);
+
+test('«under test»: steget og lib/e2e-pins.mjs tolker inputen likt, med og uten pinner', () => {
+  const avvik: string[] = [];
+  for (const rad of TOLKNING) {
+    const input = {
+      hendelse: rad.env.EVENT_NAME,
+      eventType: rad.env.EVENT_TYPE ?? '',
+      imageTag: rad.env.PAYLOAD_IMAGE_TAG ?? '',
+      environment: rad.env.INPUT_ENVIRONMENT ?? '',
+    };
+    const js = [...tjenesterUnderTest(input)].sort();
+    if (JSON.stringify(js) !== JSON.stringify([...rad.underTest].sort())) {
+      avvik.push(`JS ${JSON.stringify(rad.env)}: under test ${JSON.stringify(js)}, ventet ${JSON.stringify(rad.underTest)}`);
+    }
+    const jsTagger = Object.fromEntries(Object.entries(eksplisitteTagger(input).tagger).filter(([, tag]) => tag !== 'latest'));
+    if (JSON.stringify(jsTagger) !== JSON.stringify(rad.tagger)) {
+      avvik.push(`JS ${JSON.stringify(rad.env)}: tagger ${JSON.stringify(jsTagger)}, ventet ${JSON.stringify(rad.tagger)}`);
+    }
+    for (const pinner of [undefined, ALLE_PINNET]) {
+      const forventet = Object.fromEntries(
+        TJENESTENE.map((t) => {
+          const pin = pinner && !rad.underTest.includes(t) ? ALLE_PINNET[t].tag : undefined;
+          return [t, pin ?? rad.tagger[t] ?? 'latest'];
+        })
+      );
+      const steget = bestemTaggerISteget(rad.env, pinner);
+      const navn = `${JSON.stringify(rad.env)}${pinner ? ' med pinner' : ''}`;
+      if (JSON.stringify(steget.tagger) !== JSON.stringify(forventet)) {
+        const ulike = TJENESTENE.filter((t) => steget.tagger[t] !== forventet[t]).map((t) => `${t}=${JSON.stringify(steget.tagger[t])} (ventet ${JSON.stringify(forventet[t])})`);
+        avvik.push(`steget ${navn}: ${ulike.join(', ')}`);
+      }
+      const ventetKode = Object.values(forventet).every(gyldigTag) ? 0 : 1;
+      if (steget.kode !== ventetKode) avvik.push(`steget ${navn}: exit ${steget.kode}, ventet ${ventetKode}`);
+    }
+  }
+  assert.deepEqual(avvik, []);
 });
 
 test('utløpsjobben: en fil lesPins avviser, valideres og varsles, også når jq gir lengde 0', () => {

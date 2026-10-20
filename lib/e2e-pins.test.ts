@@ -190,6 +190,9 @@ test('«under test»: latest, melosys-api:latest, bar tag, flere tjenester og di
   );
   assert.deepEqual(under({ hendelse: 'repository_dispatch', eventType: 'melosys-web-published' }), ['melosys-web']);
   assert.deepEqual(under({ hendelse: 'repository_dispatch', eventType: 'noe-annet' }), []);
+  // Tom environment gir melosys-api tom tag, som steget avviser. En api-pin skal ikke ta over.
+  assert.deepEqual(under({ hendelse: 'workflow_dispatch', environment: '' }), ['melosys-api']);
+  assert.deepEqual(under({ hendelse: 'workflow_dispatch', environment: '  ' }), ['melosys-api']);
 });
 
 test('karantenepin brukes når tjenesten ikke er under test', () => {
