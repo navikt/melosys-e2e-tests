@@ -257,6 +257,11 @@ test('varigheter: en kjøring med tom testliste hoppes over, også uten skipped'
   assert.equal(hentVarigheter([{ id: 20, summary: utenSkipped, trigger: dispatch }, { id: 19, summary: fullSummary, trigger: dispatch }]).runId, 19);
 });
 
+test('varigheter: en kjøring med skipped: true hoppes over, også med tester', () => {
+  const medTester = { ...fullSummary, skipped: true };
+  assert.equal(hentVarigheter([{ id: 30, summary: medTester, trigger: dispatch }, { id: 29, summary: fullSummary, trigger: dispatch }]).runId, 29);
+});
+
 test('varigheter: seks regel 6-kjøringer på rad skjuler ikke en eldre full kjøring', () => {
   const regel6 = [106, 105, 104, 103, 102, 101].map((id) => ({ id, summary: regel6Summary, trigger: dispatch }));
   assert.equal(hentVarigheter([...regel6, { id: 100, summary: fullSummary, trigger: dispatch }]).runId, 100);
