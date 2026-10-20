@@ -47,14 +47,14 @@ En fil som ikke kan leses, eller en pinnet tag som mangler i GAR, gir rød plan-
 
 ## Validering før merge
 
-Jobben `pinner` i `e2e-for-merge.yml` kjører på hver PR og hver køgruppe. Er `.github/e2e-pins.json` endret, sjekker den:
+Jobben `pinner` i `e2e-for-merge.yml` kjører på hver PR og hver PR i køen. Er `.github/e2e-pins.json` endret i PR-en, sjekker den:
 
 - at fila er gyldig JSON med kjente tjenester og felt som over;
 - at hver `tag` finnes i GAR og ligger på tjenestens default-branch;
 - at en koblet pin bare fjernes, eller får ny `service_pr` eller `e2e_branch`, når ett av disse gjelder:
   - `service_pr` er merget, og merge-commiten er med i `latest`;
   - `service_pr` er lukket uten merge;
-  - PR-en (i køen: gruppen) endrer bare pin-fila.
+  - PR-en endrer bare pin-fila. I køen gjelder det PR-ens egen endring, ikke PR-ene foran den.
 
 På PR-en er `pinner` en egen sjekk som bare informerer: sjekken `e2e-for-merge` er grønn som før, så en e2e-PR som fjerner en koblet pin, kan legges klar før service-PR-en er ute. I køen gjør en rød `pinner` sjekken `e2e-for-merge` rød, så en ugyldig fil når aldri `main`.
 
@@ -64,7 +64,7 @@ På PR-en er `pinner` en egen sjekk som bare informerer: sjekken `e2e-for-merge`
 - **Fjernede eller endrede pinner der `tag` før og etter har samme digest som `latest`:** heller ingen tester.
 - **Alt annet** (endret tag, karantenepin til en eldre sha, fjerning etter at tjenesten er merget): hele suiten.
 
-Andre endrede filer i gruppen velges som før. `make ci-affected` lokalt kjører hele suiten når pin-fila er endret, fordi den ikke vet hva `latest` er.
+Andre endrede filer i PR-en velges som før. `make ci-affected` lokalt kjører hele suiten når pin-fila er endret, fordi den ikke vet hva `latest` er.
 
 ## Steg for steg
 
