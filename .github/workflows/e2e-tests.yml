@@ -273,7 +273,9 @@ jobs:
             sett_tag "$tjeneste" "$tag"
             log_payload "  📦 $tjeneste ->" "$tag"
           done < <(jq -j '.tagger | to_entries[] | "\(.key)\u0000\(.value)\u0000"' <<<"$PIN_SVAR")
-          jq -r '.ignorert[] | "  ⚠️  Ukjent tjeneste eller par uten kolon (ignorert): \(.)"' <<<"$PIN_SVAR"
+          # Et ignorert par setter ingen tag, så kjøringen får en annotasjon. Paret er vasket i
+          # lib/e2e-pins.mjs; % kodes, ellers leser runneren %0A i annotasjonen som linjeskift.
+          jq -r '.ignorert[] | "::warning::environment: \(gsub("%"; "%25")) er ignorert: ukjent tjeneste eller par uten kolon. Anførselstegn fjernes ikke."' <<<"$PIN_SVAR"
           # Verdiene er validert (kjent tjeneste, 40 hex, MELOSYS-nøkkel, dato), så de kan logges.
           while IFS=$'\t' read -r tjeneste tag; do
             sett_tag "$tjeneste" "$tag"

@@ -27,7 +27,8 @@ jobs:
         id: finnes
         run: |
           # Samme tolkning som plan-jobben i E2E Tests: en fil den avviser (null, [], "", ugyldig
-          # JSON), valideres her også, så jobben feiler og varsler. Feiler kallet, valideres fila.
+          # JSON), valideres her også, så jobben feiler og varsler. Feiler kallet, valideres fila;
+          # krasjer lib/e2e-pins.mjs, feiler neste steg, og Slack varsles om at sjekken feilet.
           PINNER=$(node lib/e2e-pins.mjs har-pinner --fil .github/e2e-pins.json) || PINNER=true
           if [ "$PINNER" = "false" ]; then
             echo "✅ Ingen pinner i .github/e2e-pins.json."
@@ -96,9 +97,11 @@ jobs:
           fi
           echo "rc=$RC" >> "$GITHUB_OUTPUT"
 
+      # Også når et steg har feilet (token, GAR-innlogging, krasj i lib/e2e-pins.mjs): da er
+      # pinnene ikke sjekket i dag, og ingen andre ser det.
       - name: Bygg Slack-melding
         id: melding
-        if: steps.valider.outputs.varsle == 'true'
+        if: failure() || steps.valider.outputs.varsle == 'true'
         env:
           UTLOPT: ${{ steps.valider.outputs.utlopt }}
           FEIL: ${{ steps.valider.outputs.feil }}
@@ -123,6 +126,9 @@ jobs:
           if [ -n "$FEIL" ]; then
             MELDING="${MELDING}*Pin-fila er ikke gyldig.* E2E Tests stopper i plan-jobben til den er rettet:\n${FEIL//$'\n'/\\n}\n\n"
           fi
+          if [ -z "$UTLOPT" ] && [ -z "$FEIL" ]; then
+            MELDING="*Sjekken av pin-fila feilet* før den ble ferdig, så pinnene er ikke sjekket i dag. Se kjøringen.\n\n"
+          fi
           if [ "$REF" != "main" ]; then
             MELDING="${MELDING}_Kjørt fra branchen \`${REF}\`, ikke main._\n"
           fi
@@ -137,7 +143,7 @@ jobs:
 
       # Samme Slack-oppsett som notify-slack i e2e-tests.yml.
       - name: Slack Notification
-        if: steps.valider.outputs.varsle == 'true'
+        if: "!cancelled() && steps.melding.outcome == 'success'"
         uses: rtCamp/action-slack-notify@v2
         env:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}

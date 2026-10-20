@@ -177,6 +177,46 @@ test('utløpsjobben: en gyldig pin valideres', () => {
   assert.equal(finnesPinner(EN_PIN), 'true');
 });
 
+test('utløpsjobben: krasjer lib/e2e-pins.mjs, valideres fila', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pin-utlop-'));
+  mkdirSync(join(dir, 'lib'));
+  mkdirSync(join(dir, '.github'));
+  writeFileSync(join(dir, 'lib/e2e-pins.mjs'), "throw new Error('krasj');\n");
+  writeFileSync(join(dir, PIN), '{}');
+  assert.equal(kjørSteg(steg('e2e-pins-utlop.yml', 'Finnes det pinner?'), dir).ut.pinner, 'true');
+});
+
+test('utløpsjobben: et steg som feiler, gir også Slack-varsel', () => {
+  // Krasjer for eksempel lib/e2e-pins.mjs, stopper «Hvilke repoer trenger tokenen?» jobben før
+  // «Valider pin-fila» har satt varsle.
+  const yml = readFileSync(join(ROT, '.github/workflows/e2e-pins-utlop.yml'), 'utf8');
+  const hvis = (navn: string) => yml.match(new RegExp(`- name: ${navn}\\n(?: {8}.*\\n)*? {8}if: (.*)\\n`))?.[1];
+  assert.equal(hvis('Bygg Slack-melding'), "failure() || steps.valider.outputs.varsle == 'true'");
+  assert.equal(hvis('Slack Notification'), `"!cancelled() && steps.melding.outcome == 'success'"`);
+  // Uten utløpte pinner og valideringsfeil sier meldingen at sjekken ikke ble ferdig.
+  assert.match(slackMelding({}), /^\*Sjekken av pin-fila feilet\* før den ble ferdig/);
+  assert.doesNotMatch(slackMelding({ UTLOPT: '• melosys-web (MELOSYS-1) utløp 2026-01-01' }), /Sjekken av pin-fila feilet/);
+});
+
+// ---- «Hvilke repoer trenger tokenen?» i e2e-for-merge.yml ----
+
+test('pinner: tokenen gjelder repoene til pinnene i både head og base', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'pin-repoer-'));
+  const temp = join(dir, 'runner-temp');
+  mkdirSync(join(dir, 'lib'));
+  mkdirSync(temp);
+  writeFileSync(join(dir, 'lib/e2e-pins.mjs'), readFileSync(join(ROT, 'lib/e2e-pins.mjs')));
+  const repoer = (head: string, base: string) => {
+    writeFileSync(join(temp, 'head-pins.json'), head);
+    writeFileSync(join(temp, 'base-pins.json'), base);
+    return kjørSteg(steg('e2e-for-merge.yml', 'Hvilke repoer trenger tokenen?'), dir, { RUNNER_TEMP: temp }).ut.repoer;
+  };
+  const koblet = { tag: 'b'.repeat(40), e2e_branch: 'MELOSYS-9000-ny-knapp', service_pr: 3300, jira: 'MELOSYS-9000', utloper: '2026-11-03' };
+  // En koblet api-pin som fjernes, slås opp i melosys-api (D14).
+  assert.equal(repoer(EN_PIN, JSON.stringify({ 'melosys-api': koblet })), 'melosys-api,melosys-web');
+  assert.equal(repoer(EN_PIN, '{'), 'melosys-web', 'ugyldig base regnes som tom');
+});
+
 // ---- «Determine image tags from trigger source» i e2e-tests.yml ----
 
 const TJENESTENE = Object.keys(TJENESTER);
@@ -208,7 +248,7 @@ function bestemTaggerISteget(env: Record<string, string>, pinner?: object) {
     const kontekst = join(dir, 'temp', 'trigger-context.json');
     assert.ok(existsSync(kontekst), `steget skrev ingen trigger-kontekst: ${r.stdout}${r.stderr}`);
     const resolved = JSON.parse(readFileSync(kontekst, 'utf8')).resolvedTags;
-    return { kode: r.status, tagger: Object.fromEntries(TJENESTENE.map((t) => [t, resolved[t] ?? ''])) };
+    return { kode: r.status, logg: r.stdout, tagger: Object.fromEntries(TJENESTENE.map((t) => [t, resolved[t] ?? ''])) };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
@@ -283,6 +323,30 @@ test('«under test»: steget og lib/e2e-pins.mjs tolker inputen likt, med og ute
   assert.deepEqual(avvik, []);
 });
 
+test('«Determine image tags»: hvert par som ignoreres i environment, gir en vasket ::warning::', () => {
+  // Paret slik det står i annotasjonen: JSON-tekst, «::» brutt opp og «%» kodet som %25.
+  const rader: [string, string[]][] = [
+    ['melosys-web:abc', []],
+    ["'melosys-mock':abc", [`"'melosys-mock':abc"`]],
+    ['"melosys-api:x"', ['"\\"melosys-api:x\\""']],
+    ['melosys-api:x,melosys-web', ['"melosys-web"']],
+    ['melosys-wbe:abc,melosys-api:x', ['"melosys-wbe:abc"']],
+    ['melosys-api:x,::error::falsk,a%0Ab', ['": :error: :falsk"', '"a%250Ab"']],
+  ];
+  for (const [environment, ignorert] of rader) {
+    const { kode, logg } = bestemTaggerISteget(manuell(environment));
+    assert.equal(kode, 0, environment);
+    const kommandoer = logg.split('\n').filter((l) => l.startsWith('::'));
+    const advarsler = kommandoer.filter((l) => l.startsWith('::warning::'));
+    assert.deepEqual(kommandoer, advarsler, `bare ::warning:: fra ${environment}`);
+    assert.equal(advarsler.length, ignorert.length, `${environment}: ${advarsler.join(' | ')}`);
+    ignorert.forEach((par, i) => {
+      assert.ok(advarsler[i].includes(par), `${advarsler[i]} nevner ikke ${par}`);
+      assert.ok(!advarsler[i].slice('::warning::'.length).includes('::'), advarsler[i]);
+    });
+  }
+});
+
 test('utløpsjobben: en fil lesPins avviser, valideres og varsles, også når jq gir lengde 0', () => {
   // null, [] og "" har lengde 0 i jq, men plan-jobben i E2E Tests avviser dem.
   for (const innhold of ['null', '[]', '""', '{', '"x"', '{"ukjent": {}}']) {
@@ -324,4 +388,12 @@ test('Slack: tekst fra pin-fila og branchnavnet blir ikke lenker eller formateri
   assert.match(melding, /`b&lt;https:\/\/y\|z&gt;`/);
   // Lenkene steget selv lager, er fortsatt lenker.
   assert.match(melding, /<https:\/\/github\.com\/run\/1\|#1>/);
+});
+
+test('Slack: lenken til pin-fila beholder / i branchnavnet og koder resten', () => {
+  const melding = slackMelding({ UTLOPT: '• melosys-web (MELOSYS-1) utløp 2026-01-01', REF: 'feature/a b#c' });
+  assert.ok(
+    melding.includes('<https://github.com/navikt/melosys-e2e-tests/blob/feature/a%20b%23c/.github/e2e-pins.json|.github/e2e-pins.json>'),
+    melding
+  );
 });
