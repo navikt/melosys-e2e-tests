@@ -170,7 +170,7 @@ jobs:
           if SVAR=$(node lib/e2e-pins.mjs regel6 --fil .github/e2e-pins.json --hendelse repository_dispatch \
               --event-type "$EVENT_TYPE" --sha "$PAYLOAD_IMAGE_TAG"); then
             HOPP=$(jq -r '.hopp == true' <<<"$SVAR") || HOPP=false
-            GRUNN=$(jq -r '.grunn' <<<"$SVAR" | tr '\n\r' '  ') || GRUNN="ukjent grunn"
+            GRUNN=$(jq -r '.grunn | gsub("[\r\n]"; " ")' <<<"$SVAR") || GRUNN="ukjent grunn"
           fi
           echo "📌 Regel 6: $GRUNN"
           {
