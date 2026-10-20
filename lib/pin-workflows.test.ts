@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
 // @ts-expect-error — .mjs uten typedeklarasjon; scriptet er ren node uten avhengigheter.
@@ -149,4 +149,34 @@ test('changedFiles: en flyttet pin-fil gir både gammel og ny sti i committede e
   const head = r.commit('flytt pin-fila');
   const run = (...a: string[]) => r.git(...a) + '\n';
   assert.deepEqual([...changedFiles(r.start, { arbeidstre: false, head, run })].sort(), [PIN, 'pins-backup.json']);
+});
+
+// ---- «Finnes det pinner?» i e2e-pins-utlop.yml ----
+
+/** Kjører steget mot en sjekket ut kopi av repoet med `innhold` som pin-fil (undefined: ingen fil). */
+function finnesPinner(innhold: string | undefined): string {
+  const dir = mkdtempSync(join(tmpdir(), 'pin-utlop-'));
+  mkdirSync(join(dir, 'lib'));
+  mkdirSync(join(dir, '.github'));
+  writeFileSync(join(dir, 'lib/e2e-pins.mjs'), readFileSync(join(ROT, 'lib/e2e-pins.mjs')));
+  if (innhold !== undefined) writeFileSync(join(dir, PIN), innhold);
+  assert.equal(existsSync(join(dir, PIN)), innhold !== undefined);
+  return kjørSteg(steg('e2e-pins-utlop.yml', 'Finnes det pinner?'), dir).ut.pinner;
+}
+
+test('utløpsjobben: ingen fil, tom fil og {} betyr ingen pinner', () => {
+  for (const innhold of [undefined, '', '  \n', '{}', '{ }\n']) {
+    assert.equal(finnesPinner(innhold), 'false', JSON.stringify(innhold));
+  }
+});
+
+test('utløpsjobben: en gyldig pin valideres', () => {
+  assert.equal(finnesPinner(EN_PIN), 'true');
+});
+
+test('utløpsjobben: en fil lesPins avviser, valideres og varsles, også når jq gir lengde 0', () => {
+  // null, [] og "" har lengde 0 i jq, men plan-jobben i E2E Tests avviser dem.
+  for (const innhold of ['null', '[]', '""', '{', '"x"', '{"ukjent": {}}']) {
+    assert.equal(finnesPinner(innhold), 'true', innhold);
+  }
 });

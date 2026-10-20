@@ -26,12 +26,13 @@ jobs:
       - name: Finnes det pinner?
         id: finnes
         run: |
-          if [ -s .github/e2e-pins.json ] && [ "$(jq 'length' .github/e2e-pins.json 2>/dev/null || echo ugyldig)" != "0" ]; then
-            echo "pinner=true" >> "$GITHUB_OUTPUT"
-          else
+          # Samme tolkning som plan-jobben i E2E Tests: en fil den avviser (null, [], "", ugyldig
+          # JSON), valideres her også, så jobben feiler og varsler. Feiler kallet, valideres fila.
+          PINNER=$(node lib/e2e-pins.mjs har-pinner --fil .github/e2e-pins.json) || PINNER=true
+          if [ "$PINNER" = "false" ]; then
             echo "✅ Ingen pinner i .github/e2e-pins.json."
-            echo "pinner=false" >> "$GITHUB_OUTPUT"
           fi
+          echo "pinner=$PINNER" >> "$GITHUB_OUTPUT"
 
       # GITHUB_TOKEN leser ikke de interne service-repoene (D12). Tokenen gjelder bare repoene til
       # pinnene i fila, som i jobben «pinner».
