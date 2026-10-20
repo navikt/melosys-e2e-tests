@@ -4,6 +4,8 @@ import { execFileSync } from 'node:child_process';
 import { mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join } from 'node:path';
+// @ts-expect-error — .mjs uten typedeklarasjon; scriptet er ren node uten avhengigheter.
+import { changedFiles } from '../scripts/affected-tests.mjs';
 
 /**
  * Stegene i e2e-for-merge.yml og e2e-pins-utlop.yml som avgjør om pin-fila skal valideres,
@@ -121,4 +123,30 @@ test('PR: bare pin-fila regnes mot merge-basen, også når main har fått andre 
   const { ut } = kjørSteg(endretSteg(), r.dir, { BASE_SHA: main, HEAD_SHA: pr });
   assert.equal(ut.endret, 'true');
   assert.equal(ut.bare_pinfil, 'true');
+});
+
+test('pin-fila som flyttes med git mv, regnes som endret og fjernet', () => {
+  const r = lagRepo();
+  r.git('mv', PIN, 'pins-backup.json');
+  const head = r.commit('flytt pin-fila');
+  const { ut, temp } = kjørSteg(endretSteg(), r.dir, { BASE_SHA: r.start, HEAD_SHA: head });
+  assert.equal(ut.endret, 'true');
+  assert.equal(ut.bare_pinfil, 'false', 'den nye fila er også en endring');
+  assert.equal(readFileSync(join(temp, 'head-pins.json'), 'utf8'), '');
+});
+
+// ---- changedFiles i affected-tests.mjs ----
+
+test('changedFiles: en flyttet pin-fil gir både gammel og ny sti i arbeidstreet', () => {
+  const r = lagRepo();
+  r.git('mv', PIN, 'pins-backup.json');
+  assert.deepEqual([...changedFiles(r.start, { run: (...a: string[]) => r.git(...a) + '\n' })].sort(), [PIN, 'pins-backup.json']);
+});
+
+test('changedFiles: en flyttet pin-fil gir både gammel og ny sti i committede endringer', () => {
+  const r = lagRepo();
+  r.git('mv', PIN, 'pins-backup.json');
+  const head = r.commit('flytt pin-fila');
+  const run = (...a: string[]) => r.git(...a) + '\n';
+  assert.deepEqual([...changedFiles(r.start, { arbeidstre: false, head, run })].sort(), [PIN, 'pins-backup.json']);
 });

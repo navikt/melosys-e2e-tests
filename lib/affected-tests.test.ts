@@ -81,7 +81,7 @@ test('head velger hvilken ref diffen regnes mot', () => {
     return '';
   };
   changedFiles('origin/main', { arbeidstre: false, head: 'origin/annen', run });
-  assert.deepEqual(kall, [['diff', '--name-only', 'origin/main...origin/annen']]);
+  assert.deepEqual(kall, [['diff', '--no-renames', '--name-only', 'origin/main...origin/annen']]);
 });
 
 // ---- Pin-fila (.github/e2e-pins.json) ----

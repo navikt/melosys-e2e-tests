@@ -45,8 +45,9 @@ jobs:
           # oppføring én squash-commit på forrige oppføring (eller main), og base_sha er den
           # forrige oppføringen, ikke main. Merge-basen er da base_sha, og diffen er bare denne
           # PR-en, ikke PR-ene foran i køen.
+          # --no-renames: en flyttet pin-fil gir både gammel og ny sti, så den ikke ser uendret ut.
           MB=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
-          FILER=$(git diff --name-only "$MB" "$HEAD_SHA")
+          FILER=$(git diff --no-renames --name-only "$MB" "$HEAD_SHA")
           if ! grep -qxF .github/e2e-pins.json <<<"$FILER"; then
             echo "✅ .github/e2e-pins.json er ikke endret."
             echo "endret=false" >> "$GITHUB_OUTPUT"

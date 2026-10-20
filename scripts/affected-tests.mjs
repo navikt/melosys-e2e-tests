@@ -58,14 +58,13 @@ const git = (...a) => execFileSync('git', a, { cwd: ROOT, encoding: 'utf8', stdi
  * Eksportert for testen; `run` erstatter git der.
  */
 export function changedFiles(base, { arbeidstre = true, head = 'HEAD', run = git } = {}) {
-  const committed = run('diff', '--name-only', `${base}...${head}`).split('\n');
+  // --no-renames: en flyttet fil gir både gammel og ny sti. Ellers forsvinner en flyttet pin-fil.
+  const committed = run('diff', '--no-renames', '--name-only', `${base}...${head}`).split('\n');
   if (!arbeidstre) return [...new Set(committed)].filter(Boolean);
-  // --porcelain gir «XY <sti>»; ved rename står «XY <fra> -> <til>» og vi vil ha målet.
-  // --untracked-files=all lister filene i en ny mappe i stedet for bare mappa.
-  const working = run('status', '--porcelain', '--untracked-files=all')
+  // --porcelain gir «XY <sti>». --untracked-files=all lister filene i en ny mappe i stedet for bare mappa.
+  const working = run('status', '--porcelain', '--no-renames', '--untracked-files=all')
     .split('\n')
-    .map((l) => l.slice(3).trim())
-    .map((p) => (p.includes(' -> ') ? p.split(' -> ')[1] : p));
+    .map((l) => l.slice(3).trim());
   return [...new Set([...committed, ...working])].filter(Boolean);
 }
 
