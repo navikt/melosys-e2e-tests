@@ -173,7 +173,7 @@ export class SoknadArbeidsgiverPage {
   }
 
   /**
-   * MELOSYS-8251: virksomheten er registrert med færre enn 20 ansatte i EREG-mocken, så steget
+   * MELOSYS-8251/7672: virksomheten har færre enn 20 ansatte eller er et NUF i EREG-mocken, så steget
    * viser de seks feltene om foretakets samlede virksomhet i stedet for spørsmålet om vanlig drift.
    */
   private async fyllSamletVirksomhet(data: SamletVirksomhet): Promise<void> {
@@ -248,7 +248,8 @@ export class SoknadArbeidsgiverPage {
    *                                     (STAT/6100, MELOSYS-7670): virksomhetssteget finnes ikke,
    *                                     og flyten verifiserer at det hoppes over (10 steg).
    * @param opts.samletVirksomhet       fylles ut når arbeidsgiveren har færre enn 20 ansatte i
-   *                                     EREG (MELOSYS-8251), f.eks. Steinars Stein 888888888.
+   *                                     EREG (MELOSYS-8251), f.eks. Steinars Stein 888888888, eller
+   *                                     er et NUF (MELOSYS-7672), f.eks. 555555555.
    * @returns søknads-id (UUID) og referansenummer fra kvitteringen.
    */
   async fyllUtOgSendInnBeggeDeler(opts: {
