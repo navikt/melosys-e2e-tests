@@ -122,8 +122,7 @@ test('CLI: --repeat-each ganger totalTests og knownDurations likt', () => {
   const prev = join(dir, 'prev.json');
   writeFileSync(list, JSON.stringify({ suites: [{ specs: [{ file: 'a.spec.ts', title: 'x' }, { file: 'b.spec.ts', title: 'y' }] }] }));
   writeFileSync(prev, JSON.stringify({ tests: [{ file: '/r/tests/a.spec.ts', title: 'x', duration: 1000 }] }));
-  // Fra repo-rota, som npm run test:unit.
-  const script = join(process.cwd(), 'scripts/shard-plan.mjs');
+  const script = join(__dirname, '..', 'scripts/shard-plan.mjs');
   const ut = execFileSync(process.execPath, [script, '--list', list, '--previous', prev, '--shards', '2', '--repeat-each', '4']);
   const plan = JSON.parse(ut.toString());
   assert.equal(plan.repeatEach, 4);
@@ -183,7 +182,7 @@ test('samme test flere ganger i test-summary.json summeres', () => {
 
 /** Skriptet i steget, slik det står i workflowen. */
 function varighetSteg(): string {
-  const linjer = readFileSync(join(process.cwd(), '.github/workflows/e2e-tests.yml'), 'utf8').split('\n');
+  const linjer = readFileSync(join(__dirname, '..', '.github/workflows/e2e-tests.yml'), 'utf8').split('\n');
   const start = linjer.findIndex((l) => l === '      - name: Hent varigheter fra forrige fulle kjøring');
   assert.ok(start !== -1, 'fant ikke steget');
   const run = linjer.findIndex((l, i) => i > start && l === '        run: |');
@@ -195,7 +194,7 @@ function varighetSteg(): string {
   return skript.join('\n');
 }
 
-type Kjøring = { id: number; summary: object; trigger: object };
+type Kjøring = { id: number; summary: object; trigger: object; event?: string };
 const fullSummary = { status: 'passed', tests: [{ file: '/r/tests/a.spec.ts', title: 'x', duration: 1000 }] };
 const regel6Summary = { status: 'skipped', skipped: true, skipReason: 'pinned-service', duration: 0, tests: [] };
 const dispatch = { event: 'repository_dispatch', inputs: null };
@@ -207,7 +206,7 @@ function hentVarigheter(kjøringer: Kjøring[]) {
   const bin = join(dir, 'bin');
   const temp = join(dir, 'runner-temp');
   for (const d of [fake, bin, temp]) mkdirSync(d, { recursive: true });
-  writeFileSync(join(fake, 'runs.json'), JSON.stringify(kjøringer.map((k) => ({ databaseId: k.id, event: dispatch.event }))));
+  writeFileSync(join(fake, 'runs.json'), JSON.stringify(kjøringer.map((k) => ({ databaseId: k.id, event: k.event ?? dispatch.event }))));
   for (const k of kjøringer) {
     mkdirSync(join(fake, String(k.id)));
     writeFileSync(join(fake, String(k.id), 'test-summary.json'), JSON.stringify(k.summary));
@@ -217,8 +216,15 @@ function hentVarigheter(kjøringer: Kjøring[]) {
     join(bin, 'gh'),
     `#!/usr/bin/env bash
 if [ "$1 $2" = "run list" ]; then
-  while [ $# -gt 0 ]; do [ "$1" = --jq ] && { shift; f="$1"; }; shift; done
-  exec jq -r "$f" "${fake}/runs.json"
+  # Som gh: -L gir de N nyeste kjøringene, og --jq virker på dem. Uten -L gir gh 20.
+  n=20
+  while [ $# -gt 0 ]; do
+    [ "$1" = --jq ] && { shift; f="$1"; }
+    [ "$1" = -L ] && { shift; n="$1"; }
+    shift
+  done
+  jq --argjson n "$n" '.[:$n]' "${fake}/runs.json" | jq -r "$f"
+  exit
 fi
 if [ "$1 $2" = "run download" ]; then
   id="$3"; while [ $# -gt 0 ]; do [ "$1" = -D ] && { shift; d="$1"; }; shift; done
@@ -265,4 +271,17 @@ test('varigheter: en kjøring med skipped: true hoppes over, også med tester', 
 test('varigheter: seks regel 6-kjøringer på rad skjuler ikke en eldre full kjøring', () => {
   const regel6 = [106, 105, 104, 103, 102, 101].map((id) => ({ id, summary: regel6Summary, trigger: dispatch }));
   assert.equal(hentVarigheter([...regel6, { id: 100, summary: fullSummary, trigger: dispatch }]).runId, 100);
+});
+
+test('varigheter: bare de 15 nyeste dispatch-kjøringene er kandidater', () => {
+  const regel6 = (n: number) => Array.from({ length: n }, (_, i) => ({ id: 200 - i, summary: regel6Summary, trigger: dispatch }));
+  assert.equal(hentVarigheter([...regel6(14), { id: 1, summary: fullSummary, trigger: dispatch }]).runId, 1, 'nummer 15 er med');
+  assert.equal(hentVarigheter([...regel6(15), { id: 1, summary: fullSummary, trigger: dispatch }]).runId, undefined, 'nummer 16 er ikke med');
+});
+
+test('varigheter: gh run list henter de 50 nyeste kjøringene, før filteret på hendelse', () => {
+  // Køen kaller E2E Tests med workflow_call, så kjøringene har køens hendelse og filtreres bort.
+  const kø = (n: number) => Array.from({ length: n }, (_, i) => ({ id: 300 - i, summary: fullSummary, trigger: dispatch, event: 'merge_group' }));
+  assert.equal(hentVarigheter([...kø(49), { id: 1, summary: fullSummary, trigger: dispatch }]).runId, 1, 'nummer 50 er med');
+  assert.equal(hentVarigheter([...kø(50), { id: 1, summary: fullSummary, trigger: dispatch }]).runId, undefined, 'nummer 51 er ikke med');
 });

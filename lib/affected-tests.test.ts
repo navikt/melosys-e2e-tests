@@ -1,9 +1,9 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync } from 'node:fs';
+import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { dirname, join } from 'node:path';
 // @ts-expect-error — .mjs uten typedeklarasjon; scriptet er ren node uten avhengigheter.
 import { affectedSpecs, changedFiles, isDoc, pinFilIgnoreres } from '../scripts/affected-tests.mjs';
 
@@ -107,36 +107,50 @@ test('pin-fila: en fil som ikke kan leses, gir hele suiten selv med flagget', ()
 });
 
 /**
- * Lager en commit oppå HEAD der bare pin-fila er endret, uten å røre arbeidstreet eller noen
- * branch: blob, tre og commit skrives rett i objektdatabasen.
+ * Et eget git-repo i en midlertidig mappe med utvelgeren, lib/e2e-pins.mjs og én spec. `head` er en
+ * commit oppå `base` der bare pin-fila er endret, fra `{}` til `innhold`. Mappa slettes etter testen.
  */
-function commitMedPinFil(innhold: string): string {
-  const git = (args: string[], env: NodeJS.ProcessEnv = {}, input?: string) =>
-    execFileSync('git', args, { cwd: ROT, encoding: 'utf8', env: { ...process.env, ...env }, input }).trim();
-  const indeks = join(mkdtempSync(join(tmpdir(), 'pin-indeks-')), 'index');
-  const blob = git(['hash-object', '-w', '--stdin'], {}, innhold);
-  git(['read-tree', 'HEAD'], { GIT_INDEX_FILE: indeks });
-  git(['update-index', '--add', '--cacheinfo', `100644,${blob},.github/e2e-pins.json`], { GIT_INDEX_FILE: indeks });
-  const tre = git(['write-tree'], { GIT_INDEX_FILE: indeks });
-  return git(['commit-tree', tre, '-p', 'HEAD', '-m', 'test: pin-fil'], {
+function repoMedPinEndring(t: { after: (fn: () => void) => void }, innhold: string) {
+  const dir = mkdtempSync(join(tmpdir(), 'pin-utvalg-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const env = {
+    ...process.env,
+    GIT_CONFIG_GLOBAL: '/dev/null',
+    GIT_CONFIG_NOSYSTEM: '1',
     GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t',
-  });
+  };
+  const git = (...a: string[]) => execFileSync('git', a, { cwd: dir, env, encoding: 'utf8' }).trim();
+  const skriv = (sti: string, tekst: string) => {
+    mkdirSync(dirname(join(dir, sti)), { recursive: true });
+    writeFileSync(join(dir, sti), tekst);
+  };
+  for (const sti of ['scripts/affected-tests.mjs', 'lib/e2e-pins.mjs']) skriv(sti, readFileSync(join(ROT, sti), 'utf8'));
+  skriv('tests/a.spec.ts', "import { test } from '@playwright/test';\n");
+  skriv('.github/e2e-pins.json', '{}\n');
+  git('init', '-q', '-b', 'main');
+  git('add', '-A');
+  git('commit', '-q', '-m', 'base');
+  const base = git('rev-parse', 'HEAD');
+  skriv('.github/e2e-pins.json', innhold);
+  git('commit', '-q', '-am', 'pin-fil');
+  return { dir, base, head: git('rev-parse', 'HEAD') };
 }
 
-function kjørUtvalg(head: string, ...flagg: string[]) {
-  const r = spawnSync('node', ['scripts/affected-tests.mjs', '--kun-committet', '--base', 'HEAD', '--head', head, ...flagg], {
-    cwd: ROT, encoding: 'utf8',
+function kjørUtvalg(repo: { dir: string; base: string; head: string }, ...flagg: string[]) {
+  const script = join(repo.dir, 'scripts/affected-tests.mjs');
+  const r = spawnSync(process.execPath, [script, '--kun-committet', '--base', repo.base, '--head', repo.head, ...flagg], {
+    cwd: repo.dir, encoding: 'utf8',
   });
   return { kode: r.status, grep: r.stdout.trim(), logg: r.stderr };
 }
 
-test('utvalget i køen: bare pin-fila endret gir hele suiten uten flagget og ingenting med det', () => {
-  const head = commitMedPinFil(PIN);
-  const uten = kjørUtvalg(head);
+test('utvalget i køen: bare pin-fila endret gir hele suiten uten flagget og ingenting med det', (t) => {
+  const repo = repoMedPinEndring(t, PIN);
+  const uten = kjørUtvalg(repo);
   assert.equal(uten.kode, 0, uten.logg);
   assert.equal(uten.grep, '', 'tom linje betyr hele suiten');
   assert.match(uten.logg, /Pin-fila: hele suiten/);
-  const med = kjørUtvalg(head, '--pinner-uten-virkning');
+  const med = kjørUtvalg(repo, '--pinner-uten-virkning');
   assert.equal(med.kode, 3, med.logg);
   assert.match(med.logg, /Pin-fila: ingen tester/);
 });

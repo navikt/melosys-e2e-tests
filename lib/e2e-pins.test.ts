@@ -258,6 +258,22 @@ test('regel 6: åpen PR kjøres, selv om pulls-API-et gir merge_commit_sha', asy
   assert.equal((await regel6(regel6Args(k))).hopp, false);
 });
 
+test('regel 6: merget PR uten gyldig merge-commit kjøres, uten å sammenligne', async () => {
+  // Uten sjekken ville compare fått «undefined» som forfar. Den falske sammenligningen sier ja
+  // til alt, så bare sjekken stopper hoppet.
+  for (const merge_commit_sha of [undefined, '', 'abc']) {
+    const k = kilder({ prer: { 'melosys-web#3300': { merged: true, state: 'closed', merge_commit_sha } } });
+    k.sammenlign = async () => {
+      k.kall.push('sammenlign');
+      return true;
+    };
+    const r = await regel6(regel6Args(k));
+    assert.equal(r.hopp, false, String(merge_commit_sha));
+    assert.match(r.grunn, /mangler merge-commit/);
+    assert.ok(!k.kall.includes('sammenlign'), String(merge_commit_sha));
+  }
+});
+
 test('regel 6: en annen dispatch fra tjenesten kjøres', async () => {
   const k = kilder({ prer: { 'melosys-web#3300': { merged: true, state: 'closed', merge_commit_sha: MERGE } } });
   const r = await regel6(regel6Args(k));

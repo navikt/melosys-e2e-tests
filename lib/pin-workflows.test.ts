@@ -15,7 +15,7 @@ import { TJENESTER, eksplisitteTagger, tjenesterUnderTest } from './e2e-pins.mjs
  */
 
 const PIN = '.github/e2e-pins.json';
-const ROT = process.cwd();
+const ROT = join(__dirname, '..');
 const EN_PIN = JSON.stringify({ 'melosys-web': { tag: 'a'.repeat(40), jira: 'MELOSYS-9000', utloper: '2026-11-03' } });
 
 /** Skriptet i steget `navn` i `workflow`, slik det står der. */
