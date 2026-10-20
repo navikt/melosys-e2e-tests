@@ -288,3 +288,39 @@ test('utløpsjobben: en fil lesPins avviser, valideres og varsles, også når jq
     assert.equal(finnesPinner(innhold), 'true', innhold);
   }
 });
+
+// ---- «Bygg Slack-melding» i e2e-pins-utlop.yml ----
+
+/** Kjører steget og gir SLACK_MESSAGE slik action-slack-notify får den. */
+function slackMelding(env: Record<string, string>): string {
+  const dir = mkdtempSync(join(tmpdir(), 'pin-slack-'));
+  try {
+    const output = join(dir, 'output');
+    writeFileSync(output, '');
+    writeFileSync(join(dir, 'steg.sh'), steg('e2e-pins-utlop.yml', 'Bygg Slack-melding'));
+    execFileSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', join(dir, 'steg.sh')], {
+      cwd: dir,
+      env: { ...process.env, GITHUB_OUTPUT: output, GITHUB_REPOSITORY: 'navikt/melosys-e2e-tests', GITHUB_RUN_ID: '1', RUN_URL: 'https://github.com/run/1', REF: 'main', UTLOPT: '', FEIL: '', ...env },
+      stdio: ['ignore', 'ignore', 'pipe'],
+    });
+    const m = readFileSync(output, 'utf8').match(/^SLACK_MESSAGE<<(\S+)\n([\s\S]*?)\n\1$/m);
+    assert.ok(m, 'fant ikke SLACK_MESSAGE');
+    return m[2];
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+}
+
+test('Slack: tekst fra pin-fila og branchnavnet blir ikke lenker eller formatering i meldingen', () => {
+  const melding = slackMelding({
+    UTLOPT: '• melosys-web (MELOSYS-1) utløp 2026-01-01 <!channel>',
+    FEIL: '• "<https://x|klikk>": ukjent tjeneste & mer',
+    REF: 'b<https://y|z>',
+  });
+  for (const rå of ['<https://x|klikk>', '<!channel>', '<https://y|z>', ' & ']) assert.ok(!melding.includes(rå), `${rå} står urørt i ${melding}`);
+  assert.match(melding, /"&lt;https:\/\/x\|klikk&gt;": ukjent tjeneste &amp; mer/);
+  assert.match(melding, /&lt;!channel&gt;/);
+  assert.match(melding, /`b&lt;https:\/\/y\|z&gt;`/);
+  // Lenkene steget selv lager, er fortsatt lenker.
+  assert.match(melding, /<https:\/\/github\.com\/run\/1\|#1>/);
+});

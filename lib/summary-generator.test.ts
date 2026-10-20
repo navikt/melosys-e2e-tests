@@ -973,6 +973,20 @@ describe('Summary Generator', () => {
       assert(result.includes('- **melosys-web:** `aaaaaaa` (MELOSYS-9000, utløper 2026-11-03, e2e-branch `MELOSYS-9000-ny-knapp`, PR #3300)\n'));
     });
 
+    test('en e2e-branch med bakoverfnutter blir i kodespennet', () => {
+      // Et gyldig branchnavn kan ha bakoverfnutter. Med én fnutt rundt ville `**x**` blitt markdown.
+      const data: TestSummaryData = {
+        status: 'passed',
+        duration: 10000,
+        tests: [createTest({ status: 'passed' })],
+        pins: { 'melosys-web': { ...pin, e2e_branch: 'a`**x**`b``c' } },
+      };
+
+      const result = generateMarkdownSummary(data);
+
+      assert(result.includes('e2e-branch ``` a`**x**`b``c ```, PR #3300'), result);
+    });
+
     test('sier fra når tjenesten er under test og pinnen ikke gjelder', () => {
       const data: TestSummaryData = {
         status: 'passed',

@@ -105,7 +105,14 @@ jobs:
           REF: ${{ github.ref_name }}
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
-          FIL_URL="https://github.com/${GITHUB_REPOSITORY}/blob/${REF}/.github/e2e-pins.json"
+          # Slack leser <, > og & som formatering: <url|tekst> blir en lenke og <!channel> varsler
+          # kanalen. Tekst fra pin-fila og branchnavnet escapes, så de vises som tekst.
+          slack_tekst() { printf '%s' "$1" | sed -e 's/&/\&amp;/g' -e 's/</\&lt;/g' -e 's/>/\&gt;/g'; }
+          REF_URL=$(jq -rn --arg r "$REF" '$r | @uri | gsub("%2F"; "/")')
+          FIL_URL="https://github.com/${GITHUB_REPOSITORY}/blob/${REF_URL}/.github/e2e-pins.json"
+          REF=$(slack_tekst "$REF")
+          UTLOPT=$(slack_tekst "$UTLOPT")
+          FEIL=$(slack_tekst "$FEIL")
           # Doble backslash: meldingen skrives med printf '%b', som ellers tolker «\c» som «stopp her».
           UTLOPT="${UTLOPT//\\/\\\\}"
           FEIL="${FEIL//\\/\\\\}"

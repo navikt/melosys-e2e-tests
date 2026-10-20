@@ -113,7 +113,7 @@ export function generateMarkdownSummary(
     md += `## 📌 Pinnede tjenester\n\n`;
     for (const [service, pin] of Object.entries(data.pins).sort((a, b) => a[0].localeCompare(b[0]))) {
       const details = [pin.jira, `utløper ${pin.utloper}`];
-      if (pin.e2e_branch) details.push(`e2e-branch \`${pin.e2e_branch}\``);
+      if (pin.e2e_branch) details.push(`e2e-branch ${kodespenn(pin.e2e_branch)}`);
       if (pin.service_pr) details.push(`PR #${pin.service_pr}`);
       const usedTag = data.tags?.[service];
       const underTest = usedTag !== undefined && usedTag !== pin.tag ? ' — under test, pinnen gjelder ikke' : '';
@@ -227,6 +227,16 @@ export function generateMarkdownSummary(
 /**
  * Format a millisecond duration as a compact human string ("8s", "4m 12s").
  */
+/**
+ * Markdown-kodespenn rundt tekst som kan ha bakoverfnutter, for eksempel et branchnavn. Gjerdet er
+ * lengre enn den lengste rekken fnutter i teksten, så teksten kan ikke avslutte spennet.
+ */
+function kodespenn(tekst: string): string {
+  if (!tekst.includes('`')) return `\`${tekst}\``;
+  const gjerde = '`'.repeat(Math.max(...(tekst.match(/`+/g) ?? []).map((r) => r.length)) + 1);
+  return `${gjerde} ${tekst} ${gjerde}`;
+}
+
 function formatDuration(ms: number): string {
   const s = Math.round(ms / 1000);
   if (s < 60) return `${s}s`;

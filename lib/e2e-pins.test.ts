@@ -238,6 +238,18 @@ test('regel 6: merget service_pr som er forfar til dispatchen, hoppes over', asy
   assert.match(r.grunn, /MELOSYS-9000-ny-knapp/);
 });
 
+test('regel 6: e2e-branchen står i et kodespenn i grunnen, som havner i sammendraget som markdown', async () => {
+  const k = kilder({
+    prer: { 'melosys-web#3300': { merged: true, state: 'closed', merge_commit_sha: MERGE } },
+    forfedre: [[MERGE, DISPATCH]],
+  });
+  const branch = 'a`<x@y.no>`b';
+  assert.ok(gyldigBranchnavn(branch));
+  const r = await regel6(regel6Args(k, { pins: { 'melosys-web': { ...koblet, e2e_branch: branch } } }));
+  assert.equal(r.hopp, true);
+  assert.ok(r.grunn.includes('e2e-branchen `` a`<x@y.no>`b ``.'), r.grunn);
+});
+
 test('regel 6: åpen PR kjøres, selv om pulls-API-et gir merge_commit_sha', async () => {
   const k = kilder({
     prer: { 'melosys-web#3300': { merged: false, state: 'open', merge_commit_sha: MERGE } },
