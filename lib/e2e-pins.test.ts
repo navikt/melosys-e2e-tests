@@ -1,11 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   TJENESTER,
   anvendPins,
+  appRepoer,
   gyldigBranchnavn,
   lesPins,
   regel6,
@@ -294,6 +296,69 @@ test('sha bak latest er commiten på default-branchen med samme digest', async (
   });
   assert.equal(await shaBakLatest('melosys-web', k), sha('2'));
   await assert.rejects(shaBakLatest('melosys-web', kilder({ digester: { 'melosys-web:latest': DIGEST_LATEST }, commits: [sha('1')] })), /deploy-manuelt/);
+});
+
+// ---- App-tokenen (D12) ----
+
+const UTEN_APP = ['melosys-trygdeavtale', 'melosys-inngangsvilkar', 'melosys-dokgen'];
+
+test('appen mangler på trygdeavtale, inngangsvilkar og dokgen', () => {
+  const utenApp = Object.entries(TJENESTER)
+    .filter(([, info]) => (info as { app: boolean }).app === false)
+    .map(([t]) => t);
+  assert.deepEqual(utenApp.sort(), [...UTEN_APP].sort());
+});
+
+test('app-tokenen gjelder repoene til pinnene i head og base, uten repoene appen mangler', () => {
+  const t = (o: object) => JSON.stringify(o);
+  assert.deepEqual(appRepoer({ headTekst: '', baseTekst: '' }), []);
+  assert.deepEqual(appRepoer({ headTekst: t({ 'melosys-web': koblet }) }), ['melosys-web']);
+  assert.deepEqual(
+    appRepoer({
+      headTekst: t({ 'melosys-mock': karantene, 'melosys-dokgen': karantene }),
+      baseTekst: t({ 'melosys-api': koblet, 'melosys-trygdeavtale': karantene, 'melosys-mock': karantene }),
+    }),
+    ['melosys-api', 'melosys-docker-compose']
+  );
+  assert.deepEqual(appRepoer({ headTekst: '{', baseTekst: t({ 'melosys-api': koblet }) }), [], 'ugyldig head: valider gjør ingen oppslag');
+  assert.deepEqual(appRepoer({ headTekst: t({ 'melosys-web': koblet }), baseTekst: '[' }), ['melosys-web'], 'ugyldig base regnes som tom');
+});
+
+test('pin på en tjeneste uten appen avvises med navnet på tjenesten, uten oppslag', async () => {
+  for (const tjeneste of UTEN_APP) {
+    const k = kilder({ digester: { [`${tjeneste}:${karantene.tag}`]: DIGEST_LATEST } });
+    const feil = await validerMotKilder({ [tjeneste]: karantene }, k);
+    assert.equal(feil.length, 1, tjeneste);
+    assert.match(feil[0], new RegExp(`^${tjeneste}: appen Melosys CI er ikke installert på navikt/${tjeneste}`));
+    assert.deepEqual(k.kall, [], tjeneste);
+  }
+  // Å fjerne en slik pin krever ingen oppslag i GitHub.
+  const k = kilder({ digester: { [`melosys-dokgen:latest`]: DIGEST_LATEST, [`melosys-dokgen:${karantene.tag}`]: DIGEST_LATEST } });
+  assert.deepEqual((await valider({ headTekst: '{}', baseTekst: JSON.stringify({ 'melosys-dokgen': karantene }), kilder: k })).feil, []);
+});
+
+test('CLI app-repoer skriver repoene kommaseparert', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'e2e-pins-'));
+  const head = join(dir, 'head.json');
+  const base = join(dir, 'base.json');
+  writeFileSync(head, JSON.stringify({ 'melosys-mock': karantene, 'melosys-dokgen': karantene }));
+  writeFileSync(base, JSON.stringify({ 'melosys-api': koblet }));
+  const cli = (...args: string[]) => execFileSync(process.execPath, [join(__dirname, 'e2e-pins.mjs'), 'app-repoer', ...args]).toString();
+  assert.equal(cli('--fil', head, '--base-fil', base), 'melosys-api,melosys-docker-compose\n');
+  assert.equal(cli('--fil', join(dir, 'finnes-ikke.json')), '\n');
+  writeFileSync(head, '{');
+  assert.equal(cli('--fil', head, '--base-fil', base), '\n', 'ugyldig head gir exit 0, så «Valider pin-fila» melder feilen');
+});
+
+test('pinner og utløpsjobben ber om token bare for repoene fra app-repoer', () => {
+  for (const fil of ['e2e-for-merge.yml', 'e2e-pins-utlop.yml']) {
+    const yml = readFileSync(join(__dirname, '..', '.github', 'workflows', fil), 'utf8');
+    const steg = yml.match(/- name: Hent app-token\n([\s\S]*?)\n\n/)?.[1];
+    assert.ok(steg, `fant ikke «Hent app-token» i ${fil}`);
+    assert.match(steg, /\n {8}if: .*steps\.repoer\.outputs\.repoer != ''/, fil);
+    assert.match(steg, /\n {10}repositories: \$\{\{ steps\.repoer\.outputs\.repoer \}\}\n/, fil);
+    assert.match(yml, /id: repoer\n[\s\S]*?node lib\/e2e-pins\.mjs app-repoer /, fil);
+  }
 });
 
 // ---- D14: fjerning og omkobling av koblet pin ----

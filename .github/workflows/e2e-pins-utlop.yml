@@ -33,27 +33,25 @@ jobs:
             echo "pinner=false" >> "$GITHUB_OUTPUT"
           fi
 
-      # GITHUB_TOKEN leser ikke de fem interne service-repoene (D12).
+      # GITHUB_TOKEN leser ikke de interne service-repoene (D12). Tokenen gjelder bare repoene til
+      # pinnene i fila, som i jobben «pinner».
+      - name: Hvilke repoer trenger tokenen?
+        id: repoer
+        if: steps.finnes.outputs.pinner == 'true'
+        run: |
+          REPOER=$(node lib/e2e-pins.mjs app-repoer --fil .github/e2e-pins.json)
+          echo "🔑 Repoer for app-tokenen: ${REPOER:-ingen}"
+          echo "repoer=$REPOER" >> "$GITHUB_OUTPUT"
+
       - name: Hent app-token
         id: app-token
-        if: steps.finnes.outputs.pinner == 'true'
+        if: steps.finnes.outputs.pinner == 'true' && steps.repoer.outputs.repoer != ''
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
           private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
           owner: navikt
-          repositories: |
-            melosys-api
-            melosys-web
-            melosys-skjema-api
-            melosys-skjema-web
-            melosys-eessi
-            faktureringskomponenten
-            melosys-trygdeavgift-beregning
-            melosys-trygdeavtale
-            melosys-inngangsvilkar
-            melosys-dokgen
-            melosys-docker-compose
+          repositories: ${{ steps.repoer.outputs.repoer }}
           permission-contents: read
 
       - name: Login to NAIS registry

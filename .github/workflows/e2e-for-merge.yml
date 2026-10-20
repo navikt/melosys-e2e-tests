@@ -57,27 +57,26 @@ jobs:
           echo "📌 .github/e2e-pins.json er endret (bare pin-fila: $BARE)."
           { echo "endret=true"; echo "bare_pinfil=$BARE"; } >> "$GITHUB_OUTPUT"
 
-      # GITHUB_TOKEN leser ikke de fem interne service-repoene, så valideringen bruker app-en (D12).
+      # GITHUB_TOKEN leser ikke de interne service-repoene, så valideringen bruker app-en (D12).
+      # Tokenen gjelder bare repoene valideringen slår opp i. Én token for et repo appen ikke er
+      # installert på, kan ikke lages, og da feilet hele jobben.
+      - name: Hvilke repoer trenger tokenen?
+        id: repoer
+        if: steps.endret.outputs.endret == 'true'
+        run: |
+          REPOER=$(node lib/e2e-pins.mjs app-repoer --fil "$RUNNER_TEMP/head-pins.json" --base-fil "$RUNNER_TEMP/base-pins.json")
+          echo "🔑 Repoer for app-tokenen: ${REPOER:-ingen}"
+          echo "repoer=$REPOER" >> "$GITHUB_OUTPUT"
+
       - name: Hent app-token
         id: app-token
-        if: steps.endret.outputs.endret == 'true'
+        if: steps.endret.outputs.endret == 'true' && steps.repoer.outputs.repoer != ''
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
           private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
           owner: navikt
-          repositories: |
-            melosys-api
-            melosys-web
-            melosys-skjema-api
-            melosys-skjema-web
-            melosys-eessi
-            faktureringskomponenten
-            melosys-trygdeavgift-beregning
-            melosys-trygdeavtale
-            melosys-inngangsvilkar
-            melosys-dokgen
-            melosys-docker-compose
+          repositories: ${{ steps.repoer.outputs.repoer }}
           permission-contents: read
 
       - name: Login to NAIS registry
