@@ -3,9 +3,13 @@ name: E2E før merge
 # Kjører testene en PR påvirker én gang, når PR-en settes i merge queue, i stedet for på hver push.
 #
 # Merge queue krever at den påkrevde sjekken også finnes på PR-en før den kan settes i kø. På
-# pull_request kjører derfor bare «e2e-for-merge», som svarer grønt med én gang. På merge_group
-# regnes utvalget mellom base_sha og head_sha, og E2E Tests kjøres som gjenbrukbar workflow.
+# pull_request svarer derfor «e2e-for-merge» grønt med én gang. På merge_group regnes utvalget
+# mellom base_sha og head_sha, og E2E Tests kjøres som gjenbrukbar workflow.
 # Sjekknavnet «e2e-for-merge» er det ruleset-et på main krever.
+#
+# «pinner» validerer .github/e2e-pins.json når PR-en eller køgruppen endrer den (se
+# docs/ci-cd/KOBLEDE-ENDRINGER.md). På PR-en er den en egen sjekk som bare informerer; i køen
+# gjør en ugyldig fil «e2e-for-merge» rød, så den aldri når main.
 
 on:
   pull_request:
@@ -21,7 +25,92 @@ permissions:
   actions: read
 
 jobs:
+  pinner:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    outputs:
+      pinner_uten_virkning: ${{ steps.valider.outputs.pinner_uten_virkning }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Er pin-fila endret?
+        id: endret
+        env:
+          BASE_SHA: ${{ github.event.merge_group.base_sha || github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.merge_group.head_sha || github.event.pull_request.head.sha }}
+        run: |
+          # Sammenligner med merge-basen, som affected-tests.mjs. I køen er det base_sha selv.
+          MB=$(git merge-base "$BASE_SHA" "$HEAD_SHA")
+          FILER=$(git diff --name-only "$MB" "$HEAD_SHA")
+          if ! grep -qxF .github/e2e-pins.json <<<"$FILER"; then
+            echo "✅ .github/e2e-pins.json er ikke endret."
+            echo "endret=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          git show "$MB:.github/e2e-pins.json" > "$RUNNER_TEMP/base-pins.json" 2>/dev/null || : > "$RUNNER_TEMP/base-pins.json"
+          git show "$HEAD_SHA:.github/e2e-pins.json" > "$RUNNER_TEMP/head-pins.json" 2>/dev/null || : > "$RUNNER_TEMP/head-pins.json"
+          # D14: en koblet pin kan fjernes uten videre når PR-en (i køen: gruppen) bare endrer pin-fila.
+          BARE=false
+          [ "$FILER" = ".github/e2e-pins.json" ] && BARE=true
+          echo "📌 .github/e2e-pins.json er endret (bare pin-fila: $BARE)."
+          { echo "endret=true"; echo "bare_pinfil=$BARE"; } >> "$GITHUB_OUTPUT"
+
+      # GITHUB_TOKEN leser ikke de fem interne service-repoene, så valideringen bruker app-en (D12).
+      - name: Hent app-token
+        id: app-token
+        if: steps.endret.outputs.endret == 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: |
+            melosys-api
+            melosys-web
+            melosys-skjema-api
+            melosys-skjema-web
+            melosys-eessi
+            faktureringskomponenten
+            melosys-trygdeavgift-beregning
+            melosys-trygdeavtale
+            melosys-inngangsvilkar
+            melosys-dokgen
+            melosys-docker-compose
+          permission-contents: read
+
+      - name: Login to NAIS registry
+        if: steps.endret.outputs.endret == 'true'
+        uses: nais/login@v0
+        with:
+          team: teammelosys
+
+      - name: Valider pin-fila
+        id: valider
+        if: steps.endret.outputs.endret == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          BARE_PINFIL: ${{ steps.endret.outputs.bare_pinfil }}
+        run: |
+          flagg=(--fil "$RUNNER_TEMP/head-pins.json" --base-fil "$RUNNER_TEMP/base-pins.json")
+          [ "$BARE_PINFIL" = "true" ] && flagg+=(--bare-pinfil)
+          if ! SVAR=$(node lib/e2e-pins.mjs valider "${flagg[@]}" 2>"$RUNNER_TEMP/pins.err"); then
+            while IFS= read -r linje; do echo "::error::$linje"; done < "$RUNNER_TEMP/pins.err"
+            echo "::error::.github/e2e-pins.json kan ikke merges slik den er. Se docs/ci-cd/KOBLEDE-ENDRINGER.md."
+            exit 1
+          fi
+          jq -r '.utlopt[] | "::warning::Pinnen for \(.tjeneste) (\(.jira)) utløp \(.utloper)."' <<<"$SVAR"
+          UTEN=$(jq -r '.utenVirkning == true' <<<"$SVAR")
+          if [ "$UTEN" = "true" ]; then
+            echo "✅ Pin-fila er gyldig. Ingen pin bytter image nå, så den bidrar ikke med tester."
+          else
+            echo "✅ Pin-fila er gyldig. Endringen bytter image for minst én tjeneste, så den gir hele suiten."
+          fi
+          echo "pinner_uten_virkning=$UTEN" >> "$GITHUB_OUTPUT"
+
   utvalg:
+    needs: pinner
     if: github.event_name == 'merge_group'
     runs-on: ubuntu-latest
     outputs:
@@ -42,11 +131,14 @@ jobs:
         env:
           BASE_SHA: ${{ github.event.merge_group.base_sha }}
           HEAD_SHA: ${{ github.event.merge_group.head_sha }}
+          PINNER_UTEN_VIRKNING: ${{ needs.pinner.outputs.pinner_uten_virkning }}
         run: |
           # Tom utdata betyr hele suiten, og exit 3 betyr at ingenting skal kjøres.
           SAMMENDRAG="$RUNNER_TEMP/sammendrag.txt"
+          flagg=()
+          [ "$PINNER_UTEN_VIRKNING" = "true" ] && flagg+=(--pinner-uten-virkning)
           RC=0
-          GREP="$(node scripts/affected-tests.mjs --kun-committet --base "$BASE_SHA" --head "$HEAD_SHA" 2>"$SAMMENDRAG")" || RC=$?
+          GREP="$(node scripts/affected-tests.mjs --kun-committet --base "$BASE_SHA" --head "$HEAD_SHA" "${flagg[@]}" 2>"$SAMMENDRAG")" || RC=$?
           cat "$SAMMENDRAG"
           # Før exit, så også en feil i scriptet vises i jobbsammendraget.
           {
@@ -80,20 +172,27 @@ jobs:
 
   e2e-for-merge:
     name: e2e-for-merge
-    needs: [utvalg, e2e]
+    needs: [pinner, utvalg, e2e]
     if: always()
     runs-on: ubuntu-latest
     steps:
       - name: Samle resultat
         env:
           EVENT_NAME: ${{ github.event_name }}
+          PINNER: ${{ needs.pinner.result }}
           UTVALG: ${{ needs.utvalg.result }}
           KJOR: ${{ needs.utvalg.outputs.kjor }}
           E2E: ${{ needs.e2e.result }}
         run: |
+          # På PR-en er «pinner» en egen sjekk som bare informerer (D14): en e2e-PR som fjerner en
+          # koblet pin før service-PR-en er i latest, skal kunne legges klar.
           if [ "$EVENT_NAME" != "merge_group" ]; then
             echo "✅ E2E kjøres når PR-en settes i merge queue, ikke på push."
             exit 0
+          fi
+          if [ "$PINNER" != "success" ]; then
+            echo "❌ .github/e2e-pins.json er ugyldig ($PINNER). Se jobben «pinner»."
+            exit 1
           fi
           if [ "$UTVALG" != "success" ]; then
             echo "❌ Utvalget feilet ($UTVALG)."

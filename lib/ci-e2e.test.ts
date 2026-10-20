@@ -84,6 +84,9 @@ function lagRepo(main: Filer, endringer: Filer = {}, ucommittet: Filer = {}) {
   for (const f of ['ci-e2e.sh', 'affected-tests.mjs']) {
     copyFileSync(join(REPO, 'scripts', f), join(arbeid, 'scripts', f));
   }
+  // affected-tests.mjs leser pin-fila med lib/e2e-pins.mjs.
+  mkdirSync(join(arbeid, 'lib'));
+  copyFileSync(join(REPO, 'lib', 'e2e-pins.mjs'), join(arbeid, 'lib', 'e2e-pins.mjs'));
   skriv(main);
   git(arbeid, 'add', '-A');
   git(arbeid, 'commit', '-q', '-m', 'main');

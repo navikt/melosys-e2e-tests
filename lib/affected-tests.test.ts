@@ -1,7 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync, spawnSync } from 'node:child_process';
+import { mkdtempSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 // @ts-expect-error — .mjs uten typedeklarasjon; scriptet er ren node uten avhengigheter.
-import { affectedSpecs, changedFiles, isDoc } from '../scripts/affected-tests.mjs';
+import { affectedSpecs, changedFiles, isDoc, pinFilIgnoreres } from '../scripts/affected-tests.mjs';
+
+const ROT = join(__dirname, '..');
 
 /**
  * Regresjonstest for utvelgeren bak `make ci-affected`.
@@ -76,4 +82,61 @@ test('head velger hvilken ref diffen regnes mot', () => {
   };
   changedFiles('origin/main', { arbeidstre: false, head: 'origin/annen', run });
   assert.deepEqual(kall, [['diff', '--name-only', 'origin/main...origin/annen']]);
+});
+
+// ---- Pin-fila (.github/e2e-pins.json) ----
+
+const PIN = JSON.stringify({
+  'melosys-web': { tag: 'a'.repeat(40), jira: 'MELOSYS-9000', utloper: '2026-11-03' },
+});
+
+test('pin-fila: samme pinner i base og head gir ingen tester, også uten flagget', () => {
+  assert.equal(pinFilIgnoreres({ baseTekst: '', headTekst: '{}\n' }).ignorer, true);
+  const omformatert = JSON.stringify(JSON.parse(PIN), null, 2);
+  assert.equal(pinFilIgnoreres({ baseTekst: PIN, headTekst: omformatert }).ignorer, true);
+});
+
+test('pin-fila: endrede pinner gir hele suiten uten --pinner-uten-virkning', () => {
+  assert.equal(pinFilIgnoreres({ baseTekst: '{}', headTekst: PIN }).ignorer, false);
+  assert.equal(pinFilIgnoreres({ baseTekst: PIN, headTekst: '{}' }).ignorer, false);
+  assert.equal(pinFilIgnoreres({ baseTekst: '{}', headTekst: PIN, pinnerUtenVirkning: true }).ignorer, true);
+});
+
+test('pin-fila: en fil som ikke kan leses, gir hele suiten selv med flagget', () => {
+  assert.equal(pinFilIgnoreres({ baseTekst: '{}', headTekst: '{', pinnerUtenVirkning: true }).ignorer, false);
+});
+
+/**
+ * Lager en commit oppå HEAD der bare pin-fila er endret, uten å røre arbeidstreet eller noen
+ * branch: blob, tre og commit skrives rett i objektdatabasen.
+ */
+function commitMedPinFil(innhold: string): string {
+  const git = (args: string[], env: NodeJS.ProcessEnv = {}, input?: string) =>
+    execFileSync('git', args, { cwd: ROT, encoding: 'utf8', env: { ...process.env, ...env }, input }).trim();
+  const indeks = join(mkdtempSync(join(tmpdir(), 'pin-indeks-')), 'index');
+  const blob = git(['hash-object', '-w', '--stdin'], {}, innhold);
+  git(['read-tree', 'HEAD'], { GIT_INDEX_FILE: indeks });
+  git(['update-index', '--add', '--cacheinfo', `100644,${blob},.github/e2e-pins.json`], { GIT_INDEX_FILE: indeks });
+  const tre = git(['write-tree'], { GIT_INDEX_FILE: indeks });
+  return git(['commit-tree', tre, '-p', 'HEAD', '-m', 'test: pin-fil'], {
+    GIT_AUTHOR_NAME: 't', GIT_AUTHOR_EMAIL: 't@t', GIT_COMMITTER_NAME: 't', GIT_COMMITTER_EMAIL: 't@t',
+  });
+}
+
+function kjørUtvalg(head: string, ...flagg: string[]) {
+  const r = spawnSync('node', ['scripts/affected-tests.mjs', '--kun-committet', '--base', 'HEAD', '--head', head, ...flagg], {
+    cwd: ROT, encoding: 'utf8',
+  });
+  return { kode: r.status, grep: r.stdout.trim(), logg: r.stderr };
+}
+
+test('utvalget i køen: bare pin-fila endret gir hele suiten uten flagget og ingenting med det', () => {
+  const head = commitMedPinFil(PIN);
+  const uten = kjørUtvalg(head);
+  assert.equal(uten.kode, 0, uten.logg);
+  assert.equal(uten.grep, '', 'tom linje betyr hele suiten');
+  assert.match(uten.logg, /Pin-fila: hele suiten/);
+  const med = kjørUtvalg(head, '--pinner-uten-virkning');
+  assert.equal(med.kode, 3, med.logg);
+  assert.match(med.logg, /Pin-fila: ingen tester/);
 });

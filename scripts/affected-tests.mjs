@@ -31,6 +31,11 @@
  *   --kun-committet  se bort fra arbeidstreet. CI kjører branchen, så ci-e2e.sh bruker denne.
  *   --changed <sti>  hopp over git og lat som om akkurat denne fila er endret. Nyttig for å
  *             se rekkevidden av en endring før du gjør den, og for å teste grafen.
+ *   --pinner-uten-virkning  jobben `pinner` i e2e-for-merge.yml har vist at endringen i
+ *             .github/e2e-pins.json ikke bytter noe image: hver tag i pinnene som er lagt til,
+ *             fjernet eller endret, har samme digest som `latest`. Da bidrar pin-fila ikke med
+ *             tester. Uten flagget gir en endret pin-fil hele suiten, med mindre JSON-innholdet
+ *             er det samme i base og head.
  *
  * Kjør: node scripts/affected-tests.mjs   (ren node, ingen avhengigheter)
  */
@@ -39,6 +44,7 @@ import { readFileSync, readdirSync, existsSync, mkdtempSync, realpathSync, rmSyn
 import { tmpdir } from 'node:os';
 import { join, dirname, isAbsolute, relative, resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { PIN_FIL, lesPins } from '../lib/e2e-pins.mjs';
 
 const ROOT = resolve(join(fileURLToPath(import.meta.url), '..', '..'));
 const TEST_DIR = join(ROOT, 'tests');
@@ -125,8 +131,38 @@ const inGraph = (p) => p.endsWith('.ts') && GRAPH_DIRS.includes(p.split('/')[0])
 export const isDoc = (p) => p.endsWith('.md') || p.startsWith('docs/');
 
 /** Verktøy som e2e-workflowen ikke leser. Et nytt script under scripts/ kan brukes av CI, så lista er eksplisitt. */
-const VERKTOY = ['Makefile', 'scripts/ci-e2e.sh', 'scripts/affected-tests.mjs'];
+const VERKTOY = ['Makefile', 'scripts/ci-e2e.sh', 'scripts/affected-tests.mjs', 'scripts/pin-sha.sh', '.github/workflows/e2e-pins-utlop.yml'];
 export const utenE2eEffekt = (p) => isDoc(p) || VERKTOY.includes(p) || (p.startsWith('lib/') && p.endsWith('.test.ts'));
+
+/**
+ * Skal en endret pin-fil holdes utenfor utvalget? Ja når innholdet er det samme i base og head
+ * (bare formatering), eller når `pinner` har vist at endringen ikke bytter image. En fil som
+ * ikke kan leses, gir hele suiten; `pinner` stopper den uansett.
+ */
+export function pinFilIgnoreres({ baseTekst, headTekst, pinnerUtenVirkning = false }) {
+  const base = lesPins(baseTekst);
+  const head = lesPins(headTekst);
+  if (base.feil.length || head.feil.length) return { ignorer: false, grunn: 'pin-fila kan ikke leses' };
+  const sortert = (pins) => JSON.stringify(Object.entries(pins).sort(([a], [b]) => a.localeCompare(b)));
+  if (sortert(base.pins) === sortert(head.pins)) return { ignorer: true, grunn: 'samme pinner i base og head' };
+  if (pinnerUtenVirkning) return { ignorer: true, grunn: 'pinner har vist at ingen image byttes' };
+  return { ignorer: false, grunn: 'pinnene er endret, og ingen har vist at imagene er de samme (--pinner-uten-virkning)' };
+}
+
+/** Innholdet i pin-fila i base (merge-basen) og head. Mangler fila, er teksten tom. */
+function pinTekster(base, head, arbeidstre) {
+  const vis = (ref) => {
+    try {
+      return git('show', `${ref}:${PIN_FIL}`);
+    } catch {
+      return '';
+    }
+  };
+  const mb = git('merge-base', base, head).trim();
+  const headTekst =
+    arbeidstre && head === 'HEAD' ? (existsSync(join(ROOT, PIN_FIL)) ? readFileSync(join(ROOT, PIN_FIL), 'utf8') : '') : vis(head);
+  return { baseTekst: vis(mb), headTekst };
+}
 
 /**
  * Spec-filene som påvirkes av at `changed` endres, funnet ved å gå oppover importgrafen.
@@ -191,7 +227,17 @@ function main() {
   // Med --head bygges grafen fra det treet, så spec-filer som bare finnes der kommer med.
   const rot = head === 'HEAD' ? ROOT : pakkUt(head);
   const files = sourceFiles(rot);
-  const relevante = changed.filter((p) => !utenE2eEffekt(p));
+  let pinMelding = '';
+  let utenPinFil = changed;
+  if (!forced && changed.includes(PIN_FIL)) {
+    const { ignorer, grunn } = pinFilIgnoreres({
+      ...pinTekster(base, head, !args.includes('--kun-committet')),
+      pinnerUtenVirkning: args.includes('--pinner-uten-virkning'),
+    });
+    pinMelding = `Pin-fila: ${ignorer ? 'ingen tester' : 'hele suiten'}, ${grunn}.\n`;
+    if (ignorer) utenPinFil = changed.filter((p) => p !== PIN_FIL);
+  }
+  const relevante = utenPinFil.filter((p) => !utenE2eEffekt(p));
   const ingenting = relevante.length === 0;
   const outside = relevante.filter((p) => !inGraph(p));
   const specs = affectedSpecs(relevante.filter(inGraph), files, rot);
@@ -214,8 +260,9 @@ function main() {
   process.stderr.write(
     `Endrede filer: ${changed.length}\n` +
       `Påvirkede spec-filer: ${specs.length} av ${total} (${Math.floor(share)} %)\n` +
+      pinMelding +
       (ingenting
-        ? `Kjører ingenting: ${changed.length ? 'bare dokumentasjon og verktøy e2e-workflowen ikke leser er endret' : `ingen endringer mot ${base}`}.\n`
+        ? `Kjører ingenting: ${changed.length ? `bare dokumentasjon${pinMelding ? ', pinner uten virkning' : ''} og verktøy e2e-workflowen ikke leser er endret` : `ingen endringer mot ${base}`}.\n`
         : '') +
       (reason ? `Kjører hele suiten: ${reason}.\n` : '')
   );
