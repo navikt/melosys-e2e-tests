@@ -123,12 +123,20 @@ jobs:
           if [ -n "$UTLOPT" ]; then
             MELDING="*Utløpte pinner* i <${FIL_URL}|.github/e2e-pins.json>:\n${UTLOPT//$'\n'/\\n}\n\nFjern pinnen, eller sett ny \`utloper\`, i en PR til melosys-e2e-tests. Oppskriften står i docs/ci-cd/KOBLEDE-ENDRINGER.md.\n\n"
           fi
+          TITTEL="E2E-pinner må ryddes"
+          FARGE=warning
           if [ -n "$FEIL" ]; then
             MELDING="${MELDING}*Pin-fila er ikke gyldig.* E2E Tests stopper i plan-jobben til den er rettet:\n${FEIL//$'\n'/\\n}\n\n"
+            TITTEL="E2E-pin-fila er ugyldig"
+            FARGE=danger
           fi
           if [ -z "$UTLOPT" ] && [ -z "$FEIL" ]; then
             MELDING="*Sjekken av pin-fila feilet* før den ble ferdig, så pinnene er ikke sjekket i dag. Se kjøringen.\n\n"
+            TITTEL="Sjekken av E2E-pinner feilet"
+            FARGE=danger
           fi
+          echo "tittel=$TITTEL" >> "$GITHUB_OUTPUT"
+          echo "farge=$FARGE" >> "$GITHUB_OUTPUT"
           if [ "$REF" != "main" ]; then
             MELDING="${MELDING}_Kjørt fra branchen \`${REF}\`, ikke main._\n"
           fi
@@ -149,8 +157,8 @@ jobs:
           SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
           SLACK_USERNAME: Github Actions
           SLACK_ICON: https://github.com/github.png?size=48
-          SLACK_COLOR: warning
-          SLACK_TITLE: "E2E-pinner må ryddes"
+          SLACK_COLOR: ${{ steps.melding.outputs.farge }}
+          SLACK_TITLE: ${{ steps.melding.outputs.tittel }}
           SLACK_FOOTER: "melosys-e2e-tests"
           SLACK_MESSAGE: ${{ steps.melding.outputs.SLACK_MESSAGE }}
           MSG_MINIMAL: "true"

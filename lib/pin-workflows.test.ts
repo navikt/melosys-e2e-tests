@@ -356,8 +356,8 @@ test('utløpsjobben: en fil lesPins avviser, valideres og varsles, også når jq
 
 // ---- «Bygg Slack-melding» i e2e-pins-utlop.yml ----
 
-/** Kjører steget og gir SLACK_MESSAGE slik action-slack-notify får den. */
-function slackMelding(env: Record<string, string>): string {
+/** Kjører steget og gir SLACK_MESSAGE og de andre outputene slik action-slack-notify får dem. */
+function slackSteg(env: Record<string, string>): { melding: string; ut: Record<string, string> } {
   const dir = mkdtempSync(join(tmpdir(), 'pin-slack-'));
   try {
     const output = join(dir, 'output');
@@ -368,13 +368,36 @@ function slackMelding(env: Record<string, string>): string {
       env: { ...process.env, GITHUB_OUTPUT: output, GITHUB_REPOSITORY: 'navikt/melosys-e2e-tests', GITHUB_RUN_ID: '1', RUN_URL: 'https://github.com/run/1', REF: 'main', UTLOPT: '', FEIL: '', ...env },
       stdio: ['ignore', 'ignore', 'pipe'],
     });
-    const m = readFileSync(output, 'utf8').match(/^SLACK_MESSAGE<<(\S+)\n([\s\S]*?)\n\1$/m);
+    const tekst = readFileSync(output, 'utf8');
+    const m = tekst.match(/^SLACK_MESSAGE<<(\S+)\n([\s\S]*?)\n\1$/m);
     assert.ok(m, 'fant ikke SLACK_MESSAGE');
-    return m[2];
+    const ut = Object.fromEntries([...tekst.replace(m[0], '').matchAll(/^([a-z_]+)=(.*)$/gm)].map((l) => [l[1], l[2]]));
+    return { melding: m[2], ut };
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
 }
+
+function slackMelding(env: Record<string, string>): string {
+  return slackSteg(env).melding;
+}
+
+test('Slack: tittel og farge følger det som skjedde', () => {
+  const UTLOPT = '• melosys-web (MELOSYS-1) utløp 2026-01-01';
+  const FEIL = '• melosys-web: tag mangler';
+  const tilfeller: [Record<string, string>, string, string][] = [
+    [{ UTLOPT }, 'E2E-pinner må ryddes', 'warning'],
+    [{ FEIL }, 'E2E-pin-fila er ugyldig', 'danger'],
+    [{ UTLOPT, FEIL }, 'E2E-pin-fila er ugyldig', 'danger'],
+    [{}, 'Sjekken av E2E-pinner feilet', 'danger'],
+  ];
+  for (const [env, tittel, farge] of tilfeller) {
+    assert.deepEqual(slackSteg(env).ut, { tittel, farge }, JSON.stringify(env));
+  }
+  const yml = readFileSync(join(ROT, '.github/workflows/e2e-pins-utlop.yml'), 'utf8');
+  assert.match(yml, /SLACK_COLOR: \$\{\{ steps\.melding\.outputs\.farge \}\}/);
+  assert.match(yml, /SLACK_TITLE: \$\{\{ steps\.melding\.outputs\.tittel \}\}/);
+});
 
 test('Slack: tekst fra pin-fila og branchnavnet blir ikke lenker eller formatering i meldingen', () => {
   const melding = slackMelding({
