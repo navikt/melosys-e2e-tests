@@ -121,6 +121,17 @@ test('tag, jira og utloper valideres', () => {
   assert.match(feil(utenJira), /MELOSYS-nøkkel/, 'jira er påkrevd');
 });
 
+test('tekstfeltene skal være tekst: en liste med gyldig verdi avvises', () => {
+  // «Determine image tags» i e2e-tests.yml ville ellers brukt ["aaaa…"] som tag.
+  const feil = (pin: object) => lesPins(JSON.stringify({ 'melosys-web': pin })).feil.join('\n');
+  assert.match(feil({ ...karantene, tag: [sha('a')] }), /tag skal være tekst, ikke en liste/);
+  assert.match(feil({ ...karantene, jira: ['MELOSYS-9'] }), /jira skal være tekst, ikke en liste/);
+  assert.match(feil({ ...karantene, utloper: ['2026-11-03'] }), /utloper skal være tekst, ikke en liste/);
+  assert.match(feil({ ...koblet, e2e_branch: ['MELOSYS-9000-ny-knapp'] }), /e2e_branch skal være tekst, ikke en liste/);
+  assert.match(feil({ ...karantene, tag: 1234 }), /tag skal være tekst, ikke et tall/);
+  assert.match(feil({ ...koblet, service_pr: [3300] }), /service_pr skal være et positivt heltall/);
+});
+
 test('e2e_branch og service_pr står sammen, og service_pr er et positivt heltall', () => {
   const feil = (pin: object) => lesPins(JSON.stringify({ 'melosys-web': pin })).feil.join('\n');
   assert.match(feil({ ...karantene, e2e_branch: 'b' }), /sammen/);
