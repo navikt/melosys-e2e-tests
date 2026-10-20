@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { chmodSync, existsSync, mkdirSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 // @ts-expect-error — .mjs uten typedeklarasjon; scriptet er ren node uten avhengigheter.
@@ -177,4 +177,87 @@ test('samme test flere ganger i test-summary.json summeres', () => {
     ],
   });
   assert.equal(d.get('a.spec.ts::x'), 3500);
+});
+
+// ---- «Hent varigheter fra forrige fulle kjøring» i e2e-tests.yml ----
+
+/** Skriptet i steget, slik det står i workflowen. */
+function varighetSteg(): string {
+  const linjer = readFileSync(join(process.cwd(), '.github/workflows/e2e-tests.yml'), 'utf8').split('\n');
+  const start = linjer.findIndex((l) => l === '      - name: Hent varigheter fra forrige fulle kjøring');
+  assert.ok(start !== -1, 'fant ikke steget');
+  const run = linjer.findIndex((l, i) => i > start && l === '        run: |');
+  const skript: string[] = [];
+  for (const l of linjer.slice(run + 1)) {
+    if (l !== '' && !l.startsWith('          ')) break;
+    skript.push(l.slice(10));
+  }
+  return skript.join('\n');
+}
+
+type Kjøring = { id: number; summary: object; trigger: object };
+const fullSummary = { status: 'passed', tests: [{ file: '/r/tests/a.spec.ts', title: 'x', duration: 1000 }] };
+const regel6Summary = { status: 'skipped', skipped: true, skipReason: 'pinned-service', duration: 0, tests: [] };
+const dispatch = { event: 'repository_dispatch', inputs: null };
+
+/** Kjører steget med en falsk `gh` som lister `kjøringer` (nyeste først) og laster ned artefaktene deres. */
+function hentVarigheter(kjøringer: Kjøring[]) {
+  const dir = mkdtempSync(join(tmpdir(), 'varigheter-'));
+  const fake = join(dir, 'fake');
+  const bin = join(dir, 'bin');
+  const temp = join(dir, 'runner-temp');
+  for (const d of [fake, bin, temp]) mkdirSync(d, { recursive: true });
+  writeFileSync(join(fake, 'runs.json'), JSON.stringify(kjøringer.map((k) => ({ databaseId: k.id, event: dispatch.event }))));
+  for (const k of kjøringer) {
+    mkdirSync(join(fake, String(k.id)));
+    writeFileSync(join(fake, String(k.id), 'test-summary.json'), JSON.stringify(k.summary));
+    writeFileSync(join(fake, String(k.id), 'trigger-context.json'), JSON.stringify(k.trigger));
+  }
+  writeFileSync(
+    join(bin, 'gh'),
+    `#!/usr/bin/env bash
+if [ "$1 $2" = "run list" ]; then
+  while [ $# -gt 0 ]; do [ "$1" = --jq ] && { shift; f="$1"; }; shift; done
+  exec jq -r "$f" "${fake}/runs.json"
+fi
+if [ "$1 $2" = "run download" ]; then
+  id="$3"; while [ $# -gt 0 ]; do [ "$1" = -D ] && { shift; d="$1"; }; shift; done
+  [ -d "${fake}/$id" ] || exit 1
+  mkdir -p "$d" && cp "${fake}/$id"/* "$d"/
+  exit 0
+fi
+exit 2
+`
+  );
+  chmodSync(join(bin, 'gh'), 0o755);
+  const skript = join(dir, 'steg.sh');
+  writeFileSync(skript, varighetSteg());
+  const output = join(dir, 'github-output');
+  writeFileSync(output, '');
+  execFileSync('bash', ['--noprofile', '--norc', '-eo', 'pipefail', skript], {
+    env: { ...process.env, PATH: `${bin}:${process.env.PATH}`, RUNNER_TEMP: temp, GITHUB_OUTPUT: output, GH_TOKEN: 'x', REPO: 'navikt/melosys-e2e-tests' },
+    stdio: ['ignore', 'ignore', 'ignore'],
+  });
+  const runId = readFileSync(output, 'utf8').match(/^run_id=(\d+)$/m)?.[1];
+  return { runId: runId ? Number(runId) : undefined, previous: existsSync(join(temp, 'previous.json')) ? JSON.parse(readFileSync(join(temp, 'previous.json'), 'utf8')) : undefined };
+}
+
+test('varigheter: en regel 6-kjøring uten tester hoppes over, og en eldre full kjøring brukes', () => {
+  const r = hentVarigheter([
+    { id: 10, summary: regel6Summary, trigger: dispatch },
+    { id: 9, summary: fullSummary, trigger: dispatch },
+  ]);
+  assert.equal(r.runId, 9);
+  assert.deepEqual(r.previous, fullSummary);
+});
+
+test('varigheter: en kjøring med tom testliste hoppes over, også uten skipped', () => {
+  const { skipped, ...utenSkipped } = regel6Summary;
+  void skipped;
+  assert.equal(hentVarigheter([{ id: 20, summary: utenSkipped, trigger: dispatch }, { id: 19, summary: fullSummary, trigger: dispatch }]).runId, 19);
+});
+
+test('varigheter: seks regel 6-kjøringer på rad skjuler ikke en eldre full kjøring', () => {
+  const regel6 = [106, 105, 104, 103, 102, 101].map((id) => ({ id, summary: regel6Summary, trigger: dispatch }));
+  assert.equal(hentVarigheter([...regel6, { id: 100, summary: fullSummary, trigger: dispatch }]).runId, 100);
 });
