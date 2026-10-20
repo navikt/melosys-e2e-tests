@@ -1,0 +1,150 @@
+name: Utløpte e2e-pinner
+
+# Regel 7 i docs/ci-cd/KOBLEDE-ENDRINGER.md: en pin i .github/e2e-pins.json skal være borte innen
+# `utloper`. Hver kjøring av E2E Tests gir en advarsel for en utløpt pin, men Slack varsles ellers
+# bare ved røde dispatch-kjøringer. Denne workflowen validerer fila hver morgen med samme kode og
+# app-token som jobben «pinner» i e2e-for-merge.yml, og poster i #melosys-ci når en pin er utløpt
+# eller fila ikke lenger er gyldig (for eksempel fordi en pinnet tag er ryddet bort fra GAR).
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+
+jobs:
+  utlop:
+    name: Sjekk pinnene
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Finnes det pinner?
+        id: finnes
+        run: |
+          if [ -s .github/e2e-pins.json ] && [ "$(jq 'length' .github/e2e-pins.json 2>/dev/null || echo ugyldig)" != "0" ]; then
+            echo "pinner=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "✅ Ingen pinner i .github/e2e-pins.json."
+            echo "pinner=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      # GITHUB_TOKEN leser ikke de fem interne service-repoene (D12).
+      - name: Hent app-token
+        id: app-token
+        if: steps.finnes.outputs.pinner == 'true'
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: |
+            melosys-api
+            melosys-web
+            melosys-skjema-api
+            melosys-skjema-web
+            melosys-eessi
+            faktureringskomponenten
+            melosys-trygdeavgift-beregning
+            melosys-trygdeavtale
+            melosys-inngangsvilkar
+            melosys-dokgen
+            melosys-docker-compose
+          permission-contents: read
+
+      - name: Login to NAIS registry
+        if: steps.finnes.outputs.pinner == 'true'
+        uses: nais/login@v0
+        with:
+          team: teammelosys
+
+      - name: Valider pin-fila
+        id: valider
+        if: steps.finnes.outputs.pinner == 'true'
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: |
+          RC=0
+          SVAR=$(node lib/e2e-pins.mjs valider --fil .github/e2e-pins.json 2>"$RUNNER_TEMP/pins.err") || RC=$?
+          while IFS= read -r linje; do echo "::error::$linje"; done < "$RUNNER_TEMP/pins.err"
+          # Verdiene i utlopt er validert (kjent tjeneste, MELOSYS-nøkkel, dato).
+          UTLOPT=$(jq -r '.utlopt[]? | "• \(.tjeneste) (\(.jira)) utløp \(.utloper)"' <<<"$SVAR") || UTLOPT=""
+          if [ -n "$UTLOPT" ]; then
+            while IFS= read -r linje; do echo "::warning::Utløpt pin: ${linje#• }"; done <<<"$UTLOPT"
+          fi
+          # Feilmeldingene er vasket i lib/e2e-pins.mjs (ingen kontrolltegn eller ::).
+          FEIL=$(sed 's/^/• /' "$RUNNER_TEMP/pins.err")
+          [ "$RC" -eq 0 ] || [ -n "$FEIL" ] || FEIL="• valideringen feilet uten melding, se jobbloggen"
+          SKILLE="EOF_$(openssl rand -hex 16)"
+          {
+            echo "utlopt<<$SKILLE"
+            printf '%s\n' "$UTLOPT"
+            echo "$SKILLE"
+            echo "feil<<$SKILLE"
+            if [ "$RC" -ne 0 ]; then printf '%s\n' "$FEIL"; fi
+            echo "$SKILLE"
+          } >> "$GITHUB_OUTPUT"
+          if [ "$RC" -ne 0 ]; then
+            echo "varsle=true" >> "$GITHUB_OUTPUT"
+          elif [ -n "$UTLOPT" ]; then
+            echo "varsle=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "✅ Alle pinnene er gyldige, og ingen er utløpt."
+          fi
+          echo "rc=$RC" >> "$GITHUB_OUTPUT"
+
+      - name: Bygg Slack-melding
+        id: melding
+        if: steps.valider.outputs.varsle == 'true'
+        env:
+          UTLOPT: ${{ steps.valider.outputs.utlopt }}
+          FEIL: ${{ steps.valider.outputs.feil }}
+          REF: ${{ github.ref_name }}
+          RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+        run: |
+          FIL_URL="https://github.com/${GITHUB_REPOSITORY}/blob/${REF}/.github/e2e-pins.json"
+          # Doble backslash: meldingen skrives med printf '%b', som ellers tolker «\c» som «stopp her».
+          UTLOPT="${UTLOPT//\\/\\\\}"
+          FEIL="${FEIL//\\/\\\\}"
+          MELDING=""
+          if [ -n "$UTLOPT" ]; then
+            MELDING="*Utløpte pinner* i <${FIL_URL}|.github/e2e-pins.json>:\n${UTLOPT//$'\n'/\\n}\n\nFjern pinnen, eller sett ny \`utloper\`, i en PR til melosys-e2e-tests. Oppskriften står i docs/ci-cd/KOBLEDE-ENDRINGER.md.\n\n"
+          fi
+          if [ -n "$FEIL" ]; then
+            MELDING="${MELDING}*Pin-fila er ikke gyldig.* E2E Tests stopper i plan-jobben til den er rettet:\n${FEIL//$'\n'/\\n}\n\n"
+          fi
+          if [ "$REF" != "main" ]; then
+            MELDING="${MELDING}_Kjørt fra branchen \`${REF}\`, ikke main._\n"
+          fi
+          MELDING="${MELDING}*Workflow run:* <${RUN_URL}|#${GITHUB_RUN_ID}>"
+          SKILLE="SLACK_EOF_$(openssl rand -hex 16)"
+          {
+            echo "SLACK_MESSAGE<<${SKILLE}"
+            printf '%b' "$MELDING"  # inn i heredocen med tilfeldig skilletegn, ikke til loggen
+            echo
+            echo "${SKILLE}"
+          } >> "$GITHUB_OUTPUT"
+
+      # Samme Slack-oppsett som notify-slack i e2e-tests.yml.
+      - name: Slack Notification
+        if: steps.valider.outputs.varsle == 'true'
+        uses: rtCamp/action-slack-notify@v2
+        env:
+          SLACK_WEBHOOK: ${{ secrets.SLACK_WEBHOOK }}
+          SLACK_USERNAME: Github Actions
+          SLACK_ICON: https://github.com/github.png?size=48
+          SLACK_COLOR: warning
+          SLACK_TITLE: "E2E-pinner må ryddes"
+          SLACK_FOOTER: "melosys-e2e-tests"
+          SLACK_MESSAGE: ${{ steps.melding.outputs.SLACK_MESSAGE }}
+          MSG_MINIMAL: "true"
+
+      - name: Feil jobben når fila er ugyldig
+        if: steps.valider.outputs.rc != '' && steps.valider.outputs.rc != '0'
+        run: |
+          echo "::error::.github/e2e-pins.json er ikke gyldig. Se steget «Valider pin-fila»."
+          exit 1
