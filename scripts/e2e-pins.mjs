@@ -8,7 +8,7 @@
  *
  * Bruk: e2e-pins.mjs <pin-fil>. Gjeldende tagger leses fra miljøvariablene i TJENESTER. Skriver
  * én linje «<variabel> <tjeneste> <tag>» per pin som brukes, og en logglinje på stderr per pin
- * som ikke brukes fordi tjenesten er under test. Ugyldig fil gir exit 1.
+ * som ikke brukes fordi tjenesten har en annen tag enn latest. Ugyldig fil gir exit 1.
  * Oppskriften for koblede endringer står i docs/ci-cd/KOBLEDE-ENDRINGER.md.
  */
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
@@ -86,7 +86,7 @@ function main() {
   for (const [tjeneste, tag] of Object.entries(pinner)) {
     if (brukt.some((p) => p.tjeneste === tjeneste)) continue;
     const egen = process.env[TJENESTER[tjeneste]] ?? '';
-    console.error(`📌 ${tjeneste} er pinnet til ${tag}, men er under test med ${egen}; pinnen gjelder ikke denne kjøringen.`);
+    console.error(`📌 ${tjeneste} er pinnet til ${tag}, men kjøringen har taggen «${egen}»; pinnen gjelder ikke.`);
   }
 }
 

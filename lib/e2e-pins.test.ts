@@ -72,7 +72,13 @@ test('CLI: leser taggene fra miljøet og skriver én linje per pin', () => {
     env: { ...alleLatest, MELOSYS_API_TAG: 'abc123' },
     encoding: 'utf8',
   });
-  assert.match(res.stderr, /melosys-api er pinnet til br-123, men er under test med abc123/);
+  assert.match(res.stderr, /melosys-api er pinnet til br-123, men kjøringen har taggen «abc123»/);
+  assert.doesNotMatch(res.stderr, /melosys-web/);
+  const tom = spawnSync(process.execPath, [script, fil], {
+    env: { ...alleLatest, MELOSYS_API_TAG: '' },
+    encoding: 'utf8',
+  });
+  assert.match(tom.stderr, /melosys-api er pinnet til br-123, men kjøringen har taggen «»/);
 
   assert.equal(execFileSync(process.execPath, [script, join(dir, 'finnes-ikke.json')]).toString(), '');
 
@@ -84,8 +90,8 @@ test('CLI: leser taggene fra miljøet og skriver én linje per pin', () => {
 });
 
 test('TJENESTER følger tjenestene i «Determine image tags»', () => {
-  // En tjeneste som mangler i export-lista, får aldri pinnen (scriptet leser process.env), og en
-  // som mangler i TJENESTER, avvises som ukjent. Begge feilene er stille, så lista sjekkes her.
+  // En tjeneste som mangler i export-lista eller case-blokken, får aldri pinnen, uten noen feil:
+  // scriptet ser ikke latest i process.env. Lista sjekkes derfor her.
   const yml = readFileSync(join(__dirname, '..', '.github', 'workflows', 'e2e-tests.yml'), 'utf8');
   const exportLinje = yml.match(/export (MELOSYS_API_TAG[\s\S]*?)\n\s*PINNER=/)?.[1] ?? '';
   const eksportert = exportLinje.split(/[\s\\]+/).filter(Boolean).sort();
