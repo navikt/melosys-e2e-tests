@@ -117,7 +117,7 @@ const apiFeil = (status, melding) => Object.assign(new Error(melding), { status 
 const dryRunFeil = (melding) => Object.assign(new Error(melding), { dryRun: true });
 /** GraphQL svarer HTTP 200 med `errors` også når GitHub feiler internt. */
 const forbigaende = (e) => e.type === 'RATE_LIMITED' || /something went wrong|timed? ?out/i.test(e.message ?? '');
-/** GitHub svarte ikke, feilet internt eller begrenset kallene; alt annet er et svar på selve forespørselen. */
+/** Nettfeil før svaret, 5xx, rate limit med header, og forbigående eller interne GraphQL-feil. Resten regnes som svar. */
 const ikkeBesvart = (e) => e.nettfeil || e.rateBegrenset || e.status >= 500 || (e.graphql?.every((g) => forbigaende(g) || /internal (server )?error/i.test(g.message ?? '')) ?? false);
 /** 404 blir null. */
 const ellerNull = (p) => p.catch((e) => (e.status === 404 ? null : Promise.reject(e)));
