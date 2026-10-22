@@ -100,4 +100,13 @@ test('TJENESTER følger tjenestene i «Determine image tags»', () => {
   const steg = yml.slice(yml.indexOf('Parsing multi-service tag format'), yml.indexOf('Simple format: just a tag'));
   const iCase = [...steg.matchAll(/^\s+([a-z-]+)\)\n\s+([A-Z_]+)="\$tag"/gm)].map(([, t, v]) => [t, v]);
   assert.deepEqual(Object.fromEntries(iCase), TJENESTER);
+
+  // Begge greinene (repository_dispatch og workflow_dispatch) setter alle tjenester til latest
+  // først. Mangler en, er variabelen tom, og pinnen gjelder ikke.
+  const standard = [...yml.matchAll(/# Default all services to latest\n((?:\s+[A-Z_]+="latest"\n)+)/g)];
+  assert.equal(standard.length, 2);
+  for (const [, blokk] of standard) {
+    const variabler = [...blokk.matchAll(/([A-Z_]+)="latest"/g)].map(([, v]) => v).sort();
+    assert.deepEqual(variabler, Object.values(TJENESTER).sort());
+  }
 });
