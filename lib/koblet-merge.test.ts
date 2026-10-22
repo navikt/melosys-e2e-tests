@@ -53,9 +53,11 @@ function lagGitHub(start: Record<string, any> = {}) {
     koer: { 'melosys-e2e-tests': 0, 'melosys-web': 0, 'melosys-api': 0 },
     filer: {},
     refs: { main: 'main-sha' },
-    runs: {},
+    runs: [],
     jobs: {},
+    forfedre: {},
     apnePulls: [],
+    graphqlSvar: [],
     etterKall: () => {},
     ...start,
   };
@@ -73,6 +75,7 @@ function lagGitHub(start: Record<string, any> = {}) {
   };
   function håndter(metode: string, sti: string, body: any) {
     if (sti === '/graphql') {
+      if (s.graphqlSvar.length) return s.graphqlSvar.shift();
       const v = body.variables;
       const op = /^\s*(?:query|mutation)\s+(\w+)/.exec(body.query)?.[1];
       if (op === 'Pr') {
@@ -110,8 +113,17 @@ function lagGitHub(start: Record<string, any> = {}) {
     if (rest === 'git/refs' && metode === 'POST') return svar(201, {});
     if (rest.startsWith('pulls?')) return svar(200, s.apnePulls);
     if (rest === 'pulls' && metode === 'POST') return svar(201, { number: 999, html_url: 'https://x/999' });
-    if ((r = /^actions\/runs\?head_sha=([^&]+)/.exec(rest))) return svar(200, { workflow_runs: s.runs[r[1]] ?? [] });
+    if ((r = /^actions\/runs\?(.*)$/.exec(rest))) {
+      const q = new URLSearchParams(r[1]);
+      const runs = (s.runs as Pr[]).filter((run) => !q.get('head_sha') || run.head_sha === q.get('head_sha'));
+      return svar(200, { workflow_runs: runs });
+    }
     if ((r = /^actions\/runs\/(\d+)\/jobs/.exec(rest))) return svar(200, { jobs: s.jobs[r[1]] ?? [] });
+    if ((r = /^compare\/([^.]+)\.\.\.([^?]+)/.exec(rest))) {
+      const [, base, head] = r;
+      const status = base === head ? 'identical' : s.forfedre[head]?.includes(base) ? 'ahead' : 'diverged';
+      return svar(200, { status });
+    }
     throw new Error(`ukjent kall ${metode} ${sti}`);
   }
   return { s, kall, fetch };
@@ -196,13 +208,22 @@ test('koStatus: klare tilstander, venting, kø, merget og feil', () => {
   assert.throws(() => koStatus(lagPr('r', 1, { state: 'CLOSED' }), 'x'), /CLOSED/);
 });
 
-test('latest: Build grønn er nok selv om deploy feiler; Build rød feiler', () => {
-  const jobb = (name: string, conclusion: string | null, status = 'completed') => ({ name, status, conclusion });
-  assert.equal(tolkLatest([jobb('Build', 'success'), jobb('deploy', 'failure')]), 'klar');
-  assert.equal(tolkLatest([jobb('Build app and push docker image to GAR', 'success')]), 'klar');
-  assert.equal(tolkLatest([jobb('Build', 'failure'), jobb('deploy', 'skipped')]), 'feilet');
-  assert.equal(tolkLatest([jobb('Build', null, 'in_progress')]), 'venter');
-  assert.equal(tolkLatest([]), 'venter');
+test('latest: latest er Build-jobben som ble ferdig sist; ny kjøring venter, feil i nyeste med endringen stopper', () => {
+  const k = (id: number, conclusion: string | null, ferdig: string, harEndringen: boolean, status = 'completed') => ({
+    id,
+    status,
+    harEndringen,
+    build: { name: 'Build', status, conclusion, completed_at: ferdig },
+  });
+  assert.equal(tolkLatest([k(2, 'success', '2026-10-21T10:05:00Z', true), k(1, 'success', '2026-10-21T10:01:00Z', false)]).status, 'klar');
+  assert.equal(tolkLatest([k(2, 'success', '2026-10-21T10:05:00Z', true), k(1, 'success', '2026-10-21T10:07:00Z', false)]).status, 'venter', 'eldre Build ferdig sist');
+  assert.equal(tolkLatest([k(3, null, '', true, 'in_progress'), k(2, 'success', '2026-10-21T10:05:00Z', true)]).status, 'venter');
+  const feil = tolkLatest([k(3, 'failure', '2026-10-21T10:09:00Z', true), k(2, 'success', '2026-10-21T10:05:00Z', false)]);
+  assert.deepEqual([feil.status, feil.run.id], ['feilet', 3]);
+  assert.equal(tolkLatest([k(3, 'success', '2026-10-21T10:09:00Z', true), k(2, 'failure', '2026-10-21T10:05:00Z', true)]).status, 'klar', 'bare nyeste teller');
+  const nyesteGronn = [k(12, 'success', '2026-10-21T10:10:00Z', true), k(10, 'failure', '2026-10-21T10:04:00Z', true), k(9, 'success', '2026-10-21T10:15:00Z', false)];
+  assert.equal(tolkLatest(nyesteGronn).status, 'venter', 'en eldre feilet kjøring stopper ikke når nyeste er grønn');
+  assert.equal(tolkLatest([]).status, 'venter');
 });
 
 // ---------------------------------------------------------------- nye forsøk
@@ -355,11 +376,74 @@ test('e2e-klar: venter til PR-en er klar, og pinnen sjekkes på head-en som send
 
 test('sett-i-ko: enqueuePullRequest med expectedHeadOid og uten køhopp', async () => {
   const gh = par();
-  await kjorSteg(gh, 'sett-i-ko', ['melosys-e2e-tests'], { PR_ID: 'PR_melosys-e2e-tests_380', HEAD_OID: 'head-380' });
+  await kjorSteg(gh, 'sett-i-ko', ['melosys-e2e-tests', '380'], { PR_ID: 'PR_melosys-e2e-tests_380', HEAD_OID: 'head-380' });
   const [m] = skriveKall(gh.kall);
   assert.match(m.body.query, /enqueuePullRequest\(input: \{ pullRequestId: \$id, expectedHeadOid: \$oid \}\)/);
   assert.doesNotMatch(m.body.query, /jump/);
   assert.deepEqual(m.body.variables, { id: 'PR_melosys-e2e-tests_380', oid: 'head-380' });
+});
+
+const graphqlFeil = (...errors: Pr[]) => svar(200, { data: null, errors });
+
+test('sett-i-ko: feiler enqueue, varsler jobben og ber om «Merge when ready»', async () => {
+  const env = { PR_ID: 'PR_melosys-web_3253', HEAD_OID: 'head-3253' };
+  const intern = par();
+  intern.s.graphqlSvar.push(graphqlFeil({ message: 'Could not enqueue: internal error' }));
+  const a = await kjorSteg(intern, 'sett-i-ko', ['melosys-web', '3253'], env);
+  assert.ok(
+    a.logg.includes('::warning::Fikk ikke lagt melosys-web #3253 i køen (GraphQL: Could not enqueue: internal error). Trykk «Merge when ready» på https://github.com/navikt/melosys-web/pull/3253; jobben venter videre.'),
+    a.logg.join('\n'),
+  );
+  assert.ok(a.logg.some((l) => l.startsWith('⚠️ Fikk ikke lagt melosys-web #3253 i køen')), 'linje i sammendraget');
+  assert.equal(a.utdata.satt, 'false');
+
+  const nede = par();
+  nede.s.graphqlSvar.push(...[1, 2, 3, 4].map(() => svar(502, { message: 'Bad gateway' })));
+  const b = await kjorSteg(nede, 'sett-i-ko', ['melosys-e2e-tests', '380'], env);
+  assert.ok(b.logg.some((l) => l.startsWith('::warning::Fikk ikke lagt melosys-e2e-tests #380 i køen (GraphQL ga HTTP 502')), b.logg.join('\n'));
+  assert.equal(b.utdata.satt, 'false');
+
+  const ok = par();
+  assert.equal((await kjorSteg(ok, 'sett-i-ko', ['melosys-web', '3253'], env)).utdata.satt, 'true');
+});
+
+test('vent-merget: etter mislykket enqueue venter jobben til noen setter PR-en i kø', async () => {
+  const gh = par();
+  gh.s.etterKall = (s: any, kall: any[]) => {
+    const pr = s.prs['melosys-e2e-tests#380'];
+    if (kall.length === 4) pr.isInMergeQueue = true;
+    if (kall.length === 5) pr.state = 'MERGED';
+  };
+  const { tid } = await kjorSteg(gh, 'vent-merget', ['melosys-e2e-tests', '380'], { SATT_I_KO: 'false' });
+  assert.equal(tid, 5 * 30_000, 'fire lesinger utenfor køen og én i køen');
+
+  // Har den vært i køen, gjelder vanlig regel: to lesinger utenfor betyr at den er tatt ut.
+  const ute = par();
+  ute.s.etterKall = (s: any, kall: any[]) => {
+    const pr = s.prs['melosys-e2e-tests#380'];
+    if (kall.length === 2) pr.isInMergeQueue = true;
+    if (kall.length === 3) pr.isInMergeQueue = false;
+  };
+  await assert.rejects(kjorSteg(ute, 'vent-merget', ['melosys-e2e-tests', '380'], { SATT_I_KO: 'false' }), /tatt ut av køen/);
+  assert.equal(ute.kall.length, 5);
+});
+
+test('GraphQL: forbigående feil med HTTP 200 prøves igjen, valideringsfeil gjør ikke', async () => {
+  const rl = par();
+  rl.s.graphqlSvar.push(graphqlFeil({ type: 'RATE_LIMITED', message: 'API rate limit exceeded' }), graphqlFeil({ message: 'Something went wrong while executing your query.' }));
+  const a = await kjorSteg(rl, 'pin-sjekk');
+  assert.equal(a.utdata.trengs, 'false');
+  assert.equal(a.tid, 15_000, '5 s og 10 s som for REST');
+
+  const tidsavbrudd = par();
+  tidsavbrudd.s.graphqlSvar.push(...[1, 2, 3, 4].map(() => graphqlFeil({ message: 'Timeout on validation of query' })));
+  await assert.rejects(kjorSteg(tidsavbrudd, 'pin-sjekk'), /GraphQL: Timeout on validation of query/);
+  assert.equal(tidsavbrudd.kall.length, 4, 'tre nye forsøk');
+
+  const validering = par();
+  validering.s.graphqlSvar.push(graphqlFeil({ type: 'NOT_FOUND', message: "Could not resolve to a Repository with the name 'navikt/x'." }));
+  await assert.rejects(kjorSteg(validering, 'pin-sjekk'), /Could not resolve/);
+  assert.equal(validering.kall.length, 1, 'prøves ikke igjen');
 });
 
 test('vent-merget: én lesing utenfor køen tåles, to på rad feiler', async () => {
@@ -400,22 +484,77 @@ test('service-klar: e2e-PR-en må være merget, og jobben venter på tom kø', a
   await assert.rejects(kjorSteg(par({ e2e: { state: 'MERGED' } }, { koer: {} }), 'service-klar', ['melosys-web', '3253']), /ingen merge-kø/);
 });
 
-test('latest-steget: venter på Build i deploy-kjøringen for merge-commiten', async () => {
-  const gh = par({ web: { state: 'MERGED', mergeCommit: { oid: 'sha-web' } } }, {
-    runs: { 'sha-web': [{ id: 7, name: 'deploy-dev', html_url: 'https://run/7' }, { id: 8, name: 'CodeQL' }] },
-    jobs: { 7: [{ name: 'Build', status: 'in_progress', conclusion: null }] },
-  });
+const deployRun = (id: number, head_sha: string, status = 'completed') => ({ id, name: 'deploy-dev', head_sha, status, html_url: `https://run/${id}` });
+const markor = { name: 'Slå opp e2e-markør', status: 'completed', conclusion: 'success', completed_at: '2026-10-21T10:00:00Z' };
+const buildJobb = (conclusion: string | null, ferdig: string | null, status = 'completed') => ({ name: 'Build', status, conclusion, completed_at: ferdig });
+const latestPar = (runs: Pr[], jobs: Record<number, Pr[]>, forfedre: Record<string, string[]> = {}) =>
+  par({ web: { state: 'MERGED', mergeCommit: { oid: 'sha-web' } } }, { runs, jobs, forfedre });
+const listeKall = (kall: { sti: string }[]) => kall.filter((k) => /\/actions\/runs\?/.test(k.sti)).length;
+
+test('latest-steget: merge-commit uten egen kjøring er klar når en senere kjøring har den', async () => {
+  // Køen fletter to PR-er i én push; deploy-dev kjører bare for den siste commiten.
+  const gh = latestPar([deployRun(9, 'sha-neste'), deployRun(8, 'sha-gammel')], {
+    9: [markor, buildJobb('success', '2026-10-21T10:05:00Z')],
+    8: [markor, buildJobb('success', '2026-10-21T09:00:00Z')],
+  }, { 'sha-neste': ['sha-web', 'sha-gammel'] });
+  const { logg, tid } = await kjorSteg(gh, 'latest', ['melosys-web', '3253']);
+  assert.ok(logg.some((l) => l.includes('melosys-web latest har #3253: https://run/9')), logg.join('\n'));
+  assert.equal(tid, 0);
+  assert.ok(gh.kall.some((k) => /actions\/runs\?event=push&branch=master/.test(k.sti)));
+  assert.ok(gh.kall.some((k) => k.sti.includes('/compare/sha-web...sha-neste')));
+});
+
+test('latest-steget: en eldre Build som blir ferdig sist, betyr at latest ikke har endringen', async () => {
+  const gh = latestPar([deployRun(10, 'sha-web'), deployRun(9, 'sha-gammel')], {
+    10: [buildJobb('success', '2026-10-21T10:05:00Z')],
+    9: [buildJobb('success', '2026-10-21T10:07:00Z')],
+  }, { 'sha-web': ['sha-gammel'] });
+  await assert.rejects(kjorSteg(gh, 'latest', ['melosys-web', '3253']), /melosys-web latest hadde ikke sha-web etter 60 min/);
+
+  // En ny push bygger latest på nytt med endringen.
   gh.s.etterKall = (s: any, kall: any[]) => {
-    if (kall.length === 5) s.jobs[7] = [{ name: 'Build', status: 'completed', conclusion: 'success' }, { name: 'deploy', status: 'completed', conclusion: 'failure' }];
+    if (listeKall(kall) === 2 && s.runs.length === 2) {
+      s.runs.unshift(deployRun(11, 'sha-ny'));
+      s.jobs[11] = [buildJobb('success', '2026-10-21T10:20:00Z')];
+      s.forfedre['sha-ny'] = ['sha-web', 'sha-gammel'];
+    }
+  };
+  gh.kall.length = 0;
+  const { logg, tid } = await kjorSteg(gh, 'latest', ['melosys-web', '3253']);
+  assert.ok(tid > 0, 'ventet');
+  assert.ok(logg.some((l) => l.includes('https://run/11')), logg.join('\n'));
+});
+
+test('latest-steget: venter mens en deploy-kjøring pågår', async () => {
+  const gh = latestPar([deployRun(11, 'sha-neste', 'in_progress'), deployRun(10, 'sha-web')], {
+    11: [buildJobb(null, null, 'in_progress')],
+    10: [buildJobb('success', '2026-10-21T10:05:00Z')],
+  }, { 'sha-neste': ['sha-web'] });
+  gh.s.etterKall = (s: any, kall: any[]) => {
+    if (listeKall(kall) === 2) {
+      s.runs[0].status = 'completed';
+      s.jobs[11] = [buildJobb('success', '2026-10-21T10:10:00Z')];
+    }
   };
   const { logg, tid } = await kjorSteg(gh, 'latest', ['melosys-web', '3253']);
-  assert.ok(logg.some((l) => l.includes('https://run/7')));
-  assert.ok(tid > 0, 'ventet på Build');
-  assert.ok(gh.kall.some((k) => /head_sha=sha-web&event=push&branch=master/.test(k.sti)));
+  assert.equal(tid, 60_000, 'to ventepauser mens kjøring 11 pågår');
+  assert.ok(logg.some((l) => l.includes('melosys-web latest har #3253: https://run/11')), logg.join('\n'));
+});
 
-  gh.s.jobs[7] = [{ name: 'Build', status: 'completed', conclusion: 'failure' }];
-  gh.s.etterKall = () => {};
-  await assert.rejects(kjorSteg(gh, 'latest', ['melosys-web', '3253']), /Build-jobben i «deploy-dev» .* feilet/);
+test('latest-steget: Build feiler i nyeste kjøring med endringen', async () => {
+  const gh = latestPar([deployRun(10, 'sha-neste'), deployRun(9, 'sha-gammel')], {
+    10: [markor, buildJobb('failure', '2026-10-21T10:05:00Z'), { name: 'deploy', status: 'completed', conclusion: 'skipped' }],
+    9: [buildJobb('success', '2026-10-21T09:00:00Z')],
+  }, { 'sha-neste': ['sha-web', 'sha-gammel'] });
+  await assert.rejects(kjorSteg(gh, 'latest', ['melosys-web', '3253']), /Build-jobben i «deploy-dev» for sha-nes i melosys-web feilet \(failure\): https:\/\/run\/10/);
+
+  // Feiler Build i en eldre kjøring, men den nyeste med endringen er grønn og ferdig sist, er latest klar.
+  const eldre = latestPar([deployRun(11, 'sha-neste'), deployRun(10, 'sha-web')], {
+    11: [buildJobb('success', '2026-10-21T10:15:00Z'), { name: 'deploy', status: 'completed', conclusion: 'failure' }],
+    10: [buildJobb('failure', '2026-10-21T10:05:00Z')],
+  }, { 'sha-neste': ['sha-web'] });
+  const { logg } = await kjorSteg(eldre, 'latest', ['melosys-web', '3253']);
+  assert.ok(logg.some((l) => l.includes('https://run/11')));
 });
 
 // ---------------------------------------------------------------- fjern pinnen
@@ -472,7 +611,7 @@ test('dry_run: ingen steg skriver, og ingen venter', async () => {
   }
   assert.deepEqual(skriveKall(gh.kall), []);
   for (const navn of ['pin-skriv', 'fjern-skriv']) await assert.rejects(kjorSteg(gh, navn, [], env), /dry_run: stoppet/);
-  await assert.rejects(kjorSteg(gh, 'sett-i-ko', ['x'], { ...env, PR_ID: 'a', HEAD_OID: 'b' }), /dry_run: stoppet en GraphQL-mutasjon/);
+  await assert.rejects(kjorSteg(gh, 'sett-i-ko', ['x', '1'], { ...env, PR_ID: 'a', HEAD_OID: 'b' }), /dry_run: stoppet en GraphQL-mutasjon/);
   assert.deepEqual(skriveKall(gh.kall), []);
 });
 
@@ -507,6 +646,16 @@ test('workflowen: jobbnavnene konsollen leser, prøvekjøring i run-name og app-
   assert.equal(tokenSteg.length, 5);
   for (const s of tokenSteg) assert.match(s, /\n\s+repositories: (melosys-e2e-tests|\$\{\{ matrix\.repo \}\})\n/);
   assert.equal((yml.match(/MELOSYS_CI_PRIVATE_KEY/g) ?? []).length, 5, 'nøkkelen brukes bare i token-stegene');
+});
+
+test('workflowen: sett-i-ko får PR-nummeret, og vent-merget får vite om enqueue feilet', () => {
+  const yml = readFileSync(join(__dirname, '..', '.github', 'workflows', 'koblet-merge.yml'), 'utf8');
+  const settIKo = [...yml.matchAll(/koblet-merge\.mjs sett-i-ko (.*)$/gm)].map((m) => m[1]);
+  assert.deepEqual(settIKo, ['melosys-e2e-tests "$E2E_PR"', '"$REPO" "$PR"', 'melosys-e2e-tests "$FJERN_PR"']);
+  const ventSteg = yml.split('      - name: ').filter((s) => s.includes('koblet-merge.mjs vent-merget'));
+  assert.equal(ventSteg.length, 3);
+  for (const s of ventSteg) assert.match(s, /SATT_I_KO: \$\{\{ steps\.ko\.outputs\.satt \}\}/);
+  assert.equal((yml.match(/\n        id: ko\n/g) ?? []).length, 3);
 });
 
 test('koblet-merge starter ikke e2e-suiten', () => {

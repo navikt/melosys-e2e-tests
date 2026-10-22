@@ -123,13 +123,16 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
       - name: Sett PR-en i køen
+        id: ko
         if: ${{ !inputs.dry_run && steps.klar.outputs.status == 'klar' }}
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           PR_ID: ${{ steps.klar.outputs.id }}
           HEAD_OID: ${{ steps.klar.outputs.head }}
-        run: node scripts/koblet-merge.mjs sett-i-ko melosys-e2e-tests
+        run: node scripts/koblet-merge.mjs sett-i-ko melosys-e2e-tests "$E2E_PR"
       - name: Vent til PR-en er merget
+        env:
+          SATT_I_KO: ${{ steps.ko.outputs.satt }}
         run: node scripts/koblet-merge.mjs vent-merget melosys-e2e-tests "$E2E_PR"
 
   service:
@@ -164,13 +167,16 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
       - name: Sett PR-en i køen
+        id: ko
         if: ${{ !inputs.dry_run && steps.klar.outputs.status == 'klar' }}
         env:
           GH_TOKEN: ${{ steps.token.outputs.token }}
           PR_ID: ${{ steps.klar.outputs.id }}
           HEAD_OID: ${{ steps.klar.outputs.head }}
-        run: node scripts/koblet-merge.mjs sett-i-ko "$REPO"
+        run: node scripts/koblet-merge.mjs sett-i-ko "$REPO" "$PR"
       - name: Vent til PR-en er merget
+        env:
+          SATT_I_KO: ${{ steps.ko.outputs.satt }}
         run: node scripts/koblet-merge.mjs vent-merget "$REPO" "$PR"
 
   latest:
@@ -185,7 +191,7 @@ jobs:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Vent til Build-jobben for merge-commiten er grønn
+      - name: Vent til latest er bygd med merge-commiten
         env:
           REPO: ${{ matrix.repo }}
           PR: ${{ matrix.pr }}
@@ -239,14 +245,17 @@ jobs:
           permission-contents: write
           permission-pull-requests: write
       - name: Sett PR-en i køen
+        id: ko
         if: ${{ steps.klar.outputs.status == 'klar' }}
         env:
           GH_TOKEN: ${{ steps.token-ko.outputs.token }}
           PR_ID: ${{ steps.klar.outputs.id }}
           HEAD_OID: ${{ steps.klar.outputs.head }}
-        run: node scripts/koblet-merge.mjs sett-i-ko melosys-e2e-tests
+          FJERN_PR: ${{ steps.skriv.outputs.pr }}
+        run: node scripts/koblet-merge.mjs sett-i-ko melosys-e2e-tests "$FJERN_PR"
       - name: Vent til PR-en er merget
         if: ${{ steps.skriv.outputs.pr != '' }}
         env:
           FJERN_PR: ${{ steps.skriv.outputs.pr }}
+          SATT_I_KO: ${{ steps.ko.outputs.satt }}
         run: node scripts/koblet-merge.mjs vent-merget melosys-e2e-tests "$FJERN_PR"
