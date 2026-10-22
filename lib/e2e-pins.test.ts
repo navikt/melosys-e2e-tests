@@ -51,7 +51,7 @@ function lagHenter({ pr = {}, revisjon = sha('b'), compare = 'ahead' }: { pr?: O
     compare: (repo: string, base: string, head: string) => (kall.push(`compare ${repo} ${base.slice(0, 1)}...${head.slice(0, 1)}`), svar(compare)),
   };
 }
-const merget = { state: 'closed', merged: true, merge_commit_sha: sha('a') };
+const merget = { state: 'closed', merged: true, merge_commit_sha: sha('a'), merged_at: '2026-10-22T14:30:00Z' };
 
 // ---------------------------------------------------------------- fila
 
@@ -187,8 +187,8 @@ test('revisjonen leses fra multi-arch og fra et image med én plattform', () => 
 });
 
 test('utløp: åpen service-PR er aktiv, lukket uten merge er forlatt', async () => {
-  assert.deepEqual(await vurderService('melosys-web', 3267, lagHenter()), { status: 'aktiv', grunn: 'melosys-web #3267 er ikke merget' });
-  const lukket = await vurderService('melosys-web', 3267, lagHenter({ pr: { 'melosys-web#3267': { state: 'closed', merged: false } } }));
+  assert.deepEqual(await vurderService('melosys-web', 3267, lagHenter(), { nå: NÅ, satt: PIN.satt }), { status: 'aktiv', grunn: 'melosys-web #3267 er ikke merget' });
+  const lukket = await vurderService('melosys-web', 3267, lagHenter({ pr: { 'melosys-web#3267': { state: 'closed', merged: false } } }), { nå: NÅ, satt: PIN.satt });
   assert.equal(lukket.status, 'forlatt');
   assert.match(lukket.advarsel, /lukket uten merge/);
 });
@@ -197,15 +197,15 @@ test('utløp: latest lik eller foran merge-commiten er utløpt, bak er aktiv', a
   const pr = { 'melosys-web#3267': merget };
   for (const compare of ['identical', 'ahead']) {
     const hent = lagHenter({ pr, compare });
-    const v = await vurderService('melosys-web', 3267, hent);
+    const v = await vurderService('melosys-web', 3267, hent, { nå: NÅ, satt: PIN.satt });
     assert.equal(v.status, 'utløpt', compare);
     assert.equal(v.advarsel, undefined);
     // base er merge-commiten, head er revisjonen på latest.
     assert.deepEqual(hent.kall, ['pr melosys-web#3267', 'revisjon melosys-web', 'compare melosys-web a...b']);
   }
-  const bak = await vurderService('melosys-web', 3267, lagHenter({ pr, compare: 'behind' }));
+  const bak = await vurderService('melosys-web', 3267, lagHenter({ pr, compare: 'behind' }), { nå: NÅ, satt: PIN.satt });
   assert.deepEqual(bak, { status: 'aktiv', grunn: 'latest (bbbbbbb) er bygd før melosys-web #3267 (aaaaaaa)' });
-  const sidelengs = await vurderService('melosys-web', 3267, lagHenter({ pr, compare: 'diverged' }));
+  const sidelengs = await vurderService('melosys-web', 3267, lagHenter({ pr, compare: 'diverged' }), { nå: NÅ, satt: PIN.satt });
   assert.equal(sidelengs.status, 'aktiv');
   assert.match(sidelengs.advarsel, /hver sin vei/);
 });
@@ -220,9 +220,39 @@ test('utløp: feil underveis beholder pinnen med en advarsel', async () => {
     ['merge-commiten mangler', { pr: { 'melosys-web#3267': { ...merget, merge_commit_sha: null } } }],
   ];
   for (const [navn, oppsett] of tilfeller) {
-    const v = await vurderService('melosys-web', 3267, lagHenter(oppsett));
+    const v = await vurderService('melosys-web', 3267, lagHenter(oppsett), { nå: NÅ, satt: PIN.satt });
     assert.equal(v.status, 'aktiv', navn);
     assert.match(v.advarsel, /pinnen beholdes/, navn);
+  }
+});
+
+test('utløp: en feil beholder pinnen bare et døgn etter mergen', async () => {
+  // En utløpt pin kan stå igjen i variabelen. Feiler et oppslag dager senere, skal den ikke slå
+  // seg på igjen og gi en gate et gammelt br-image.
+  const gammelMerge = { 'melosys-web#3267': { ...merget, merged_at: '2026-10-21T14:00:00Z' } };
+  for (const [navn, oppsett] of [
+    ['docker feiler', { pr: gammelMerge, revisjon: new Error('unauthorized') }],
+    ['labelen mangler', { pr: gammelMerge, revisjon: null }],
+    ['compare feiler', { pr: gammelMerge, compare: new Error('HTTP 403') }],
+    ['merge-commiten mangler', { pr: { 'melosys-web#3267': { ...gammelMerge['melosys-web#3267'], merge_commit_sha: null } } }],
+    ['merged_at mangler', { pr: { 'melosys-web#3267': { ...merget, merged_at: null }, }, revisjon: null }],
+  ] as [string, Obj][]) {
+    const v = await vurderService('melosys-web', 3267, lagHenter(oppsett), { nå: NÅ, satt: PIN.satt });
+    assert.equal(v.status, 'utløpt', navn);
+    assert.match(v.advarsel, /merget for mer enn et døgn siden/, navn);
+  }
+  // Rett etter mergen er latest kanskje ikke bygd ennå; da beholdes pinnen.
+  const fersk = await vurderService('melosys-web', 3267, lagHenter({ pr: { 'melosys-web#3267': { ...merget, merged_at: '2026-10-21T15:01:00Z' } }, revisjon: null }), { nå: NÅ, satt: PIN.satt });
+  assert.equal(fersk.status, 'aktiv');
+});
+
+test('utløp: feiler PR-oppslaget, beholdes bare en pin satt de siste tre dagene', async () => {
+  const hent = () => lagHenter({ pr: { 'melosys-web#3267': new Error('HTTP 502') } });
+  assert.equal((await vurderService('melosys-web', 3267, hent(), { nå: NÅ, satt: '2026-10-20T15:00:00Z' })).status, 'aktiv');
+  for (const satt of ['2026-10-19T14:59:00Z', null]) {
+    const v = await vurderService('melosys-web', 3267, hent(), { nå: NÅ, satt });
+    assert.equal(v.status, 'utløpt', String(satt));
+    assert.match(v.advarsel, /brukes ikke/, String(satt));
   }
 });
 

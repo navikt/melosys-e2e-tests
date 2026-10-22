@@ -56,7 +56,8 @@ const E2E_REPO = 'melosys-e2e-tests';
 const VARIABEL = 'E2E_PINS';
 const GAR = 'europe-north1-docker.pkg.dev/nais-management-233d/teammelosys';
 const REVISJON = 'org.opencontainers.image.revision';
-const TRE_DAGER = 3 * 24 * 60 * 60 * 1000;
+const DØGN = 24 * 60 * 60 * 1000;
+const TRE_DAGER = 3 * DØGN;
 
 /** Samme regel som tag-sjekken i «Determine image tags». */
 const DOCKER_TAG = /^[A-Za-z0-9_][A-Za-z0-9._-]{0,127}$/;
@@ -163,19 +164,24 @@ export function revisjonFraImage(image) {
 }
 
 const beholdes = (grunn, advarsel) => ({ status: 'aktiv', grunn, advarsel: `${advarsel}; pinnen beholdes.` });
+const innenfor = (nå, tidspunkt, grense) => nå - Date.parse(tidspunkt) <= grense;
 
 /**
  * Utløpsregelen for en pin som har startet: 'aktiv', 'utløpt' eller 'forlatt'. Feiler et kall mot
- * GitHub eller docker, er pinnen aktiv med en advarsel: pinnen er den trygge siden så lenge
- * br-imaget finnes.
+ * GitHub eller docker, beholdes pinnen med en advarsel, men bare i en kort periode: en utløpt pin
+ * kan stå igjen i variabelen, og et feilet oppslag dager senere skal ikke gi en gate et gammelt
+ * br-image. Etter mergen beholdes den et døgn fra merged_at (latest bygges vanligvis innen en
+ * time); feiler selve PR-oppslaget, beholdes den bare når den ble satt de siste tre dagene.
  */
-export async function vurderService(tjeneste, servicePr, hent) {
+export async function vurderService(tjeneste, servicePr, hent, { nå, satt }) {
   const navn = `${tjeneste} #${servicePr}`;
   let pr;
   try {
     pr = await hent.pr(tjeneste, servicePr);
   } catch (e) {
-    return beholdes(`fikk ikke lest ${navn}`, `Fikk ikke lest ${navn} (${vask(e.message)})`);
+    const feil = `Fikk ikke lest ${navn} (${vask(e.message)})`;
+    if (satt && innenfor(nå, satt, TRE_DAGER)) return beholdes(`fikk ikke lest ${navn}`, feil);
+    return { status: 'utløpt', grunn: `fikk ikke lest ${navn}`, advarsel: `${feil}, og pinnen ble ikke satt de siste tre dagene; pinnen brukes ikke.` };
   }
   if (!pr.merged) {
     if (pr.state === 'closed') {
@@ -187,20 +193,24 @@ export async function vurderService(tjeneste, servicePr, hent) {
     }
     return { status: 'aktiv', grunn: `${navn} er ikke merget` };
   }
+  // Mangler merged_at, regnes mergen som gammel, så feilen ikke holder pinnen i live.
+  const nyMerge = innenfor(nå, pr.merged_at, DØGN);
+  const feiletEtterMerge = (grunn, advarsel) =>
+    nyMerge ? beholdes(grunn, advarsel) : { status: 'utløpt', grunn, advarsel: `${advarsel}, og ${navn} ble merget for mer enn et døgn siden; pinnen regnes som utløpt.` };
   const merge = pr.merge_commit_sha;
-  if (typeof merge !== 'string' || !SHA.test(merge)) return beholdes(`${navn} mangler merge-commit`, `${navn} er merget, men GitHub oppgir ingen merge-commit`);
+  if (typeof merge !== 'string' || !SHA.test(merge)) return feiletEtterMerge(`${navn} mangler merge-commit`, `${navn} er merget, men GitHub oppgir ingen merge-commit`);
   let revisjon;
   try {
     revisjon = await hent.revisjon(tjeneste);
   } catch (e) {
-    return beholdes(`fikk ikke lest ${tjeneste}:latest`, `Fikk ikke lest ${tjeneste}:latest (${vask(e.message)})`);
+    return feiletEtterMerge(`fikk ikke lest ${tjeneste}:latest`, `Fikk ikke lest ${tjeneste}:latest (${vask(e.message)})`);
   }
-  if (!revisjon) return beholdes(`${tjeneste}:latest mangler revisjon`, `${tjeneste}:latest mangler labelen ${REVISJON}`);
+  if (!revisjon) return feiletEtterMerge(`${tjeneste}:latest mangler revisjon`, `${tjeneste}:latest mangler labelen ${REVISJON}`);
   let status;
   try {
     status = await hent.compare(tjeneste, merge, revisjon);
   } catch (e) {
-    return beholdes(`fikk ikke sammenlignet latest med ${navn}`, `Fikk ikke sammenlignet ${tjeneste}:latest med ${navn} (${vask(e.message)})`);
+    return feiletEtterMerge(`fikk ikke sammenlignet latest med ${navn}`, `Fikk ikke sammenlignet ${tjeneste}:latest med ${navn} (${vask(e.message)})`);
   }
   const par = `latest (${kort(revisjon)}) og ${navn} (${kort(merge)})`;
   if (status === 'identical' || status === 'ahead') return { status: 'utløpt', grunn: `latest (${kort(revisjon)}) har ${navn} (${kort(merge)})` };
@@ -215,7 +225,7 @@ export async function vurderPin(tjeneste, pin, { tagger, emner, hent, nå }) {
   if (egen !== 'latest') return { ...felt, status: 'under test', grunn: `kjøringen har taggen «${vask(egen)}» for ${tjeneste}`, advarsel: null };
   const start = startStatus(emner, pin.e2e_pr);
   if (!start.startet) return { ...felt, status: 'ikke startet', grunn: start.grunn, advarsel: null };
-  const service = await vurderService(tjeneste, pin.service_pr, hent);
+  const service = await vurderService(tjeneste, pin.service_pr, hent, { nå, satt: pin.satt });
   let advarsel = service.advarsel ?? null;
   if (service.status === 'aktiv' && pin.satt && nå - Date.parse(pin.satt) > TRE_DAGER) {
     const gammel = `Pinnen for ${tjeneste} ble satt ${pin.satt.slice(0, 10)}, for mer enn tre dager siden. Sjekk om ${tjeneste} #${pin.service_pr} står fast.`;
@@ -329,13 +339,13 @@ export function planleggSet({ pinner, vurdering, args, e2e, service, nå }) {
 }
 
 /** Status for en eksisterende pin i skriveren: som utløpsregelen, og forlatt når e2e-PR-en er lukket. */
-export async function vurderPar(tjeneste, pin, hent) {
+export async function vurderPar(tjeneste, pin, hent, nå) {
   try {
     if (prStatus(await hent.pr(E2E_REPO, pin.e2e_pr)) === 'lukket') return { status: 'forlatt', grunn: `e2e #${pin.e2e_pr} er lukket uten merge` };
   } catch (e) {
     return { status: 'aktiv', grunn: `fikk ikke lest e2e #${pin.e2e_pr} (${vask(e.message)})` };
   }
-  return vurderService(tjeneste, pin.service_pr, hent);
+  return vurderService(tjeneste, pin.service_pr, hent, { nå, satt: pin.satt });
 }
 
 /**
@@ -486,7 +496,7 @@ export async function skriv(args, io) {
   } else {
     const [e2ePr, servicePr] = await Promise.all([io.hent.pr(E2E_REPO, args.e2ePr), io.hent.pr(args.tjeneste, args.servicePr)]);
     const vurdering = {};
-    for (const [t, pin] of Object.entries(pinner)) vurdering[t] = await vurderPar(t, pin, io.hent);
+    for (const [t, pin] of Object.entries(pinner)) vurdering[t] = await vurderPar(t, pin, io.hent, io.nå());
     const plan = planleggSet({ pinner, vurdering, args, e2e: prStatus(e2ePr), service: prStatus(servicePr), nå: io.nå() });
     // Også en lik pin sjekkes: har PR-ene fått nye commits siden br-kjøringen, er imaget utdatert.
     const runId = args.tag.slice('br-'.length);
