@@ -136,6 +136,15 @@ const ellerNull = (p) => p.catch((e) => (e.status === 404 ? null : Promise.rejec
 const rateBegrenset = (res) =>
   (res.status === 403 || res.status === 429) && (res.headers.get('retry-after') !== null || res.headers.get('x-ratelimit-remaining') === '0');
 
+/** Sekunder før neste forsøk. Er timekvoten brukt opp, venter vi til den fornyes, maks 15 min. */
+function ventetid(ctx, res, forsok) {
+  const retryAfter = res?.headers.get('retry-after');
+  if (retryAfter != null) return Math.min(60, Number(retryAfter) || 5 * 2 ** forsok);
+  const reset = Number(res?.headers.get('x-ratelimit-reset'));
+  if (res && rateBegrenset(res) && reset) return Math.min(15 * 60, Math.max(1, Math.ceil(reset - ctx.now() / 1000)));
+  return 5 * 2 ** forsok;
+}
+
 /** fetch med opptil tre nye forsøk ved nettverksfeil, 5xx og rate limit. */
 export async function hentMedNyeForsok(ctx, url, init, hva) {
   for (let forsok = 0; ; forsok++) {
@@ -152,7 +161,7 @@ export async function hentMedNyeForsok(ctx, url, init, hva) {
       if (nettfeil) throw new Error(`${hva} feilet etter 4 forsøk: ${grunn}`);
       return res;
     }
-    const sek = Math.min(60, Number(res?.headers.get('retry-after')) || 5 * 2 ** forsok);
+    const sek = ventetid(ctx, res, forsok);
     ctx.logg(`${hva}: ${grunn}; prøver igjen om ${sek} s.`);
     await ctx.sleep(sek * 1000);
   }

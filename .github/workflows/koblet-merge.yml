@@ -235,7 +235,7 @@ jobs:
         run: node scripts/koblet-merge.mjs klar melosys-e2e-tests "$FJERN_PR"
       - name: Hent app-token for køen
         id: token-ko
-        if: ${{ steps.klar.outputs.status == 'klar' }}
+        if: ${{ !inputs.dry_run && steps.klar.outputs.status == 'klar' }}
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
@@ -246,7 +246,7 @@ jobs:
           permission-pull-requests: write
       - name: Sett PR-en i køen
         id: ko
-        if: ${{ steps.klar.outputs.status == 'klar' }}
+        if: ${{ !inputs.dry_run && steps.klar.outputs.status == 'klar' }}
         env:
           GH_TOKEN: ${{ steps.token-ko.outputs.token }}
           PR_ID: ${{ steps.klar.outputs.id }}

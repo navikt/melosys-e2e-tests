@@ -4,6 +4,7 @@ import { execFileSync } from 'node:child_process';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
+  finnBuild,
   fjernPinner,
   hentMedNyeForsok,
   kjor,
@@ -208,6 +209,13 @@ test('koStatus: klare tilstander, venting, kø, merget og feil', () => {
   assert.throws(() => koStatus(lagPr('r', 1, { state: 'CLOSED' }), 'x'), /CLOSED/);
 });
 
+test('latest: Build-jobben finnes på navn, ikke plass', () => {
+  const build = { name: 'Build app and push docker image to GAR', conclusion: 'failure' };
+  assert.equal(finnBuild([{ name: 'Slå opp e2e-markør', conclusion: 'success' }, build, { name: 'deploy' }]), build);
+  assert.equal(finnBuild([{ name: 'deploy' }, { name: 'Trigger E2E tests' }]), null);
+  assert.equal(finnBuild(undefined), null);
+});
+
 test('latest: latest er Build-jobben som ble ferdig sist; ny kjøring venter, feil i nyeste med endringen stopper', () => {
   const k = (id: number, conclusion: string | null, ferdig: string, harEndringen: boolean, status = 'completed') => ({
     id,
@@ -223,6 +231,8 @@ test('latest: latest er Build-jobben som ble ferdig sist; ny kjøring venter, fe
   assert.equal(tolkLatest([k(3, 'success', '2026-10-21T10:09:00Z', true), k(2, 'failure', '2026-10-21T10:05:00Z', true)]).status, 'klar', 'bare nyeste teller');
   const nyesteGronn = [k(12, 'success', '2026-10-21T10:10:00Z', true), k(10, 'failure', '2026-10-21T10:04:00Z', true), k(9, 'success', '2026-10-21T10:15:00Z', false)];
   assert.equal(tolkLatest(nyesteGronn).status, 'venter', 'en eldre feilet kjøring stopper ikke når nyeste er grønn');
+  const usortert = [nyesteGronn[1], nyesteGronn[0], nyesteGronn[2]];
+  assert.equal(tolkLatest(usortert).status, 'venter', 'nyeste velges etter id, ikke rekkefølgen fra API-et');
   assert.equal(tolkLatest([]).status, 'venter');
 });
 
@@ -243,7 +253,7 @@ function fetchSomSvarer(...svarListe: (Response | Error)[]) {
 
 const retryCtx = (fetch: any) => {
   const sover: number[] = [];
-  return { ctx: { fetch, sleep: async (ms: number) => void sover.push(ms), logg: () => {} }, sover };
+  return { ctx: { fetch, sleep: async (ms: number) => void sover.push(ms), logg: () => {}, now: () => 1_000_000_000 }, sover };
 };
 
 test('nye forsøk: 502 og ECONNRESET prøves igjen, så lykkes kallet', async () => {
@@ -271,6 +281,15 @@ test('nye forsøk: rate limit prøves igjen; annen 4xx og vedvarende nettfeil gi
   const nede = fetchSomSvarer(e, e, e, e, svar(200, {}));
   await assert.rejects(hentMedNyeForsok(retryCtx(nede.fetch).ctx, 'u', {}, 'GET /x'), /GET \/x feilet etter 4 forsøk/);
   assert.equal(nede.kall.length, 4);
+});
+
+test('nye forsøk: primær rate limit venter til x-ratelimit-reset, maks 15 min', async () => {
+  const naa = 1_000_000; // sekunder; retryCtx sin klokke står på 1_000_000_000 ms
+  const tom = (reset: number) => svar(403, {}, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(reset) });
+  const f = fetchSomSvarer(tom(naa + 300), svar(429, {}, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': String(naa + 7200) }), tom(naa - 5), svar(200, {}));
+  const { ctx, sover } = retryCtx(f.fetch);
+  assert.equal((await hentMedNyeForsok(ctx, 'u', {}, 'x')).status, 200);
+  assert.deepEqual(sover, [300_000, 900_000, 1000]);
 });
 
 test('API-feil: 4xx feiler med meldingen fra GitHub, og en HTML-side tåles', async () => {
@@ -656,6 +675,19 @@ test('workflowen: sett-i-ko får PR-nummeret, og vent-merget får vite om enqueu
   assert.equal(ventSteg.length, 3);
   for (const s of ventSteg) assert.match(s, /SATT_I_KO: \$\{\{ steps\.ko\.outputs\.satt \}\}/);
   assert.equal((yml.match(/\n        id: ko\n/g) ?? []).length, 3);
+});
+
+test('workflowen: app-token og skriving bare uten dry_run', () => {
+  const yml = readFileSync(join(__dirname, '..', '.github', 'workflows', 'koblet-merge.yml'), 'utf8');
+  const steg = yml.split(/\n      - /).slice(1);
+  const token = steg.filter((s) => /\buses: actions\/create-github-app-token@/.test(s));
+  const skriv = steg.filter((s) => /koblet-merge\.mjs (pin-skriv|fjern-skriv|sett-i-ko)\b/.test(s));
+  assert.equal(token.length, 5);
+  assert.equal(skriv.length, 5);
+  for (const s of [...token, ...skriv]) {
+    const hvis = /^\s+if: (.*)$/m.exec(s)?.[1] ?? '';
+    assert.match(hvis, /!inputs\.dry_run\b/, `steget «${s.split('\n')[0]}» mangler !inputs.dry_run i if: ${hvis}`);
+  }
 });
 
 test('koblet-merge starter ikke e2e-suiten', () => {
