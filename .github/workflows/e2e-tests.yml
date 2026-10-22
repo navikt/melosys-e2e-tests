@@ -66,6 +66,11 @@ on:
         required: false
         type: string
         default: ''
+      e2e_pins:
+        description: 'JSON som erstatter variabelen E2E_PINS i denne kjøringen, for å prøve pinnene uten å endre den. {} = ingen pinner. Tom = variabelen.'
+        required: false
+        type: string
+        default: ''
       shards:
         description: 'Antall shards (1–8). Hver shard kjører en del av testene mot sin egen stack. Et lite utvalg får færre. 1 = uten sharding.'
         required: false
@@ -149,6 +154,16 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          # Startregelen for pinner i E2E_PINS leter etter e2e-PR-en i historikken. Med
+          # standarddybden 1 ser den bare HEAD.
+          fetch-depth: 0
+
+      # Før taggvalget: utløpsregelen for pinner i E2E_PINS leser revisjonen på latest.
+      - name: Login to NAIS registry
+        uses: nais/login@v0
+        with:
+          team: teammelosys
 
       - name: Determine image tags from trigger source
         id: image-tags
@@ -177,6 +192,9 @@ jobs:
           INPUT_GATE_CONTEXT: ${{ inputs.gate_context }}
           INPUT_CORRELATION_ID: ${{ inputs.correlation_id }}
           INPUT_BRANCH_CONTEXT: ${{ inputs.branch_context }}
+          E2E_PINS_INPUT: ${{ inputs.e2e_pins }}
+          E2E_PINS_VAR: ${{ vars.E2E_PINS }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           # Verdier utenfra (payload og workflow_dispatch-input) får linjeskiftene
           # fjernet før de logges. En workflow-kommando
@@ -331,21 +349,26 @@ jobs:
             fi
           fi
 
-          # ---- Pinner fra .github/e2e-pins.json ----
-          # En tjeneste som fortsatt har latest, får taggen i fila; tjenesten under test
-          # beholder sin egen. Ved en koblet endring pinner e2e-PR-en tjenesten til imaget den
-          # er testet mot, så tester og image byttes i samme commit (docs/ci-cd/KOBLEDE-ENDRINGER.md).
+          # ---- Pinner fra .github/e2e-pins.json og E2E_PINS ----
+          # En tjeneste som fortsatt har latest, får pinnen; tjenesten under test beholder sin
+          # egen tag. Ved en koblet endring pinner e2e-PR-en tjenesten til imaget den er testet
+          # mot (docs/ci-cd/KOBLEDE-ENDRINGER.md). En pin i fila gjelder alltid. En pin i
+          # variabelen gjelder fra testene har e2e-PR-en til latest har service-PR-en, og
+          # vinner over fila. Ugyldig fil stopper kjøringen; ugyldig variabel gir ingen pinner
+          # fra variabelen. Statusen per pin havner i trigger-konteksten (pinner, pinnerFeil).
           export MELOSYS_API_TAG FAKTURERINGSKOMPONENTEN_TAG MELOSYS_WEB_TAG \
                  MELOSYS_TRYGDEAVGIFT_TAG MELOSYS_TRYGDEAVTALE_TAG \
                  MELOSYS_INNGANGSVILKAR_TAG MELOSYS_EESSI_TAG MELOSYS_MOCK_TAG \
                  MELOSYS_DOKGEN_TAG MELOSYS_SKJEMA_API_TAG MELOSYS_SKJEMA_WEB_TAG
-          PINNER=$(node scripts/e2e-pins.mjs .github/e2e-pins.json) \
-            || { echo "::error::.github/e2e-pins.json er ugyldig, se meldingen over"; exit 1; }
-          while read -r tag_var tjeneste tag; do
+          PINNER_FIL="$RUNNER_TEMP/pinner.json"
+          PINNER=$(node scripts/e2e-pins.mjs velg .github/e2e-pins.json "$PINNER_FIL") \
+            || { echo "::error::Pinvalget feilet, se meldingen over"; exit 1; }
+          while read -r tag_var _tjeneste tag; do
             [ -n "$tag_var" ] || continue
             printf -v "$tag_var" '%s' "$tag"
-            echo "::warning::📌 $tjeneste er pinnet til $tag i .github/e2e-pins.json. Fjern pinnen når $tjeneste latest har endringen."
           done <<< "$PINNER"
+          PINNER_FELT=$(jq -c '{pinner, pinnerFeil}' "$PINNER_FIL") \
+            || PINNER_FELT='{"pinner":[],"pinnerFeil":"fant ikke resultatet av pinvalget"}'
 
           # ---- Trigger-kontekst for melosys-console ----
           # Konsollen leser trigger-konteksten fra test-summary-artefakten: runs-API-et
@@ -373,6 +396,8 @@ jobs:
             --arg eessi "$MELOSYS_EESSI_TAG" \
             --arg mock "$MELOSYS_MOCK_TAG" \
             --arg dokgen "$MELOSYS_DOKGEN_TAG" \
+            --arg skjemaApi "$MELOSYS_SKJEMA_API_TAG" \
+            --arg skjemaWeb "$MELOSYS_SKJEMA_WEB_TAG" \
             '{
               "melosys-api": $melosysApi,
               "melosys-web": $melosysWeb,
@@ -382,7 +407,9 @@ jobs:
               "melosys-inngangsvilkar": $inngangsvilkar,
               "melosys-eessi": $eessi,
               "melosys-mock": $mock,
-              "melosys-dokgen": $dokgen
+              "melosys-dokgen": $dokgen,
+              "melosys-skjema-api": $skjemaApi,
+              "melosys-skjema-web": $skjemaWeb
             }
             | with_entries(select(.value != ""))') || RESOLVED_TAGS=""
 
@@ -520,6 +547,7 @@ jobs:
               --argjson resolvedTags "$RESOLVED_TAGS" \
               --argjson gate "$GATE_FIELDS" \
               --argjson branch "$BRANCH_FIELDS" \
+              --argjson pinner "$PINNER_FELT" \
               "$JQ_HELPERS"'
               {
                 schemaVersion: 1,
@@ -534,7 +562,7 @@ jobs:
                 runAttempt: ($runAttempt | as_num),
                 resolvedTags: $resolvedTags,
                 inputs: null
-              } + $gate + $branch') || TRIGGER_JSON=""
+              } + $gate + $branch + $pinner') || TRIGGER_JSON=""
           else
             TRIGGER_JSON=$(jq -n \
               --arg actor "$GITHUB_ACTOR_NAME" \
@@ -551,6 +579,7 @@ jobs:
               --argjson resolvedTags "$RESOLVED_TAGS" \
               --argjson gate "$GATE_FIELDS" \
               --argjson branch "$BRANCH_FIELDS" \
+              --argjson pinner "$PINNER_FELT" \
               "$JQ_HELPERS"'
               {
                 schemaVersion: 1,
@@ -574,7 +603,7 @@ jobs:
                   unleash_force_disable: ($unleashForceDisable | nz),
                   unleash_force_enable: ($unleashForceEnable | nz)
                 }
-              } + $gate + $branch') || TRIGGER_JSON=""
+              } + $gate + $branch + $pinner') || TRIGGER_JSON=""
           fi
 
           echo ""
@@ -639,11 +668,6 @@ jobs:
           if [ -f "$RUNNER_TEMP/trigger-context.json" ]; then
             echo "json=$(jq -c . "$RUNNER_TEMP/trigger-context.json")" >> "$GITHUB_OUTPUT"
           fi
-
-      - name: Login to NAIS registry
-        uses: nais/login@v0
-        with:
-          team: teammelosys
 
       - name: Pin image-tagger til digest
         id: pin
