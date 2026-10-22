@@ -8,6 +8,28 @@ Løsningen er en pin i `.github/e2e-pins.json`. e2e-PR-en pinner tjenesten til i
 
 Kan testene skrives slik at de er grønne mot både gammelt og nytt image (regex for tekst, `.or()` for lokatorer), merger du e2e-PR-en først og service-PR-en etterpå. Er en backend-PR i samme endring bakoverkompatibel, merger du den først uten pin.
 
+## Automatisk fra konsollen
+
+Knappen i melosys-console starter workflowen «Koblet merge» (`.github/workflows/koblet-merge.yml`) på `main`. Den gjør steg 2–4 i den manuelle oppskriften for deg, uten køhopp, og åpner PR-en i steg 5. Kjør paret grønt med «E2E med brancher» først (steg 1); knappen trenger taggen `br-<run_id>`, e2e-PR-en og service-PR-ene i den rekkefølgen de skal merges.
+
+**Bare repoer med merge-kø:** melosys-api, melosys-web, melosys-skjema-api, melosys-skjema-web, melosys-eessi og faktureringskomponenten. For andre repoer bruker du den manuelle oppskriften.
+
+Workflowen har fem jobber:
+
+1. **Sjekk paret.** Hver PR finnes, er ikke et utkast, har ingen konflikter, går mot default-branchen og har branchen i samme repo. En PR som står i kø, godtas.
+2. **Legg pinnen i e2e-PR-en.** Workflowen committer `.github/e2e-pins.json` til e2e-branchen. Andre pinner i fila står. Er branchen pushet til i mellomtiden, stopper jobben i stedet for å overskrive.
+3. **e2e-PR gjennom køen.** Workflowen venter til PR-en kan merges (opptil 30 min), sjekker at pinnen står på head, setter PR-en i kø og venter til den er merget (opptil 150 min). Tas den ut av køen, stopper kjøringen.
+4. **`<repo> #<pr>` i køen**, én service-PR om gangen. Står andre PR-er i køen, venter jobben til køen er tom (opptil 60 min), og setter så PR-en bakerst i køen. Andre kan sette PR-er i kø mens jobben venter; si fra i kanalen.
+5. **Fjern pinnen.** Når service-PR-ene er merget, lager workflowen branchen `fjern-pin-<tag>` fra `main` og åpner PR-en, eller gjenbruker en åpen PR fra branchen. Den fjerner bare pinner som fortsatt står på taggen. Workflowen setter ikke PR-en i kø: trykk «Merge when ready» selv. e2e-køen kjører hele suiten mot `latest` og blir grønn først når `latest` har endringene.
+
+**Svarer ikke GitHub når en PR skal i kø**, for eksempel med en intern feil, 5xx eller rate limit med `retry-after` eller `x-ratelimit-remaining: 0`, står en advarsel i sammendraget. Trykk «Merge when ready» på PR-en; jobben venter videre til PR-en er merget. Avviser GitHub forespørselen, for eksempel fordi head har endret seg, PR-en allerede er i kø eller appen mangler rettighet, stopper jobben.
+
+**Prøv først med `dry_run`.** Hver jobb leser og sjekker som vanlig og skriver i loggen hva den ville gjort, men committer, setter i kø og åpner ingenting, og venter ikke. Kjøringen heter da «… (prøvekjøring)».
+
+**Rettigheter.** Workflowen leser med `github.token`; alle repoene er offentlige. Før hver skriving henter den et token fra appen «Melosys CI» for det ene repoet den skriver til. Appen trenger *Contents: write* og *Pull requests: write* i melosys-e2e-tests og service-repoene. Uten dem stopper jobben ved «Hent app-token». En org-admin gir rettighetene i appens innstillinger. `dry_run` henter ikke app-token.
+
+**Stoppe og fortsette.** Avbryt kjøringen i Actions. Det som er gjort, står: en commitet pin, en PR i kø, en merget PR. Start på nytt med samme input når du vil fortsette. Hver jobb hopper over det som er gjort, og venter på en PR som står i kø. Sjekken godtar en merget e2e-PR bare når merge-commiten pinner alle tjenestene til taggen, og en merget service-PR bare når e2e-PR-en og tjenestene foran den er merget.
+
 ## Slik gjør du det
 
 Eksempel: melosys-web #3300 bytter en knapp, og e2e-branchen `MELOSYS-9000-ny-knapp` har testene som finner den nye knappen.
