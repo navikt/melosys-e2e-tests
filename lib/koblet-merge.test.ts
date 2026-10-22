@@ -1,24 +1,16 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { createVerify, generateKeyPairSync } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import {
-  andreIKo,
   fjernPinner,
-  GRENSER,
+  hentMedNyeForsok,
   kjor,
-  lagJwt,
-  lagKlient,
-  lagTokenKilde,
+  koStatus,
   leggTilPinner,
   lesInput,
-  sjekkPr,
-  tolkDeploy,
-  tolkKoPoll,
-  velgDeployKjoring,
-  velgKoHandling,
+  tolkLatest,
   vaskBestiller,
   // @ts-expect-error — .mjs uten typedeklarasjon; scriptet er ren node uten avhengigheter.
 } from '../scripts/koblet-merge.mjs';
@@ -26,24 +18,17 @@ import {
 import { utenE2eEffekt } from '../scripts/affected-tests.mjs';
 
 /**
- * Koblet merge setter PR-er i merge-køer og committer til e2e-repoet. Feilene som koster mest:
- * en dry_run som skriver, en pin-endring som sletter andres pinner, en service-PR som settes i
- * kø mens køen har andre PR-er (D4), og en PR som faller ut av køen uten at jobben feiler.
+ * Feilene som koster mest: en dry_run som skriver, en merget PR uten pinnen som godtas, en
+ * service-PR som flettes i feil rekkefølge, og en PR som faller ut av køen uten at jobben feiler.
  */
 
 const TAG = 'br-38725776923';
-const MIN = 60_000;
-
-// ---------------------------------------------------------------- falsk GitHub
-
 type Pr = Record<string, any>;
 
 function lagPr(repo: string, nr: number, felt: Pr = {}): Pr {
   return {
     id: `PR_${repo}_${nr}`,
     number: nr,
-    url: `https://github.com/navikt/${repo}/pull/${nr}`,
-    title: 'x',
     state: 'OPEN',
     isDraft: false,
     baseRefName: repo === 'melosys-e2e-tests' ? 'main' : 'master',
@@ -51,512 +36,459 @@ function lagPr(repo: string, nr: number, felt: Pr = {}): Pr {
     headRefOid: `head-${nr}`,
     headRepository: { nameWithOwner: `navikt/${repo}` },
     isInMergeQueue: false,
-    mergeQueueEntry: null,
     mergeCommit: null,
     mergeStateStatus: 'CLEAN',
-    reviewDecision: null,
-    viewerCanEnableAutoMerge: false,
-    autoMergeRequest: null,
     ...felt,
   };
 }
 
-/**
- * En liten GitHub i minnet. `prs` er nøklet «repo#nr», `koer` er PR-numre per repo (mangler
- * repoet, har det ingen kø), `filer` er pin-fila per ref. `etterKall` kjøres etter hvert kall,
- * så testen kan flytte tilstanden (køen tømmes, PR-en merges) mens jobben venter.
- */
-function lagGitHub(start: Partial<Record<string, any>> = {}) {
+const pinTekst = (o: Record<string, string>) => JSON.stringify(o, null, 2) + '\n';
+const svar = (status: number, data: any, headers: Record<string, string> = {}) =>
+  new Response(JSON.stringify(data), { status, headers });
+
+/** En liten GitHub i minnet. `etterKall` kan flytte tilstanden mens et steg venter. */
+function lagGitHub(start: Record<string, any> = {}) {
   const s: Record<string, any> = {
     prs: {},
-    standard: { 'melosys-e2e-tests': 'main' },
-    koer: { 'melosys-e2e-tests': [], 'melosys-web': [], 'melosys-skjema-api': [] },
+    koer: { 'melosys-e2e-tests': 0, 'melosys-web': 0, 'melosys-api': 0 },
     filer: {},
     refs: { main: 'main-sha' },
     runs: {},
+    jobs: {},
     apnePulls: [],
-    refFlyttet: false,
     etterKall: () => {},
     ...start,
   };
-  const kall: { metode: string; sti: string; body: any; operasjon?: string }[] = [];
-  const svar = (status: number, data: any) => ({ ok: status < 300, status, text: async () => JSON.stringify(data) });
-
+  const kall: { metode: string; sti: string; body: any }[] = [];
   const fetch = async (url: string, init: any = {}) => {
     const metode = init.method ?? 'GET';
     const body = init.body ? JSON.parse(init.body) : undefined;
     const sti = url.replace('https://api.github.com', '');
-    const operasjon = body?.query ? /^\s*(?:query|mutation)\s+(\w+)/.exec(body.query)?.[1] : undefined;
-    kall.push({ metode, sti, body, operasjon });
+    kall.push({ metode, sti, body });
     try {
-      return håndter(metode, sti, body, operasjon);
+      return håndter(metode, sti, body);
     } finally {
       s.etterKall(s, kall);
     }
   };
-
-  function håndter(metode: string, sti: string, body: any, operasjon?: string) {
+  function håndter(metode: string, sti: string, body: any) {
     if (sti === '/graphql') {
       const v = body.variables;
-      const pr = s.prs[`${v.repo}#${v.nr}`];
-      switch (operasjon) {
-        case 'Pr':
-          if (!pr) return svar(200, { data: { repository: null }, errors: [{ message: 'Could not resolve to a PullRequest' }] });
-          return svar(200, { data: { repository: { defaultBranchRef: { name: s.standard[v.repo] ?? 'master' }, pullRequest: pr } } });
-        case 'Ko': {
-          const ko = s.koer[v.repo];
-          const mergeQueue = ko
-            ? { entries: { totalCount: ko.length, nodes: ko.map((n: number) => ({ pullRequest: { number: n } })) } }
-            : null;
-          return svar(200, { data: { repository: { mergeQueue } } });
-        }
-        case 'SettIKo':
-        case 'AutoMerge': {
-          const funnet = Object.values(s.prs).find((p: any) => p.id === v.id) as Pr;
-          if (operasjon === 'SettIKo') funnet.isInMergeQueue = true;
-          else funnet.autoMergeRequest = { enabledAt: 'nå' };
-          return svar(200, { data: {} });
-        }
+      const op = /^\s*(?:query|mutation)\s+(\w+)/.exec(body.query)?.[1];
+      if (op === 'Pr') {
+        const pr = s.prs[`${v.repo}#${v.nr}`];
+        const standard = v.repo === 'melosys-e2e-tests' ? 'main' : 'master';
+        return svar(200, { data: { repository: { defaultBranchRef: { name: standard }, pullRequest: pr ?? null } } });
       }
-      throw new Error(`ukjent GraphQL-operasjon ${operasjon}`);
+      if (op === 'Ko') {
+        const n = s.koer[v.repo];
+        return svar(200, { data: { repository: { mergeQueue: n === undefined ? null : { entries: { totalCount: n } } } } });
+      }
+      if (op === 'SettIKo') {
+        (Object.values(s.prs).find((p: any) => p.id === v.id) as Pr).isInMergeQueue = true;
+        return svar(200, { data: {} });
+      }
+      throw new Error(`ukjent GraphQL ${op}`);
     }
-    const m = /^\/repos\/navikt\/([^/]+)\/(.*)$/.exec(sti);
-    if (!m) throw new Error(`ukjent sti ${sti}`);
-    const [, , rest] = m;
+    const rest = sti.replace(/^\/repos\/navikt\/[^/]+\//, '');
     let r: RegExpExecArray | null;
     if ((r = /^contents\/\.github\/e2e-pins\.json\?ref=(.*)$/.exec(rest))) {
-      const tekst = s.filer[decodeURIComponent(r[1])];
-      return tekst == null ? svar(404, { message: 'Not Found' }) : svar(200, { content: Buffer.from(tekst).toString('base64') });
+      const t = s.filer[decodeURIComponent(r[1])];
+      return t == null ? svar(404, { message: 'Not Found' }) : svar(200, { content: Buffer.from(t).toString('base64') });
     }
-    if ((r = /^git\/ref\/heads\/(.*)$/.exec(rest))) return svar(200, { object: { sha: s.refs[decodeURIComponent(r[1])] } });
+    if ((r = /^git\/ref\/heads\/(.*)$/.exec(rest))) {
+      const sha = s.refs[decodeURIComponent(r[1])];
+      return sha ? svar(200, { object: { sha } }) : svar(404, { message: 'Not Found' });
+    }
     if ((r = /^git\/commits\/(.*)$/.exec(rest)) && metode === 'GET') return svar(200, { tree: { sha: `tre-${r[1]}` } });
     if (rest === 'git/trees') return svar(201, { sha: 'nytt-tre' });
     if (rest === 'git/commits') return svar(201, { sha: 'ny-commit' });
     if ((r = /^git\/refs\/heads\/(.*)$/.exec(rest)) && metode === 'PATCH') {
-      if (s.refFlyttet) return svar(422, { message: 'Update is not a fast forward' });
       s.refs[decodeURIComponent(r[1])] = body.sha;
       return svar(200, {});
     }
-    if (rest === 'git/refs' && metode === 'POST') {
-      const navn = body.ref.replace('refs/heads/', '');
-      if (s.refs[navn]) return svar(422, { message: 'Reference already exists' });
-      s.refs[navn] = body.sha;
-      return svar(201, {});
-    }
+    if (rest === 'git/refs' && metode === 'POST') return svar(201, {});
     if (rest.startsWith('pulls?')) return svar(200, s.apnePulls);
-    if (rest === 'pulls' && metode === 'POST') {
-      s.prs['melosys-e2e-tests#999'] = lagPr('melosys-e2e-tests', 999, { headRefName: body.head, title: body.title });
-      return svar(201, { number: 999, html_url: 'https://github.com/navikt/melosys-e2e-tests/pull/999' });
-    }
+    if (rest === 'pulls' && metode === 'POST') return svar(201, { number: 999, html_url: 'https://x/999' });
     if ((r = /^actions\/runs\?head_sha=([^&]+)/.exec(rest))) return svar(200, { workflow_runs: s.runs[r[1]] ?? [] });
+    if ((r = /^actions\/runs\/(\d+)\/jobs/.exec(rest))) return svar(200, { jobs: s.jobs[r[1]] ?? [] });
     throw new Error(`ukjent kall ${metode} ${sti}`);
   }
-
   return { s, kall, fetch };
 }
 
-/** Kjører en jobb mot den falske GitHuben med en klokke som går fram når jobben sover. */
-async function kjorJobb(gh: ReturnType<typeof lagGitHub>, jobb: string, args: string[] = [], env: Record<string, string> = {}) {
+async function kjorSteg(gh: ReturnType<typeof lagGitHub>, steg: string, args: string[] = [], env: Record<string, string> = {}) {
   let t = 0;
   const logg: string[] = [];
-  const sammendrag: string[] = [];
   const utdata: Record<string, string> = {};
-  await kjor(jobb, args, {
-    env: { GH_TOKEN: 't0', TAG, E2E_PR: '380', TJENESTER: 'melosys-web#3253', DRY_RUN: 'false', RUN_URL: 'https://run', ...env },
+  await kjor(steg, args, {
+    env: { GH_TOKEN: 't', TAG, E2E_PR: '380', TJENESTER: 'melosys-web#3253', DRY_RUN: 'false', ...env },
     fetch: gh.fetch,
-    sleep: async (ms: number) => {
-      t += ms;
-    },
+    sleep: async (ms: number) => void (t += ms),
     now: () => t,
     logg: (l: string) => logg.push(l),
-    sammendrag: (l: string) => sammendrag.push(l),
+    sammendrag: (l: string) => logg.push(l),
     utdata: (k: string, v: string) => (utdata[k] = v),
   });
-  return { logg, sammendrag, utdata, tid: () => t };
+  return { logg, utdata, tid: t };
 }
 
-const skriveKall = (kall: { metode: string; sti: string; body: any; operasjon?: string }[]) =>
+const skriveKall = (kall: { metode: string; sti: string; body: any }[]) =>
   kall.filter((k) => (k.sti === '/graphql' ? /^\s*mutation\b/.test(k.body.query) : k.metode !== 'GET'));
 
-const pinTekst = (o: Record<string, string>) => JSON.stringify(o, null, 2) + '\n';
-
-/** Et åpent par: e2e #380 med pinnen på head, melosys-web #3253 klar. */
-function aaptPar(felt: { e2e?: Pr; web?: Pr } = {}) {
+function par(felt: { e2e?: Pr; web?: Pr; api?: Pr } = {}, start: Record<string, any> = {}) {
   return lagGitHub({
     prs: {
       'melosys-e2e-tests#380': lagPr('melosys-e2e-tests', 380, felt.e2e),
       'melosys-web#3253': lagPr('melosys-web', 3253, felt.web),
+      'melosys-api#100': lagPr('melosys-api', 100, felt.api),
     },
     refs: { main: 'main-sha', 'gren-380': 'head-380' },
-    filer: { 'head-380': pinTekst({ 'melosys-web': TAG }) },
+    filer: { 'head-380': pinTekst({ 'melosys-web': TAG }), 'merge-380': pinTekst({ 'melosys-web': TAG }) },
+    ...start,
   });
 }
 
-// ---------------------------------------------------------------- input
+// ---------------------------------------------------------------- rene funksjoner
 
-test('input: tag, e2e_pr og tjenester valideres', () => {
-  const ok = { tag: TAG, e2ePr: '380', tjenester: 'melosys-web#3253', requestedBy: 'rune', dryRun: 'false' };
-  assert.deepEqual(lesInput(ok).tjenester, [{ repo: 'melosys-web', pr: 3253, nokkel: 'melosys-web' }]);
-  for (const tag of ['br-abc', '38725776923', 'br-1\n', 'latest', '', 'br-']) {
-    assert.throws(() => lesInput({ ...ok, tag }), /tag må være br-<run_id>/, JSON.stringify(tag));
-  }
-  for (const e2ePr of ['0', 'abc', '', '12a', '-1']) {
-    assert.throws(() => lesInput({ ...ok, e2ePr }), /e2e_pr må være/, e2ePr);
-  }
-  for (const tjenester of ['melosys-web', 'melosys-web#0', 'melosys-web#', 'melosys-web 3253', 'melosys-web#1#2']) {
-    assert.throws(() => lesInput({ ...ok, tjenester }), /ikke på formen <repo>#<pr>/, tjenester);
-  }
-  assert.throws(() => lesInput({ ...ok, tjenester: ' , ' }), /minst én/);
-  assert.throws(() => lesInput({ ...ok, dryRun: 'ja' }), /dry_run/);
-});
-
-test('input: ukjent repo avvises; melosys-docker-compose er melosys-mock', () => {
-  const ok = { tag: TAG, e2ePr: '380', tjenester: '', requestedBy: '', dryRun: '' };
-  for (const repo of ['melosys-foo', 'melosys-mock', 'constructor', '__proto__', 'melosys-e2e-tests']) {
-    assert.throws(() => lesInput({ ...ok, tjenester: `${repo}#1` }), /Ukjent repo/, repo);
-  }
+test('input: format og repoer uten merge-kø avvises', () => {
+  const ok = { tag: TAG, e2ePr: '380', tjenester: 'melosys-web#3253, melosys-api#1', requestedBy: 'x', dryRun: 'true' };
+  assert.deepEqual(lesInput(ok).tjenester, [{ repo: 'melosys-web', pr: 3253 }, { repo: 'melosys-api', pr: 1 }]);
+  assert.equal(lesInput(ok).dryRun, true);
+  for (const tag of ['br-abc', '38725776923', 'latest', '']) assert.throws(() => lesInput({ ...ok, tag }), /tag må være/);
+  assert.throws(() => lesInput({ ...ok, e2ePr: '0' }), /e2e_pr/);
+  assert.throws(() => lesInput({ ...ok, tjenester: '' }), /minst én/);
+  assert.throws(() => lesInput({ ...ok, tjenester: 'melosys-web' }), /<repo>#<pr>/);
   assert.throws(() => lesInput({ ...ok, tjenester: 'melosys-web#1,melosys-web#2' }), /to ganger/);
-
-  const inp = lesInput({ ...ok, tjenester: 'melosys-skjema-api#422, melosys-docker-compose#9,melosys-skjema-web#695' });
-  assert.deepEqual(inp.tjenester, [
-    { repo: 'melosys-skjema-api', pr: 422, nokkel: 'melosys-skjema-api' },
-    { repo: 'melosys-docker-compose', pr: 9, nokkel: 'melosys-mock' },
-    { repo: 'melosys-skjema-web', pr: 695, nokkel: 'melosys-skjema-web' },
-  ]);
-  assert.equal(inp.dryRun, false);
-  assert.equal(inp.bestiller, 'ukjent');
+  for (const repo of ['melosys-docker-compose', 'melosys-mock', 'melosys-trygdeavgift-beregning']) {
+    assert.throws(() => lesInput({ ...ok, tjenester: `${repo}#1` }), new RegExp(`${repo} har ingen merge-kø; bruk den manuelle oppskriften`));
+  }
 });
 
-test('requested_by vaskes som i e2e-brancher.yml', () => {
-  assert.equal(vaskBestiller('Rune\n::error::x #1'), 'Rune::error::x 1');
+test('requested_by: kontrolltegn, # og @ fjernes, maks 100 tegn', () => {
+  assert.equal(vaskBestiller('@rune\n#1 @team'), 'rune1 team');
   assert.equal(vaskBestiller('a'.repeat(150)).length, 100);
-  assert.equal(vaskBestiller(''), 'ukjent');
+  assert.equal(vaskBestiller('@#'), 'ukjent');
   assert.equal(vaskBestiller(undefined), 'ukjent');
 });
 
-// ---------------------------------------------------------------- pinner
+test('pinner: legges til og fjernes idempotent, andre pinner står', () => {
+  const start = pinTekst({ 'melosys-api': 'br-1' });
+  const lagt = leggTilPinner(start, ['melosys-web'], TAG);
+  assert.equal(lagt.endret, true);
+  assert.deepEqual(JSON.parse(lagt.tekst), { 'melosys-api': 'br-1', 'melosys-web': TAG });
+  assert.equal(leggTilPinner(lagt.tekst, ['melosys-web'], TAG).endret, false);
+  assert.equal(leggTilPinner(null, ['melosys-web'], TAG).endret, true);
 
-test('leggTilPinner beholder andre pinner og er idempotent', () => {
-  const før = pinTekst({ 'melosys-api': 'br-1', 'melosys-web': 'br-2' });
-  const en = leggTilPinner(før, ['melosys-web', 'melosys-mock'], TAG);
-  assert.equal(en.endret, true);
-  assert.deepEqual(JSON.parse(en.tekst), { 'melosys-api': 'br-1', 'melosys-web': TAG, 'melosys-mock': TAG });
-  const to = leggTilPinner(en.tekst, ['melosys-web', 'melosys-mock'], TAG);
-  assert.equal(to.endret, false);
-  assert.equal(to.tekst, en.tekst);
-
-  assert.deepEqual(JSON.parse(leggTilPinner(null, ['melosys-web'], TAG).tekst), { 'melosys-web': TAG });
-  assert.throws(() => leggTilPinner('{"ukjent": "br-1"}', ['melosys-web'], TAG), /ukjent tjeneste/);
+  const fjernet = fjernPinner(lagt.tekst, ['melosys-web', 'melosys-api'], TAG);
+  assert.deepEqual(fjernet.fjernet, ['melosys-web'], 'melosys-api står på en annen tag');
+  assert.equal(fjernet.tekst, start);
+  assert.equal(fjernPinner(fjernet.tekst, ['melosys-web'], TAG).endret, false);
+  assert.equal(fjernPinner(pinTekst({ 'melosys-web': TAG }), ['melosys-web'], TAG).tekst, null, 'tom fil slettes');
 });
 
-test('fjernPinner fjerner bare nøkler som fortsatt står på taggen', () => {
-  const tekst = pinTekst({ 'melosys-api': TAG, 'melosys-web': TAG, 'melosys-mock': 'br-9' });
-  const r = fjernPinner(tekst, ['melosys-web', 'melosys-mock'], TAG);
-  assert.deepEqual(r.fjernet, ['melosys-web']);
-  assert.equal(r.endret, true);
-  // melosys-api er ikke i paret; melosys-mock er pinnet av en annen endring.
-  assert.deepEqual(JSON.parse(r.tekst), { 'melosys-api': TAG, 'melosys-mock': 'br-9' });
+test('koStatus: klare tilstander, venting, kø, merget og feil', () => {
+  for (const m of ['CLEAN', 'HAS_HOOKS', 'UNSTABLE', 'BEHIND']) assert.equal(koStatus(lagPr('r', 1, { mergeStateStatus: m }), 'x'), 'klar');
+  for (const m of ['BLOCKED', 'UNKNOWN']) assert.equal(koStatus(lagPr('r', 1, { mergeStateStatus: m }), 'x'), 'vent');
+  assert.equal(koStatus(lagPr('r', 1, { isInMergeQueue: true }), 'x'), 'i-ko');
+  assert.equal(koStatus(lagPr('r', 1, { state: 'MERGED' }), 'x'), 'merget');
+  assert.throws(() => koStatus(lagPr('r', 1, { mergeStateStatus: 'DIRTY' }), 'x'), /konflikter/);
+  assert.throws(() => koStatus(lagPr('r', 1, { state: 'CLOSED' }), 'x'), /CLOSED/);
+});
 
-  const tom = fjernPinner(pinTekst({ 'melosys-web': TAG }), ['melosys-web'], TAG);
-  assert.equal(tom.tekst, null);
-  assert.equal(tom.endret, true);
+test('latest: Build grønn er nok selv om deploy feiler; Build rød feiler', () => {
+  const jobb = (name: string, conclusion: string | null, status = 'completed') => ({ name, status, conclusion });
+  assert.equal(tolkLatest([jobb('Build', 'success'), jobb('deploy', 'failure')]), 'klar');
+  assert.equal(tolkLatest([jobb('Build app and push docker image to GAR', 'success')]), 'klar');
+  assert.equal(tolkLatest([jobb('Build', 'failure'), jobb('deploy', 'skipped')]), 'feilet');
+  assert.equal(tolkLatest([jobb('Build', null, 'in_progress')]), 'venter');
+  assert.equal(tolkLatest([]), 'venter');
+});
 
-  for (const t of [null, '', pinTekst({ 'melosys-web': 'br-1' })]) {
-    assert.equal(fjernPinner(t, ['melosys-web'], TAG).endret, false);
+// ---------------------------------------------------------------- nye forsøk
+
+function fetchSomSvarer(...svarListe: (Response | Error)[]) {
+  const kall: string[] = [];
+  return {
+    kall,
+    fetch: async (url: string) => {
+      kall.push(url);
+      const s = svarListe.shift();
+      if (s instanceof Error) throw s;
+      return s;
+    },
+  };
+}
+
+const retryCtx = (fetch: any) => {
+  const sover: number[] = [];
+  return { ctx: { fetch, sleep: async (ms: number) => void sover.push(ms), logg: () => {} }, sover };
+};
+
+test('nye forsøk: 502 og ECONNRESET prøves igjen, så lykkes kallet', async () => {
+  const nettfeil = Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } });
+  const f = fetchSomSvarer(svar(502, {}), nettfeil, svar(200, { ok: 1 }));
+  const { ctx, sover } = retryCtx(f.fetch);
+  const res = await hentMedNyeForsok(ctx, 'u', {}, 'GET /x');
+  assert.equal(res.status, 200);
+  assert.equal(f.kall.length, 3);
+  assert.deepEqual(sover, [5000, 10000]);
+});
+
+test('nye forsøk: rate limit prøves igjen; annen 4xx og vedvarende nettfeil gir opp', async () => {
+  const rl = fetchSomSvarer(svar(403, {}, { 'x-ratelimit-remaining': '0' }), svar(429, {}, { 'retry-after': '2' }), svar(200, {}));
+  const a = retryCtx(rl.fetch);
+  assert.equal((await hentMedNyeForsok(a.ctx, 'u', {}, 'x')).status, 200);
+  assert.deepEqual(a.sover, [5000, 2000]);
+
+  for (const status of [403, 404, 422]) {
+    const f = fetchSomSvarer(svar(status, { message: 'nei' }));
+    assert.equal((await hentMedNyeForsok(retryCtx(f.fetch).ctx, 'u', {}, 'x')).status, status);
+    assert.equal(f.kall.length, 1, `${status} prøves ikke igjen`);
   }
+  const e = new TypeError('fetch failed');
+  const nede = fetchSomSvarer(e, e, e, e, svar(200, {}));
+  await assert.rejects(hentMedNyeForsok(retryCtx(nede.fetch).ctx, 'u', {}, 'GET /x'), /GET \/x feilet etter 4 forsøk/);
+  assert.equal(nede.kall.length, 4);
 });
 
-// ---------------------------------------------------------------- kø og deploy
-
-test('sjekkPr og andreIKo', () => {
-  const navn = 'x #1';
-  assert.equal(sjekkPr(lagPr('melosys-web', 1), { navn, base: 'master' }), 'åpen');
-  assert.equal(sjekkPr(lagPr('melosys-web', 1, { state: 'MERGED' }), { navn, base: 'master' }), 'merget');
-  assert.throws(() => sjekkPr(lagPr('melosys-web', 1, { state: 'CLOSED' }), { navn, base: 'master' }), /CLOSED, ikke OPEN/);
-  assert.throws(() => sjekkPr(lagPr('melosys-web', 1, { isDraft: true }), { navn, base: 'master' }), /utkast/);
-  assert.throws(() => sjekkPr(lagPr('melosys-web', 1, { isInMergeQueue: true }), { navn, base: 'master' }), /står i merge-køen/);
-  assert.throws(() => sjekkPr(lagPr('melosys-web', 1, { mergeStateStatus: 'DIRTY' }), { navn, base: 'master' }), /konflikter/);
-  assert.throws(() => sjekkPr(lagPr('melosys-web', 1), { navn, base: 'main' }), /går mot master/);
-  const fork = lagPr('melosys-e2e-tests', 1, { headRepository: { nameWithOwner: 'noen/melosys-e2e-tests' } });
-  assert.throws(() => sjekkPr(fork, { navn, base: 'main', egetRepo: 'navikt/melosys-e2e-tests' }), /fork/);
-  assert.throws(() => sjekkPr(lagPr('x', 1, { reviewDecision: 'REVIEW_REQUIRED' }), { navn, base: 'master' }), /godkjenning/);
-
-  const ko = { entries: { nodes: [{ pullRequest: { number: 7 } }, { pullRequest: { number: 3253 } }] } };
-  assert.equal(andreIKo(ko, { repo: 'r', branch: 'b', prNummer: 3253 }), 1);
-  assert.throws(() => andreIKo(null, { repo: 'r', branch: 'b', prNummer: 1 }), /har ingen merge-kø på b/);
+test('API-feil: 4xx feiler med meldingen fra GitHub, og en HTML-side tåles', async () => {
+  const gh = par();
+  const fetch = gh.fetch;
+  gh.fetch = (async (url: string, init: any) =>
+    url.endsWith('/graphql') ? new Response('<html>Bad gateway</html>', { status: 400 }) : fetch(url, init)) as any;
+  await assert.rejects(kjorSteg(gh, 'pin-sjekk'), /GraphQL ga HTTP 400: <html>Bad gateway<\/html>/);
 });
 
-test('velgKoHandling og tolkKoPoll', () => {
-  const h = (felt: Pr) => velgKoHandling(lagPr('r', 1, felt), 'r #1');
-  assert.equal(h({ state: 'MERGED' }), 'merget');
-  assert.equal(h({ isInMergeQueue: true }), 'i-ko');
-  assert.equal(h({ autoMergeRequest: {} }), 'auto-merge-på');
-  for (const m of ['CLEAN', 'HAS_HOOKS', 'UNSTABLE', 'BEHIND']) assert.equal(h({ mergeStateStatus: m }), 'sett-i-ko', m);
-  assert.equal(h({ mergeStateStatus: 'BLOCKED' }), 'vent-på-sjekker');
-  assert.equal(h({ mergeStateStatus: 'UNKNOWN', viewerCanEnableAutoMerge: true }), 'slå-på-auto-merge');
-  assert.throws(() => h({ mergeStateStatus: 'DIRTY' }), /konflikter/);
-  assert.throws(() => h({ state: 'CLOSED' }), /CLOSED/);
+// ---------------------------------------------------------------- sjekk paret
 
-  const p = (felt: Pr) => tolkKoPoll(lagPr('r', 1, felt));
-  assert.equal(p({ state: 'MERGED' }), 'merget');
-  assert.equal(p({ state: 'CLOSED' }), 'lukket');
-  assert.equal(p({ isInMergeQueue: true }), 'venter');
-  assert.equal(p({ autoMergeRequest: {} }), 'venter');
-  assert.equal(p({}), 'ute');
+test('sjekk: åpent par og PR-er i kø godtas', async () => {
+  await kjorSteg(par(), 'sjekk');
+  await kjorSteg(par({ e2e: { isInMergeQueue: true }, web: { isInMergeQueue: true } }), 'sjekk');
 });
 
-test('deploy-kjøringen finnes for begge navneformene, og nyeste vinner', () => {
-  const runs = [
-    { id: 1, name: 'Integration Tests (Playback)', created_at: '2026-10-22T10:05:00Z', status: 'completed', conclusion: 'success' },
-    { id: 2, name: 'deploy-dev', created_at: '2026-10-22T10:00:00Z', status: 'completed', conclusion: 'failure' },
-    { id: 3, name: 'deploy-dev', created_at: '2026-10-22T10:30:00Z', status: 'in_progress', conclusion: null },
-    { id: 4, name: 'Publish Types', created_at: '2026-10-22T11:00:00Z', status: 'completed', conclusion: 'success' },
+test('sjekk: merget e2e-PR godtas bare med pinnen i merge-commiten', async () => {
+  const merget = { state: 'MERGED', mergeCommit: { oid: 'merge-380' } };
+  const { logg } = await kjorSteg(par({ e2e: merget }), 'sjekk');
+  assert.ok(logg.some((l) => /fortsetter der forrige slapp/.test(l)));
+  await kjorSteg(par({ e2e: merget, web: { state: 'MERGED' } }), 'sjekk');
+
+  const utenPin = par({ e2e: { state: 'MERGED', mergeCommit: { oid: 'uten-pin' } } });
+  await assert.rejects(kjorSteg(utenPin, 'sjekk'), /merget uten pinnen/);
+  const annenTag = par({ e2e: merget });
+  annenTag.s.filer['merge-380'] = pinTekst({ 'melosys-web': 'br-1' });
+  await assert.rejects(kjorSteg(annenTag, 'sjekk'), /merget uten pinnen/);
+});
+
+test('sjekk: service-PR merget i feil rekkefølge stopper kjøringen', async () => {
+  await assert.rejects(kjorSteg(par({ web: { state: 'MERGED' } }), 'sjekk'), /melosys-web #3253 er merget før/);
+  const merget = { state: 'MERGED', mergeCommit: { oid: 'merge-380' } };
+  const env = { TJENESTER: 'melosys-api#100,melosys-web#3253' };
+  const pinner = pinTekst({ 'melosys-api': TAG, 'melosys-web': TAG });
+  const utenApi = par({ e2e: merget, web: { state: 'MERGED' } });
+  utenApi.s.filer['merge-380'] = pinner;
+  await assert.rejects(kjorSteg(utenApi, 'sjekk', [], env), /melosys-web #3253 er merget før/);
+  const iRekkefolge = par({ e2e: merget, api: { state: 'MERGED' }, web: { state: 'MERGED' } });
+  iRekkefolge.s.filer['merge-380'] = pinner;
+  await kjorSteg(iRekkefolge, 'sjekk', [], env);
+});
+
+test('sjekk: utkast, fork, feil base, konflikt og lukket PR stopper', async () => {
+  const tilfeller: [Pr, RegExp][] = [
+    [{ isDraft: true }, /utkast/],
+    [{ headRepository: { nameWithOwner: 'fork/melosys-web' } }, /fork/],
+    [{ baseRefName: 'dev' }, /går mot dev/],
+    [{ mergeStateStatus: 'DIRTY' }, /konflikter/],
+    [{ state: 'CLOSED' }, /CLOSED/],
   ];
-  assert.equal(velgDeployKjoring(runs).id, 3);
-  assert.equal(velgDeployKjoring([{ id: 5, name: 'Build and Push melosys-mock', created_at: 'x' }]).id, 5);
-  assert.equal(velgDeployKjoring([{ id: 6, name: 'deploy til Q2', created_at: 'x' }]).id, 6);
-  assert.equal(velgDeployKjoring([runs[0], runs[3]]), null);
-  assert.equal(tolkDeploy(null), 'mangler');
-  assert.equal(tolkDeploy(runs[2]), 'venter');
-  assert.equal(tolkDeploy(runs[1]), 'feilet');
-  assert.equal(tolkDeploy(runs[0]), 'ok');
+  for (const [felt, feil] of tilfeller) await assert.rejects(kjorSteg(par({ web: felt }), 'sjekk'), feil);
+  const gh = par();
+  delete gh.s.prs['melosys-web#3253'];
+  await assert.rejects(kjorSteg(gh, 'sjekk'), /Fant ikke melosys-web #3253/);
 });
 
-// ---------------------------------------------------------------- jobbene
+// ---------------------------------------------------------------- pinnen
 
-test('sjekk: en service-kø med andre PR-er stopper kjøringen', async () => {
-  const gh = aaptPar();
-  gh.s.koer['melosys-web'] = [11, 12];
-  await assert.rejects(kjorJobb(gh, 'sjekk'), /melosys-web har 2 PR-er i køen\. Vent til køen er tom og start på nytt\./);
-  gh.s.koer['melosys-web'] = [];
-  const { sammendrag } = await kjorJobb(gh, 'sjekk');
-  assert.match(sammendrag.join(), /Paret er klart/);
-  delete gh.s.koer['melosys-web'];
-  await assert.rejects(kjorJobb(gh, 'sjekk'), /melosys-web har ingen merge-kø på master/);
-});
+test('pin: står pinnen på head, skrives ingenting; ellers committes den uten force', async () => {
+  const har = par();
+  const a = await kjorSteg(har, 'pin-sjekk');
+  assert.deepEqual(a.utdata, { trengs: 'false', head: 'head-380' });
+  const b = await kjorSteg(har, 'pin-skriv');
+  assert.equal(b.utdata.head, 'head-380');
+  assert.deepEqual(skriveKall(har.kall), []);
 
-test('sjekk: merget e2e-PR uten pinnen er ikke OPEN; med pinnen fortsetter kjøringen', async () => {
-  const gh = aaptPar({ e2e: { state: 'MERGED', mergeCommit: { oid: 'm-380' } }, web: { state: 'MERGED' } });
-  await assert.rejects(kjorJobb(gh, 'sjekk'), /e2e #380 er MERGED, ikke OPEN/);
-  gh.s.filer['m-380'] = pinTekst({ 'melosys-web': TAG });
-  const { logg } = await kjorJobb(gh, 'sjekk');
-  assert.match(logg.join('\n'), /allerede merget med pinnen/);
-  assert.equal(skriveKall(gh.kall).length, 0);
-});
-
-test('pin: committer oppå head, hopper over når pinnen står, og stopper når branchen er flyttet', async () => {
-  const gh = aaptPar();
-  gh.s.filer['head-380'] = pinTekst({ 'melosys-api': 'br-1' });
-  await kjorJobb(gh, 'pin');
-  const tre = gh.kall.find((k) => k.sti.endsWith('/git/trees'))!;
+  const mangler = par();
+  mangler.s.filer['head-380'] = pinTekst({ 'melosys-api': 'br-1' });
+  assert.equal((await kjorSteg(mangler, 'pin-sjekk')).utdata.trengs, 'true');
+  const c = await kjorSteg(mangler, 'pin-skriv');
+  assert.equal(c.utdata.head, 'ny-commit');
+  const tre = mangler.kall.find((k) => k.sti.endsWith('/git/trees'))!;
   assert.deepEqual(JSON.parse(tre.body.tree[0].content), { 'melosys-api': 'br-1', 'melosys-web': TAG });
-  const commit = gh.kall.find((k) => k.sti.endsWith('/git/commits') && k.metode === 'POST')!;
-  assert.deepEqual(commit.body.parents, ['head-380']);
-  assert.equal(commit.body.message, `TEK Pin melosys-web til ${TAG}`);
-  const patch = gh.kall.find((k) => k.metode === 'PATCH')!;
-  assert.equal(patch.body.force, false);
-  assert.equal(gh.s.refs['gren-380'], 'ny-commit');
-
-  const ferdig = aaptPar();
-  await kjorJobb(ferdig, 'pin');
-  assert.equal(skriveKall(ferdig.kall).length, 0, 'pinnen sto allerede');
-
-  const flyttet = aaptPar();
-  flyttet.s.filer['head-380'] = null;
-  flyttet.s.refFlyttet = true;
-  await assert.rejects(kjorJobb(flyttet, 'pin'), /gren-380 er endret siden jobben leste den \(head-380\)/);
+  const patch = mangler.kall.find((k) => k.metode === 'PATCH')!;
+  assert.match(patch.sti, /git\/refs\/heads\/gren-380$/);
+  assert.deepEqual(patch.body, { sha: 'ny-commit', force: false });
 });
 
-test('service: venter til køen er tom, setter PR-en i kø uten køhopp og venter på merge', async () => {
-  const gh = aaptPar({ e2e: { state: 'MERGED' } });
-  gh.s.koer['melosys-web'] = [11];
-  let koLesinger = 0;
+test('pin: merget e2e-PR sjekkes mot merge-commiten', async () => {
+  const ok = await kjorSteg(par({ e2e: { state: 'MERGED', mergeCommit: { oid: 'merge-380' } } }), 'pin-sjekk');
+  assert.deepEqual(ok.utdata, { trengs: 'false', head: 'merge-380' });
+  await assert.rejects(kjorSteg(par({ e2e: { state: 'MERGED', mergeCommit: { oid: 'x' } } }), 'pin-sjekk'), /merget uten pinnen/);
+});
+
+// ---------------------------------------------------------------- køene
+
+test('e2e-klar: venter til PR-en er klar, og pinnen sjekkes på head-en som sendes til køen', async () => {
+  const gh = par({ e2e: { mergeStateStatus: 'BLOCKED' } });
   gh.s.etterKall = (s: any, kall: any[]) => {
-    const siste = kall[kall.length - 1];
-    if (siste.operasjon === 'Ko' && ++koLesinger === 3) s.koer['melosys-web'] = [];
-    const pr = s.prs['melosys-web#3253'];
-    if (pr.isInMergeQueue && siste.operasjon === 'Pr' && kall.filter((k) => k.operasjon === 'Pr').length > 8) {
-      Object.assign(pr, { state: 'MERGED', isInMergeQueue: false });
-    }
+    if (kall.length === 2) Object.assign(s.prs['melosys-e2e-tests#380'], { mergeStateStatus: 'CLEAN', headRefOid: 'head-ny' });
   };
-  const { tid } = await kjorJobb(gh, 'service', ['melosys-web', '3253']);
-  const i = gh.kall.findIndex((k) => k.operasjon === 'SettIKo');
-  assert.ok(i > 0, 'PR-en ble satt i kø');
-  // Køen tømmes etter tredje lesing, så fjerde lesing er den første som ser den tom.
-  assert.equal(gh.kall.filter((k, j) => k.operasjon === 'Ko' && j < i).length, 4, 'satt i kø først når køen var tom');
-  assert.equal(gh.kall[i].body.query.includes('jump'), false);
-  assert.equal(gh.kall[i].body.variables.oid, 'head-3253');
-  assert.equal(gh.s.prs['melosys-web#3253'].state, 'MERGED');
-  assert.ok(tid() >= 2 * GRENSER.intervall);
-});
-
-test('service: en kø som aldri tømmes, gir tidsavbrudd etter 60 min uten at PR-en settes i kø', async () => {
-  const gh = aaptPar({ e2e: { state: 'MERGED' } });
-  gh.s.koer['melosys-web'] = [11];
-  await assert.rejects(kjorJobb(gh, 'service', ['melosys-web', '3253']), /melosys-web-køen var ikke tom etter 60 min/);
-  assert.equal(skriveKall(gh.kall).length, 0);
-});
-
-test('service: PR-en går ikke i kø før de foran er merget', async () => {
-  const gh = aaptPar();
-  await assert.rejects(kjorJobb(gh, 'service', ['melosys-web', '3253']), /e2e #380 er ikke merget ennå/);
-  assert.equal(skriveKall(gh.kall).length, 0);
-});
-
-test('e2e-ko: en PR som faller ut av køen uten merge, feiler jobben; ett glipp tåles', async () => {
-  const gh = aaptPar();
-  let lesinger = 0;
-  gh.s.etterKall = (s: any, kall: any[]) => {
-    const pr = s.prs['melosys-e2e-tests#380'];
-    if (kall[kall.length - 1].operasjon !== 'Pr' || !kall.some((k) => k.operasjon === 'SettIKo')) return;
-    lesinger += 1;
-    // Én lesing uten oppføring (køen henger etter), så tilbake i køen, så ute for godt.
-    pr.isInMergeQueue = lesinger === 2 || lesinger === 3;
-  };
-  await assert.rejects(
-    kjorJobb(gh, 'e2e-ko'),
-    /e2e-PR-en ble tatt ut av køen\. Se kjøringen i køen, rett og start på nytt\./,
-  );
-  assert.ok(lesinger >= 5, `glippet på lesing 1 skal ikke feile jobben (${lesinger} lesinger)`);
-
-  const lukket = aaptPar();
-  lukket.s.etterKall = (s: any, kall: any[]) => {
-    if (kall.some((k) => k.operasjon === 'SettIKo')) s.prs['melosys-e2e-tests#380'].state = 'CLOSED';
-  };
-  await assert.rejects(kjorJobb(lukket, 'e2e-ko'), /e2e-PR-en ble tatt ut av køen/);
-});
-
-test('e2e-ko: venter på sjekkene når auto-merge ikke er lov, og stopper når pinnen mangler', async () => {
-  const gh = aaptPar({ e2e: { mergeStateStatus: 'BLOCKED' } });
-  gh.s.etterKall = (s: any, kall: any[]) => {
-    const pr = s.prs['melosys-e2e-tests#380'];
-    if (kall.filter((k) => k.operasjon === 'Pr').length === 4) pr.mergeStateStatus = 'CLEAN';
-    if (pr.isInMergeQueue && kall.filter((k) => k.operasjon === 'Pr').length > 6) Object.assign(pr, { state: 'MERGED', isInMergeQueue: false });
-  };
-  await kjorJobb(gh, 'e2e-ko');
-  assert.deepEqual(skriveKall(gh.kall).map((k) => k.operasjon), ['SettIKo']);
-
-  const uten = aaptPar();
-  uten.s.filer['head-380'] = null;
-  await assert.rejects(kjorJobb(uten, 'e2e-ko'), /pinner ikke melosys-web til br-38725776923/);
-  assert.equal(skriveKall(uten.kall).length, 0);
-});
-
-test('latest: venter på deploy-kjøringen og feiler når den feiler', async () => {
-  const gh = aaptPar({ web: { state: 'MERGED', mergeCommit: { oid: 'msha' } } });
-  gh.s.runs.msha = [{ id: 1, name: 'deploy-dev', status: 'in_progress', created_at: 'a', html_url: 'u' }];
-  let n = 0;
-  gh.s.etterKall = (s: any, kall: any[]) => {
-    if (kall[kall.length - 1].sti.includes('actions/runs') && ++n === 3) Object.assign(s.runs.msha[0], { status: 'completed', conclusion: 'success' });
-  };
-  const { sammendrag } = await kjorJobb(gh, 'latest', ['melosys-web', '3253']);
-  assert.match(sammendrag.join(), /melosys-web latest har melosys-web #3253/);
-  assert.equal(n, 3);
+  gh.s.filer['head-ny'] = pinTekst({ 'melosys-web': TAG });
+  const { utdata } = await kjorSteg(gh, 'e2e-klar');
+  assert.deepEqual(utdata, { status: 'klar', id: 'PR_melosys-e2e-tests_380', head: 'head-ny' });
+  assert.ok(gh.kall.some((k) => k.sti.endsWith('ref=head-ny')));
 
   gh.s.etterKall = () => {};
-  gh.s.runs.msha = [{ id: 2, name: 'deploy-dev', status: 'completed', conclusion: 'failure', created_at: 'b', html_url: 'u2' }];
-  await assert.rejects(kjorJobb(gh, 'latest', ['melosys-web', '3253']), /«deploy-dev» for msha i melosys-web endte med failure: u2/);
+  delete gh.s.filer['head-ny'];
+  await assert.rejects(kjorSteg(gh, 'e2e-klar'), /har ikke pinnen på head-ny/);
+  await assert.rejects(kjorSteg(par({ e2e: { mergeStateStatus: 'BLOCKED' } }), 'e2e-klar'), /ble ikke klar for køen på 30 min/);
 });
 
-test('fjern-pin: åpner PR-en fra main, og main uten pinnen er ingen feil', async () => {
-  const gh = aaptPar();
-  gh.s.filer['main-sha'] = pinTekst({ 'melosys-web': TAG });
-  gh.s.etterKall = (s: any) => {
-    const pr = s.prs['melosys-e2e-tests#999'];
-    if (pr?.isInMergeQueue) Object.assign(pr, { state: 'MERGED', isInMergeQueue: false });
+test('sett-i-ko: enqueuePullRequest med expectedHeadOid og uten køhopp', async () => {
+  const gh = par();
+  await kjorSteg(gh, 'sett-i-ko', ['melosys-e2e-tests'], { PR_ID: 'PR_melosys-e2e-tests_380', HEAD_OID: 'head-380' });
+  const [m] = skriveKall(gh.kall);
+  assert.match(m.body.query, /enqueuePullRequest\(input: \{ pullRequestId: \$id, expectedHeadOid: \$oid \}\)/);
+  assert.doesNotMatch(m.body.query, /jump/);
+  assert.deepEqual(m.body.variables, { id: 'PR_melosys-e2e-tests_380', oid: 'head-380' });
+});
+
+test('vent-merget: én lesing utenfor køen tåles, to på rad feiler', async () => {
+  const blipp = par({ e2e: { isInMergeQueue: true } });
+  blipp.s.etterKall = (s: any, kall: any[]) => {
+    const pr = s.prs['melosys-e2e-tests#380'];
+    if (kall.length === 1) pr.isInMergeQueue = false;
+    if (kall.length === 2) pr.isInMergeQueue = true;
+    if (kall.length === 4) pr.state = 'MERGED';
   };
-  await kjorJobb(gh, 'fjern-pin');
-  const tre = gh.kall.find((k) => k.sti.endsWith('/git/trees'))!;
-  assert.deepEqual(tre.body.tree[0], { path: '.github/e2e-pins.json', mode: '100644', type: 'blob', sha: null }, 'tom fil slettes');
-  assert.deepEqual(gh.kall.find((k) => k.sti.endsWith('/git/commits') && k.metode === 'POST')!.body.parents, ['main-sha']);
-  assert.equal(gh.s.refs[`fjern-pin-${TAG}`], 'ny-commit');
-  const pr = gh.kall.find((k) => k.sti.endsWith('/pulls') && k.metode === 'POST')!;
-  assert.equal(pr.body.title, `TEK Fjern pinnen for melosys-web (${TAG})`);
-  assert.match(pr.body.body, /https:\/\/run/);
-  assert.match(pr.body.body, /navikt\/melosys-web#3253/);
-  assert.equal(gh.s.prs['melosys-e2e-tests#999'].state, 'MERGED');
+  await kjorSteg(blipp, 'vent-merget', ['melosys-e2e-tests', '380']);
 
-  const tom = aaptPar();
-  tom.s.filer['main-sha'] = pinTekst({ 'melosys-web': 'br-annen' });
-  const { logg } = await kjorJobb(tom, 'fjern-pin');
-  assert.match(logg.join(), /ingenting å fjerne/);
-  assert.equal(skriveKall(tom.kall).length, 0);
+  const ute = par({ e2e: { isInMergeQueue: true } });
+  ute.s.etterKall = (s: any, kall: any[]) => {
+    if (kall.length === 1) s.prs['melosys-e2e-tests#380'].isInMergeQueue = false;
+  };
+  await assert.rejects(kjorSteg(ute, 'vent-merget', ['melosys-e2e-tests', '380']), /tatt ut av køen uten merge/);
+  assert.equal(ute.kall.length, 3, 'feiler på andre lesing utenfor køen');
+  await assert.rejects(kjorSteg(par({ e2e: { state: 'CLOSED' } }), 'vent-merget', ['melosys-e2e-tests', '380']), /tatt ut/);
 });
 
-test('dry_run: ingen jobb skriver, og alle fullfører', async () => {
-  const gh = aaptPar({ e2e: { viewerCanEnableAutoMerge: true, mergeStateStatus: 'BLOCKED' } });
-  gh.s.filer['head-380'] = null;
-  gh.s.filer['main-sha'] = pinTekst({ 'melosys-web': TAG });
-  gh.s.koer['melosys-web'] = [];
-  const env = { DRY_RUN: 'true', APP_CLIENT_ID: 'Iv1', APP_PRIVATE_KEY: 'nøkkel' };
-  for (const [jobb, args] of [
-    ['input', []],
+test('service-klar: e2e-PR-en må være merget, og jobben venter på tom kø', async () => {
+  await assert.rejects(kjorSteg(par(), 'service-klar', ['melosys-web', '3253']), /e2e-tests #380 er ikke merget/);
+
+  const gh = par({ e2e: { state: 'MERGED' } }, { koer: { 'melosys-web': 2 } });
+  gh.s.etterKall = (s: any, kall: any[]) => {
+    if (kall.filter((k) => /query Ko/.test(k.body?.query ?? '')).length === 2) s.koer['melosys-web'] = 0;
+  };
+  const { utdata, tid } = await kjorSteg(gh, 'service-klar', ['melosys-web', '3253']);
+  assert.equal(utdata.status, 'klar');
+  assert.equal(tid, 60_000, 'to ventepauser før køen er tom');
+
+  const full = par({ e2e: { state: 'MERGED' } }, { koer: { 'melosys-web': 1 } });
+  await assert.rejects(kjorSteg(full, 'service-klar', ['melosys-web', '3253']), /ikke tom etter 60 min/);
+
+  const iKo = par({ e2e: { state: 'MERGED' }, web: { isInMergeQueue: true } }, { koer: { 'melosys-web': 3 } });
+  assert.equal((await kjorSteg(iKo, 'service-klar', ['melosys-web', '3253'])).utdata.status, 'i-ko');
+  await assert.rejects(kjorSteg(par({ e2e: { state: 'MERGED' } }, { koer: {} }), 'service-klar', ['melosys-web', '3253']), /ingen merge-kø/);
+});
+
+test('latest-steget: venter på Build i deploy-kjøringen for merge-commiten', async () => {
+  const gh = par({ web: { state: 'MERGED', mergeCommit: { oid: 'sha-web' } } }, {
+    runs: { 'sha-web': [{ id: 7, name: 'deploy-dev', html_url: 'https://run/7' }, { id: 8, name: 'CodeQL' }] },
+    jobs: { 7: [{ name: 'Build', status: 'in_progress', conclusion: null }] },
+  });
+  gh.s.etterKall = (s: any, kall: any[]) => {
+    if (kall.length === 5) s.jobs[7] = [{ name: 'Build', status: 'completed', conclusion: 'success' }, { name: 'deploy', status: 'completed', conclusion: 'failure' }];
+  };
+  const { logg, tid } = await kjorSteg(gh, 'latest', ['melosys-web', '3253']);
+  assert.ok(logg.some((l) => l.includes('https://run/7')));
+  assert.ok(tid > 0, 'ventet på Build');
+  assert.ok(gh.kall.some((k) => /head_sha=sha-web&event=push&branch=master/.test(k.sti)));
+
+  gh.s.jobs[7] = [{ name: 'Build', status: 'completed', conclusion: 'failure' }];
+  gh.s.etterKall = () => {};
+  await assert.rejects(kjorSteg(gh, 'latest', ['melosys-web', '3253']), /Build-jobben i «deploy-dev» .* feilet/);
+});
+
+// ---------------------------------------------------------------- fjern pinnen
+
+test('fjern-pin: main uten pinnen er ferdig; branch og åpen PR gjenbrukes', async () => {
+  assert.equal((await kjorSteg(par(), 'fjern-sjekk')).utdata.ferdig, 'true');
+
+  const ny = par();
+  ny.s.filer.main = pinTekst({ 'melosys-web': TAG });
+  assert.equal((await kjorSteg(ny, 'fjern-sjekk')).utdata.ferdig, 'false');
+  assert.equal((await kjorSteg(ny, 'fjern-skriv', [], { REQUESTED_BY: '@rune' })).utdata.pr, '999');
+  assert.deepEqual(skriveKall(ny.kall).map((k) => `${k.metode} ${k.sti.split('/').slice(-2).join('/')}`), [
+    'POST git/trees',
+    'POST git/commits',
+    'POST git/refs',
+    'POST melosys-e2e-tests/pulls',
+  ]);
+  assert.match(skriveKall(ny.kall).at(-1)!.body.body, /Bestilt av rune via/);
+
+  const gammel = par({}, { apnePulls: [{ number: 5, html_url: 'https://x/5' }] });
+  gammel.s.filer.main = pinTekst({ 'melosys-web': TAG });
+  gammel.s.filer['gren-sha'] = pinTekst({ 'melosys-web': TAG });
+  gammel.s.refs[`fjern-pin-${TAG}`] = 'gren-sha';
+  assert.equal((await kjorSteg(gammel, 'fjern-skriv')).utdata.pr, '5');
+  const patch = skriveKall(gammel.kall).find((k) => k.metode === 'PATCH')!;
+  assert.deepEqual(patch.body, { sha: 'ny-commit', force: false });
+  assert.ok(!skriveKall(gammel.kall).some((k) => k.sti.endsWith('/pulls')), 'åpen PR gjenbrukes');
+
+  gammel.kall.length = 0;
+  await kjorSteg(gammel, 'fjern-skriv');
+  assert.deepEqual(skriveKall(gammel.kall), [], 'branchen har allerede riktig innhold');
+});
+
+// ---------------------------------------------------------------- dry_run
+
+test('dry_run: ingen steg skriver, og ingen venter', async () => {
+  const gh = par({ e2e: { mergeStateStatus: 'BLOCKED' } }, { koer: { 'melosys-web': 4 } });
+  gh.s.filer.main = pinTekst({ 'melosys-web': TAG });
+  delete gh.s.filer['head-380'];
+  const env = { DRY_RUN: 'true' };
+  const steg: [string, string[]][] = [
     ['sjekk', []],
-    ['pin', []],
-    ['e2e-ko', []],
-    ['service', ['melosys-web', '3253']],
+    ['pin-sjekk', []],
+    ['e2e-klar', []],
+    ['vent-merget', ['melosys-e2e-tests', '380']],
+    ['service-klar', ['melosys-web', '3253']],
+    ['vent-merget', ['melosys-web', '3253']],
     ['latest', ['melosys-web', '3253']],
-    ['fjern-pin', []],
-  ] as [string, string[]][]) {
-    const { logg } = await kjorJobb(gh, jobb, args, env);
-    if (jobb !== 'input' && jobb !== 'sjekk') assert.match(logg.join('\n'), /dry_run/, jobb);
+    ['fjern-sjekk', []],
+  ];
+  for (const [navn, args] of steg) {
+    const { tid } = await kjorSteg(gh, navn, args, env);
+    assert.equal(tid, 0, `${navn} venter ikke`);
   }
-  assert.ok(gh.kall.length > 10);
   assert.deepEqual(skriveKall(gh.kall), []);
-  assert.ok(gh.kall.every((k) => k.metode === 'GET' || k.sti === '/graphql'));
-});
-
-test('dry_run-sperren i klienten stopper skriving selv om en jobb skulle prøve', async () => {
-  const gh = aaptPar();
-  gh.s.filer['head-380'] = null;
-  // Med sperren alene (jobben tror den skal skrive) skal fetch aldri se skrivingen.
-  const api = lagKlient({ token: 't', fetch: gh.fetch, dryRun: true });
-  await assert.rejects(api.rest('POST', '/repos/navikt/melosys-e2e-tests/git/refs', {}), /dry_run: stoppet POST/);
-  await assert.rejects(api.graphql('mutation X { a }', {}), /dry_run: stoppet en GraphQL-mutasjon/);
-  assert.equal(gh.kall.length, 0);
-});
-
-test('app-tokenet byttes før det går ut', async () => {
-  const { privateKey, publicKey } = generateKeyPairSync('rsa', { modulusLength: 2048 });
-  const pem = privateKey.export({ type: 'pkcs8', format: 'pem' }).toString();
-  const jwt = lagJwt('Iv1.abc', pem, 1_000_000);
-  const [h, p, sig] = jwt.split('.');
-  assert.ok(createVerify('RSA-SHA256').update(`${h}.${p}`).verify(publicKey, sig, 'base64url'));
-  assert.equal(JSON.parse(Buffer.from(p, 'base64url').toString()).iss, 'Iv1.abc');
-
-  let t = 0;
-  const kall: any[] = [];
-  const fetch = async (url: string, init: any = {}) => {
-    kall.push({ url, init });
-    const data = url.endsWith('/installation') ? { id: 42 } : { token: 't-ny' };
-    return { ok: true, status: 200, text: async () => JSON.stringify(data) };
-  };
-  const kilde = lagTokenKilde({ token: 't0', klientId: 'Iv1.abc', nokkel: pem, repoer: ['melosys-e2e-tests'], fetch, now: () => t });
-  assert.equal(await kilde(), 't0');
-  t = 49 * MIN;
-  assert.equal(await kilde(), 't0');
-  t = 51 * MIN;
-  assert.equal(await kilde(), 't-ny');
-  assert.match(kall[1].url, /\/app\/installations\/42\/access_tokens$/);
-  assert.deepEqual(JSON.parse(kall[1].init.body), { repositories: ['melosys-e2e-tests'] });
+  for (const navn of ['pin-skriv', 'fjern-skriv']) await assert.rejects(kjorSteg(gh, navn, [], env), /dry_run: stoppet/);
+  await assert.rejects(kjorSteg(gh, 'sett-i-ko', ['x'], { ...env, PR_ID: 'a', HEAD_OID: 'b' }), /dry_run: stoppet en GraphQL-mutasjon/);
+  assert.deepEqual(skriveKall(gh.kall), []);
 });
 
 // ---------------------------------------------------------------- CLI og kontrakt
 
-test('CLI: input skriver matrisen og repolista', () => {
+test('CLI: input skriver matrisen, og feil blir ::error::', () => {
   const script = join(__dirname, '..', 'scripts', 'koblet-merge.mjs');
-  const ut = execFileSync(process.execPath, [script, 'input'], {
-    env: { TAG, E2E_PR: '380', TJENESTER: 'melosys-docker-compose#5,melosys-web#3253' },
-  }).toString();
-  assert.match(ut, /matrix=\{"include":\[\{"repo":"melosys-docker-compose","pr":5,"nokkel":"melosys-mock"\}/);
-  assert.match(ut, /repos=melosys-e2e-tests\nmelosys-docker-compose\nmelosys-web/);
+  const ut = execFileSync(process.execPath, [script, 'input'], { env: { TAG, E2E_PR: '380', TJENESTER: 'melosys-web#3253' } }).toString();
+  assert.match(ut, /matrix=\{"include":\[\{"repo":"melosys-web","pr":3253\}\]\}/);
   assert.throws(
-    () => execFileSync(process.execPath, [script, 'input'], { env: { TAG: 'x', E2E_PR: '1', TJENESTER: 'melosys-web#1' }, stdio: 'pipe' }),
-    (e: { status: number; stdout: Buffer }) => e.status === 1 && /::error::tag må være/.test(e.stdout.toString()),
+    () => execFileSync(process.execPath, [script, 'input'], { env: { TAG, E2E_PR: '1', TJENESTER: 'melosys-docker-compose#1' }, stdio: 'pipe' }),
+    (e: { status: number; stdout: Buffer }) => e.status === 1 && /::error::melosys-docker-compose har ingen merge-kø/.test(e.stdout.toString()),
   );
 });
 
-test('workflowen har jobbene og navnene konsollen leser', () => {
+test('workflowen: jobbnavnene konsollen leser, prøvekjøring i run-name og app-token for ett repo', () => {
   const yml = readFileSync(join(__dirname, '..', '.github', 'workflows', 'koblet-merge.yml'), 'utf8');
   const jobber = [...yml.matchAll(/^  ([a-z0-9-]+):\n    name: "?(.+?)"?$/gm)].map(([, id, navn]) => [id, navn]);
   assert.deepEqual(jobber, [
@@ -568,10 +500,13 @@ test('workflowen har jobbene og navnene konsollen leser', () => {
     ['fjern-pin', 'Fjern pinnen'],
   ]);
   for (const inp of ['tag', 'e2e_pr', 'tjenester', 'requested_by', 'dry_run']) assert.match(yml, new RegExp(`^      ${inp}:$`, 'm'));
+  assert.match(yml, /^run-name: .*\$\{\{ inputs\.dry_run && ' \(prøvekjøring\)' \|\| '' \}\}"$/m);
   assert.match(yml, /group: koblet-merge-\$\{\{ inputs\.tag \}\}\n  cancel-in-progress: false/);
-  for (const jobb of ['sjekk', 'pin', 'e2e-ko', 'service', 'latest', 'fjern-pin']) {
-    assert.match(yml, new RegExp(`koblet-merge\\.mjs ${jobb}\\b`), jobb);
-  }
+  assert.match(yml, /GH_TOKEN: \$\{\{ github\.token \}\}/);
+  const tokenSteg = yml.split('uses: actions/create-github-app-token@v3').slice(1);
+  assert.equal(tokenSteg.length, 5);
+  for (const s of tokenSteg) assert.match(s, /\n\s+repositories: (melosys-e2e-tests|\$\{\{ matrix\.repo \}\})\n/);
+  assert.equal((yml.match(/MELOSYS_CI_PRIVATE_KEY/g) ?? []).length, 5, 'nøkkelen brukes bare i token-stegene');
 });
 
 test('koblet-merge starter ikke e2e-suiten', () => {
