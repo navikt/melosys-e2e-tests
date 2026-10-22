@@ -331,6 +331,22 @@ jobs:
             fi
           fi
 
+          # ---- Pinner fra .github/e2e-pins.json ----
+          # En tjeneste som fortsatt har latest, får taggen i fila; tjenesten under test
+          # beholder sin egen. Ved en koblet endring pinner e2e-PR-en tjenesten til imaget den
+          # er testet mot, så tester og image byttes i samme commit (docs/ci-cd/KOBLEDE-ENDRINGER.md).
+          export MELOSYS_API_TAG FAKTURERINGSKOMPONENTEN_TAG MELOSYS_WEB_TAG \
+                 MELOSYS_TRYGDEAVGIFT_TAG MELOSYS_TRYGDEAVTALE_TAG \
+                 MELOSYS_INNGANGSVILKAR_TAG MELOSYS_EESSI_TAG MELOSYS_MOCK_TAG \
+                 MELOSYS_DOKGEN_TAG MELOSYS_SKJEMA_API_TAG MELOSYS_SKJEMA_WEB_TAG
+          PINNER=$(node scripts/e2e-pins.mjs .github/e2e-pins.json) \
+            || { echo "::error::.github/e2e-pins.json er ugyldig, se meldingen over"; exit 1; }
+          while read -r tag_var tjeneste tag; do
+            [ -n "$tag_var" ] || continue
+            printf -v "$tag_var" '%s' "$tag"
+            echo "::warning::📌 $tjeneste er pinnet til $tag i .github/e2e-pins.json. Fjern pinnen når $tjeneste latest har endringen."
+          done <<< "$PINNER"
+
           # ---- Trigger-kontekst for melosys-console ----
           # Konsollen leser trigger-konteksten fra test-summary-artefakten: runs-API-et
           # eksponerer ikke client_payload, og triggering_actor er app-en eller PAT-eieren, ikke
