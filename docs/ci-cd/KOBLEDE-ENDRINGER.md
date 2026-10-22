@@ -8,6 +8,27 @@ Løsningen er en pin i `.github/e2e-pins.json`. e2e-PR-en pinner tjenesten til i
 
 Kan testene skrives slik at de er grønne mot både gammelt og nytt image (regex for tekst, `.or()` for lokatorer), merger du e2e-PR-en først og service-PR-en etterpå. Er en backend-PR i samme endring bakoverkompatibel, merger du den først uten pin.
 
+## Automatisk fra konsollen
+
+Knappen i melosys-console starter workflowen «Koblet merge» (`.github/workflows/koblet-merge.yml`) på `main`. Den gjør steg 2–5 i den manuelle oppskriften for deg, uten køhopp. Kjør paret grønt med «E2E med brancher» først (steg 1); knappen trenger taggen `br-<run_id>`, e2e-PR-en og service-PR-ene i den rekkefølgen de skal merges.
+
+Workflowen har seks jobber:
+
+1. **Sjekk paret.** Alle PR-ene er åpne, ikke utkast og ikke i kø, e2e-branchen ligger i dette repoet, og hver service-kø er tom. Er en kø ikke tom, stopper kjøringen: vent til køen er tom, og start på nytt.
+2. **Legg pinnen i e2e-PR-en.** Workflowen committer `.github/e2e-pins.json` til e2e-branchen. Andre pinner i fila står. Er branchen pushet til i mellomtiden, stopper jobben i stedet for å overskrive.
+3. **e2e-PR gjennom køen.** Workflowen venter til sjekkene på PR-en er grønne, setter den i kø og venter til den er merget (opptil 150 min). Tas den ut av køen, stopper kjøringen.
+4. **`<repo> #<pr>` i køen**, én service-PR om gangen. Står andre PR-er i køen, venter jobben til køen er tom (opptil 60 min), og setter så PR-en bakerst i køen. Andre kan sette PR-er i kø mens jobben venter; si fra i kanalen.
+5. **`<repo>` latest har endringen.** Workflowen venter på deploy-kjøringen for merge-commiten (opptil 60 min). Feiler den, stopper kjøringen, og pinnen står.
+6. **Fjern pinnen.** Workflowen åpner PR-en `fjern-pin-<tag>` fra `main` og fletter den gjennom køen. Den fjerner bare pinner som fortsatt står på taggen.
+
+**Prøv først med `dry_run`.** Hver jobb leser og sjekker som vanlig, og skriver i loggen hva den ville gjort, men committer, setter i kø og åpner ingenting. Jobber som venter på noe workflowen selv skulle gjort, hopper over ventingen.
+
+**Rettigheter.** Appen «Melosys CI» trenger *Contents: write* og *Pull requests: write* i melosys-e2e-tests og service-repoene. Uten dem stopper den første skrivende jobben ved «Hent app-token». En org-admin gir rettighetene i appens innstillinger. `dry_run` virker med lesetilgang.
+
+**Bare repoer med merge-kø.** Workflowen setter PR-er i kø og merger aldri forbi køen. Har repoet ingen kø på default-branchen (i dag melosys-trygdeavgift-beregning og melosys-docker-compose), stopper sjekken; bruk den manuelle oppskriften.
+
+**Stoppe og fortsette.** Avbryt kjøringen i Actions. Det som er gjort, står: en commitet pin, en merget PR. En PR som står i kø, blir stående og merges av køen. Start på nytt med samme input når du vil fortsette. Hver jobb hopper over det som er gjort: pinnen står allerede, e2e-PR-en er merget, service-PR-en er merget, pinnen er fjernet. Står en PR fortsatt i kø når du starter på nytt, stopper sjekken; vent til den er merget, eller ta den ut av køen.
+
 ## Slik gjør du det
 
 Eksempel: melosys-web #3300 bytter en knapp, og e2e-branchen `MELOSYS-9000-ny-knapp` har testene som finner den nye knappen.

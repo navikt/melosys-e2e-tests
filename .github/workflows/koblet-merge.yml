@@ -1,0 +1,274 @@
+name: Koblet merge
+run-name: "Koblet merge · ${{ inputs.requested_by || 'ukjent' }}: ${{ inputs.tag }} · e2e #${{ inputs.e2e_pr }} · ${{ inputs.tjenester }}"
+
+# Fletter en koblet endring: service-PR-er som krever nye e2e-tester, og e2e-PR-en som
+# retter testene. Paret må være kjørt grønt med «E2E med brancher» først; taggen derfra
+# pinnes i e2e-PR-en, e2e-PR-en og service-PR-ene går gjennom køene i rekkefølge, og
+# pinnen fjernes når latest har endringene. melosys-console starter workflowen.
+# Logikken ligger i scripts/koblet-merge.mjs; oppskriften i docs/ci-cd/KOBLEDE-ENDRINGER.md.
+#
+# Hver jobb hopper over arbeid som er gjort. Start på nytt med samme input etter en
+# avbrutt eller rød kjøring.
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Taggen fra «E2E med brancher»: br-<run_id>'
+        required: true
+        type: string
+      e2e_pr:
+        description: 'PR-nummeret i melosys-e2e-tests'
+        required: true
+        type: string
+      tjenester:
+        description: '<repo>#<pr> i merge-rekkefølge, kommaseparert (f.eks. melosys-skjema-api#422,melosys-skjema-web#695). melosys-mock = melosys-docker-compose.'
+        required: true
+        type: string
+      requested_by:
+        description: 'Hvem som bestilte kjøringen. Settes av melosys-console.'
+        required: false
+        type: string
+        default: ukjent
+      dry_run:
+        description: 'Les og sjekk alt, men skriv ingenting'
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: koblet-merge-${{ inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  TAG: ${{ inputs.tag }}
+  E2E_PR: ${{ inputs.e2e_pr }}
+  TJENESTER: ${{ inputs.tjenester }}
+  REQUESTED_BY: ${{ inputs.requested_by }}
+  DRY_RUN: ${{ inputs.dry_run }}
+  RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
+
+# Skrivende jobber henter et lesetoken med dry_run og et skrivetoken ellers. Appen trenger
+# Contents: write og Pull requests: write for skrivetokenet. Tokenet varer én time; jobbene
+# som venter på køer, sender nøkkelen til scriptet, som henter et nytt token før det går ut.
+
+jobs:
+  sjekk:
+    name: Sjekk paret
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      matrix: ${{ steps.input.outputs.matrix }}
+      repos: ${{ steps.input.outputs.repos }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Les input
+        id: input
+        run: node scripts/koblet-merge.mjs input
+      - name: Hent app-token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: ${{ steps.input.outputs.repos }}
+          permission-contents: read
+      - name: Sjekk PR-ene og køene
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+        run: node scripts/koblet-merge.mjs sjekk
+
+  pin:
+    name: Legg pinnen i e2e-PR-en
+    needs: sjekk
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Hent app-token (dry_run)
+        id: token-les
+        if: inputs.dry_run
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: melosys-e2e-tests
+          permission-contents: read
+      - name: Hent app-token
+        id: token-skriv
+        if: ${{ !inputs.dry_run }}
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: melosys-e2e-tests
+          permission-contents: write
+      - name: Legg pinnen i e2e-PR-en
+        env:
+          GH_TOKEN: ${{ steps.token-les.outputs.token || steps.token-skriv.outputs.token }}
+        run: node scripts/koblet-merge.mjs pin
+
+  e2e-ko:
+    name: e2e-PR gjennom køen
+    needs: pin
+    runs-on: ubuntu-latest
+    # 30 min til sjekkene er grønne + 150 min i køen
+    timeout-minutes: 190
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Hent app-token (dry_run)
+        id: token-les
+        if: inputs.dry_run
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: melosys-e2e-tests
+          permission-contents: read
+      - name: Hent app-token
+        id: token-skriv
+        if: ${{ !inputs.dry_run }}
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: melosys-e2e-tests
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Sett e2e-PR-en i køen og vent på merge
+        env:
+          GH_TOKEN: ${{ steps.token-les.outputs.token || steps.token-skriv.outputs.token }}
+          APP_CLIENT_ID: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          APP_REPOS: melosys-e2e-tests
+          APP_PERMISSIONS: '{"contents":"write","pull_requests":"write"}'
+        run: node scripts/koblet-merge.mjs e2e-ko
+
+  service:
+    name: "${{ matrix.repo }} #${{ matrix.pr }} i køen"
+    needs: [sjekk, e2e-ko]
+    runs-on: ubuntu-latest
+    # 60 min på tom kø + 30 min til sjekkene er grønne + 150 min i køen
+    timeout-minutes: 250
+    strategy:
+      max-parallel: 1
+      fail-fast: true
+      matrix: ${{ fromJSON(needs.sjekk.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Hent app-token (dry_run)
+        id: token-les
+        if: inputs.dry_run
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: ${{ needs.sjekk.outputs.repos }}
+          permission-contents: read
+      - name: Hent app-token
+        id: token-skriv
+        if: ${{ !inputs.dry_run }}
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: ${{ needs.sjekk.outputs.repos }}
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Vent på tom kø, sett PR-en i kø og vent på merge
+        env:
+          GH_TOKEN: ${{ steps.token-les.outputs.token || steps.token-skriv.outputs.token }}
+          APP_CLIENT_ID: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          APP_REPOS: ${{ needs.sjekk.outputs.repos }}
+          APP_PERMISSIONS: '{"contents":"write","pull_requests":"write"}'
+          REPO: ${{ matrix.repo }}
+          PR: ${{ matrix.pr }}
+        run: node scripts/koblet-merge.mjs service "$REPO" "$PR"
+
+  latest:
+    name: "${{ matrix.repo }} latest har endringen"
+    needs: [sjekk, service]
+    runs-on: ubuntu-latest
+    timeout-minutes: 70
+    strategy:
+      fail-fast: false
+      matrix: ${{ fromJSON(needs.sjekk.outputs.matrix) }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Hent app-token
+        id: app-token
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: ${{ matrix.repo }}
+          permission-contents: read
+          permission-actions: read
+      - name: Vent på deploy av merge-commiten
+        env:
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
+          REPO: ${{ matrix.repo }}
+          PR: ${{ matrix.pr }}
+        run: node scripts/koblet-merge.mjs latest "$REPO" "$PR"
+
+  fjern-pin:
+    name: Fjern pinnen
+    needs: [sjekk, latest]
+    runs-on: ubuntu-latest
+    # 30 min til sjekkene er grønne + 150 min i køen
+    timeout-minutes: 190
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Hent app-token (dry_run)
+        id: token-les
+        if: inputs.dry_run
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: melosys-e2e-tests
+          permission-contents: read
+      - name: Hent app-token
+        id: token-skriv
+        if: ${{ !inputs.dry_run }}
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: melosys-e2e-tests
+          permission-contents: write
+          permission-pull-requests: write
+      - name: Åpne PR-en som fjerner pinnen, og flett den
+        env:
+          GH_TOKEN: ${{ steps.token-les.outputs.token || steps.token-skriv.outputs.token }}
+          APP_CLIENT_ID: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          APP_PRIVATE_KEY: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          APP_REPOS: melosys-e2e-tests
+          APP_PERMISSIONS: '{"contents":"write","pull_requests":"write"}'
+        run: node scripts/koblet-merge.mjs fjern-pin
