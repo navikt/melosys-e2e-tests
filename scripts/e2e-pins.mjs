@@ -440,12 +440,18 @@ async function skrivLagret(github, finnes, verdi) {
 async function hentBrancherKjøring(github, runId, lastNed) {
   const orkestrator = krev(await github('GET', `/repos/${EIER}/${E2E_REPO}/actions/runs/${runId}`), `kjøring ${runId}`);
   const tittel = `E2E Tests · br-${runId}-${orkestrator.run_attempt}`;
-  const fra = encodeURIComponent(`>=${orkestrator.created_at}`);
-  const kjøringer = krev(
-    await github('GET', `/repos/${EIER}/${E2E_REPO}/actions/workflows/e2e-tests.yml/runs?event=workflow_dispatch&created=${fra}&per_page=100`),
-    'E2E Tests-kjøringer',
-  );
-  const e2eKjøring = kjøringer.workflow_runs.find((r) => r.display_title === tittel) ?? null;
+  // Gatene starter også E2E Tests med workflow_dispatch, så kjøringen kan ligge bak flere sider.
+  const til = new Date(Date.parse(orkestrator.created_at) + 24 * 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  const vindu = encodeURIComponent(`${orkestrator.created_at}..${til}`);
+  let e2eKjøring = null;
+  for (let side = 1; side <= 10 && !e2eKjøring; side++) {
+    const { workflow_runs: kjøringer } = krev(
+      await github('GET', `/repos/${EIER}/${E2E_REPO}/actions/workflows/e2e-tests.yml/runs?event=workflow_dispatch&created=${vindu}&per_page=100&page=${side}`),
+      'E2E Tests-kjøringer',
+    );
+    e2eKjøring = kjøringer.find((r) => r.display_title === tittel) ?? null;
+    if (kjøringer.length < 100) break;
+  }
   const kontekst = e2eKjøring ? await lastNed(e2eKjøring.id) : null;
   return { orkestrator, e2eKjøring, kontekst };
 }
@@ -482,18 +488,17 @@ export async function skriv(args, io) {
     const vurdering = {};
     for (const [t, pin] of Object.entries(pinner)) vurdering[t] = await vurderPar(t, pin, io.hent);
     const plan = planleggSet({ pinner, vurdering, args, e2e: prStatus(e2ePr), service: prStatus(servicePr), nå: io.nå() });
+    // Også en lik pin sjekkes: har PR-ene fått nye commits siden br-kjøringen, er imaget utdatert.
+    const runId = args.tag.slice('br-'.length);
+    sjekkBrancherKjøring({
+      runId,
+      ...(await hentBrancherKjøring(github, runId, io.lastNed)),
+      tjeneste: args.tjeneste,
+      serviceHead: servicePr.head.sha,
+      e2e: { head: e2ePr.head.sha, merget: Boolean(e2ePr.merged), mergedAt: e2ePr.merged_at },
+    });
     for (const t of plan.ryddet) logg(`Rydder bort pinnen for ${t}: ${vurdering[t].status}, ${vurdering[t].grunn}.`);
     if (plan.uendret && !plan.ryddet.length) return logg(`${args.tjeneste} er allerede pinnet til ${args.tag} for e2e #${args.e2ePr}; ingenting å skrive.`);
-    if (!plan.uendret) {
-      const runId = args.tag.slice('br-'.length);
-      sjekkBrancherKjøring({
-        runId,
-        ...(await hentBrancherKjøring(github, runId, io.lastNed)),
-        tjeneste: args.tjeneste,
-        serviceHead: servicePr.head.sha,
-        e2e: { head: e2ePr.head.sha, merget: Boolean(e2ePr.merged), mergedAt: e2ePr.merged_at },
-      });
-    }
     if (plan.tvunget) logg(`--tving: overskriver pinnen for ${args.tjeneste} fra e2e #${pinner[args.tjeneste].e2e_pr}.`);
     nye = plan.pinner;
   }
@@ -501,7 +506,8 @@ export async function skriv(args, io) {
   const verdi = JSON.stringify(nye, null, 2);
   if (args.dryRun) return logg(`--dry-run: ville skrevet ${VARIABEL}:\n${verdi}`);
   await skrivLagret(github, lagret.finnes, verdi);
-  // API-et har ingen sammenlign-og-skriv, så en samtidig skriving kan ha overskrevet denne.
+  // API-et har ingen sammenlign-og-skriv. Tilbakelesingen oppdager en skriving mellom vår
+  // skriving og lesingen, ikke en som kommer etterpå og bygger på en eldre lesing.
   const tilbake = lesVariabel((await lesLagret(github)).tekst);
   if (JSON.stringify(tilbake[args.tjeneste]) !== JSON.stringify(nye[args.tjeneste])) {
     throw new Error(`${VARIABEL} har ikke ${args.kommando === 'fjern' ? 'mistet' : 'fått'} pinnen for ${args.tjeneste} etter skrivingen. En annen skriving kan ha overskrevet den; kjør på nytt.`);

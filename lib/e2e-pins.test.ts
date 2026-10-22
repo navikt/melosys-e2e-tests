@@ -404,7 +404,7 @@ test('set --erstatt for merget e2e-PR: en kjøring på main etter mergen godtas'
 });
 
 /** Falsk GitHub for skriveren: variabelen, kjøringene og PR-ene. */
-function lagGitHub({ verdi, prer = {}, ikkeLagre = false }: { verdi?: string; prer?: Obj; ikkeLagre?: boolean }) {
+function lagGitHub({ verdi, prer = {}, ikkeLagre = false, kjøringerPerSide = false }: { verdi?: string; prer?: Obj; ikkeLagre?: boolean; kjøringerPerSide?: boolean }) {
   const kall: string[] = [];
   const lagret: { verdi?: string } = { verdi };
   const github = async (metode: string, sti: string, body?: Obj) => {
@@ -422,6 +422,13 @@ function lagGitHub({ verdi, prer = {}, ikkeLagre = false }: { verdi?: string; pr
       return { status: 200, data: { path: '.github/workflows/e2e-brancher.yml', conclusion: 'success', run_attempt: 2, created_at: '2026-10-22T12:00:00Z' } };
     }
     if (sti.includes('/workflows/e2e-tests.yml/runs')) {
+      if (kjøringerPerSide) {
+        // 100 nyere kjøringer på side 1, kjøringen til br-500 på side 2.
+        const side = Number(new URLSearchParams(sti.split('?')[1]).get('page') ?? '1');
+        const andre = Array.from({ length: 100 }, (_, i) => ({ id: 1000 + i, display_title: `E2E Tests · gate-${i}` }));
+        const runs = side === 1 ? andre : side === 2 ? [{ id: 8, display_title: 'E2E Tests · br-500-2', conclusion: 'success', created_at: '2026-10-22T12:05:00Z' }] : [];
+        return { status: 200, data: { workflow_runs: runs } };
+      }
       const kjøringer = [
         { id: 7, display_title: 'E2E Tests · br-500-1', conclusion: 'failure' },
         { id: 8, display_title: 'E2E Tests · br-500-2', conclusion: 'success', created_at: '2026-10-22T12:05:00Z' },
@@ -463,7 +470,23 @@ test('skriv: --dry-run skriver ingenting, og en lik pin skrives ikke på nytt', 
   const h = lagGitHub({ verdi: lik });
   await skriv(SET, h.io);
   assert.equal(h.lagret.verdi, lik);
-  assert.deepEqual(h.lastet, []);
+  assert.ok(h.logg.some((l) => /allerede pinnet til br-500/.test(l)));
+});
+
+test('skriv: en lik pin sjekkes også mot nåværende heads', async () => {
+  // Service-PR-en har fått nye commits siden br-kjøringen; set med samme argumenter skal ikke si
+  // at alt er i orden.
+  const lik = JSON.stringify({ 'melosys-web': { ...ny, satt: '2026-10-21T00:00:00Z' } });
+  const g = lagGitHub({ verdi: lik, prer: { 'melosys-web#3300': { state: 'open', merged: false, head: { sha: sha('5') } } } });
+  await assert.rejects(skriv(SET, g.io), /service-PR-en har 5555555 nå/);
+  assert.equal(g.lagret.verdi, lik);
+});
+
+test('skriv: finner E2E Tests-kjøringen også når den ikke er på første side', async () => {
+  const g = lagGitHub({ kjøringerPerSide: true });
+  await skriv(SET, g.io);
+  assert.deepEqual(g.lastet, [8]);
+  assert.ok(g.kall.filter((k) => k.includes('/workflows/e2e-tests.yml/runs')).length >= 2);
 });
 
 test('skriv: feiler når pinnen mangler etter skrivingen', async () => {
