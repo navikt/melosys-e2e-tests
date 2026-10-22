@@ -7,7 +7,8 @@
  * (eksplisitt tag fra gaten, dispatch eller «E2E med brancher») beholder sin egen tag.
  *
  * Bruk: e2e-pins.mjs <pin-fil>. Gjeldende tagger leses fra miljøvariablene i TJENESTER. Skriver
- * én linje «<variabel> <tjeneste> <tag>» per pin som brukes. Ugyldig fil gir exit 1.
+ * én linje «<variabel> <tjeneste> <tag>» per pin som brukes, og en logglinje på stderr per pin
+ * som ikke brukes fordi tjenesten er under test. Ugyldig fil gir exit 1.
  * Oppskriften for koblede endringer står i docs/ci-cd/KOBLEDE-ENDRINGER.md.
  */
 import { existsSync, readFileSync, realpathSync } from 'node:fs';
@@ -44,7 +45,7 @@ export function lesPinner(tekst) {
     throw new Error('skal være et objekt fra tjeneste til tag, for eksempel {"melosys-web": "br-123"}');
   }
   for (const [tjeneste, tag] of Object.entries(pinner)) {
-    if (!(tjeneste in TJENESTER)) {
+    if (!Object.hasOwn(TJENESTER, tjeneste)) {
       throw new Error(`ukjent tjeneste «${tjeneste}». Gyldige: ${Object.keys(TJENESTER).join(', ')}`);
     }
     if (typeof tag !== 'string' || !DOCKER_TAG.test(tag)) {
@@ -78,8 +79,14 @@ function main() {
     console.error(`${fil} ${e.message}`);
     process.exit(1);
   }
-  for (const { variabel, tjeneste, tag } of brukPinner(pinner, process.env)) {
+  const brukt = brukPinner(pinner, process.env);
+  for (const { variabel, tjeneste, tag } of brukt) {
     console.log(`${variabel} ${tjeneste} ${tag}`);
+  }
+  for (const [tjeneste, tag] of Object.entries(pinner)) {
+    if (brukt.some((p) => p.tjeneste === tjeneste)) continue;
+    const egen = process.env[TJENESTER[tjeneste]] ?? '';
+    console.error(`📌 ${tjeneste} er pinnet til ${tag}, men er under test med ${egen}; pinnen gjelder ikke denne kjøringen.`);
   }
 }
 

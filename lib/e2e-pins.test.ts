@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync } from 'node:child_process';
+import { execFileSync, spawnSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -49,6 +49,9 @@ test('ugyldige filer avvises med en melding', () => {
     assert.throws(() => lesPinner(tekst), /skal være et objekt/, tekst);
   }
   assert.throws(() => lesPinner('{"melosys-wbe": "br-1"}'), /ukjent tjeneste «melosys-wbe»/);
+  for (const nøkkel of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
+    assert.throws(() => lesPinner(`{"${nøkkel}": "br-1"}`), /ukjent tjeneste/, nøkkel);
+  }
   assert.throws(() => lesPinner('{"melosys-web": 123}'), /ikke en gyldig docker-tag/);
   assert.throws(() => lesPinner('{"melosys-web": "br-1\\nMELOSYS_API_TAG x y"}'), /ikke en gyldig docker-tag/);
   assert.throws(() => lesPinner('{"melosys-web": "br 1"}'), /ikke en gyldig docker-tag/);
@@ -63,6 +66,13 @@ test('CLI: leser taggene fra miljøet og skriver én linje per pin', () => {
     env: { ...alleLatest, MELOSYS_API_TAG: 'abc123' },
   }).toString();
   assert.equal(ut, 'MELOSYS_WEB_TAG melosys-web br-123\n');
+
+  // En pin som ikke brukes fordi tjenesten er under test, skal synes i loggen.
+  const res = spawnSync(process.execPath, [script, fil], {
+    env: { ...alleLatest, MELOSYS_API_TAG: 'abc123' },
+    encoding: 'utf8',
+  });
+  assert.match(res.stderr, /melosys-api er pinnet til br-123, men er under test med abc123/);
 
   assert.equal(execFileSync(process.execPath, [script, join(dir, 'finnes-ikke.json')]).toString(), '');
 
