@@ -247,6 +247,13 @@ test('utløp: en feil beholder pinnen bare et døgn etter mergen', async () => {
   assert.equal(fersk.status, 'aktiv');
 });
 
+test('utløp: grensene er med, akkurat et døgn og akkurat tre dager', async () => {
+  const døgn = { 'melosys-web#3267': { ...merget, merged_at: '2026-10-21T15:00:00Z' } };
+  assert.equal((await vurderService('melosys-web', 3267, lagHenter({ pr: døgn, revisjon: null }), { nå: NÅ, satt: PIN.satt })).status, 'aktiv');
+  const feiler = lagHenter({ pr: { 'melosys-web#3267': new Error('HTTP 502') } });
+  assert.equal((await vurderService('melosys-web', 3267, feiler, { nå: NÅ, satt: '2026-10-19T15:00:00Z' })).status, 'aktiv');
+});
+
 test('utløp: feiler PR-oppslaget, beholdes bare en pin satt de siste tre dagene', async () => {
   const hent = () => lagHenter({ pr: { 'melosys-web#3267': new Error('HTTP 502') } });
   assert.equal((await vurderService('melosys-web', 3267, hent(), { nå: NÅ, satt: '2026-10-20T15:00:00Z' })).status, 'aktiv');
