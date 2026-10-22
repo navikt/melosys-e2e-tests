@@ -18,7 +18,7 @@ const MIN = 60_000;
 
 /** Repoene med merge-kø. Pin-nøkkelen er reponavnet. */
 export const REPOER_MED_KO = ['melosys-api', 'melosys-web', 'melosys-skjema-api', 'melosys-skjema-web', 'melosys-eessi', 'faktureringskomponenten'];
-export const GRENSER = { klar: 30 * MIN, tomKo: 60 * MIN, ko: 150 * MIN, latest: 60 * MIN, intervall: 30_000 };
+export const GRENSER = { klar: 30 * MIN, tomKo: 60 * MIN, ko: 150 * MIN, intervall: 30_000 };
 
 // ---------------------------------------------------------------- rene funksjoner
 
@@ -96,26 +96,6 @@ export function koStatus(pr, navn) {
   return ['CLEAN', 'HAS_HOOKS', 'UNSTABLE', 'BEHIND'].includes(pr.mergeStateStatus) ? 'klar' : 'vent';
 }
 
-export const finnBuild = (jobber) => (jobber ?? []).find((j) => /^build/i.test(j.name ?? '')) ?? null;
-
-/**
- * deploy-dev har ingen concurrency, så `latest` er imaget fra Build-jobben som ble ferdig sist,
- * ikke fra den nyeste kjøringen. Hver kjøring har `build` (jobben eller null) og `harEndringen`
- * (head inneholder merge-commiten). Svarer { status: 'klar' | 'venter' | 'feilet', run }.
- */
-export function tolkLatest(kjoringer) {
-  const pagar = kjoringer.find((r) => r.status !== 'completed');
-  if (pagar) return { status: 'venter', run: pagar };
-  const ferdig = (r) => Date.parse(r.build.completed_at);
-  const sist = kjoringer
-    .filter((r) => r.build?.conclusion === 'success')
-    .reduce((a, r) => (!a || ferdig(r) > ferdig(a) ? r : a), null);
-  if (sist?.harEndringen) return { status: 'klar', run: sist };
-  const nyeste = kjoringer.filter((r) => r.harEndringen && r.build).sort((a, b) => b.id - a.id)[0];
-  if (nyeste && nyeste.build.conclusion !== 'success') return { status: 'feilet', run: nyeste };
-  return { status: 'venter', run: sist };
-}
-
 /**
  * Kaller `sjekk` til den svarer noe annet enn undefined, eller til `grense` ms er gått.
  * Med dry_run sjekker den én gang og venter ikke.
@@ -137,6 +117,8 @@ const apiFeil = (status, melding) => Object.assign(new Error(melding), { status 
 const dryRunFeil = (melding) => Object.assign(new Error(melding), { dryRun: true });
 /** GraphQL svarer HTTP 200 med `errors` også når GitHub feiler internt. */
 const forbigaende = (e) => e.type === 'RATE_LIMITED' || /something went wrong|timed? ?out/i.test(e.message ?? '');
+/** Feil der GitHub ikke svarte eller feilet internt; alt annet er et svar på selve forespørselen. */
+const ikkeBesvart = (e) => e.nettfeil || e.status >= 500 || (e.graphql?.every((g) => forbigaende(g) || /internal (server )?error/i.test(g.message ?? '')) ?? false);
 /** 404 blir null. */
 const ellerNull = (p) => p.catch((e) => (e.status === 404 ? null : Promise.reject(e)));
 
@@ -165,7 +147,7 @@ export async function hentMedNyeForsok(ctx, url, init, hva) {
     if (res && res.status < 500 && !rateBegrenset(res)) return res;
     const grunn = nettfeil ? vask(nettfeil.cause?.code ?? nettfeil.message) : `HTTP ${res.status}`;
     if (forsok >= 3) {
-      if (nettfeil) throw new Error(`${hva} feilet etter 4 forsøk: ${grunn}`);
+      if (nettfeil) throw Object.assign(new Error(`${hva} feilet etter 4 forsøk: ${grunn}`), { nettfeil: true });
       return res;
     }
     const sek = ventetid(ctx, res, forsok);
@@ -202,7 +184,7 @@ export function lagKlient(ctx, token) {
         const data = await kall('POST', '/graphql', { query, variables }, 'GraphQL');
         if (!data.errors?.length) return data.data;
         const melding = `GraphQL: ${vask(data.errors.map((e) => e.message).join('; '))}`;
-        if (forsok >= 3 || !data.errors.every(forbigaende)) throw apiFeil(200, melding);
+        if (forsok >= 3 || !data.errors.every(forbigaende)) throw Object.assign(apiFeil(200, melding), { graphql: data.errors });
         const sek = 5 * 2 ** forsok;
         ctx.logg(`${melding}; prøver igjen om ${sek} s.`);
         await ctx.sleep(sek * 1000);
@@ -370,7 +352,10 @@ async function serviceKlar(ctx, repo, nr) {
   await klar(ctx, repo, Number(nr), navn);
 }
 
-/** Feiler enqueue, varsler steget og lar vent-merget vente på at noen setter PR-en i kø. */
+/**
+ * Svarer ikke GitHub, varsler steget og lar vent-merget vente på at noen setter PR-en i kø.
+ * Avviser GitHub forespørselen (feil head, PR-en er i køen, mangler rettighet), feiler jobben.
+ */
 async function settIKo(ctx, repo, nr) {
   const { PR_ID: id, HEAD_OID: oid } = ctx.env;
   if (!id || !oid) throw new Error('PR_ID og HEAD_OID mangler.');
@@ -383,6 +368,7 @@ async function settIKo(ctx, repo, nr) {
     );
   } catch (e) {
     if (e.dryRun) throw e;
+    if (!ikkeBesvart(e)) throw new Error(`Fikk ikke lagt ${navn} i køen: ${e.message}`);
     const melding = `Fikk ikke lagt ${navn} i køen (${e.message}). Trykk «Merge when ready» på https://github.com/${EIER}/${repo}/pull/${nr}; jobben venter videre.`;
     ctx.logg(`::warning::${vask(melding)}`);
     ctx.sammendrag(`⚠️ ${melding}`);
@@ -413,46 +399,10 @@ export async function ventMerget(ctx, repo, nr) {
   if (merget) ctx.sammendrag(`🚦 ${navn} er merget.`);
 }
 
-async function latest(ctx, repo, nr) {
-  const pr = await hentPr(ctx, repo, Number(nr));
-  if (pr.state !== 'MERGED') {
-    if (!ctx.input.dryRun) throw new Error(`${repo} #${nr} er ikke merget.`);
-    return ctx.notis(`dry_run: ${repo} #${nr} er ikke merget; sjekker ikke latest.`);
-  }
-  const sha = pr.mergeCommit.oid;
-  const kort = sha.slice(0, 7);
-  const repoSti = `/repos/${EIER}/${repo}`;
-  // Jobbene i en ferdig kjøring og innholdet i en commit endrer seg ikke.
-  const builds = new Map();
-  const inneholder = new Map();
-  const les = async () => {
-    const { workflow_runs: runs } = await ctx.api.rest('GET', `${repoSti}/actions/runs?event=push&branch=${encodeURIComponent(pr.defaultBranch)}&per_page=100`);
-    const deploy = runs.filter((r) => /^deploy/i.test(r.name ?? '')).slice(0, 20);
-    if (deploy.some((r) => r.status !== 'completed')) return tolkLatest(deploy);
-    for (const r of deploy) {
-      if (!builds.has(r.id)) builds.set(r.id, finnBuild((await ctx.api.rest('GET', `${repoSti}/actions/runs/${r.id}/jobs?per_page=100`)).jobs));
-      if (!inneholder.has(r.head_sha)) {
-        const { status } = await ctx.api.rest('GET', `${repoSti}/compare/${sha}...${r.head_sha}?per_page=1`);
-        inneholder.set(r.head_sha, status === 'ahead' || status === 'identical');
-      }
-    }
-    return tolkLatest(deploy.map((r) => ({ ...r, build: builds.get(r.id), harEndringen: inneholder.get(r.head_sha) })));
-  };
-  const tidsavbrudd = `${repo} latest hadde ikke ${kort} etter ${ctx.grenser.latest / MIN} min. Build-jobben som ble ferdig sist, var fra en kjøring uten merge-commiten.`;
-  const run = await vent(ctx, ctx.grenser.latest, tidsavbrudd, async () => {
-    const { status, run } = await les();
-    if (status === 'feilet') {
-      throw new Error(`Build-jobben i «${vask(run.name)}» for ${run.head_sha.slice(0, 7)} i ${repo} feilet (${vask(run.build.conclusion)}): ${run.html_url}`);
-    }
-    if (status === 'klar') return run;
-    const grunn = run?.status !== 'completed' && run ? `deploy-kjøringen ${run.html_url} pågår` : `latest har ikke ${kort} ennå`;
-    ctx.logg(`${repo}: ${grunn}.`);
-    if (ctx.input.dryRun) ctx.notis(`dry_run: ${repo}: ${grunn}; venter ikke.`);
-  });
-  if (run) ctx.sammendrag(`🚀 ${repo} latest har #${nr}: ${run.html_url}`);
-}
-
-/** Uten `skriv` sier steget bare om main fortsatt har pinnen. Med `skriv` lager det branchen og PR-en. */
+/**
+ * Uten `skriv` sier steget bare om main fortsatt har pinnen. Med `skriv` lager det branchen og
+ * PR-en, men setter den ikke i kø: e2e-køen blir grønn først når latest har endringene.
+ */
 async function fjern(ctx, skriv) {
   const inp = ctx.input;
   const gren = `fjern-pin-${inp.tag}`;
@@ -460,8 +410,14 @@ async function fjern(ctx, skriv) {
   const { tekst, endret, fjernet } = fjernPinner(await hentFil(ctx, 'main'), repoer(inp), inp.tag);
   ctx.utdata('ferdig', String(!endret));
   if (!endret) return ctx.notis(`main pinner ikke ${repoer(inp).join(', ')} til ${inp.tag}; ingenting å fjerne.`);
+  for (const t of inp.tjenester) {
+    if ((await hentPr(ctx, t.repo, t.pr))?.state === 'MERGED') continue;
+    const melding = `${t.repo} #${t.pr} er ikke merget, og pinnen fjernes først etter at service-PR-ene er merget.`;
+    if (!inp.dryRun) throw new Error(melding);
+    ctx.notis(`dry_run: ${melding}`);
+  }
   if (!skriv) {
-    if (inp.dryRun) ctx.notis(`dry_run: ville fjernet ${fjernet.join(', ')} på ${gren} og satt PR-en i kø. ${tekst ?? 'Fila slettes.'}`);
+    if (inp.dryRun) ctx.notis(`dry_run: ville fjernet ${fjernet.join(', ')} på ${gren} og åpnet PR-en. ${tekst ?? 'Fila slettes.'}`);
     return;
   }
   const head = await hentRef(ctx, gren);
@@ -476,10 +432,9 @@ async function fjern(ctx, skriv) {
     title: tittel,
     head: gren,
     base: 'main',
-    body: `Fjerner pinnen til \`${inp.tag}\` nå som latest har endringen fra ${inp.tjenester.map((t) => `${EIER}/${t.repo}#${t.pr}`).join(', ')}.\n\nBestilt av ${kodespenn(inp.bestiller)} via [Koblet merge](${ctx.env.RUN_URL ?? ''}).`,
+    body: `Fjerner pinnen til \`${inp.tag}\` nå som ${inp.tjenester.map((t) => `${EIER}/${t.repo}#${t.pr}`).join(', ')} er merget. Merge med «Merge when ready»: e2e-køen kjører hele suiten mot latest og blir grønn først når latest har endringene.\n\nBestilt av ${kodespenn(inp.bestiller)} via [Koblet merge](${ctx.env.RUN_URL ?? ''}).`,
   }));
-  ctx.logg(`PR-en som fjerner pinnen: ${pr.html_url}`);
-  ctx.utdata('pr', String(pr.number));
+  ctx.sammendrag(`🧹 PR-en som fjerner pinnen: ${pr.html_url}. Merge den med «Merge when ready».`);
 }
 
 // ---------------------------------------------------------------- CLI
@@ -491,10 +446,8 @@ const STEG = {
   'pin-skriv': (ctx) => pin(ctx, true),
   'e2e-klar': e2eKlar,
   'service-klar': serviceKlar,
-  klar: (ctx, repo, nr) => klar(ctx, repo, Number(nr), `${repo} #${nr}`),
   'sett-i-ko': settIKo,
   'vent-merget': ventMerget,
-  latest,
   'fjern-sjekk': (ctx) => fjern(ctx, false),
   'fjern-skriv': (ctx) => fjern(ctx, true),
 };

@@ -53,7 +53,8 @@ jobs:
   sjekk:
     name: Sjekk paret
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Rom for at timekvoten fornyes (inntil 3 × 15 min i ett kall)
+    timeout-minutes: 60
     outputs:
       matrix: ${{ steps.input.outputs.matrix }}
     steps:
@@ -70,7 +71,8 @@ jobs:
     name: Legg pinnen i e2e-PR-en
     needs: sjekk
     runs-on: ubuntu-latest
-    timeout-minutes: 10
+    # Rom for at timekvoten fornyes (inntil 3 × 15 min i ett kall)
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
@@ -177,39 +179,21 @@ jobs:
           SATT_I_KO: ${{ steps.ko.outputs.satt }}
         run: node scripts/koblet-merge.mjs vent-merget "$REPO" "$PR"
 
-  latest:
-    name: "${{ matrix.repo }} latest har endringen"
-    needs: [sjekk, service]
-    runs-on: ubuntu-latest
-    timeout-minutes: 70
-    strategy:
-      fail-fast: false
-      matrix: ${{ fromJSON(needs.sjekk.outputs.matrix) }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Vent til latest er bygd med merge-commiten
-        env:
-          REPO: ${{ matrix.repo }}
-          PR: ${{ matrix.pr }}
-        run: node scripts/koblet-merge.mjs latest "$REPO" "$PR"
-
   fjern-pin:
     name: Fjern pinnen
-    needs: latest
+    needs: service
     runs-on: ubuntu-latest
-    # 30 min til PR-en er klar + 150 min i køen
-    timeout-minutes: 190
+    # Rom for at timekvoten fornyes (inntil 3 × 15 min i ett kall)
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Sjekk pinnen på main
+      - name: Sjekk service-PR-ene og pinnen på main
         id: les
         run: node scripts/koblet-merge.mjs fjern-sjekk
-      - name: Hent app-token for branchen
-        id: token-gren
+      - name: Hent app-token
+        id: token
         if: ${{ !inputs.dry_run && steps.les.outputs.ferdig == 'false' }}
         uses: actions/create-github-app-token@v3
         with:
@@ -219,41 +203,9 @@ jobs:
           repositories: melosys-e2e-tests
           permission-contents: write
           permission-pull-requests: write
+      # Utvikleren merger PR-en med «Merge when ready»; e2e-køen er grønn først når latest har endringene.
       - name: Lag branchen og PR-en
-        id: skriv
         if: ${{ !inputs.dry_run && steps.les.outputs.ferdig == 'false' }}
         env:
-          GH_TOKEN: ${{ steps.token-gren.outputs.token }}
+          GH_TOKEN: ${{ steps.token.outputs.token }}
         run: node scripts/koblet-merge.mjs fjern-skriv
-      - name: Vent til PR-en er klar for køen
-        id: klar
-        if: ${{ steps.skriv.outputs.pr != '' }}
-        env:
-          FJERN_PR: ${{ steps.skriv.outputs.pr }}
-        run: node scripts/koblet-merge.mjs klar melosys-e2e-tests "$FJERN_PR"
-      - name: Hent app-token for køen
-        id: token-ko
-        if: ${{ !inputs.dry_run && steps.klar.outputs.status == 'klar' }}
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
-          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
-          owner: navikt
-          repositories: melosys-e2e-tests
-          permission-contents: write
-          permission-pull-requests: write
-      - name: Sett PR-en i køen
-        id: ko
-        if: ${{ !inputs.dry_run && steps.klar.outputs.status == 'klar' }}
-        env:
-          GH_TOKEN: ${{ steps.token-ko.outputs.token }}
-          PR_ID: ${{ steps.klar.outputs.id }}
-          HEAD_OID: ${{ steps.klar.outputs.head }}
-          FJERN_PR: ${{ steps.skriv.outputs.pr }}
-        run: node scripts/koblet-merge.mjs sett-i-ko melosys-e2e-tests "$FJERN_PR"
-      - name: Vent til PR-en er merget
-        if: ${{ steps.skriv.outputs.pr != '' }}
-        env:
-          FJERN_PR: ${{ steps.skriv.outputs.pr }}
-          SATT_I_KO: ${{ steps.ko.outputs.satt }}
-        run: node scripts/koblet-merge.mjs vent-merget melosys-e2e-tests "$FJERN_PR"

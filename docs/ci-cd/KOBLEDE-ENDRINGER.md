@@ -10,20 +10,19 @@ Kan testene skrives slik at de er grønne mot både gammelt og nytt image (regex
 
 ## Automatisk fra konsollen
 
-Knappen i melosys-console starter workflowen «Koblet merge» (`.github/workflows/koblet-merge.yml`) på `main`. Den gjør steg 2–5 i den manuelle oppskriften for deg, uten køhopp. Kjør paret grønt med «E2E med brancher» først (steg 1); knappen trenger taggen `br-<run_id>`, e2e-PR-en og service-PR-ene i den rekkefølgen de skal merges.
+Knappen i melosys-console starter workflowen «Koblet merge» (`.github/workflows/koblet-merge.yml`) på `main`. Den gjør steg 2–4 i den manuelle oppskriften for deg, uten køhopp, og åpner PR-en i steg 5. Kjør paret grønt med «E2E med brancher» først (steg 1); knappen trenger taggen `br-<run_id>`, e2e-PR-en og service-PR-ene i den rekkefølgen de skal merges.
 
 **Bare repoer med merge-kø:** melosys-api, melosys-web, melosys-skjema-api, melosys-skjema-web, melosys-eessi og faktureringskomponenten. For andre repoer bruker du den manuelle oppskriften.
 
-Workflowen har seks jobber:
+Workflowen har fem jobber:
 
 1. **Sjekk paret.** Hver PR finnes, er ikke et utkast, har ingen konflikter, går mot default-branchen og har branchen i samme repo. En PR som står i kø, godtas.
 2. **Legg pinnen i e2e-PR-en.** Workflowen committer `.github/e2e-pins.json` til e2e-branchen. Andre pinner i fila står. Er branchen pushet til i mellomtiden, stopper jobben i stedet for å overskrive.
 3. **e2e-PR gjennom køen.** Workflowen venter til PR-en kan merges (opptil 30 min), sjekker at pinnen står på head, setter PR-en i kø og venter til den er merget (opptil 150 min). Tas den ut av køen, stopper kjøringen.
 4. **`<repo> #<pr>` i køen**, én service-PR om gangen. Står andre PR-er i køen, venter jobben til køen er tom (opptil 60 min), og setter så PR-en bakerst i køen. Andre kan sette PR-er i kø mens jobben venter; si fra i kanalen.
-5. **`<repo>` latest har endringen.** deploy-dev kjører ikke for hver merge-commit: fletter køen to PR-er i én push, kjører den bare for den siste. Kjøringene har heller ingen concurrency, så en eldre Build som blir ferdig sist, overskriver `latest`. Workflowen leser derfor de 20 siste deploy-kjøringene på default-branchen og venter så lenge noen av dem pågår. `latest` har endringen når Build-jobben som ble ferdig sist, er bygd fra en commit som inneholder merge-commiten (opptil 60 min). Deploy til dev teller ikke. Feiler Build i den nyeste kjøringen med merge-commiten, stopper kjøringen, og pinnen står.
-6. **Fjern pinnen.** Workflowen lager branchen `fjern-pin-<tag>` fra `main`, åpner PR-en og fletter den gjennom køen. Den fjerner bare pinner som fortsatt står på taggen.
+5. **Fjern pinnen.** Når service-PR-ene er merget, lager workflowen branchen `fjern-pin-<tag>` fra `main` og åpner PR-en, eller gjenbruker en åpen PR fra branchen. Den fjerner bare pinner som fortsatt står på taggen. Workflowen setter ikke PR-en i kø: trykk «Merge when ready» selv. e2e-køen kjører hele suiten mot `latest` og blir grønn først når `latest` har endringene.
 
-**Feiler det å sette en PR i kø**, for eksempel med en intern feil fra GitHub, står en advarsel i sammendraget. Trykk «Merge when ready» på PR-en; jobben venter videre til PR-en er merget.
+**Svarer ikke GitHub når en PR skal i kø**, for eksempel med en intern feil eller 5xx, står en advarsel i sammendraget. Trykk «Merge when ready» på PR-en; jobben venter videre til PR-en er merget. Avviser GitHub forespørselen, for eksempel fordi head har endret seg, PR-en allerede er i kø eller appen mangler rettighet, stopper jobben.
 
 **Prøv først med `dry_run`.** Hver jobb leser og sjekker som vanlig og skriver i loggen hva den ville gjort, men committer, setter i kø og åpner ingenting, og venter ikke. Kjøringen heter da «… (prøvekjøring)».
 
