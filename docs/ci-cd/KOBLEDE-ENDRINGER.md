@@ -22,7 +22,7 @@ Workflowen har fem jobber:
 4. **`<repo> #<pr>` i køen**, én service-PR om gangen. Står andre PR-er i køen, venter jobben til køen er tom (opptil 60 min), og setter så PR-en bakerst i køen. Andre kan sette PR-er i kø mens jobben venter; si fra i kanalen.
 5. **Fjern pinnen.** Når service-PR-ene er merget, lager workflowen branchen `fjern-pin-<tag>` fra `main` og åpner PR-en, eller gjenbruker en åpen PR fra branchen. Den fjerner bare pinner som fortsatt står på taggen. Workflowen setter ikke PR-en i kø: trykk «Merge when ready» selv. e2e-køen kjører hele suiten mot `latest` og blir grønn først når `latest` har endringene.
 
-**Svarer ikke GitHub når en PR skal i kø**, for eksempel med en intern feil eller 5xx, står en advarsel i sammendraget. Trykk «Merge when ready» på PR-en; jobben venter videre til PR-en er merget. Avviser GitHub forespørselen, for eksempel fordi head har endret seg, PR-en allerede er i kø eller appen mangler rettighet, stopper jobben.
+**Svarer ikke GitHub når en PR skal i kø**, for eksempel med en intern feil, 5xx eller rate limit, står en advarsel i sammendraget. Trykk «Merge when ready» på PR-en; jobben venter videre til PR-en er merget. Avviser GitHub forespørselen, for eksempel fordi head har endret seg, PR-en allerede er i kø eller appen mangler rettighet, stopper jobben.
 
 **Prøv først med `dry_run`.** Hver jobb leser og sjekker som vanlig og skriver i loggen hva den ville gjort, men committer, setter i kø og åpner ingenting, og venter ikke. Kjøringen heter da «… (prøvekjøring)».
 

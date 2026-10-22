@@ -117,8 +117,8 @@ const apiFeil = (status, melding) => Object.assign(new Error(melding), { status 
 const dryRunFeil = (melding) => Object.assign(new Error(melding), { dryRun: true });
 /** GraphQL svarer HTTP 200 med `errors` også når GitHub feiler internt. */
 const forbigaende = (e) => e.type === 'RATE_LIMITED' || /something went wrong|timed? ?out/i.test(e.message ?? '');
-/** Feil der GitHub ikke svarte eller feilet internt; alt annet er et svar på selve forespørselen. */
-const ikkeBesvart = (e) => e.nettfeil || e.status >= 500 || (e.graphql?.every((g) => forbigaende(g) || /internal (server )?error/i.test(g.message ?? '')) ?? false);
+/** GitHub svarte ikke, feilet internt eller begrenset kallene; alt annet er et svar på selve forespørselen. */
+const ikkeBesvart = (e) => e.nettfeil || e.rateBegrenset || e.status >= 500 || (e.graphql?.every((g) => forbigaende(g) || /internal (server )?error/i.test(g.message ?? '')) ?? false);
 /** 404 blir null. */
 const ellerNull = (p) => p.catch((e) => (e.status === 404 ? null : Promise.reject(e)));
 
@@ -169,7 +169,7 @@ export function lagKlient(ctx, token) {
       try {
         melding = JSON.parse(tekst).message ?? tekst;
       } catch {}
-      throw apiFeil(res.status, `${hva} ga HTTP ${res.status}: ${vask(melding)}`);
+      throw Object.assign(apiFeil(res.status, `${hva} ga HTTP ${res.status}: ${vask(melding)}`), { rateBegrenset: rateBegrenset(res) });
     }
     return tekst ? JSON.parse(tekst) : null;
   };
@@ -183,7 +183,7 @@ export function lagKlient(ctx, token) {
       for (let forsok = 0; ; forsok++) {
         const data = await kall('POST', '/graphql', { query, variables }, 'GraphQL');
         if (!data.errors?.length) return data.data;
-        const melding = `GraphQL: ${vask(data.errors.map((e) => e.message).join('; '))}`;
+        const melding = `GraphQL: ${vask(data.errors.map((e) => e.message ?? e.type ?? 'ukjent feil').join('; '))}`;
         if (forsok >= 3 || !data.errors.every(forbigaende)) throw Object.assign(apiFeil(200, melding), { graphql: data.errors });
         const sek = 5 * 2 ** forsok;
         ctx.logg(`${melding}; prøver igjen om ${sek} s.`);
@@ -354,7 +354,8 @@ async function serviceKlar(ctx, repo, nr) {
 
 /**
  * Svarer ikke GitHub, varsler steget og lar vent-merget vente på at noen setter PR-en i kø.
- * Avviser GitHub forespørselen (feil head, PR-en er i køen, mangler rettighet), feiler jobben.
+ * Det gjelder også rate limit. Avviser GitHub forespørselen (feil head, PR-en er i køen, mangler
+ * rettighet), feiler jobben.
  */
 async function settIKo(ctx, repo, nr) {
   const { PR_ID: id, HEAD_OID: oid } = ctx.env;

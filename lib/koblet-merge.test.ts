@@ -434,6 +434,51 @@ test('sett-i-ko: feil head, manglende rettighet og PR som allerede er i køen fe
   }
 });
 
+test('sett-i-ko: hver feilklasse fra enqueue gir enten «Merge when ready» eller stopp', async () => {
+  const env = { PR_ID: 'PR_melosys-web_3253', HEAD_OID: 'head-3253' };
+  const fire = (lag: () => Response | Error) => [1, 2, 3, 4].map(lag);
+  const nett = () => Object.assign(new TypeError('fetch failed'), { cause: { code: 'ECONNRESET' } });
+  const brukt = (status: number) => () => svar(status, { message: 'API rate limit exceeded' }, { 'x-ratelimit-remaining': '0', 'x-ratelimit-reset': '1' });
+  const sekundaer = () => svar(403, { message: 'You have exceeded a secondary rate limit' }, { 'retry-after': '1' });
+  // Ubesvart: GitHub svarte ikke, feilet internt eller begrenset kallene. Jobben venter på «Merge when ready».
+  const ubesvart: [string, (Response | Error)[]][] = [
+    ['nettverksfeil', fire(nett)],
+    ['HTTP 502', fire(() => svar(502, { message: 'Bad gateway' }))],
+    ['HTTP 403 brukt timekvote', fire(brukt(403))],
+    ['HTTP 429 brukt timekvote', fire(brukt(429))],
+    ['HTTP 403 sekundær grense', fire(sekundaer)],
+    ['GraphQL RATE_LIMITED', fire(() => graphqlFeil({ type: 'RATE_LIMITED', message: 'API rate limit exceeded' }))],
+    ['GraphQL something went wrong', fire(() => graphqlFeil({ message: 'Something went wrong while executing your query.' }))],
+    ['GraphQL timeout', fire(() => graphqlFeil({ message: 'Timeout on validation of query' }))],
+    ['GraphQL intern feil', [graphqlFeil({ message: 'Could not enqueue: internal error' })]],
+  ];
+  for (const [navn, svarene] of ubesvart) {
+    const gh = par();
+    gh.s.graphqlSvar.push(...svarene);
+    const { utdata, logg } = await kjorSteg(gh, 'sett-i-ko', ['melosys-web', '3253'], env);
+    assert.equal(utdata.satt, 'false', navn);
+    assert.ok(logg.some((l) => l.startsWith('::warning::Fikk ikke lagt melosys-web #3253 i køen (')), navn);
+  }
+  // Besvart: GitHub avviste forespørselen. Jobben stopper med grunnen.
+  const besvart: [string, Response, RegExp][] = [
+    ['HTTP 401', svar(401, { message: 'Bad credentials' }), /GraphQL ga HTTP 401: Bad credentials$/],
+    ['HTTP 403 uten grense', svar(403, { message: 'Resource not accessible by integration' }), /GraphQL ga HTTP 403: Resource not accessible by integration$/],
+    ['HTTP 404', svar(404, { message: 'Not Found' }), /GraphQL ga HTTP 404: Not Found$/],
+    ['GraphQL feil head', graphqlFeil({ type: 'UNPROCESSABLE', message: "Head sha didn't match expected head sha" }), /GraphQL: Head sha didn't match expected head sha$/],
+    ['GraphQL blandet', graphqlFeil({ message: 'Could not enqueue: internal error' }, { type: 'FORBIDDEN', message: 'Resource not accessible by integration' }), /internal error; Resource not accessible by integration$/],
+    ['GraphQL uten melding', graphqlFeil({ type: 'INTERNAL' }), /GraphQL: INTERNAL$/],
+  ];
+  for (const [navn, feil, grunn] of besvart) {
+    const gh = par();
+    gh.s.graphqlSvar.push(feil);
+    await assert.rejects(
+      kjorSteg(gh, 'sett-i-ko', ['melosys-web', '3253'], env),
+      (e: Error) => /^Fikk ikke lagt melosys-web #3253 i køen: /.test(e.message) && grunn.test(e.message),
+      navn,
+    );
+  }
+});
+
 test('vent-merget: etter mislykket enqueue venter jobben til noen setter PR-en i kø', async () => {
   const gh = par();
   gh.s.etterKall = (s: any, kall: any[]) => {
