@@ -90,8 +90,9 @@ test('CLI: leser taggene fra miljøet og skriver én linje per pin', () => {
 });
 
 test('TJENESTER følger tjenestene i «Determine image tags»', () => {
-  // En tjeneste som mangler i export-lista eller case-blokken, får aldri pinnen, uten noen feil:
-  // scriptet ser ikke latest i process.env. Lista sjekkes derfor her.
+  // Begge feilene er stille: mangler tjenesten i export-lista, ser ikke scriptet taggen, og
+  // pinnen brukes aldri. Mangler den i case-blokken, ignoreres taggen fra environment, tjenesten
+  // beholder latest, og pinnen brukes også når tjenesten skulle vært under test.
   const yml = readFileSync(join(__dirname, '..', '.github', 'workflows', 'e2e-tests.yml'), 'utf8');
   const exportLinje = yml.match(/export (MELOSYS_API_TAG[\s\S]*?)\n\s*PINNER=/)?.[1] ?? '';
   const eksportert = exportLinje.split(/[\s\\]+/).filter(Boolean).sort();

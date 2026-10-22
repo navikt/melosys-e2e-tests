@@ -45,7 +45,7 @@ Endrer service-PR-en seg vesentlig etter steg 1, kjører du paret på nytt og by
 - E2E Tests leser fila fra sin egen ref i steget «Determine image tags» (`scripts/e2e-pins.mjs`).
 - En tjeneste som har `latest` i kjøringen, får pin-taggen. En tjeneste under test beholder sin egen tag: gaten, dispatch etter merge og «E2E med brancher» tester alltid imaget de er startet med.
 - En eksplisitt `latest` regnes ikke som under test: `environment=melosys-web:latest` får pin-taggen for web så lenge pinnen står. Vil du teste mot `latest`, er PR-en som fjerner pinnen (steg 5) veien: køen tester den uten pin.
-- Hver kjøring der en pin brukes, viser en advarsel i sammendraget. En pin som ikke brukes fordi tjenesten er under test, står som en linje i loggen til steget «Determine image tags».
+- Hver kjøring der en pin brukes, viser en advarsel i sammendraget. En pin som ikke brukes fordi tjenesten har en annen tag enn `latest`, står som en linje i loggen til steget «Determine image tags».
 - Ugyldig JSON, en ukjent tjeneste, en tag som ikke er en gyldig docker-tag og en pin til `latest` stopper plan-jobben med en melding. e2e-køen stopper derfor en ugyldig fil før den når `main`.
 - Gyldige tjenester er navnene `environment`-inputen bruker, for eksempel `melosys-api`, `melosys-web`, `melosys-skjema-api`, `melosys-skjema-web` og `melosys-mock`.
 
