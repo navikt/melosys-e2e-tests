@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync, spawnSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 // @ts-expect-error — .mjs uten typedeklarasjon; scriptet er ren node uten avhengigheter.
@@ -81,4 +81,17 @@ test('CLI: leser taggene fra miljøet og skriver én linje per pin', () => {
     () => execFileSync(process.execPath, [script, fil], { stdio: 'pipe' }),
     (e: { status: number; stderr: Buffer }) => e.status === 1 && /ukjent tjeneste/.test(e.stderr.toString()),
   );
+});
+
+test('TJENESTER følger tjenestene i «Determine image tags»', () => {
+  // En tjeneste som mangler i export-lista, får aldri pinnen (scriptet leser process.env), og en
+  // som mangler i TJENESTER, avvises som ukjent. Begge feilene er stille, så lista sjekkes her.
+  const yml = readFileSync(join(__dirname, '..', '.github', 'workflows', 'e2e-tests.yml'), 'utf8');
+  const exportLinje = yml.match(/export (MELOSYS_API_TAG[\s\S]*?)\n\s*PINNER=/)?.[1] ?? '';
+  const eksportert = exportLinje.split(/[\s\\]+/).filter(Boolean).sort();
+  assert.deepEqual(eksportert, Object.values(TJENESTER).sort());
+
+  const steg = yml.slice(yml.indexOf('Parsing multi-service tag format'), yml.indexOf('Simple format: just a tag'));
+  const iCase = [...steg.matchAll(/^\s+([a-z-]+)\)\n\s+([A-Z_]+)="\$tag"/gm)].map(([, t, v]) => [t, v]);
+  assert.deepEqual(Object.fromEntries(iCase), TJENESTER);
 });

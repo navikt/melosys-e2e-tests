@@ -33,7 +33,7 @@ Eksempel: melosys-web #3300 bytter en knapp, og e2e-branchen `MELOSYS-9000-ny-kn
      -f id="$(gh pr view 3300 -R navikt/melosys-web --json id -q .id)"
    ```
 
-   Å hoppe først i køen krever trolig admin-rett i repoet.
+   Køhopp krever admin-rett i repoet, eller en egendefinert repo-rolle med den rettigheten ([GitHub changelog](https://github.blog/changelog/2023-07-12-pull-request-merge-queue-is-now-generally-available/)). Har du ikke det, ber du en admin om å legge PR-en i kø. Uten køhopp kan web-PR-er som ligger foran #3300, bli røde; sett dem i kø igjen etter #3300.
 5. **Fjern pinnen med en PR som bare sletter linja.** Køen kjører hele suiten mot `latest` og blir grønn først når `latest` har #3300. Du kan derfor ikke fjerne pinnen for tidlig.
 
 Endrer service-PR-en seg vesentlig etter steg 1, kjører du paret på nytt og bytter taggen.
