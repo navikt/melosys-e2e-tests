@@ -17,6 +17,7 @@ import {
   TJENESTER,
   TJENESTER_MED_KO,
   velgPinner,
+  vurderPar,
   vurderPin,
   vurderService,
   // @ts-expect-error — .mjs uten typedeklarasjon; scriptet er ren node uten avhengigheter.
@@ -256,6 +257,23 @@ test('utløp: feiler PR-oppslaget, beholdes bare en pin satt de siste tre dagene
   }
 });
 
+test('utløp: diverged beholder pinnen også lenge etter mergen', async () => {
+  const pr = { 'melosys-web#3267': { ...merget, merged_at: '2026-10-15T00:00:00Z' } };
+  const v = await vurderService('melosys-web', 3267, lagHenter({ pr, compare: 'diverged' }), { nå: NÅ, satt: PIN.satt });
+  assert.equal(v.status, 'aktiv');
+});
+
+test('vurderPin og vurderPar sender nå og satt videre til utløpsregelen', async () => {
+  const feiler = () => lagHenter({ pr: { 'melosys-web#3267': new Error('HTTP 502') } });
+  const fersk = { ...PIN, satt: '2026-10-21T15:00:00Z' };
+  const gammel = { ...PIN, satt: '2026-10-18T15:00:00Z' };
+  const pin = (p: Obj) => vurderPin('melosys-web', p, { tagger: alleLatest, emner: ['x (#388)'], hent: feiler(), nå: NÅ });
+  assert.equal((await pin(fersk)).status, 'aktiv');
+  assert.equal((await pin(gammel)).status, 'utløpt');
+  assert.equal((await vurderPar('melosys-web', fersk, feiler(), NÅ)).status, 'aktiv');
+  assert.equal((await vurderPar('melosys-web', gammel, feiler(), NÅ)).status, 'utløpt');
+});
+
 test('vurderPin: under test og ikke startet slår ikke opp noe', async () => {
   const hent = lagHenter();
   const underTest = await vurderPin('melosys-web', PIN, { tagger: { ...alleLatest, MELOSYS_WEB_TAG: 'br-1' }, emner: ['x (#388)'], hent, nå: NÅ });
@@ -357,6 +375,14 @@ test('set: ny pin, og utløpte og forlatte pinner ryddes bort', () => {
   const plan = planlegg({ pinner, vurdering });
   assert.deepEqual(plan.ryddet, ['melosys-api', 'faktureringskomponenten']);
   assert.deepEqual(plan.pinner, { 'melosys-eessi': PIN, 'melosys-web': ny });
+});
+
+test('set: en pin som bare regnes som utløpt fordi et oppslag feilet, ryddes ikke bort', async () => {
+  // I en kjøring gjelder ikke pinnen da, men skriveren skal ikke slette den for godt.
+  const pinner = { 'melosys-api': PIN };
+  const plan = planlegg({ pinner, vurdering: { 'melosys-api': { status: 'utløpt', feil: true } } });
+  assert.deepEqual(plan.ryddet, []);
+  assert.deepEqual(plan.pinner, { 'melosys-api': PIN, 'melosys-web': ny });
 });
 
 test('set: en pin fra et annet par overskrives bare når den er utløpt eller med --tving', () => {
@@ -507,6 +533,16 @@ test('skriv: set rydder en utløpt pin og skriver med PATCH', async () => {
   assert.deepEqual(JSON.parse(g.lagret.verdi!), { 'melosys-web': ny });
   assert.ok(g.kall.includes('PATCH /repos/navikt/melosys-e2e-tests/actions/variables/E2E_PINS'));
   assert.ok(g.logg.some((l) => /Rydder bort pinnen for melosys-api: utløpt/.test(l)));
+});
+
+test('skriv: en pin der oppslaget feiler, står igjen, og skriveren viser advarselen', async () => {
+  for (const [satt, ventet] of [['2026-10-21T15:00:00Z', /pinnen beholdes/], ['2026-10-18T15:00:00Z', /brukes ikke/]] as [string, RegExp][]) {
+    const api = { ...PIN, service_pr: 77, satt };
+    const g = lagGitHub({ verdi: JSON.stringify({ 'melosys-api': api }), prer: { 'melosys-api#77': new Error('HTTP 502') } });
+    await skriv(SET, g.io);
+    assert.deepEqual(JSON.parse(g.lagret.verdi!), { 'melosys-api': api, 'melosys-web': ny }, satt);
+    assert.ok(g.logg.some((l) => /melosys-api/.test(l) && ventet.test(l)), satt);
+  }
 });
 
 test('skriv: --dry-run skriver ingenting, og en lik pin skrives ikke på nytt', async () => {

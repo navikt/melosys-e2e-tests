@@ -172,6 +172,8 @@ const innenfor = (nå, tidspunkt, grense) => nå - Date.parse(tidspunkt) <= gren
  * kan stå igjen i variabelen, og et feilet oppslag dager senere skal ikke gi en gate et gammelt
  * br-image. Etter mergen beholdes den et døgn fra merged_at (latest bygges vanligvis innen en
  * time); feiler selve PR-oppslaget, beholdes den bare når den ble satt de siste tre dagene.
+ * Etter den perioden er pinnen 'utløpt' med `feil: true`: kjøringen bruker den ikke, men skriveren
+ * sletter den ikke, fordi den kan gjelde igjen når oppslaget virker.
  */
 export async function vurderService(tjeneste, servicePr, hent, { nå, satt }) {
   const navn = `${tjeneste} #${servicePr}`;
@@ -181,7 +183,7 @@ export async function vurderService(tjeneste, servicePr, hent, { nå, satt }) {
   } catch (e) {
     const feil = `Fikk ikke lest ${navn} (${vask(e.message)})`;
     if (satt && innenfor(nå, satt, TRE_DAGER)) return beholdes(`fikk ikke lest ${navn}`, feil);
-    return { status: 'utløpt', grunn: `fikk ikke lest ${navn}`, advarsel: `${feil}, og pinnen ble ikke satt de siste tre dagene; pinnen brukes ikke.` };
+    return { status: 'utløpt', feil: true, grunn: `fikk ikke lest ${navn}`, advarsel: `${feil}, og pinnen ble ikke satt de siste tre dagene; pinnen brukes ikke.` };
   }
   if (!pr.merged) {
     if (pr.state === 'closed') {
@@ -196,7 +198,7 @@ export async function vurderService(tjeneste, servicePr, hent, { nå, satt }) {
   // Mangler merged_at, regnes mergen som gammel, så feilen ikke holder pinnen i live.
   const nyMerge = innenfor(nå, pr.merged_at, DØGN);
   const feiletEtterMerge = (grunn, advarsel) =>
-    nyMerge ? beholdes(grunn, advarsel) : { status: 'utløpt', grunn, advarsel: `${advarsel}, og ${navn} ble merget for mer enn et døgn siden; pinnen regnes som utløpt.` };
+    nyMerge ? beholdes(grunn, advarsel) : { status: 'utløpt', feil: true, grunn, advarsel: `${advarsel}, og ${navn} ble merget for mer enn et døgn siden; pinnen regnes som utløpt.` };
   const merge = pr.merge_commit_sha;
   if (typeof merge !== 'string' || !SHA.test(merge)) return feiletEtterMerge(`${navn} mangler merge-commit`, `${navn} er merget, men GitHub oppgir ingen merge-commit`);
   let revisjon;
@@ -318,7 +320,7 @@ export function planleggSet({ pinner, vurdering, args, e2e, service, nå }) {
   const feil = [];
   const gammel = pinner[tjeneste];
   const sammePar = gammel?.e2e_pr === e2ePr;
-  const ryddet = Object.keys(pinner).filter((t) => ['utløpt', 'forlatt'].includes(vurdering[t]?.status));
+  const ryddet = Object.keys(pinner).filter((t) => ['utløpt', 'forlatt'].includes(vurdering[t]?.status) && !vurdering[t].feil);
   if (e2e === 'lukket') feil.push(`e2e #${e2ePr} er lukket uten merge.`);
   if (e2e === 'merget' && !(erstatt && sammePar)) feil.push(`e2e #${e2ePr} er merget. En merget e2e-PR godtas bare med --erstatt for en pin fra samme e2e-PR.`);
   if (service !== 'åpen') feil.push(`${tjeneste} #${servicePr} er ${service}; pinnen trengs bare mens service-PR-en er åpen.`);
@@ -496,7 +498,10 @@ export async function skriv(args, io) {
   } else {
     const [e2ePr, servicePr] = await Promise.all([io.hent.pr(E2E_REPO, args.e2ePr), io.hent.pr(args.tjeneste, args.servicePr)]);
     const vurdering = {};
-    for (const [t, pin] of Object.entries(pinner)) vurdering[t] = await vurderPar(t, pin, io.hent, io.nå());
+    for (const [t, pin] of Object.entries(pinner)) {
+      vurdering[t] = await vurderPar(t, pin, io.hent, io.nå());
+      if (vurdering[t].advarsel) logg(`${t}: ${vurdering[t].advarsel}`);
+    }
     const plan = planleggSet({ pinner, vurdering, args, e2e: prStatus(e2ePr), service: prStatus(servicePr), nå: io.nå() });
     // Også en lik pin sjekkes: har PR-ene fått nye commits siden br-kjøringen, er imaget utdatert.
     const runId = args.tag.slice('br-'.length);
