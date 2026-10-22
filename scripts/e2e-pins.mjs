@@ -451,8 +451,8 @@ async function hentBrancherKjøring(github, runId, lastNed) {
   const orkestrator = krev(await github('GET', `/repos/${EIER}/${E2E_REPO}/actions/runs/${runId}`), `kjøring ${runId}`);
   const tittel = `E2E Tests · br-${runId}-${orkestrator.run_attempt}`;
   // Gatene starter også E2E Tests med workflow_dispatch, så kjøringen kan ligge bak flere sider.
-  const til = new Date(Date.parse(orkestrator.created_at) + 24 * 60 * 60 * 1000).toISOString().replace(/\.\d{3}Z$/, 'Z');
-  const vindu = encodeURIComponent(`${orkestrator.created_at}..${til}`);
+  // Uten øvre grense: et nytt forsøk kan starte dager etter created_at, som gjelder det første.
+  const vindu = encodeURIComponent(`>=${orkestrator.created_at}`);
   let e2eKjøring = null;
   for (let side = 1; side <= 10 && !e2eKjøring; side++) {
     const { workflow_runs: kjøringer } = krev(
@@ -515,9 +515,13 @@ export async function skriv(args, io) {
 
   const verdi = JSON.stringify(nye, null, 2);
   if (args.dryRun) return logg(`--dry-run: ville skrevet ${VARIABEL}:\n${verdi}`);
+  // API-et har ingen sammenlign-og-skriv. Lesingen rett før skrivingen stopper en skriving gjort
+  // mens denne sjekket PR-ene og kjøringen; tilbakelesingen ser bare om vår pin står. En skriving
+  // som bygger på en lesing gjort før vår skriving, kan fortsatt fjerne pinnen uten at noen ser det.
+  if ((await lesLagret(github)).tekst !== lagret.tekst) {
+    throw new Error(`${VARIABEL} er endret mens skriveren jobbet. Se på den nye verdien og kjør på nytt.`);
+  }
   await skrivLagret(github, lagret.finnes, verdi);
-  // API-et har ingen sammenlign-og-skriv. Tilbakelesingen oppdager en skriving mellom vår
-  // skriving og lesingen, ikke en som kommer etterpå og bygger på en eldre lesing.
   const tilbake = lesVariabel((await lesLagret(github)).tekst);
   if (JSON.stringify(tilbake[args.tjeneste]) !== JSON.stringify(nye[args.tjeneste])) {
     throw new Error(`${VARIABEL} har ikke ${args.kommando === 'fjern' ? 'mistet' : 'fått'} pinnen for ${args.tjeneste} etter skrivingen. En annen skriving kan ha overskrevet den; kjør på nytt.`);

@@ -434,7 +434,17 @@ test('set --erstatt for merget e2e-PR: en kjøring på main etter mergen godtas'
 });
 
 /** Falsk GitHub for skriveren: variabelen, kjøringene og PR-ene. */
-function lagGitHub({ verdi, prer = {}, ikkeLagre = false, kjøringerPerSide = false }: { verdi?: string; prer?: Obj; ikkeLagre?: boolean; kjøringerPerSide?: boolean }) {
+function lagGitHub({ verdi, prer = {}, ikkeLagre = false, kjøringerPerSide = false, alleKjøringer, orkestrator = {}, underveis }: {
+  verdi?: string;
+  prer?: Obj;
+  ikkeLagre?: boolean;
+  kjøringerPerSide?: boolean;
+  /** E2E Tests-kjøringer, filtrert på created-parameteren som GitHub gjør. */
+  alleKjøringer?: Obj[];
+  orkestrator?: Obj;
+  /** Kjøres mens skriveren laster ned trigger-konteksten, for en samtidig skriving. */
+  underveis?: (lagret: { verdi?: string }) => void;
+}) {
   const kall: string[] = [];
   const lagret: { verdi?: string } = { verdi };
   const github = async (metode: string, sti: string, body?: Obj) => {
@@ -449,9 +459,17 @@ function lagGitHub({ verdi, prer = {}, ikkeLagre = false, kjøringerPerSide = fa
       return { status: 201, data: null };
     }
     if (sti.endsWith('/actions/runs/500')) {
-      return { status: 200, data: { path: '.github/workflows/e2e-brancher.yml', conclusion: 'success', run_attempt: 2, created_at: '2026-10-22T12:00:00Z' } };
+      return { status: 200, data: { path: '.github/workflows/e2e-brancher.yml', conclusion: 'success', run_attempt: 2, created_at: '2026-10-22T12:00:00Z', ...orkestrator } };
     }
     if (sti.includes('/workflows/e2e-tests.yml/runs')) {
+      if (alleKjøringer) {
+        const query = new URLSearchParams(sti.split('?')[1]);
+        const created = query.get('created') ?? '';
+        const [fra, til] = created.startsWith('>=') ? [created.slice(2), null] : created.split('..');
+        const side = Number(query.get('page') ?? '1');
+        const treff = alleKjøringer.filter((r) => Date.parse(r.created_at) >= Date.parse(fra ?? '') && (!til || Date.parse(r.created_at) <= Date.parse(til)));
+        return { status: 200, data: { workflow_runs: treff.slice((side - 1) * 100, side * 100) } };
+      }
       if (kjøringerPerSide) {
         // 100 nyere kjøringer på side 1, kjøringen til br-500 på side 2.
         const side = Number(new URLSearchParams(sti.split('?')[1]).get('page') ?? '1');
@@ -470,7 +488,7 @@ function lagGitHub({ verdi, prer = {}, ikkeLagre = false, kjøringerPerSide = fa
   const åpen = (head: string) => ({ state: 'open', merged: false, head: { sha: head } });
   const hent = lagHenter({ pr: { 'melosys-e2e-tests#390': åpen(sha('2')), 'melosys-web#3300': åpen(sha('1')), ...prer } });
   const lastet: number[] = [];
-  const lastNed = async (id: number) => (lastet.push(id), brancher().kontekst);
+  const lastNed = async (id: number) => (lastet.push(id), underveis?.(lagret), brancher().kontekst);
   const logg: string[] = [];
   return { kall, lagret, lastet, logg, io: { github, hent, lastNed, nå: () => NÅ, logg: (t: string) => logg.push(t) } };
 }
@@ -517,6 +535,28 @@ test('skriv: finner E2E Tests-kjøringen også når den ikke er på første side
   await skriv(SET, g.io);
   assert.deepEqual(g.lastet, [8]);
   assert.ok(g.kall.filter((k) => k.includes('/workflows/e2e-tests.yml/runs')).length >= 2);
+});
+
+test('skriv: finner kjøringen til et nytt forsøk startet dager etter det første', async () => {
+  // created_at er tidspunktet for første forsøk; forsøk 2 kan starte mye senere.
+  const kjøring = { id: 8, display_title: 'E2E Tests · br-500-2', conclusion: 'success', created_at: '2026-10-24T09:05:00Z' };
+  const g = lagGitHub({ alleKjøringer: [kjøring], orkestrator: { created_at: '2026-10-22T12:00:00Z', run_started_at: '2026-10-24T09:00:00Z' } });
+  await skriv(SET, g.io);
+  assert.deepEqual(g.lastet, [8]);
+});
+
+test('skriv: leter ikke videre når en side har færre enn 100 kjøringer', async () => {
+  const andre = Array.from({ length: 105 }, (_, i) => ({ id: 1000 + i, display_title: `E2E Tests · gate-${i}`, created_at: '2026-10-22T13:00:00Z' }));
+  const g = lagGitHub({ alleKjøringer: andre });
+  await assert.rejects(skriv(SET, g.io), /Fant ikke E2E Tests-kjøringen til br-500/);
+  assert.equal(g.kall.filter((k) => k.includes('/workflows/e2e-tests.yml/runs')).length, 2);
+});
+
+test('skriv: skriver ikke over en variabel som er endret mens skriveren jobbet', async () => {
+  const annen = JSON.stringify({ 'melosys-api': PIN });
+  const g = lagGitHub({ verdi: '{}', underveis: (lagret) => (lagret.verdi = annen) });
+  await assert.rejects(skriv(SET, g.io), /E2E_PINS er endret mens skriveren jobbet/);
+  assert.equal(g.lagret.verdi, annen);
 });
 
 test('skriv: feiler når pinnen mangler etter skrivingen', async () => {
