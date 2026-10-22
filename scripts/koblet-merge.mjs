@@ -31,6 +31,13 @@ export function vaskBestiller(t) {
   return String(t ?? '').replace(/[\u0000-\u001f\u007f#@]/g, '').slice(0, 100).trim() || 'ukjent';
 }
 
+/** Markdown-kodespenn: lengre skilletegn enn den lengste rekken av backticks i teksten. */
+export function kodespenn(t) {
+  const n = Math.max(0, ...(String(t).match(/`+/g) ?? []).map((m) => m.length)) + 1;
+  const kant = /^`|`$/.test(t) ? ' ' : '';
+  return '`'.repeat(n) + kant + t + kant + '`'.repeat(n);
+}
+
 export function lesInput({ tag, e2ePr, tjenester, requestedBy, dryRun }) {
   const feil = [];
   if (!/^br-[0-9]+$/.test(tag ?? '')) feil.push('tag må være br-<run_id> fra «E2E med brancher».');
@@ -291,7 +298,7 @@ async function sjekk(ctx) {
   ctx.sammendrag(`✅ Paret er klart: ${e2eNavn(inp)} og ${inp.tjenester.map((t) => `${t.repo} #${t.pr}`).join(', ')} (${inp.tag}).`);
 }
 
-/** Uten `skriv` sier steget bare om pinnen trengs. `head` er commiten som har pinnen. */
+/** Uten `skriv` sier steget bare om pinnen trengs. */
 async function pin(ctx, skriv) {
   const inp = ctx.input;
   const pr = await hentPr(ctx, E2E_REPO, inp.e2ePr);
@@ -310,7 +317,6 @@ async function pin(ctx, skriv) {
     await flyttRef(ctx, pr.headRefName, ny, head);
   } else ctx.notis(`Pinnen står på ${head.slice(0, 7)} i ${e2eNavn(inp)}.`);
   ctx.utdata('trengs', 'false');
-  ctx.utdata('head', ny);
   ctx.sammendrag(`📌 Pinnen står i ${e2eNavn(inp)} (${ny.slice(0, 7)}).`);
 }
 
@@ -470,7 +476,7 @@ async function fjern(ctx, skriv) {
     title: tittel,
     head: gren,
     base: 'main',
-    body: `Fjerner pinnen til \`${inp.tag}\` nå som latest har endringen fra ${inp.tjenester.map((t) => `${EIER}/${t.repo}#${t.pr}`).join(', ')}.\n\nBestilt av ${inp.bestiller} via [Koblet merge](${ctx.env.RUN_URL ?? ''}).`,
+    body: `Fjerner pinnen til \`${inp.tag}\` nå som latest har endringen fra ${inp.tjenester.map((t) => `${EIER}/${t.repo}#${t.pr}`).join(', ')}.\n\nBestilt av ${kodespenn(inp.bestiller)} via [Koblet merge](${ctx.env.RUN_URL ?? ''}).`,
   }));
   ctx.logg(`PR-en som fjerner pinnen: ${pr.html_url}`);
   ctx.utdata('pr', String(pr.number));

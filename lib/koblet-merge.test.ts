@@ -352,16 +352,16 @@ test('sjekk: utkast, fork, feil base, konflikt og lukket PR stopper', async () =
 test('pin: står pinnen på head, skrives ingenting; ellers committes den uten force', async () => {
   const har = par();
   const a = await kjorSteg(har, 'pin-sjekk');
-  assert.deepEqual(a.utdata, { trengs: 'false', head: 'head-380' });
+  assert.deepEqual(a.utdata, { trengs: 'false' });
   const b = await kjorSteg(har, 'pin-skriv');
-  assert.equal(b.utdata.head, 'head-380');
+  assert.deepEqual(b.utdata, { trengs: 'false' });
   assert.deepEqual(skriveKall(har.kall), []);
 
   const mangler = par();
   mangler.s.filer['head-380'] = pinTekst({ 'melosys-api': 'br-1' });
   assert.equal((await kjorSteg(mangler, 'pin-sjekk')).utdata.trengs, 'true');
   const c = await kjorSteg(mangler, 'pin-skriv');
-  assert.equal(c.utdata.head, 'ny-commit');
+  assert.deepEqual(c.utdata, { trengs: 'false' });
   const tre = mangler.kall.find((k) => k.sti.endsWith('/git/trees'))!;
   assert.deepEqual(JSON.parse(tre.body.tree[0].content), { 'melosys-api': 'br-1', 'melosys-web': TAG });
   const patch = mangler.kall.find((k) => k.metode === 'PATCH')!;
@@ -371,7 +371,7 @@ test('pin: står pinnen på head, skrives ingenting; ellers committes den uten f
 
 test('pin: merget e2e-PR sjekkes mot merge-commiten', async () => {
   const ok = await kjorSteg(par({ e2e: { state: 'MERGED', mergeCommit: { oid: 'merge-380' } } }), 'pin-sjekk');
-  assert.deepEqual(ok.utdata, { trengs: 'false', head: 'merge-380' });
+  assert.deepEqual(ok.utdata, { trengs: 'false' });
   await assert.rejects(kjorSteg(par({ e2e: { state: 'MERGED', mergeCommit: { oid: 'x' } } }), 'pin-sjekk'), /merget uten pinnen/);
 });
 
@@ -591,7 +591,21 @@ test('fjern-pin: main uten pinnen er ferdig; branch og åpen PR gjenbrukes', asy
     'POST git/refs',
     'POST melosys-e2e-tests/pulls',
   ]);
-  assert.match(skriveKall(ny.kall).at(-1)!.body.body, /Bestilt av rune via/);
+  assert.match(skriveKall(ny.kall).at(-1)!.body.body, /Bestilt av `rune` via/);
+
+  // Lenker og HTML i requested_by blir kode i PR-teksten, også med backticks.
+  const lenke = par();
+  lenke.s.filer.main = pinTekst({ 'melosys-web': TAG });
+  await kjorSteg(lenke, 'fjern-skriv', [], { REQUESTED_BY: '[klikk](https://x.example) <img src=x>' });
+  assert.match(skriveKall(lenke.kall).at(-1)!.body.body, /Bestilt av `\[klikk\]\(https:\/\/x\.example\) <img src=x>` via/);
+  const backtick = par();
+  backtick.s.filer.main = pinTekst({ 'melosys-web': TAG });
+  await kjorSteg(backtick, 'fjern-skriv', [], { REQUESTED_BY: 'a`[b](https://x)``c' });
+  assert.match(skriveKall(backtick.kall).at(-1)!.body.body, /Bestilt av ```a`\[b\]\(https:\/\/x\)``c``` via/);
+  const kant = par();
+  kant.s.filer.main = pinTekst({ 'melosys-web': TAG });
+  await kjorSteg(kant, 'fjern-skriv', [], { REQUESTED_BY: '`x`' });
+  assert.match(skriveKall(kant.kall).at(-1)!.body.body, /Bestilt av `` `x` `` via/);
 
   const gammel = par({}, { apnePulls: [{ number: 5, html_url: 'https://x/5' }] });
   gammel.s.filer.main = pinTekst({ 'melosys-web': TAG });
@@ -665,6 +679,8 @@ test('workflowen: jobbnavnene konsollen leser, prøvekjøring i run-name og app-
   assert.equal(tokenSteg.length, 5);
   for (const s of tokenSteg) assert.match(s, /\n\s+repositories: (melosys-e2e-tests|\$\{\{ matrix\.repo \}\})\n/);
   assert.equal((yml.match(/MELOSYS_CI_PRIVATE_KEY/g) ?? []).length, 5, 'nøkkelen brukes bare i token-stegene');
+  const pinJobb = yml.slice(yml.indexOf('\n  pin:\n'), yml.indexOf('\n  e2e-ko:\n'));
+  assert.doesNotMatch(pinJobb, /\n    outputs:/, 'ingen leser utdata fra pin-jobben');
 });
 
 test('workflowen: sett-i-ko får PR-nummeret, og vent-merget får vite om enqueue feilet', () => {

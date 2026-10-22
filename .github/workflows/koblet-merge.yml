@@ -71,8 +71,6 @@ jobs:
     needs: sjekk
     runs-on: ubuntu-latest
     timeout-minutes: 10
-    outputs:
-      head: ${{ steps.skriv.outputs.head || steps.les.outputs.head }}
     steps:
       - uses: actions/checkout@v4
         with:
