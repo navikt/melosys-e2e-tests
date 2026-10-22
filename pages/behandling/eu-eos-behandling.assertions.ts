@@ -32,7 +32,10 @@ export class EuEosBehandlingAssertions {
    * Verifiser at land-dropdown er synlig
    */
   async verifiserLandDropdownSynlig(): Promise<void> {
-    const landDropdown = this.page.locator('.css-19bb58m');
+    const landDropdown = this.page.getByRole('combobox', {
+      name: 'I hvilke land skal arbeidet/næringen utføres i?',
+      exact: true
+    });
     await expect(landDropdown).toBeVisible();
   }
 

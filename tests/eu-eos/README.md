@@ -297,7 +297,7 @@ await behandling.fattVedtak();
 ### EU/EØS vs FTRL og Trygdeavtale (generelt)
 
 1. **Dateplukker** - Bruker år-velger og dag-velger (ikke bare tekstfelt)
-2. **Land-dropdown** - Bruker CSS-locator (`.css-19bb58m`) i stedet for label
+2. **Land-dropdown** - Aksel Combobox (flervalg) med skjult label «I hvilke land skal arbeidet/næringen utføres i?»
 3. **Yrkesaktiv/Selvstendig** - Eget steg med radio-knapper
 4. **Arbeidsgiver** - Bruker **checkbox** i stedet for radio-knapp
 5. **Arbeidstype** - Lønnet arbeid vs Ulønnet arbeid
