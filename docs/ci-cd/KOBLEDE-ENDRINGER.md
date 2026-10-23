@@ -2,79 +2,94 @@
 
 En koblet endring er en PR i et service-repo som får testene på `main` til å feile, og en PR her som retter testene. Ingen av dem kommer gjennom sin merge-kø alene: service-køen kjører de gamle testene mot det nye imaget, og e2e-køen kjører de nye testene mot det gamle `latest`.
 
-Løsningen er en pin i `.github/e2e-pins.json`. e2e-PR-en pinner tjenesten til imaget paret er testet grønt mot. Tester og image byttes da i samme commit på `main`, og begge PR-ene går gjennom køene uten bypass.
+Løsningen er en pin i Actions-variabelen `E2E_PINS` i melosys-e2e-tests. Pinnen setter tjenesten til imaget paret er testet grønt mot, `br-<run_id>` fra «E2E med brancher». Hver kjøring av E2E Tests avgjør selv om pinnen gjelder: fra testene har e2e-PR-en, til `latest` har service-PR-en. Pinnen slår seg av selv, og ingen PR trengs for å fjerne den.
 
 ## Når du ikke trenger pin
 
 Kan testene skrives slik at de er grønne mot både gammelt og nytt image (regex for tekst, `.or()` for lokatorer), merger du e2e-PR-en først og service-PR-en etterpå. Er en backend-PR i samme endring bakoverkompatibel, merger du den først uten pin.
 
+## Repoer uten merge-kø
+
+Pinnen finnes bare for de seks repoene med merge-kø: melosys-api, melosys-web, melosys-skjema-api, melosys-skjema-web, melosys-eessi og faktureringskomponenten. Utløpsregelen leser service-PR-en, og det kan den bare i disse repoene.
+
+For de andre tjenestene, for eksempel melosys-mock, melosys-trygdeavgift-beregning og melosys-dokgen, gjør du endringen slik at den ikke trenger pin:
+
+- **Service først:** gjør service-endringen bakoverkompatibel, merge den, og merge e2e-PR-en når `latest` har den.
+- **Tester for begge:** skriv testene slik at de består mot både gammelt og nytt image, merge e2e-PR-en, og så service-PR-en.
+
 ## Automatisk fra konsollen
 
-Knappen i melosys-console starter workflowen «Koblet merge» (`.github/workflows/koblet-merge.yml`) på `main`. Den gjør steg 2–4 i den manuelle oppskriften for deg, uten køhopp, og åpner PR-en i steg 5. Kjør paret grønt med «E2E med brancher» først (steg 1); knappen trenger taggen `br-<run_id>`, e2e-PR-en og service-PR-ene i den rekkefølgen de skal merges.
+Knappen «Koblet merge» i melosys-console starter workflowen «Koblet merge» (`.github/workflows/koblet-merge.yml`) på `main`. Kjør paret grønt med «E2E med brancher» først, uten `test_grep`. Knappen trenger taggen `br-<run_id>`, e2e-PR-en og service-PR-ene i den rekkefølgen de skal merges.
 
-**Bare repoer med merge-kø:** melosys-api, melosys-web, melosys-skjema-api, melosys-skjema-web, melosys-eessi og faktureringskomponenten. For andre repoer bruker du den manuelle oppskriften.
+Workflowen har to jobber:
 
-Workflowen har fem jobber:
+1. **Sjekk paret.** Hver PR finnes, er åpen, er ikke et utkast, har ingen konflikter, går mot default-branchen, har branchen i samme repo og står ikke i merge-køen. En køkjøring som har startet, ser ikke en pin som settes etterpå.
+2. **Skriv pinnen i E2E_PINS.** For hver service-PR kjører jobben `scripts/e2e-pins.mjs set` (se [Skriveren](#skriveren)). Sammendraget viser rekkefølgen du merger i.
 
-1. **Sjekk paret.** Hver PR finnes, er ikke et utkast, har ingen konflikter, går mot default-branchen og har branchen i samme repo. En PR som står i kø, godtas.
-2. **Legg pinnen i e2e-PR-en.** Workflowen committer `.github/e2e-pins.json` til e2e-branchen. Andre pinner i fila står. Er branchen pushet til i mellomtiden, stopper jobben i stedet for å overskrive.
-3. **e2e-PR gjennom køen.** Workflowen venter til PR-en kan merges (opptil 30 min), sjekker at pinnen står på head, setter PR-en i kø og venter til den er merget (opptil 150 min). Tas den ut av køen, stopper kjøringen.
-4. **`<repo> #<pr>` i køen**, én service-PR om gangen. Står andre PR-er i køen, venter jobben til køen er tom (opptil 60 min), og setter så PR-en bakerst i køen. Andre kan sette PR-er i kø mens jobben venter; si fra i kanalen.
-5. **Fjern pinnen.** Når service-PR-ene er merget, lager workflowen branchen `fjern-pin-<tag>` fra `main` og åpner PR-en, eller gjenbruker en åpen PR fra branchen. Den fjerner bare pinner som fortsatt står på taggen. Workflowen setter ikke PR-en i kø: trykk «Merge when ready» selv. e2e-køen kjører hele suiten mot `latest` og blir grønn først når `latest` har endringene.
+Workflowen setter ingenting i kø. Merge selv med **Merge when ready**, i rekkefølgen sammendraget viser:
 
-**Svarer ikke GitHub når en PR skal i kø**, for eksempel med en intern feil, 5xx eller rate limit med `retry-after` eller `x-ratelimit-remaining: 0`, står en advarsel i sammendraget. Trykk «Merge when ready» på PR-en; jobben venter videre til PR-en er merget. Avviser GitHub forespørselen, for eksempel fordi head har endret seg, PR-en allerede er i kø eller appen mangler rettighet, stopper jobben.
+1. e2e-PR-en. e2e-køen kjører de nye testene mot `br`-imaget, fordi køens commit har `(#<e2e_pr>)` i emnet.
+2. Hver service-PR, når PR-en foran er merget og køen i service-repoet er tom. En annen PR foran i køen har ikke endringen og blir rød mot de nye testene. Si fra i kanalen at andre merger i repoet venter.
 
-**Prøv først med `dry_run`.** Hver jobb leser og sjekker som vanlig og skriver i loggen hva den ville gjort, men committer, setter i kø og åpner ingenting, og venter ikke. Kjøringen heter da «… (prøvekjøring)».
+**Prøv først med `dry_run`.** Jobbene leser og sjekker som vanlig, og skriveren viser verdien den ville skrevet, men variabelen endres ikke. Kjøringen heter da «… (prøvekjøring)». En prøvekjøring leser `E2E_PINS` slik den var da jobben startet, fordi `github.token` ikke kan lese variabler.
 
-**Rettigheter.** Workflowen leser med `github.token`; alle repoene er offentlige. Før hver skriving henter den et token fra appen «Melosys CI» for det ene repoet den skriver til. Appen trenger *Contents: write* og *Pull requests: write* i melosys-e2e-tests og service-repoene. Uten dem stopper jobben ved «Hent app-token». En org-admin gir rettighetene i appens innstillinger. `dry_run` henter ikke app-token.
+**Rettigheter.** Workflowen leser PR-er og kjøringer med `github.token`; alle repoene er offentlige. Bare skrivingen av variabelen bruker et token fra app-en Melosys CI, avgrenset til melosys-e2e-tests. App-en trenger *Variables: write*. Uten den svarer GitHub `403 Resource not accessible by integration`, og jobben stopper før noe er skrevet. En prøvekjøring henter ikke app-token.
 
-**Stoppe og fortsette.** Avbryt kjøringen i Actions. Det som er gjort, står: en commitet pin, en PR i kø, en merget PR. Start på nytt med samme input når du vil fortsette. Hver jobb hopper over det som er gjort, og venter på en PR som står i kø. Sjekken godtar en merget e2e-PR bare når merge-commiten pinner alle tjenestene til taggen, og en merget service-PR bare når e2e-PR-en og tjenestene foran den er merget.
+**Én skriving om gangen.** API-et har ingen sammenlign-og-skriv for variabler, så skrivejobben har concurrency-gruppen `e2e-pins-variabel`. En prøvekjøring står utenfor gruppen.
 
-## Slik gjør du det
+## Skriveren
 
-Eksempel: melosys-web #3300 bytter en knapp, og e2e-branchen `MELOSYS-9000-ny-knapp` har testene som finner den nye knappen.
+`scripts/e2e-pins.mjs` setter og fjerner pinner. Workflowen bruker den, og du kan kjøre den selv med ditt eget gh-token:
 
-1. **Kjør paret med «E2E med brancher»** (se [KJOR-E2E-PA-CI.md](KJOR-E2E-PA-CI.md#e2e-med-brancher)). Oppdater web-branchen fra `master` først. Kjøringen må være grønn. Noter taggen `br-<run_id>`.
-2. **Sjekk at web-køen er tom, og si fra i kanalen** at andre web-merger venter til #3300 er inne:
+```bash
+GH_TOKEN=$(gh auth token) node scripts/e2e-pins.mjs set melosys-web br-39400000000 388 3300
+GH_TOKEN=$(gh auth token) node scripts/e2e-pins.mjs fjern melosys-web
+```
 
-   ```bash
-   gh api graphql -f query='{ repository(owner: "navikt", name: "melosys-web") { mergeQueue(branch: "master") { entries(first: 20) { nodes { position state pullRequest { number title } } } } } }'
-   ```
+`set` krever `gh` og docker logget inn i GAR (`gcloud auth configure-docker europe-north1-docker.pkg.dev`). Før den skriver, sjekker den dette:
 
-3. **Legg pinnen i e2e-PR-en, og sett PR-en i køen.**
+- e2e-PR-en og service-PR-en er åpne.
+- `br-<run_id>` er en grønn kjøring av «E2E med brancher» med hele suiten, mot head-commitene PR-ene har nå.
+- Ingen pin fra et annet par gjelder for tjenesten. En utløpt eller forlatt pin ryddes bort.
 
-   ```json
-   { "melosys-web": "br-39400000000" }
-   ```
+Flagg:
 
-   Køen kjører hele suiten med de nye testene mot `br`-imaget.
-4. **Sett web #3300 først i web-køen med én gang e2e-PR-en er merget.** Gaten kjører testene på `main`, som nå er de nye, mot køens image. Legg PR-en først, så bygges andre web-oppføringer på nytt oppå #3300 i stedet for å bli røde:
+- `--erstatt`: bytt tag og service-PR for en pin fra samme e2e-PR, for eksempel når service-PR-en er erstattet.
+- `--tving`: overskriv en pin fra et annet par.
+- `--dry-run`: vis verdien uten å skrive.
 
-   ```bash
-   gh api graphql -f query='mutation($id: ID!) { enqueuePullRequest(input: {pullRequestId: $id, jump: true}) { mergeQueueEntry { position } } }' \
-     -f id="$(gh pr view 3300 -R navikt/melosys-web --json id -q .id)"
-   ```
+`gh variable set E2E_PINS -R navikt/melosys-e2e-tests` skriver variabelen uten noen av sjekkene. Kjøringene validerer verdien selv, og en ugyldig verdi slår av alle pinnene med en feilmelding. Skriv ikke for hånd mens «Koblet merge» skriver.
 
-   Køhopp krever admin-rett i repoet, eller en egendefinert repo-rolle med den rettigheten ([GitHub changelog](https://github.blog/changelog/2023-07-12-pull-request-merge-queue-is-now-generally-available/)). Har du ikke det, ber du en admin om å legge PR-en i kø. Uten køhopp kan web-PR-er som ligger foran #3300, bli røde; sett dem i kø igjen etter #3300.
-5. **Fjern pinnen med en PR som bare sletter linja.** Køen kjører hele suiten mot `latest` og blir grønn først når `latest` har #3300. Du kan derfor ikke fjerne pinnen for tidlig.
+Verdien er ett JSON-objekt, én pin per tjeneste:
 
-Endrer service-PR-en seg vesentlig etter steg 1, kjører du paret på nytt og bytter taggen.
-
-**To tjenester i samme endring:** kjør begge branchene i samme «E2E med brancher», og pin begge til samme `br-<run_id>`. Rekkefølgen på service-mergene spiller da ingen rolle.
+```json
+{ "melosys-web": { "tag": "br-39400000000", "e2e_pr": 388, "service_pr": 3300, "satt": "2026-10-23T08:00:00Z" } }
+```
 
 ## Slik virker pinnen
 
-- E2E Tests leser fila fra sin egen ref i steget «Determine image tags» (`scripts/e2e-pins.mjs`).
-- En tjeneste som har `latest` i kjøringen, får pin-taggen. En tjeneste under test beholder sin egen tag: gaten, dispatch etter merge og «E2E med brancher» tester alltid imaget de er startet med.
-- En eksplisitt `latest` regnes ikke som under test: `environment=melosys-web:latest` får pin-taggen for web så lenge pinnen står. Vil du teste mot `latest`, er PR-en som fjerner pinnen (steg 5) veien: køen tester den uten pin.
-- Hver kjøring der en pin brukes, viser en advarsel i sammendraget. En pin som ikke brukes fordi tjenesten har en annen tag enn `latest`, står som en linje i loggen til steget «Determine image tags».
-- Ugyldig JSON, en ukjent tjeneste, en tag som ikke er en gyldig docker-tag og en pin til `latest` stopper plan-jobben med en melding. e2e-køen stopper derfor en ugyldig fil før den når `main`.
-- Gyldige tjenester er navnene `environment`-inputen bruker, for eksempel `melosys-api`, `melosys-web`, `melosys-skjema-api`, `melosys-skjema-web` og `melosys-mock`.
+Steget «Determine image tags» i E2E Tests leser `vars.E2E_PINS` og avgjør hver pin for seg:
+
+- **Under test:** har tjenesten en annen tag enn `latest` i kjøringen, beholder den taggen. Gaten, dispatch etter merge og «E2E med brancher» tester alltid imaget de er startet med.
+- **Ikke startet:** ingen commit i historikken har emne som slutter på `(#<e2e_pr>)`, eller e2e-PR-en er revertert. Kjøringen bruker `latest`.
+- **Aktiv:** testene har e2e-PR-en, og service-PR-en er åpen, eller `latest` er bygd før merge-commiten. Kjøringen bruker pin-taggen og viser en advarsel i sammendraget.
+- **Utløpt:** revisjonen på `latest` (labelen `org.opencontainers.image.revision`) har merge-commiten til service-PR-en. Kjøringen bruker `latest`.
+- **Forlatt:** service-PR-en er lukket uten merge, eller finnes ikke. Kjøringen bruker `latest` og viser en advarsel.
+
+Statusen per pin står i `pinner` i `trigger-context.json`, som konsollen viser.
+
+Andre regler:
+
+- En eksplisitt `latest` regnes ikke som under test: `environment=melosys-web:latest` får pin-taggen for web så lenge pinnen er aktiv.
+- Startregelen ser etter `(#<e2e_pr>)` i emnet. Squash-merge gjennom køen gir alltid det. En rebase-merge forbi køen gir ikke det, og pinnen starter ikke.
+- Feiler et oppslag mot GitHub eller GAR, beholdes en aktiv pin en kort tid med en advarsel: et døgn etter at service-PR-en er merget, eller tre dager etter at pinnen ble satt hvis selve PR-oppslaget feiler.
+- En utløpt pin kan stå i variabelen. Den er en linje i loggen, og neste `set` rydder den bort.
 
 ## Når noe går galt
 
-- **Du glemmer pinnen.** e2e-PR-en blir rød i køen. Bare din PR tas ut.
 - **Du setter service-PR-en i kø før e2e-PR-en er merget.** Gaten kjører de gamle testene og blir rød. Bare din PR tas ut.
-- **Service-PR-en droppes etter at e2e-PR-en er merget.** Reverter e2e-PR-en. Reverten fjerner testene og pinnen i samme commit og går gjennom køen.
-- **Du glemmer å fjerne pinnen.** Tjenesten holdes på `br`-imaget i alle kjøringer som ikke tester den. Advarselen står i hvert sammendrag.
-- **`br`-taggen er ryddet bort fra GAR.** Kjøringene blir røde når imaget hentes. Fjern pinnen, eller kjør paret på nytt og bytt taggen.
+- **e2e-PR-en revertes.** Revert-commiten slår av startregelen. Fjern pinnen også: `node scripts/e2e-pins.mjs fjern <tjeneste>`.
+- **Service-PR-en lukkes eller erstattes.** Pinnen er forlatt, og kjøringene blir røde mot `latest`. Revert e2e-PR-en, eller kjør «E2E med brancher» på nytt med den nye service-PR-en og bytt med `set --erstatt <tjeneste> <ny br-tag> <e2e_pr> <ny service_pr>`.
+- **Service-PR-en revertes etter merge.** `latest` er forbi merge-commiten, så pinnen er utløpt, og testene feiler mot et image uten endringen. Revert e2e-PR-en også.
+- **En pin står aktiv i mer enn tre dager.** Hver kjøring viser en advarsel. Sjekk om service-PR-en står fast.
+- **`br`-taggen er ryddet bort fra GAR.** GAR beholder versjoner i minst 90 dager. Kjøringene blir røde når imaget hentes. Fjern pinnen, eller kjør paret på nytt og bytt taggen.
