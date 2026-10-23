@@ -27,6 +27,8 @@ Merge queue virker bare på brancher med navn på høyst 15 tegn. `nais/login` a
 
 Sjekken `e2e-for-merge` er grønn på en PR før den står i kø, og betyr bare noe i køen. Merger noen med bypass på ruleset-et forbi køen, har ingen e2e-tester kjørt.
 
+Krever en PR i et service-repo nye e2e-tester, går begge PR-ene gjennom køene med en pin i Actions-variabelen `E2E_PINS`. Se [KOBLEDE-ENDRINGER.md](KOBLEDE-ENDRINGER.md).
+
 ## E2E-gate for kilderepoer
 
 `.github/workflows/e2e-gate.yml` er en gjenbrukbar workflow et kilderepo (først melosys-api) kaller fra en PR eller fra sin egen merge queue. Den svarer på ett spørsmål: er nøyaktig denne koden testet grønt før?

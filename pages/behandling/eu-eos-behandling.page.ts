@@ -382,14 +382,15 @@ export class EuEosBehandlingPage extends BasePage {
   }
 
   /**
-   * Legg til begrunnelse for vurdering (combobox + "Legg til" knapp)
+   * Kryss av begrunnelse for at utsendingsbestemmelsen ikke er oppfylt
    * @param tekst - Begrunnelsestekst (f.eks. 'Erstatter en annen utsendt person...')
    */
   async leggTilBegrunnelseForVurdering(tekst: string): Promise<void> {
-    const combobox = this.page.getByRole('combobox', { name: 'Legg til begrunnelse for at' });
-    await combobox.click();
-    await combobox.fill(tekst);
-    await this.page.getByRole('button', { name: 'Legg til' }).click();
+    const gruppe = this.page.getByRole('group', {
+      name: 'Legg til begrunnelse for at utsendingsbestemmelse ikke er oppfylt',
+      exact: true
+    });
+    await gruppe.getByRole('checkbox', { name: tekst }).check();
     console.log(`✅ La til begrunnelse: ${tekst.substring(0, 50)}...`);
   }
 

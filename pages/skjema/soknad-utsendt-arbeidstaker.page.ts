@@ -45,7 +45,7 @@ export class SoknadUtsendtArbeidstakerPage {
 
   async fyllUtsendingsperiodeOgLand(land = 'Frankrike'): Promise<void> {
     const page = this.page;
-    await expect(page.getByRole('heading', { name: 'Utsendingsperiode og land' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Utenlandsperiode og land' })).toBeVisible();
     await page.getByLabel('I hvilket land skal arbeidet utføres?').selectOption({ label: land });
 
     const { fraDato, tilDato } = standardUtsendingsperiode();
