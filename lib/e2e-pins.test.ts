@@ -1,13 +1,13 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { execFileSync, spawnSync } from 'node:child_process';
+import { spawnSync } from 'node:child_process';
 import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
-  brukPinner,
+  lagHenter as lagEkteHenter,
+  lagSkrivIo,
   lesArgumenter,
-  lesPinner,
   lesVariabel,
   planleggSet,
   revisjonFraImage,
@@ -29,8 +29,8 @@ import { imageTagsFromEnv } from '../reporters/test-summary';
 /**
  * Pinnene styrer imagevalget i alle E2E Tests-kjøringer. Feilene som koster mest: en pin som
  * overstyrer tjenesten under test (gaten tester feil image og blir grønn på feil grunnlag), en pin
- * som gjelder før testene har e2e-PR-en eller etter at latest har service-PR-en, en ugyldig fil
- * som slipper gjennom, og en ugyldig variabel som stopper alle gates.
+ * som gjelder før testene har e2e-PR-en eller etter at latest har service-PR-en, og en ugyldig
+ * variabel som stopper alle gates.
  */
 
 type Obj = Record<string, any>;
@@ -53,50 +53,6 @@ function lagHenter({ pr = {}, revisjon = sha('b'), compare = 'ahead' }: { pr?: O
   };
 }
 const merget = { state: 'closed', merged: true, merge_commit_sha: sha('a'), merged_at: '2026-10-22T14:30:00Z' };
-
-// ---------------------------------------------------------------- fila
-
-test('tom fil og {} gir ingen pinner', () => {
-  assert.deepEqual(lesPinner(''), {});
-  assert.deepEqual(lesPinner('  \n'), {});
-  assert.deepEqual(lesPinner('{}'), {});
-});
-
-test('pinnen i fila gjelder tjenester som har latest', () => {
-  const pinner = lesPinner('{"melosys-web": "br-123", "melosys-skjema-api": "br-123"}');
-  assert.deepEqual(brukPinner(pinner, alleLatest), [
-    { variabel: 'MELOSYS_WEB_TAG', tjeneste: 'melosys-web', tag: 'br-123' },
-    { variabel: 'MELOSYS_SKJEMA_API_TAG', tjeneste: 'melosys-skjema-api', tag: 'br-123' },
-  ]);
-});
-
-test('tjenesten under test beholder sin egen tag', () => {
-  const pinner = lesPinner('{"melosys-web": "br-123", "melosys-api": "br-123"}');
-  const tagger = { ...alleLatest, MELOSYS_WEB_TAG: 'mq-abc' };
-  assert.deepEqual(brukPinner(pinner, tagger), [
-    { variabel: 'MELOSYS_API_TAG', tjeneste: 'melosys-api', tag: 'br-123' },
-  ]);
-});
-
-test('tom api-tag (tom environment) får ikke pinnen', () => {
-  const pinner = lesPinner('{"melosys-api": "br-123"}');
-  assert.deepEqual(brukPinner(pinner, { ...alleLatest, MELOSYS_API_TAG: '' }), []);
-});
-
-test('ugyldige filer avvises med en melding', () => {
-  assert.throws(() => lesPinner('{"melosys-web": '), /ikke gyldig JSON/);
-  for (const tekst of ['null', '[]', '"br-1"', '42']) {
-    assert.throws(() => lesPinner(tekst), /skal være et objekt/, tekst);
-  }
-  assert.throws(() => lesPinner('{"melosys-wbe": "br-1"}'), /ukjent tjeneste «melosys-wbe»/);
-  for (const nøkkel of ['constructor', '__proto__', 'toString', 'hasOwnProperty']) {
-    assert.throws(() => lesPinner(`{"${nøkkel}": "br-1"}`), /ukjent tjeneste/, nøkkel);
-  }
-  assert.throws(() => lesPinner('{"melosys-web": 123}'), /ikke en gyldig docker-tag/);
-  assert.throws(() => lesPinner('{"melosys-web": "br-1\\nMELOSYS_API_TAG x y"}'), /ikke en gyldig docker-tag/);
-  assert.throws(() => lesPinner('{"melosys-web": "br 1"}'), /ikke en gyldig docker-tag/);
-  assert.throws(() => lesPinner('{"melosys-web": "latest"}'), /pinnet til latest/);
-});
 
 // ---------------------------------------------------------------- variabelen
 
@@ -194,6 +150,24 @@ test('utløp: åpen service-PR er aktiv, lukket uten merge er forlatt', async ()
   assert.match(lukket.advarsel, /lukket uten merge/);
 });
 
+test('utløp: en service-PR som ikke finnes (404), er forlatt, ikke en forbigående feil', async () => {
+  const finnesIkke = Object.assign(new Error('melosys-web #3267 ga HTTP 404: Not Found'), { status: 404 });
+  const v = await vurderService('melosys-web', 3267, lagHenter({ pr: { 'melosys-web#3267': finnesIkke } }), { nå: NÅ, satt: PIN.satt });
+  assert.equal(v.status, 'forlatt');
+  assert.match(v.grunn, /melosys-web #3267 finnes ikke/);
+  assert.equal(v.feil, undefined);
+  const e2e = await vurderPar('melosys-web', PIN, lagHenter({ pr: { 'melosys-e2e-tests#388': finnesIkke } }), NÅ);
+  assert.equal(e2e.status, 'forlatt');
+  assert.match(e2e.grunn, /e2e #388 finnes ikke/);
+});
+
+test('lagHenter: en feil fra GitHub har HTTP-statusen', async () => {
+  const github = async () => ({ status: 404, data: { message: 'Not Found' } });
+  const feil = await lagEkteHenter(github).pr('melosys-web', 1).catch((e: Obj) => e);
+  assert.equal(feil.status, 404);
+  assert.match(feil.message, /melosys-web #1 ga HTTP 404: Not Found/);
+});
+
 test('utløp: latest lik eller foran merge-commiten er utløpt, bak er aktiv', async () => {
   const pr = { 'melosys-web#3267': merget };
   for (const compare of ['identical', 'ahead']) {
@@ -240,6 +214,7 @@ test('utløp: en feil beholder pinnen bare et døgn etter mergen', async () => {
   ] as [string, Obj][]) {
     const v = await vurderService('melosys-web', 3267, lagHenter(oppsett), { nå: NÅ, satt: PIN.satt });
     assert.equal(v.status, 'utløpt', navn);
+    assert.equal(v.feil, true, navn);
     assert.match(v.advarsel, /merget for mer enn et døgn siden/, navn);
   }
   // Rett etter mergen er latest kanskje ikke bygd ennå; da beholdes pinnen.
@@ -329,29 +304,19 @@ test('velg: bare en aktiv pin i variabelen brukes', async () => {
   assert.ok(r.logg.some((l: Obj) => l.nivå === 'info' && /faktureringskomponenten .* utløpt/.test(l.tekst)));
 });
 
-test('velg: ugyldig variabel gir ingen pinner fra den, men fila gjelder', async () => {
-  const r = await velg({ tekst: '{"melosys-web": "br-1"}', filPinner: { 'melosys-api': 'br-5' } });
+test('velg: ugyldig variabel gir ingen pinner og en feilmelding', async () => {
+  const r = await velg({ tekst: '{"melosys-web": "br-1"}' });
   assert.deepEqual(r.pinner, []);
+  assert.deepEqual(r.bruk, []);
   assert.match(r.pinnerFeil, /^E2E_PINS pinnen for melosys-web skal være et objekt/);
-  assert.deepEqual(r.bruk, [{ variabel: 'MELOSYS_API_TAG', tjeneste: 'melosys-api', tag: 'br-5' }]);
   assert.ok(r.logg.some((l: Obj) => l.nivå === 'error' && /ingen pinner fra E2E_PINS/.test(l.tekst)));
 });
 
-test('velg: en aktiv pin i variabelen vinner over fila, ellers gjelder fila', async () => {
-  const tekst = JSON.stringify({ 'melosys-web': PIN });
-  const aktiv = await velg({ tekst, filPinner: { 'melosys-web': 'br-fil' } });
-  assert.deepEqual(aktiv.bruk, [{ variabel: 'MELOSYS_WEB_TAG', tjeneste: 'melosys-web', tag: PIN.tag }]);
-  assert.ok(aktiv.logg.some((l: Obj) => l.nivå === 'warning' && /både i .github\/e2e-pins.json/.test(l.tekst)));
-  const ikkeStartet = await velg({ tekst, filPinner: { 'melosys-web': 'br-fil' }, emner: [] });
-  assert.deepEqual(ikkeStartet.bruk, [{ variabel: 'MELOSYS_WEB_TAG', tjeneste: 'melosys-web', tag: 'br-fil' }]);
-});
-
-test('velg: tjenesten under test får verken pinnen i variabelen eller i fila', async () => {
+test('velg: tjenesten under test får ikke pinnen', async () => {
   const tagger = { ...alleLatest, MELOSYS_WEB_TAG: 'mq-abc' };
-  const r = await velg({ tekst: JSON.stringify({ 'melosys-web': PIN }), filPinner: { 'melosys-web': 'br-fil' }, tagger });
+  const r = await velg({ tekst: JSON.stringify({ 'melosys-web': PIN }), tagger });
   assert.deepEqual(r.bruk, []);
   assert.equal(r.pinner[0].status, 'under test');
-  assert.ok(r.logg.some((l: Obj) => /pinnet til br-fil, men kjøringen har taggen «mq-abc»/.test(l.tekst)));
 });
 
 // ---------------------------------------------------------------- skriveren
@@ -398,6 +363,10 @@ test('set: en pin fra et annet par overskrives bare når den er utløpt eller me
     assert.throws(() => planlegg({ pinner, vurdering: { 'melosys-web': { status, grunn: 'g' } } }), /pinnet for e2e #388 .*--tving/, status);
   }
   assert.deepEqual(planlegg({ pinner, vurdering: { 'melosys-web': { status: 'utløpt' } } }).pinner, { 'melosys-web': ny });
+  // Utløpt bare fordi oppslaget feilet: meldingen skal ikke be om å vente til den er utløpt.
+  const feilet = () => planlegg({ pinner, vurdering: { 'melosys-web': { status: 'utløpt', feil: true, grunn: 'fikk ikke lest melosys-web:latest' } } });
+  assert.throws(feilet, /fikk ikke lest melosys-web:latest.*oppslaget feilet.*Kjør på nytt når oppslaget virker, eller bruk --tving/s);
+  assert.throws(feilet, (e: Error) => !/Vent til pinnen er utløpt/.test(e.message));
   const tvunget = planlegg({ pinner, vurdering: { 'melosys-web': { status: 'aktiv' } }, args: { ...SET, tving: true } });
   assert.deepEqual(tvunget.pinner, { 'melosys-web': ny });
   assert.equal(tvunget.tvunget, true);
@@ -552,6 +521,86 @@ test('skriv: en pin der oppslaget feiler, står igjen, og skriveren viser advars
   }
 });
 
+test('skriv: en utløpt pin med feil etter mergen står igjen, og loggen sier at den beholdes', async () => {
+  const api = { ...PIN, service_pr: 77 };
+  const gammelMerge = { ...merget, merged_at: '2026-10-20T14:00:00Z' };
+  const g = lagGitHub({ verdi: JSON.stringify({ 'melosys-api': api }), prer: { 'melosys-api#77': gammelMerge } });
+  g.io.hent.revisjon = async () => null;
+  await skriv(SET, g.io);
+  assert.deepEqual(JSON.parse(g.lagret.verdi!), { 'melosys-api': api, 'melosys-web': ny });
+  assert.ok(g.logg.some((l) => /Beholder pinnen for melosys-api: .*oppslaget feilet/.test(l)), g.logg.join('\n'));
+});
+
+test('skriv: --dry-run med verdien fra vars leser ikke variabelen med API-et', async () => {
+  // I «Koblet merge» har dry_run bare github.token, som ikke kan lese variabler.
+  const lagret = JSON.stringify({ 'melosys-api': PIN });
+  const g = lagGitHub({});
+  await skriv({ ...SET, dryRun: true }, { ...g.io, lagretVerdi: lagret });
+  assert.equal(g.kall.filter((k) => k.includes('/actions/variables')).length, 0, g.kall.join('\n'));
+  assert.ok(g.logg.some((l) => /--dry-run: ville skrevet E2E_PINS/.test(l) && /melosys-api/.test(l)));
+  // Uten --dry-run brukes ikke verdien fra vars.
+  const h = lagGitHub({ verdi: '{}' });
+  await skriv(SET, { ...h.io, lagretVerdi: lagret });
+  assert.deepEqual(JSON.parse(h.lagret.verdi!), { 'melosys-web': ny });
+});
+
+test('skriv: variabelen leses og skrives med et eget token når det finnes', async () => {
+  const g = lagGitHub({ verdi: '{}' });
+  const variabelKall: string[] = [];
+  const variabel = async (metode: string, sti: string, body?: Obj) => (variabelKall.push(`${metode} ${sti}`), g.io.github(metode, sti, body));
+  const github = async (metode: string, sti: string, body?: Obj) => {
+    assert.ok(!sti.includes('/actions/variables'), `${metode} ${sti} skal bruke variabel-tokenet`);
+    return g.io.github(metode, sti, body);
+  };
+  await skriv(SET, { ...g.io, github, variabel });
+  assert.ok(variabelKall.some((k) => k.startsWith('PATCH ')));
+});
+
+test('CLI-oppsettet: variabelen bruker E2E_PINS_TOKEN, resten GH_TOKEN, og E2E_PINS_VAR blir lagretVerdi', async () => {
+  const tokens: string[] = [];
+  const fetch = async (_url: string, init: Obj) => (tokens.push(init.headers.Authorization), new Response('{}', { status: 200 }));
+  const io = lagSkrivIo({ GH_TOKEN: 'gh', E2E_PINS_TOKEN: 'app', E2E_PINS_VAR: '{}' }, { fetch });
+  await io.variabel('GET', '/x');
+  await io.github('GET', '/x');
+  assert.deepEqual(tokens, ['Bearer app', 'Bearer gh']);
+  assert.equal(io.lagretVerdi, '{}');
+  // Oppslagene (PR, compare) går til andre repoer og skal ikke bruke app-tokenet for melosys-e2e-tests.
+  await io.hent.pr('melosys-web', 1);
+  assert.equal(tokens.at(-1), 'Bearer gh', 'hent bruker GH_TOKEN');
+  const lokalt = lagSkrivIo({ GH_TOKEN: 'gh' }, { fetch });
+  await lokalt.variabel('GET', '/x');
+  assert.equal(tokens.at(-1), 'Bearer gh', 'uten E2E_PINS_TOKEN bruker variabelen GH_TOKEN');
+  assert.equal(lokalt.lagretVerdi, undefined);
+  // Workflowen sender E2E_PINS_VAR bare i en prøvekjøring som har innhold; tokenet velges uavhengig av den.
+  const utenVars = lagSkrivIo({ GH_TOKEN: 'gh', E2E_PINS_TOKEN: 'app' }, { fetch });
+  await utenVars.variabel('GET', '/x');
+  assert.equal(tokens.at(-1), 'Bearer app', 'E2E_PINS_TOKEN uten E2E_PINS_VAR');
+});
+
+test('CLI fjern: main() leser og skriver variabelen med E2E_PINS_TOKEN', () => {
+  // En preload bytter ut globalThis.fetch i barneprosessen og logger hvert kall, uten nettverk.
+  const dir = mkdtempSync(join(tmpdir(), 'e2e-pins-'));
+  const logg = join(dir, 'kall.log');
+  const preload = join(dir, 'fetch.mjs');
+  writeFileSync(preload, `
+    import { appendFileSync } from 'node:fs';
+    let verdi = ${JSON.stringify(JSON.stringify({ 'melosys-web': PIN }))};
+    globalThis.fetch = async (url, init = {}) => {
+      appendFileSync(process.env.KALL_LOGG, (init.method ?? 'GET') + ' ' + url + ' ' + init.headers.Authorization + '\\n');
+      if (init.method === 'PATCH') { verdi = JSON.parse(init.body).value; return new Response(null, { status: 204 }); }
+      return new Response(JSON.stringify({ value: verdi }), { status: 200 });
+    };
+  `);
+  const res = spawnSync(process.execPath, ['--import', preload, script, 'fjern', 'melosys-web'], {
+    env: { PATH: process.env.PATH, GH_TOKEN: 'gh', E2E_PINS_TOKEN: 'app', KALL_LOGG: logg },
+    encoding: 'utf8',
+  });
+  assert.equal(res.status, 0, res.stderr);
+  const kall = readFileSync(logg, 'utf8').trim().split('\n');
+  assert.ok(kall.some((k) => k.startsWith('PATCH ')), kall.join('\n'));
+  for (const k of kall.filter((k) => k.includes('/actions/variables/E2E_PINS'))) assert.match(k, / Bearer app$/, k);
+});
+
 test('skriv: --dry-run skriver ingenting, og en lik pin skrives ikke på nytt', async () => {
   const g = lagGitHub({ verdi: '{}' });
   await skriv({ ...SET, dryRun: true }, g.io);
@@ -625,28 +674,21 @@ test('skriv: fjern tar bort én pin og lar resten stå', async () => {
 
 // ---------------------------------------------------------------- CLI og workflow
 
-test('CLI velg: pinnene fra fila og statusen per pin i variabelen', () => {
+test('CLI velg: statusen per pin i variabelen, og en ugyldig input gir ingen pinner', () => {
   const dir = mkdtempSync(join(tmpdir(), 'e2e-pins-'));
-  const fil = join(dir, 'e2e-pins.json');
   const ut = join(dir, 'pinner.json');
-  writeFileSync(fil, '{"melosys-web": "br-123", "melosys-api": "br-123"}');
   // e2e #999999 finnes ikke i historikken, så pinnen starter ikke, og ingen kall går mot GitHub.
   const variabel = JSON.stringify({ 'melosys-eessi': { ...PIN, e2e_pr: 999999 } });
   const miljø = { ...alleLatest, PATH: process.env.PATH };
-  const res = spawnSync(process.execPath, [script, 'velg', fil, ut], {
-    env: { ...miljø, MELOSYS_API_TAG: 'abc123', E2E_PINS_VAR: variabel },
-    encoding: 'utf8',
-  });
+  const res = spawnSync(process.execPath, [script, 'velg', ut], { env: { ...miljø, E2E_PINS_VAR: variabel }, encoding: 'utf8' });
   assert.equal(res.status, 0, res.stderr);
-  assert.equal(res.stdout, 'MELOSYS_WEB_TAG melosys-web br-123\n');
-  assert.match(res.stderr, /melosys-api er pinnet til br-123, men kjøringen har taggen «abc123»/);
-  assert.match(res.stderr, /::warning::📌 melosys-web er pinnet til br-123 i .github\/e2e-pins.json/);
+  assert.equal(res.stdout, '');
   const resultat = JSON.parse(readFileSync(ut, 'utf8'));
   assert.equal(resultat.pinnerFeil, null);
   assert.deepEqual(resultat.pinner.map((p: Obj) => [p.tjeneste, p.status]), [['melosys-eessi', 'ikke startet']]);
 
   // Inputen erstatter variabelen; ugyldig gir en feilmelding, ingen pinner og exit 0.
-  const ugyldig = spawnSync(process.execPath, [script, 'velg', join(dir, 'finnes-ikke.json'), ut], {
+  const ugyldig = spawnSync(process.execPath, [script, 'velg', ut], {
     env: { ...miljø, E2E_PINS_VAR: variabel, E2E_PINS_INPUT: '{"melosys-web": ' },
     encoding: 'utf8',
   });
@@ -655,11 +697,20 @@ test('CLI velg: pinnene fra fila og statusen per pin i variabelen', () => {
   assert.match(ugyldig.stderr, /::error::input e2e_pins er ikke gyldig JSON/);
   assert.deepEqual(JSON.parse(readFileSync(ut, 'utf8')), { pinner: [], pinnerFeil: 'input e2e_pins er ikke gyldig JSON' });
 
-  writeFileSync(fil, '{"ukjent": "br-1"}');
-  assert.throws(
-    () => execFileSync(process.execPath, [script, 'velg', fil, ut], { stdio: 'pipe' }),
-    (e: { status: number; stderr: Buffer }) => e.status === 1 && /ukjent tjeneste/.test(e.stderr.toString()),
-  );
+  const feilBruk = spawnSync(process.execPath, [script, 'velg', '.github/e2e-pins.json', ut], { encoding: 'utf8' });
+  assert.equal(feilBruk.status, 2);
+  assert.match(feilBruk.stderr, /Bruk: e2e-pins.mjs velg <ut-fil>/);
+});
+
+test('CLI fjern --dry-run leser E2E_PINS_VAR uten nettverk', () => {
+  // Ugyldige token: et kall mot GitHub ville feilet, så kjøringen viser at verdien kom fra miljøet.
+  const res = spawnSync(process.execPath, [script, 'fjern', 'melosys-web', '--dry-run'], {
+    env: { PATH: process.env.PATH, GH_TOKEN: 'ugyldig', E2E_PINS_TOKEN: 'ugyldig', E2E_PINS_VAR: JSON.stringify({ 'melosys-web': PIN, 'melosys-api': PIN }) },
+    encoding: 'utf8',
+  });
+  assert.equal(res.status, 0, res.stderr);
+  assert.match(res.stdout, /--dry-run: ville skrevet E2E_PINS \(lest fra vars ved jobbstart\)/);
+  assert.deepEqual(JSON.parse(res.stdout.slice(res.stdout.indexOf('{'))), { 'melosys-api': PIN });
 });
 
 const yml = readFileSync(join(__dirname, '..', '.github', 'workflows', 'e2e-tests.yml'), 'utf8');
@@ -703,6 +754,9 @@ test('plan-jobben henter hele historikken og logger inn før taggvalget', () => 
   assert.ok(login !== -1 && login < plan.indexOf('- name: Determine image tags from trigger source'));
   assert.match(plan, /E2E_PINS_INPUT: \$\{\{ inputs\.e2e_pins \}\}/);
   assert.match(plan, /E2E_PINS_VAR: \$\{\{ vars\.E2E_PINS \}\}/);
+  // Fila er borte: velg får bare ut-fila, og ingenting leser .github/e2e-pins.json.
+  assert.match(plan, /node scripts\/e2e-pins\.mjs velg "\$PINNER_FIL"\)/);
+  assert.doesNotMatch(yml, /e2e-pins\.json/);
   // Begge trigger-kontekstene får pinnene.
   assert.equal([...yml.matchAll(/\+ \$gate \+ \$branch \+ \$pinner'\)/g)].length, 2);
 });

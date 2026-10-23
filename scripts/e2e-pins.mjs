@@ -1,26 +1,24 @@
 #!/usr/bin/env node
 /**
- * Pinner for E2E Tests: hvilke image-tagger en kjøring bytter ut. Det er to kilder til fila er
- * fjernet:
- *
- * - `.github/e2e-pins.json`: et objekt fra tjeneste til tag, for eksempel
- *   `{ "melosys-web": "br-39400000000" }`. En pin i fila gjelder alltid.
- * - Actions-variabelen `E2E_PINS`, eller input `e2e_pins` i én kjøring: et objekt fra tjeneste til
- *   `{ tag, e2e_pr, service_pr, satt }`. En pin der gjelder fra testene har e2e-PR-en (start) til
- *   `latest` har service-PR-en (utløp), og slår seg dermed av selv.
+ * Pinner for E2E Tests: hvilke image-tagger en kjøring bytter ut. Pinnene står i Actions-variabelen
+ * `E2E_PINS`, eller i input `e2e_pins` for én kjøring: et objekt fra tjeneste til
+ * `{ tag, e2e_pr, service_pr, satt }`. En pin gjelder fra testene har e2e-PR-en (start) til
+ * `latest` har service-PR-en (utløp), og slår seg dermed av selv.
  *
  * Bare tjenester som har `latest` i kjøringen, får en pin. En tjeneste under test (eksplisitt tag
  * fra gaten, dispatch eller «E2E med brancher») beholder sin egen tag.
  *
  * Bruk:
- *   e2e-pins.mjs velg <pin-fil> <ut-fil>
+ *   e2e-pins.mjs velg <ut-fil>
  *       «Determine image tags»: skriver «<variabel> <tjeneste> <tag>» per pin som brukes, og
- *       statusen per pin i variabelen til <ut-fil> (feltene pinner og pinnerFeil i
- *       trigger-context.json). Ugyldig fil gir exit 1; ugyldig variabel gir ingen pinner.
+ *       statusen per pin til <ut-fil> (feltene pinner og pinnerFeil i trigger-context.json).
+ *       En ugyldig variabel gir ingen pinner.
  *   e2e-pins.mjs set <tjeneste> <tag> <e2e_pr> <service_pr> [--erstatt] [--tving] [--dry-run]
  *   e2e-pins.mjs fjern <tjeneste> [--dry-run]
- *       Skriver variabelen. Krever GH_TOKEN med Variables: write i melosys-e2e-tests, og docker
- *       logget inn i GAR for å se om eksisterende pinner er utløpt.
+ *       Skriver variabelen. Krever et token med Variables: write i melosys-e2e-tests, i
+ *       E2E_PINS_TOKEN eller GH_TOKEN, og docker logget inn i GAR for å se om eksisterende pinner
+ *       er utløpt. GH_TOKEN brukes til resten (PR-er, kjøringer og gh run download). Med --dry-run
+ *       og E2E_PINS_VAR satt leses verdien derfra i stedet for med API-et.
  * Oppskriften for koblede endringer står i docs/ci-cd/KOBLEDE-ENDRINGER.md.
  */
 import { execFile, execFileSync } from 'node:child_process';
@@ -68,41 +66,6 @@ const TIDSPUNKT = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z$/;
 export const vask = (t) => String(t).replace(/[\r\n]+/g, ' ').replace(/::/g, ': :').replace(/##\[/g, '# #[');
 const kort = (sha) => sha.slice(0, 7);
 const erObjekt = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
-
-// ---------------------------------------------------------------- fila
-
-/** Tom tekst betyr ingen pinner. Kaster med en melding som kan vises i jobbloggen. */
-export function lesPinner(tekst) {
-  if (tekst.trim() === '') return {};
-  let pinner;
-  try {
-    pinner = JSON.parse(tekst);
-  } catch {
-    throw new Error('er ikke gyldig JSON');
-  }
-  if (!erObjekt(pinner)) {
-    throw new Error('skal være et objekt fra tjeneste til tag, for eksempel {"melosys-web": "br-123"}');
-  }
-  for (const [tjeneste, tag] of Object.entries(pinner)) {
-    if (!Object.hasOwn(TJENESTER, tjeneste)) {
-      throw new Error(`ukjent tjeneste «${vask(tjeneste)}». Gyldige: ${Object.keys(TJENESTER).join(', ')}`);
-    }
-    if (typeof tag !== 'string' || !DOCKER_TAG.test(tag)) {
-      throw new Error(`taggen for ${tjeneste} er ikke en gyldig docker-tag`);
-    }
-    if (tag === 'latest') {
-      throw new Error(`${tjeneste} er pinnet til latest, som ikke endrer noe. Fjern linja`);
-    }
-  }
-  return pinner;
-}
-
-/** Pinnene som gjelder: bare tjenester som har `latest` i `tagger` (variabel → tag). */
-export function brukPinner(pinner, tagger) {
-  return Object.entries(pinner)
-    .filter(([tjeneste]) => tagger[TJENESTER[tjeneste]] === 'latest')
-    .map(([tjeneste, tag]) => ({ variabel: TJENESTER[tjeneste], tjeneste, tag }));
-}
 
 // ---------------------------------------------------------------- variabelen
 
@@ -163,11 +126,17 @@ export function revisjonFraImage(image) {
   return typeof revisjon === 'string' && SHA.test(revisjon) ? revisjon : null;
 }
 
+const finnesIkke = (navn) => ({
+  status: 'forlatt',
+  grunn: `${navn} finnes ikke`,
+  advarsel: `${navn} finnes ikke, så pinnen gjelder ikke. Sett pinnen på nytt med riktig PR-nummer, eller fjern den (docs/ci-cd/KOBLEDE-ENDRINGER.md).`,
+});
 const beholdes = (grunn, advarsel) => ({ status: 'aktiv', grunn, advarsel: `${advarsel}; pinnen beholdes.` });
 const innenfor = (nå, tidspunkt, grense) => nå - Date.parse(tidspunkt) <= grense;
 
 /**
- * Utløpsregelen for en pin som har startet: 'aktiv', 'utløpt' eller 'forlatt'. Feiler et kall mot
+ * Utløpsregelen for en pin som har startet: 'aktiv', 'utløpt' eller 'forlatt'. En service-PR som
+ * ikke finnes (404), gir 'forlatt', så skriveren rydder bort en pin med feil nummer. Feiler et kall mot
  * GitHub eller docker, beholdes pinnen med en advarsel, men bare i en kort periode: en utløpt pin
  * kan stå igjen i variabelen, og et feilet oppslag dager senere skal ikke gi en gate et gammelt
  * br-image. Etter mergen beholdes den et døgn fra merged_at (latest bygges vanligvis innen en
@@ -181,6 +150,7 @@ export async function vurderService(tjeneste, servicePr, hent, { nå, satt }) {
   try {
     pr = await hent.pr(tjeneste, servicePr);
   } catch (e) {
+    if (e.status === 404) return finnesIkke(navn);
     const feil = `Fikk ikke lest ${navn} (${vask(e.message)})`;
     if (satt && innenfor(nå, satt, TRE_DAGER)) return beholdes(`fikk ikke lest ${navn}`, feil);
     return { status: 'utløpt', feil: true, grunn: `fikk ikke lest ${navn}`, advarsel: `${feil}, og pinnen ble ikke satt de siste tre dagene; pinnen brukes ikke.` };
@@ -237,11 +207,11 @@ export async function vurderPin(tjeneste, pin, { tagger, emner, hent, nå }) {
 }
 
 /**
- * Avgjørelsen i «Determine image tags». `logg` har nivåene info, warning og error. En aktiv pin i
- * variabelen vinner over fila; en ugyldig variabel gir ingen pinner fra variabelen og en melding i
- * `pinnerFeil`, fordi variabelen gjelder alle køer med en gang.
+ * Avgjørelsen i «Determine image tags». `logg` har nivåene info, warning og error. En ugyldig
+ * variabel gir ingen pinner og en melding i `pinnerFeil`, fordi variabelen gjelder alle køer med
+ * en gang.
  */
-export async function velgPinner({ tekst, kilde, filPinner = {}, tagger, emner, hent, nå }) {
+export async function velgPinner({ tekst, kilde, tagger, emner, hent, nå }) {
   const logg = [];
   let variabel = {};
   let pinnerFeil = null;
@@ -264,20 +234,6 @@ export async function velgPinner({ tekst, kilde, filPinner = {}, tagger, emner, 
   for (const p of bruk) {
     const pin = variabel[p.tjeneste];
     logg.push({ nivå: 'warning', tekst: `📌 ${p.tjeneste} er pinnet til ${p.tag} i ${kilde} (e2e #${pin.e2e_pr}). Pinnen slutter å gjelde når ${p.tjeneste}:latest har ${p.tjeneste} #${pin.service_pr}.` });
-  }
-  for (const p of brukPinner(filPinner, tagger)) {
-    const fraVariabel = bruk.find((b) => b.tjeneste === p.tjeneste);
-    if (fraVariabel) {
-      logg.push({ nivå: 'warning', tekst: `📌 ${p.tjeneste} er pinnet både i .github/e2e-pins.json (${p.tag}) og i ${kilde} (${fraVariabel.tag}); pinnen i ${kilde} gjelder.` });
-      continue;
-    }
-    bruk.push(p);
-    logg.push({ nivå: 'warning', tekst: `📌 ${p.tjeneste} er pinnet til ${p.tag} i .github/e2e-pins.json. Fjern pinnen når ${p.tjeneste} latest har endringen.` });
-  }
-  for (const [tjeneste, tag] of Object.entries(filPinner)) {
-    const egen = tagger[TJENESTER[tjeneste]] ?? '';
-    if (egen === 'latest') continue;
-    logg.push({ nivå: 'info', tekst: `📌 ${tjeneste} er pinnet til ${tag}, men kjøringen har taggen «${vask(egen)}»; pinnen gjelder ikke.` });
   }
   return { bruk, pinner, pinnerFeil, logg };
 }
@@ -312,8 +268,9 @@ export const prStatus = (pr) => (pr.merged ? 'merget' : pr.state === 'open' ? '�
 
 /**
  * Den nye variabelen for `set`. `vurdering` har status per eksisterende pin (vurderPar); utløpte
- * og forlatte pinner ryddes bort. En pin fra et annet par overskrives bare med `tving`, og samme
- * par (samme e2e_pr) får ny tag eller service-PR bare med `erstatt`.
+ * og forlatte pinner ryddes bort, unntatt en pin med `feil: true`, som bare regnes som utløpt
+ * fordi et oppslag feilet og kan gjelde igjen. En pin fra et annet par overskrives bare med
+ * `tving`, og samme par (samme e2e_pr) får ny tag eller service-PR bare med `erstatt`.
  */
 export function planleggSet({ pinner, vurdering, args, e2e, service, nå }) {
   const { tjeneste, tag, e2ePr, servicePr, erstatt, tving } = args;
@@ -330,7 +287,12 @@ export function planleggSet({ pinner, vurdering, args, e2e, service, nå }) {
   }
   if (gammel && !sammePar && !ryddet.includes(tjeneste) && !tving) {
     const v = vurdering[tjeneste];
-    feil.push(`${tjeneste} er pinnet for e2e #${gammel.e2e_pr} og ${tjeneste} #${gammel.service_pr} (${v?.status ?? 'ukjent'}: ${v?.grunn ?? 'ikke vurdert'}). Vent til pinnen er utløpt, eller bruk --tving etter at en kjøring har vist den som utløpt.`);
+    const par = `${tjeneste} er pinnet for e2e #${gammel.e2e_pr} og ${tjeneste} #${gammel.service_pr}`;
+    feil.push(
+      v?.feil
+        ? `${par} (${v.grunn}; oppslaget feilet, så pinnen kan gjelde igjen). Kjør på nytt når oppslaget virker, eller bruk --tving.`
+        : `${par} (${v?.status ?? 'ukjent'}: ${v?.grunn ?? 'ikke vurdert'}). Vent til pinnen er utløpt, eller bruk --tving etter at en kjøring har vist den som utløpt.`,
+    );
   }
   if (feil.length) throw new Error(feil.join('\n'));
   const nye = Object.fromEntries(Object.entries(pinner).filter(([t]) => !ryddet.includes(t)));
@@ -345,6 +307,7 @@ export async function vurderPar(tjeneste, pin, hent, nå) {
   try {
     if (prStatus(await hent.pr(E2E_REPO, pin.e2e_pr)) === 'lukket') return { status: 'forlatt', grunn: `e2e #${pin.e2e_pr} er lukket uten merge` };
   } catch (e) {
+    if (e.status === 404) return finnesIkke(`e2e #${pin.e2e_pr}`);
     return { status: 'aktiv', grunn: `fikk ikke lest e2e #${pin.e2e_pr} (${vask(e.message)})` };
   }
   return vurderService(tjeneste, pin.service_pr, hent, { nå, satt: pin.satt });
@@ -420,7 +383,7 @@ export function lagGitHub({ token, fetch = globalThis.fetch, vent = sov }) {
 
 const krev = (svar, hva) => {
   if (svar.status >= 200 && svar.status < 300) return svar.data;
-  throw new Error(`${hva} ga HTTP ${svar.status}${svar.data?.message ? `: ${vask(svar.data.message)}` : ''}`);
+  throw Object.assign(new Error(`${hva} ga HTTP ${svar.status}${svar.data?.message ? `: ${vask(svar.data.message)}` : ''}`), { status: svar.status });
 };
 
 /** Oppslagene reglene trenger: PR, revisjon på latest og compare. */
@@ -480,10 +443,17 @@ function lastNedTriggerKontekst(id) {
   }
 }
 
-/** set og fjern. `io` har github, hent, lastNed, nå og logg; testene sender inn sine egne. */
+/**
+ * set og fjern. `io` har github, hent, lastNed, nå og logg; testene sender inn sine egne.
+ * `io.variabel` leser og skriver variabelen (standard: github). Med --dry-run og `io.lagretVerdi`
+ * leses verdien derfra: «Koblet merge» har bare github.token i en prøvekjøring, og det kan ikke
+ * lese variabler.
+ */
 export async function skriv(args, io) {
   const { github, logg } = io;
-  const lagret = await lesLagret(github);
+  const variabel = io.variabel ?? github;
+  const fraVars = args.dryRun && typeof io.lagretVerdi === 'string';
+  const lagret = fraVars ? { finnes: io.lagretVerdi !== '', tekst: io.lagretVerdi } : await lesLagret(variabel);
   let pinner;
   try {
     pinner = lesVariabel(lagret.tekst);
@@ -501,6 +471,7 @@ export async function skriv(args, io) {
     for (const [t, pin] of Object.entries(pinner)) {
       vurdering[t] = await vurderPar(t, pin, io.hent, io.nå());
       if (vurdering[t].advarsel) logg(`${t}: ${vurdering[t].advarsel}`);
+      if (vurdering[t].feil) logg(`Beholder pinnen for ${t}: ${vurdering[t].grunn}, og oppslaget feilet, så den ryddes ikke.`);
     }
     const plan = planleggSet({ pinner, vurdering, args, e2e: prStatus(e2ePr), service: prStatus(servicePr), nå: io.nå() });
     // Også en lik pin sjekkes: har PR-ene fått nye commits siden br-kjøringen, er imaget utdatert.
@@ -519,15 +490,15 @@ export async function skriv(args, io) {
   }
 
   const verdi = JSON.stringify(nye, null, 2);
-  if (args.dryRun) return logg(`--dry-run: ville skrevet ${VARIABEL}:\n${verdi}`);
+  if (args.dryRun) return logg(`--dry-run: ville skrevet ${VARIABEL}${fraVars ? ' (lest fra vars ved jobbstart)' : ''}:\n${verdi}`);
   // API-et har ingen sammenlign-og-skriv. Lesingen rett før skrivingen stopper en skriving gjort
   // mens denne sjekket PR-ene og kjøringen; tilbakelesingen ser bare om vår pin står. En skriving
   // som bygger på en lesing gjort før vår skriving, kan fortsatt fjerne pinnen uten at noen ser det.
-  if ((await lesLagret(github)).tekst !== lagret.tekst) {
+  if ((await lesLagret(variabel)).tekst !== lagret.tekst) {
     throw new Error(`${VARIABEL} er endret mens skriveren jobbet. Se på den nye verdien og kjør på nytt.`);
   }
-  await skrivLagret(github, lagret.finnes, verdi);
-  const tilbake = lesVariabel((await lesLagret(github)).tekst);
+  await skrivLagret(variabel, lagret.finnes, verdi);
+  const tilbake = lesVariabel((await lesLagret(variabel)).tekst);
   if (JSON.stringify(tilbake[args.tjeneste]) !== JSON.stringify(nye[args.tjeneste])) {
     throw new Error(`${VARIABEL} har ikke ${args.kommando === 'fjern' ? 'mistet' : 'fått'} pinnen for ${args.tjeneste} etter skrivingen. En annen skriving kan ha overskrevet den; kjør på nytt.`);
   }
@@ -544,20 +515,11 @@ function historikk() {
   return { grunn, emner };
 }
 
-async function velg(fil, utFil, env) {
-  let filPinner = {};
-  if (existsSync(fil)) {
-    try {
-      filPinner = lesPinner(readFileSync(fil, 'utf8'));
-    } catch (e) {
-      console.error(`::error::${fil} ${e.message}`);
-      return 1;
-    }
-  }
+async function velg(utFil, env) {
   const fraInput = (env.E2E_PINS_INPUT ?? '').trim() !== '';
   const kilde = fraInput ? 'input e2e_pins' : VARIABEL;
   const tekst = fraInput ? env.E2E_PINS_INPUT : (env.E2E_PINS_VAR ?? '');
-  const felles = { kilde, filPinner, tagger: env, hent: lagHenter(lagGitHub({ token: env.GH_TOKEN })), nå: Date.now() };
+  const felles = { kilde, tagger: env, hent: lagHenter(lagGitHub({ token: env.GH_TOKEN })), nå: Date.now() };
   if (fraInput) console.error(`📌 Input e2e_pins erstatter ${VARIABEL} i denne kjøringen.`);
   let resultat;
   try {
@@ -569,7 +531,7 @@ async function velg(fil, utFil, env) {
     }
     resultat = await velgPinner({ ...felles, tekst, emner });
   } catch (e) {
-    // En feil her skal ikke stoppe alle gates; kjøringen fortsetter med pinnene i fila.
+    // En feil her skal ikke stoppe alle gates; kjøringen fortsetter uten pinner.
     resultat = await velgPinner({ ...felles, tekst: '', emner: [] });
     resultat.pinnerFeil = `pinvalget feilet: ${vask(e.message)}`;
     resultat.logg.unshift({ nivå: 'error', tekst: `${resultat.pinnerFeil}. Kjøringen bruker ingen pinner fra ${kilde}.` });
@@ -577,24 +539,37 @@ async function velg(fil, utFil, env) {
   for (const { nivå, tekst: t } of resultat.logg) console.error(nivå === 'info' ? vask(t) : `::${nivå}::${vask(t)}`);
   writeFileSync(utFil, JSON.stringify({ pinner: resultat.pinner, pinnerFeil: resultat.pinnerFeil }) + '\n');
   for (const { variabel, tjeneste, tag } of resultat.bruk) console.log(`${variabel} ${tjeneste} ${tag}`);
-  return 0;
+}
+
+/** `io` til skriv fra miljøet: E2E_PINS_TOKEN for variabelen hvis det finnes, ellers GH_TOKEN. */
+export function lagSkrivIo(env, { fetch } = {}) {
+  const github = lagGitHub({ token: env.GH_TOKEN, fetch });
+  const variabel = env.E2E_PINS_TOKEN ? lagGitHub({ token: env.E2E_PINS_TOKEN, fetch }) : github;
+  return {
+    github,
+    variabel,
+    lagretVerdi: env.E2E_PINS_VAR,
+    hent: lagHenter(github),
+    lastNed: lastNedTriggerKontekst,
+    nå: () => Date.now(),
+    logg: (t) => console.log(t),
+  };
 }
 
 async function main() {
   const [kommando, ...rest] = process.argv.slice(2);
   if (kommando === 'velg') {
-    if (rest.length !== 2) {
-      console.error('Bruk: e2e-pins.mjs velg <pin-fil> <ut-fil>');
+    if (rest.length !== 1) {
+      console.error('Bruk: e2e-pins.mjs velg <ut-fil>');
       process.exit(2);
     }
-    process.exitCode = await velg(rest[0], rest[1], process.env);
+    await velg(rest[0], process.env);
     return;
   }
   const iActions = process.env.GITHUB_ACTIONS === 'true';
   try {
     const args = lesArgumenter(process.argv.slice(2));
-    const github = lagGitHub({ token: process.env.GH_TOKEN });
-    await skriv(args, { github, hent: lagHenter(github), lastNed: lastNedTriggerKontekst, nå: () => Date.now(), logg: (t) => console.log(t) });
+    await skriv(args, lagSkrivIo(process.env));
   } catch (e) {
     for (const linje of String(e.message).split('\n')) console.error(iActions ? `::error::${vask(linje)}` : linje);
     process.exitCode = 1;

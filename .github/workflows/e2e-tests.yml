@@ -349,19 +349,18 @@ jobs:
             fi
           fi
 
-          # ---- Pinner fra .github/e2e-pins.json og E2E_PINS ----
+          # ---- Pinner fra E2E_PINS ----
           # En tjeneste som fortsatt har latest, får pinnen; tjenesten under test beholder sin
-          # egen tag. Ved en koblet endring pinner e2e-PR-en tjenesten til imaget den er testet
-          # mot (docs/ci-cd/KOBLEDE-ENDRINGER.md). En pin i fila gjelder alltid. En pin i
-          # variabelen gjelder fra testene har e2e-PR-en til latest har service-PR-en, og
-          # vinner over fila. Ugyldig fil stopper kjøringen; ugyldig variabel gir ingen pinner
-          # fra variabelen. Statusen per pin havner i trigger-konteksten (pinner, pinnerFeil).
+          # egen tag. Ved en koblet endring pinner variabelen tjenesten til imaget paret er
+          # testet mot (docs/ci-cd/KOBLEDE-ENDRINGER.md). En pin gjelder fra testene har
+          # e2e-PR-en til latest har service-PR-en. En ugyldig variabel gir ingen pinner.
+          # Statusen per pin havner i trigger-konteksten (pinner, pinnerFeil).
           export MELOSYS_API_TAG FAKTURERINGSKOMPONENTEN_TAG MELOSYS_WEB_TAG \
                  MELOSYS_TRYGDEAVGIFT_TAG MELOSYS_TRYGDEAVTALE_TAG \
                  MELOSYS_INNGANGSVILKAR_TAG MELOSYS_EESSI_TAG MELOSYS_MOCK_TAG \
                  MELOSYS_DOKGEN_TAG MELOSYS_SKJEMA_API_TAG MELOSYS_SKJEMA_WEB_TAG
           PINNER_FIL="$RUNNER_TEMP/pinner.json"
-          PINNER=$(node scripts/e2e-pins.mjs velg .github/e2e-pins.json "$PINNER_FIL") \
+          PINNER=$(node scripts/e2e-pins.mjs velg "$PINNER_FIL") \
             || { echo "::error::Pinvalget feilet, se meldingen over"; exit 1; }
           while read -r tag_var _tjeneste tag; do
             [ -n "$tag_var" ] || continue

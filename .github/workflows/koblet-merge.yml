@@ -1,10 +1,12 @@
 name: Koblet merge
 run-name: "Koblet merge · ${{ inputs.requested_by || 'ukjent' }}: ${{ inputs.tag }} · e2e #${{ inputs.e2e_pr }} · ${{ inputs.tjenester }}${{ inputs.dry_run && ' (prøvekjøring)' || '' }}"
 
-# Fletter en koblet endring: service-PR-er som krever nye e2e-tester, og e2e-PR-en som
-# retter testene. melosys-console starter workflowen. Lesing bruker github.token (alle repoene
-# er offentlige). Hver skriving får et app-token for ett repo, hentet i steget rett før.
-# Logikken ligger i scripts/koblet-merge.mjs; oppskriften i docs/ci-cd/KOBLEDE-ENDRINGER.md.
+# Setter pinnen for en koblet endring: service-PR-er som krever nye e2e-tester, og e2e-PR-en som
+# retter testene. melosys-console starter workflowen. Den sjekker paret og skriver pinnen i
+# Actions-variabelen E2E_PINS med scripts/e2e-pins.mjs; utvikleren merger PR-ene selv med
+# «Merge when ready» i rekkefølgen sammendraget viser. Lesing bruker github.token (alle repoene
+# er offentlige); bare skrivingen av variabelen bruker app-tokenet.
+# Oppskriften står i docs/ci-cd/KOBLEDE-ENDRINGER.md.
 
 on:
   workflow_dispatch:
@@ -27,7 +29,7 @@ on:
         type: string
         default: ukjent
       dry_run:
-        description: 'Les og sjekk alt, men skriv ingenting'
+        description: 'Les og sjekk alt, men skriv ikke variabelen'
         required: false
         type: boolean
         default: false
@@ -36,8 +38,10 @@ permissions:
   contents: read
   pull-requests: read
 
+# GitHub beholder én ventende kjøring per gruppe. En prøvekjøring får sin egen gruppe, så den
+# ikke avbryter en ekte kjøring for samme tag som venter.
 concurrency:
-  group: koblet-merge-${{ inputs.tag }}
+  group: koblet-merge-${{ inputs.tag }}${{ inputs.dry_run && format('-prove-{0}', github.run_id) || '' }}
   cancel-in-progress: false
 
 env:
@@ -68,144 +72,58 @@ jobs:
         run: node scripts/koblet-merge.mjs sjekk
 
   pin:
-    name: Legg pinnen i e2e-PR-en
+    name: Skriv pinnen i E2E_PINS
     needs: sjekk
     runs-on: ubuntu-latest
-    # Rom for at timekvoten fornyes (inntil 3 × 15 min i ett kall)
     timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: read
+      # gh run download av trigger-konteksten til br-kjøringen
+      actions: read
+      # nais/login: skriveren leser revisjonen på latest for pinnene som står
+      id-token: write
+    # API-et har ingen sammenlign-og-skriv for variabler, så skrivingene går én om gangen.
+    # En prøvekjøring skriver ikke, og står utenfor gruppen, som på workflow-nivå.
+    concurrency:
+      group: ${{ inputs.dry_run && format('e2e-pins-prove-{0}', github.run_id) || 'e2e-pins-variabel' }}
+      cancel-in-progress: false
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
-      - name: Sjekk pinnen
-        id: les
-        run: node scripts/koblet-merge.mjs pin-sjekk
+      - name: Login to NAIS registry
+        uses: nais/login@v0
+        with:
+          team: teammelosys
+      # Uten permission-*: action-en har ingen input for variabler, så tokenet får rettighetene
+      # installasjonen har, men bare i melosys-e2e-tests.
       - name: Hent app-token
         id: token
-        if: ${{ !inputs.dry_run && steps.les.outputs.trengs == 'true' }}
+        if: ${{ !inputs.dry_run }}
         uses: actions/create-github-app-token@v3
         with:
           client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
           private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
           owner: navikt
           repositories: melosys-e2e-tests
-          permission-contents: write
-          permission-pull-requests: write
-      - name: Commit pinnen
-        id: skriv
-        if: ${{ !inputs.dry_run && steps.les.outputs.trengs == 'true' }}
+      # github.token kan ikke lese variabler. En prøvekjøring leser derfor verdien fra vars,
+      # låst ved jobbstart; en ekte skriving leser den med app-tokenet rett før den skriver.
+      - name: Skriv pinnen
         env:
-          GH_TOKEN: ${{ steps.token.outputs.token }}
-        run: node scripts/koblet-merge.mjs pin-skriv
-
-  e2e-ko:
-    name: e2e-PR gjennom køen
-    needs: pin
-    runs-on: ubuntu-latest
-    # 30 min til PR-en er klar + 150 min i køen
-    timeout-minutes: 190
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Vent til PR-en er klar for køen
-        id: klar
-        run: node scripts/koblet-merge.mjs e2e-klar
-      - name: Hent app-token
-        id: token
-        if: ${{ !inputs.dry_run && steps.klar.outputs.status == 'klar' }}
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
-          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
-          owner: navikt
-          repositories: melosys-e2e-tests
-          permission-contents: write
-          permission-pull-requests: write
-      - name: Sett PR-en i køen
-        id: ko
-        if: ${{ !inputs.dry_run && steps.klar.outputs.status == 'klar' }}
-        env:
-          GH_TOKEN: ${{ steps.token.outputs.token }}
-          PR_ID: ${{ steps.klar.outputs.id }}
-          HEAD_OID: ${{ steps.klar.outputs.head }}
-        run: node scripts/koblet-merge.mjs sett-i-ko melosys-e2e-tests "$E2E_PR"
-      - name: Vent til PR-en er merget
-        env:
-          SATT_I_KO: ${{ steps.ko.outputs.satt }}
-        run: node scripts/koblet-merge.mjs vent-merget melosys-e2e-tests "$E2E_PR"
-
-  service:
-    name: "${{ matrix.repo }} #${{ matrix.pr }} i køen"
-    needs: [sjekk, e2e-ko]
-    runs-on: ubuntu-latest
-    # 60 min på tom kø + 30 min til PR-en er klar + 150 min i køen
-    timeout-minutes: 250
-    strategy:
-      max-parallel: 1
-      fail-fast: true
-      matrix: ${{ fromJSON(needs.sjekk.outputs.matrix) }}
-    env:
-      REPO: ${{ matrix.repo }}
-      PR: ${{ matrix.pr }}
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Vent på tom kø og til PR-en er klar
-        id: klar
-        run: node scripts/koblet-merge.mjs service-klar "$REPO" "$PR"
-      - name: Hent app-token
-        id: token
-        if: ${{ !inputs.dry_run && steps.klar.outputs.status == 'klar' }}
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
-          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
-          owner: navikt
-          repositories: ${{ matrix.repo }}
-          permission-contents: write
-          permission-pull-requests: write
-      - name: Sett PR-en i køen
-        id: ko
-        if: ${{ !inputs.dry_run && steps.klar.outputs.status == 'klar' }}
-        env:
-          GH_TOKEN: ${{ steps.token.outputs.token }}
-          PR_ID: ${{ steps.klar.outputs.id }}
-          HEAD_OID: ${{ steps.klar.outputs.head }}
-        run: node scripts/koblet-merge.mjs sett-i-ko "$REPO" "$PR"
-      - name: Vent til PR-en er merget
-        env:
-          SATT_I_KO: ${{ steps.ko.outputs.satt }}
-        run: node scripts/koblet-merge.mjs vent-merget "$REPO" "$PR"
-
-  fjern-pin:
-    name: Fjern pinnen
-    needs: service
-    runs-on: ubuntu-latest
-    # Rom for at timekvoten fornyes (inntil 3 × 15 min i ett kall)
-    timeout-minutes: 60
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-      - name: Sjekk service-PR-ene og pinnen på main
-        id: les
-        run: node scripts/koblet-merge.mjs fjern-sjekk
-      - name: Hent app-token
-        id: token
-        if: ${{ !inputs.dry_run && steps.les.outputs.ferdig == 'false' }}
-        uses: actions/create-github-app-token@v3
-        with:
-          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
-          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
-          owner: navikt
-          repositories: melosys-e2e-tests
-          permission-contents: write
-          permission-pull-requests: write
-      # Utvikleren merger PR-en med «Merge when ready»; e2e-køen er grønn først når latest har endringene.
-      - name: Lag branchen og PR-en
-        if: ${{ !inputs.dry_run && steps.les.outputs.ferdig == 'false' }}
-        env:
-          GH_TOKEN: ${{ steps.token.outputs.token }}
-        run: node scripts/koblet-merge.mjs fjern-skriv
+          E2E_PINS_TOKEN: ${{ steps.token.outputs.token }}
+          E2E_PINS_VAR: ${{ vars.E2E_PINS }}
+          MATRIX: ${{ needs.sjekk.outputs.matrix }}
+        # Feiler set for en tjeneste, står pinnene før den (hva du gjør da, står i
+        # docs/ci-cd/KOBLEDE-ENDRINGER.md). jq -e feiler på tom eller ugyldig matrise i stedet for
+        # å skrive ingenting.
+        run: |
+          flagg=()
+          if [ "$DRY_RUN" = "true" ]; then flagg=(--dry-run); fi
+          par=$(jq -er '.include[] | "\(.repo) \(.pr)"' <<< "$MATRIX") \
+            || { echo "::error::Utdataene fra «Sjekk paret» har ingen gyldig liste over tjenester (se jq-feilen over)"; exit 1; }
+          while read -r repo pr; do
+            node scripts/e2e-pins.mjs set "$repo" "$TAG" "$E2E_PR" "$pr" "${flagg[@]}"
+          done <<< "$par"
+      - name: Neste steg
+        run: node scripts/koblet-merge.mjs neste
