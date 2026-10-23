@@ -312,7 +312,8 @@ function kjørSkrivSteg(env: Record<string, string>) {
   const dir = mkdtempSync(join(tmpdir(), 'koblet-merge-'));
   writeFileSync(join(dir, 'node'), '#!/bin/sh\necho "node $*"\n');
   chmodSync(join(dir, 'node'), 0o755);
-  return spawnSync('bash', ['-eo', 'pipefail', '-c', blokk], { env: { PATH: `${dir}:${process.env.PATH}`, TAG, E2E_PR: '380', ...env }, encoding: 'utf8' });
+  // Samme skall som Actions bruker uten shell: i workflowen (bash -e {0}), uten pipefail.
+  return spawnSync('bash', ['-e', '-c', blokk], { env: { PATH: `${dir}:${process.env.PATH}`, TAG, E2E_PR: '380', ...env }, encoding: 'utf8' });
 }
 
 test('workflowen: skriveren kalles én gang per tjeneste, med --dry-run bare i en prøvekjøring', () => {
@@ -329,7 +330,7 @@ test('workflowen: et tomt eller ugyldig utvalg av tjenester feiler i stedet for 
     const r = kjørSkrivSteg({ MATRIX, DRY_RUN: 'false' });
     assert.notEqual(r.status, 0, `MATRIX=${MATRIX} skal feile`);
     assert.doesNotMatch(r.stdout, /^node /m, `MATRIX=${MATRIX}: ingen skriving`);
-    assert.match(r.stdout, /::error::Fant ingen tjenester/, `MATRIX=${MATRIX}`);
+    assert.match(r.stdout, /::error::Utdataene fra «Sjekk paret» har ingen gyldig liste over tjenester/, `MATRIX=${MATRIX}`);
   }
 });
 

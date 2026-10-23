@@ -121,7 +121,7 @@ jobs:
           flagg=()
           if [ "$DRY_RUN" = "true" ]; then flagg=(--dry-run); fi
           par=$(jq -er '.include[] | "\(.repo) \(.pr)"' <<< "$MATRIX") \
-            || { echo "::error::Fant ingen tjenester i utdataene fra «Sjekk paret»"; exit 1; }
+            || { echo "::error::Utdataene fra «Sjekk paret» har ingen gyldig liste over tjenester (se jq-feilen over)"; exit 1; }
           while read -r repo pr; do
             node scripts/e2e-pins.mjs set "$repo" "$TAG" "$E2E_PR" "$pr" "${flagg[@]}"
           done <<< "$par"
