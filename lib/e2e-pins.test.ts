@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
-import { mkdtempSync, readFileSync } from 'node:fs';
+import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -564,10 +564,41 @@ test('CLI-oppsettet: variabelen bruker E2E_PINS_TOKEN, resten GH_TOKEN, og E2E_P
   await io.github('GET', '/x');
   assert.deepEqual(tokens, ['Bearer app', 'Bearer gh']);
   assert.equal(io.lagretVerdi, '{}');
+  // Oppslagene (PR, compare) går til andre repoer og skal ikke bruke app-tokenet for melosys-e2e-tests.
+  await io.hent.pr('melosys-web', 1);
+  assert.equal(tokens.at(-1), 'Bearer gh', 'hent bruker GH_TOKEN');
   const lokalt = lagSkrivIo({ GH_TOKEN: 'gh' }, { fetch });
   await lokalt.variabel('GET', '/x');
   assert.equal(tokens.at(-1), 'Bearer gh', 'uten E2E_PINS_TOKEN bruker variabelen GH_TOKEN');
   assert.equal(lokalt.lagretVerdi, undefined);
+  // Workflowen sender E2E_PINS_VAR bare i en prøvekjøring som har innhold; tokenet velges uavhengig av den.
+  const utenVars = lagSkrivIo({ GH_TOKEN: 'gh', E2E_PINS_TOKEN: 'app' }, { fetch });
+  await utenVars.variabel('GET', '/x');
+  assert.equal(tokens.at(-1), 'Bearer app', 'E2E_PINS_TOKEN uten E2E_PINS_VAR');
+});
+
+test('CLI fjern: main() leser og skriver variabelen med E2E_PINS_TOKEN', () => {
+  // En preload bytter ut globalThis.fetch i barneprosessen og logger hvert kall, uten nettverk.
+  const dir = mkdtempSync(join(tmpdir(), 'e2e-pins-'));
+  const logg = join(dir, 'kall.log');
+  const preload = join(dir, 'fetch.mjs');
+  writeFileSync(preload, `
+    import { appendFileSync } from 'node:fs';
+    let verdi = ${JSON.stringify(JSON.stringify({ 'melosys-web': PIN }))};
+    globalThis.fetch = async (url, init = {}) => {
+      appendFileSync(process.env.KALL_LOGG, (init.method ?? 'GET') + ' ' + url + ' ' + init.headers.Authorization + '\\n');
+      if (init.method === 'PATCH') { verdi = JSON.parse(init.body).value; return new Response(null, { status: 204 }); }
+      return new Response(JSON.stringify({ value: verdi }), { status: 200 });
+    };
+  `);
+  const res = spawnSync(process.execPath, ['--import', preload, script, 'fjern', 'melosys-web'], {
+    env: { PATH: process.env.PATH, GH_TOKEN: 'gh', E2E_PINS_TOKEN: 'app', KALL_LOGG: logg },
+    encoding: 'utf8',
+  });
+  assert.equal(res.status, 0, res.stderr);
+  const kall = readFileSync(logg, 'utf8').trim().split('\n');
+  assert.ok(kall.some((k) => k.startsWith('PATCH ')), kall.join('\n'));
+  for (const k of kall.filter((k) => k.includes('/actions/variables/E2E_PINS'))) assert.match(k, / Bearer app$/, k);
 });
 
 test('skriv: --dry-run skriver ingenting, og en lik pin skrives ikke på nytt', async () => {
