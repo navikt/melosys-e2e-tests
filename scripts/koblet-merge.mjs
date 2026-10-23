@@ -8,7 +8,7 @@
  */
 import { appendFileSync, existsSync, realpathSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
-import { lesPinner } from './e2e-pins.mjs';
+import { lesPinner, TJENESTER_MED_KO } from './e2e-pins.mjs';
 
 const EIER = 'navikt';
 const E2E_REPO = 'melosys-e2e-tests';
@@ -17,7 +17,7 @@ const API = 'https://api.github.com';
 const MIN = 60_000;
 
 /** Repoene med merge-kø. Pin-nøkkelen er reponavnet. */
-export const REPOER_MED_KO = ['melosys-api', 'melosys-web', 'melosys-skjema-api', 'melosys-skjema-web', 'melosys-eessi', 'faktureringskomponenten'];
+export const REPOER_MED_KO = TJENESTER_MED_KO;
 export const GRENSER = { klar: 30 * MIN, tomKo: 60 * MIN, ko: 150 * MIN, intervall: 30_000 };
 
 // ---------------------------------------------------------------- rene funksjoner
