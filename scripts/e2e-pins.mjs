@@ -541,6 +541,21 @@ async function velg(utFil, env) {
   for (const { variabel, tjeneste, tag } of resultat.bruk) console.log(`${variabel} ${tjeneste} ${tag}`);
 }
 
+/** `io` til skriv fra miljøet: E2E_PINS_TOKEN for variabelen hvis det finnes, ellers GH_TOKEN. */
+export function lagSkrivIo(env, { fetch } = {}) {
+  const github = lagGitHub({ token: env.GH_TOKEN, fetch });
+  const variabel = env.E2E_PINS_TOKEN ? lagGitHub({ token: env.E2E_PINS_TOKEN, fetch }) : github;
+  return {
+    github,
+    variabel,
+    lagretVerdi: env.E2E_PINS_VAR,
+    hent: lagHenter(github),
+    lastNed: lastNedTriggerKontekst,
+    nå: () => Date.now(),
+    logg: (t) => console.log(t),
+  };
+}
+
 async function main() {
   const [kommando, ...rest] = process.argv.slice(2);
   if (kommando === 'velg') {
@@ -554,17 +569,7 @@ async function main() {
   const iActions = process.env.GITHUB_ACTIONS === 'true';
   try {
     const args = lesArgumenter(process.argv.slice(2));
-    const github = lagGitHub({ token: process.env.GH_TOKEN });
-    const variabel = process.env.E2E_PINS_TOKEN ? lagGitHub({ token: process.env.E2E_PINS_TOKEN }) : github;
-    await skriv(args, {
-      github,
-      variabel,
-      lagretVerdi: process.env.E2E_PINS_VAR,
-      hent: lagHenter(github),
-      lastNed: lastNedTriggerKontekst,
-      nå: () => Date.now(),
-      logg: (t) => console.log(t),
-    });
+    await skriv(args, lagSkrivIo(process.env));
   } catch (e) {
     for (const linje of String(e.message).split('\n')) console.error(iActions ? `::error::${vask(linje)}` : linje);
     process.exitCode = 1;

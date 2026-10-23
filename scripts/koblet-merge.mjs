@@ -27,6 +27,13 @@ export function vaskBestiller(t) {
   return String(t ?? '').replace(/[\u0000-\u001f\u007f#@]/g, '').slice(0, 100).trim() || 'ukjent';
 }
 
+/** Markdown-kodespenn: lengre skilletegn enn den lengste rekken av backticks i teksten. */
+export function kodespenn(t) {
+  const n = Math.max(0, ...(String(t).match(/`+/g) ?? []).map((m) => m.length)) + 1;
+  const kant = /^`|`$/.test(t) ? ' ' : '';
+  return '`'.repeat(n) + kant + t + kant + '`'.repeat(n);
+}
+
 export function lesInput({ tag, e2ePr, tjenester, requestedBy, dryRun }) {
   const feil = [];
   if (!/^br-[0-9]+$/.test(tag ?? '')) feil.push('tag må være br-<run_id> fra «E2E med brancher».');
@@ -185,7 +192,7 @@ function neste(ctx) {
       const forrige = i === 0 ? e2eNavn(inp) : `${inp.tjenester[i - 1].repo} #${inp.tjenester[i - 1].pr}`;
       return `${i + 2}. ${t.repo} #${t.pr}, når ${forrige} er merget og ${t.repo}-køen er tom: ${lenke(t.repo, t.pr)}`;
     }),
-    `Pinnen gjelder fra testene har ${e2eNavn(inp)} til latest har service-PR-en, og slår seg av selv. Bestilt av ${inp.bestiller}.`,
+    `Pinnen gjelder fra testene har ${e2eNavn(inp)} til latest har service-PR-en, og slår seg av selv. Bestilt av ${kodespenn(inp.bestiller)}.`,
   ];
   for (const l of linjer) ctx.sammendrag(l);
 }

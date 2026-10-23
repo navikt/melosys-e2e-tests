@@ -50,9 +50,9 @@ GH_TOKEN=$(gh auth token) node scripts/e2e-pins.mjs fjern melosys-web
 
 `set` krever `gh` og docker logget inn i GAR (`gcloud auth configure-docker europe-north1-docker.pkg.dev`). Før den skriver, sjekker den dette:
 
-- e2e-PR-en og service-PR-en er åpne.
+- Service-PR-en er åpen. e2e-PR-en er åpen, eller merget når du bytter en pin fra samme e2e-PR med `--erstatt`.
 - `br-<run_id>` er en grønn kjøring av «E2E med brancher» med hele suiten, mot head-commitene PR-ene har nå.
-- Ingen pin fra et annet par gjelder for tjenesten. En utløpt eller forlatt pin ryddes bort.
+- Ingen pin fra et annet par gjelder for tjenesten. En utløpt eller forlatt pin ryddes bort. En pin som bare regnes som utløpt fordi et oppslag feilet, står igjen og stopper `set` for samme tjeneste fra et annet par; kjør på nytt når oppslaget virker, eller bruk `--tving`.
 
 Flagg:
 
@@ -85,7 +85,7 @@ Andre regler:
 - En eksplisitt `latest` regnes ikke som under test: `environment=melosys-web:latest` får pin-taggen for web så lenge pinnen er aktiv.
 - Startregelen ser etter `(#<e2e_pr>)` i emnet. Squash-merge gjennom køen gir alltid det. En rebase-merge forbi køen gir ikke det, og pinnen starter ikke.
 - Feiler et oppslag mot GitHub eller GAR, beholdes en aktiv pin en kort tid med en advarsel: et døgn etter at service-PR-en er merget, eller tre dager etter at pinnen ble satt hvis selve PR-oppslaget feiler.
-- En utløpt pin kan stå i variabelen. Den er en linje i loggen, og neste `set` rydder den bort.
+- En utløpt pin kan stå i variabelen. Den er en linje i loggen, og neste `set` rydder den bort, med mindre den bare regnes som utløpt fordi et oppslag feilet.
 
 ## Når noe går galt
 

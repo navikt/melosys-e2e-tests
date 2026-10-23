@@ -6,6 +6,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
   lagHenter as lagEkteHenter,
+  lagSkrivIo,
   lesArgumenter,
   lesVariabel,
   planleggSet,
@@ -555,6 +556,20 @@ test('skriv: variabelen leses og skrives med et eget token når det finnes', asy
   assert.ok(variabelKall.some((k) => k.startsWith('PATCH ')));
 });
 
+test('CLI-oppsettet: variabelen bruker E2E_PINS_TOKEN, resten GH_TOKEN, og E2E_PINS_VAR blir lagretVerdi', async () => {
+  const tokens: string[] = [];
+  const fetch = async (_url: string, init: Obj) => (tokens.push(init.headers.Authorization), new Response('{}', { status: 200 }));
+  const io = lagSkrivIo({ GH_TOKEN: 'gh', E2E_PINS_TOKEN: 'app', E2E_PINS_VAR: '{}' }, { fetch });
+  await io.variabel('GET', '/x');
+  await io.github('GET', '/x');
+  assert.deepEqual(tokens, ['Bearer app', 'Bearer gh']);
+  assert.equal(io.lagretVerdi, '{}');
+  const lokalt = lagSkrivIo({ GH_TOKEN: 'gh' }, { fetch });
+  await lokalt.variabel('GET', '/x');
+  assert.equal(tokens.at(-1), 'Bearer gh', 'uten E2E_PINS_TOKEN bruker variabelen GH_TOKEN');
+  assert.equal(lokalt.lagretVerdi, undefined);
+});
+
 test('skriv: --dry-run skriver ingenting, og en lik pin skrives ikke på nytt', async () => {
   const g = lagGitHub({ verdi: '{}' });
   await skriv({ ...SET, dryRun: true }, g.io);
@@ -654,6 +669,17 @@ test('CLI velg: statusen per pin i variabelen, og en ugyldig input gir ingen pin
   const feilBruk = spawnSync(process.execPath, [script, 'velg', '.github/e2e-pins.json', ut], { encoding: 'utf8' });
   assert.equal(feilBruk.status, 2);
   assert.match(feilBruk.stderr, /Bruk: e2e-pins.mjs velg <ut-fil>/);
+});
+
+test('CLI fjern --dry-run leser E2E_PINS_VAR uten nettverk', () => {
+  // Ugyldige token: et kall mot GitHub ville feilet, så kjøringen viser at verdien kom fra miljøet.
+  const res = spawnSync(process.execPath, [script, 'fjern', 'melosys-web', '--dry-run'], {
+    env: { PATH: process.env.PATH, GH_TOKEN: 'ugyldig', E2E_PINS_TOKEN: 'ugyldig', E2E_PINS_VAR: JSON.stringify({ 'melosys-web': PIN, 'melosys-api': PIN }) },
+    encoding: 'utf8',
+  });
+  assert.equal(res.status, 0, res.stderr);
+  assert.match(res.stdout, /--dry-run: ville skrevet E2E_PINS \(lest fra vars ved jobbstart\)/);
+  assert.deepEqual(JSON.parse(res.stdout.slice(res.stdout.indexOf('{'))), { 'melosys-api': PIN });
 });
 
 const yml = readFileSync(join(__dirname, '..', '.github', 'workflows', 'e2e-tests.yml'), 'utf8');

@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import {
   hentMedNyeForsok,
   kjor,
+  lagKlient,
   lesInput,
   vaskBestiller,
   // @ts-expect-error — .mjs uten typedeklarasjon; scriptet er ren node uten avhengigheter.
@@ -215,9 +216,25 @@ test('neste: rekkefølgen er e2e-PR-en og så service-PR-ene, hver når køen er
   assert.equal(logg[1], '1. e2e #380: https://github.com/navikt/melosys-e2e-tests/pull/380');
   assert.equal(logg[2], '2. melosys-api #100, når e2e #380 er merget og melosys-api-køen er tom: https://github.com/navikt/melosys-api/pull/100');
   assert.equal(logg[3], '3. melosys-web #3253, når melosys-api #100 er merget og melosys-web-køen er tom: https://github.com/navikt/melosys-web/pull/3253');
-  assert.match(logg[4], /Bestilt av rune\.$/);
+  assert.match(logg[4], /Bestilt av `rune`\.$/);
   const prøve = await kjorSteg(par(), 'neste', { DRY_RUN: 'true' });
   assert.match(prøve.logg[0], /Prøvekjøring: E2E_PINS er ikke skrevet/);
+});
+
+test('klienten sender ingen GraphQL-mutasjon', async () => {
+  const kall: string[] = [];
+  const fetch = async (url: string) => (kall.push(url), svar(200, { data: {} }));
+  const api = lagKlient({ fetch, sleep: async () => {}, logg: () => {}, now: () => 0 }, 't');
+  await assert.rejects(api.graphql('mutation SettIKo { x }', {}), /skriver ikke til GitHub/);
+  await assert.rejects(api.graphql('  mutation\n{ x }', {}), /skriver ikke til GitHub/);
+  assert.deepEqual(kall, []);
+  await api.graphql('query Pr { x }', {});
+  assert.equal(kall.length, 1);
+});
+
+test('neste: bestilleren vises som kode, så markdown i requested_by ikke blir en lenke', async () => {
+  const { logg } = await kjorSteg(par(), 'neste', { REQUESTED_BY: '[klikk](https://example.com) `x`' });
+  assert.match(logg.at(-1)!, /Bestilt av `` \[klikk\]\(https:\/\/example\.com\) `x` ``\.$/);
 });
 
 test('ingen steg skriver til GitHub med github.token', async () => {
