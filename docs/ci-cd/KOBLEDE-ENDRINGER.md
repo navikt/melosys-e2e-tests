@@ -37,7 +37,10 @@ Workflowen setter ingenting i kø. Merge selv med **Merge when ready**, i rekkef
 
 **Én skriving om gangen.** API-et har ingen sammenlign-og-skriv for variabler, så skrivejobben har concurrency-gruppen `e2e-pins-variabel`, og hele workflowen har en gruppe per tag. GitHub beholder bare én ventende kjøring per gruppe: starter en ny ekte kjøring mens én kjører og én venter, avbrytes den som venter, og pinnen for den er ikke skrevet. Start den på nytt. En prøvekjøring står utenfor begge gruppene og avbryter ingenting.
 
-**Feiler skrivingen for én av flere service-PR-er**, står pinnene for tjenestene foran den. Rett feilen og start på nytt med samme input: en pin som står fra før, skrives ikke på nytt.
+**Feiler skrivingen for én av flere service-PR-er**, står pinnene for tjenestene foran den. Hva du gjør, avhenger av feilen:
+
+- **Forbigående, for eksempel en API-feil eller «E2E_PINS er endret mens skriveren jobbet»:** start på nytt med samme input. En pin som står fra før, skrives ikke på nytt.
+- **br-kjøringen gjelder ikke lenger, for eksempel fordi en PR har fått nye commits:** kjør «E2E med brancher» på nytt. Den nye taggen kan ikke settes med «Koblet merge» mens de første pinnene står, fordi workflowen ikke bruker `--erstatt`. Fjern dem med `fjern <tjeneste>`, og start «Koblet merge» med den nye taggen. Du kan også bytte dem for hånd med `set --erstatt` og sette resten med `set`.
 
 ## Skriveren
 
@@ -51,7 +54,7 @@ GH_TOKEN=$(gh auth token) node scripts/e2e-pins.mjs fjern melosys-web
 `set` krever `gh` og docker logget inn i GAR (`gcloud auth configure-docker europe-north1-docker.pkg.dev`). Før den skriver, sjekker den dette:
 
 - Service-PR-en er åpen. e2e-PR-en er åpen, eller merget når du bytter en pin fra samme e2e-PR med `--erstatt`.
-- `br-<run_id>` er en grønn kjøring av «E2E med brancher» med hele suiten, mot head-commitene PR-ene har nå.
+- `br-<run_id>` er en grønn kjøring av «E2E med brancher» med hele suiten, mot head-commitene PR-ene har nå. Er e2e-PR-en merget (`--erstatt`), godtas også en kjøring på `main` startet etter mergen, uten e2e-branch.
 - Ingen pin fra et annet par gjelder for tjenesten. En utløpt eller forlatt pin ryddes bort. En pin som bare regnes som utløpt fordi et oppslag feilet, står igjen og stopper `set` for samme tjeneste fra et annet par; kjør på nytt når oppslaget virker, eller bruk `--tving`.
 
 Flagg:
@@ -85,7 +88,7 @@ Andre regler:
 - En eksplisitt `latest` regnes ikke som under test: `environment=melosys-web:latest` får pin-taggen for web så lenge pinnen er aktiv.
 - Startregelen ser etter `(#<e2e_pr>)` i emnet. Squash-merge gjennom køen gir alltid det. En rebase-merge forbi køen gir ikke det, og pinnen starter ikke.
 - Feiler et oppslag mot GitHub eller GAR, beholdes en aktiv pin en kort tid med en advarsel: et døgn etter at service-PR-en er merget, eller tre dager etter at pinnen ble satt hvis selve PR-oppslaget feiler.
-- En utløpt pin kan stå i variabelen. Den er en linje i loggen, og neste `set` rydder den bort, med mindre den bare regnes som utløpt fordi et oppslag feilet.
+- En utløpt pin kan stå i variabelen. Den er en linje i loggen, og neste `set` som skriver, rydder den bort, med mindre den bare regnes som utløpt fordi et oppslag feilet.
 
 ## Når noe går galt
 

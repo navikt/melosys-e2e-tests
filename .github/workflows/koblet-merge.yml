@@ -114,8 +114,9 @@ jobs:
           E2E_PINS_TOKEN: ${{ steps.token.outputs.token }}
           E2E_PINS_VAR: ${{ vars.E2E_PINS }}
           MATRIX: ${{ needs.sjekk.outputs.matrix }}
-        # Feiler set for en tjeneste, står pinnene før den; en ny kjøring med samme input
-        # skriver resten. jq -e feiler på tom eller ugyldig matrise i stedet for å skrive ingenting.
+        # Feiler set for en tjeneste, står pinnene før den (hva du gjør da, står i
+        # docs/ci-cd/KOBLEDE-ENDRINGER.md). jq -e feiler på tom eller ugyldig matrise i stedet for
+        # å skrive ingenting.
         run: |
           flagg=()
           if [ "$DRY_RUN" = "true" ]; then flagg=(--dry-run); fi
