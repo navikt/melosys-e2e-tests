@@ -41,6 +41,9 @@ Workflowen setter ingenting i kø. Merge selv med **Merge when ready**, i rekkef
 
 - **Forbigående, for eksempel en API-feil eller «E2E_PINS er endret mens skriveren jobbet»:** start på nytt med samme input. En pin som står fra før, skrives ikke på nytt.
 - **br-kjøringen gjelder ikke lenger, for eksempel fordi en PR har fått nye commits:** kjør «E2E med brancher» på nytt. Den nye taggen kan ikke settes med «Koblet merge» mens de første pinnene står, fordi workflowen ikke bruker `--erstatt`. Fjern dem med `fjern <tjeneste>`, og start «Koblet merge» med den nye taggen. Du kan også bytte dem for hånd med `set --erstatt` og sette resten med `set`.
+- **En pin fra et annet par står for tjenesten:** feilmeldingen viser paret og statusen pinnen har. Er pinnen aktiv, venter du til `latest` har service-PR-en til det andre paret, og starter på nytt. Bruk `--tving` for hånd bare etter at en kjøring har vist pinnen som utløpt.
+- **Service-PR-en er lukket uten merge:** paret er forlatt; se [Når noe går galt](#når-noe-går-galt). Skal ikke paret videre, fjerner du pinnene foran med `fjern <tjeneste>`.
+- **Service-PR-en er merget:** den trenger ingen pin, og «Sjekk paret» avviser en ny start med en merget PR. Sett pinnene for resten for hånd med `set` (se [Skriveren](#skriveren)).
 
 ## Skriveren
 
@@ -51,10 +54,12 @@ GH_TOKEN=$(gh auth token) node scripts/e2e-pins.mjs set melosys-web br-394000000
 GH_TOKEN=$(gh auth token) node scripts/e2e-pins.mjs fjern melosys-web
 ```
 
+For hånd går skriveren utenom «Sjekk paret» og rekkefølgen i sammendraget. Sjekk selv at ingen PR i paret står i merge-køen: en køkjøring som har startet, ser ikke en pin som skrives etterpå. Merge så i rekkefølgen under [Automatisk fra konsollen](#automatisk-fra-konsollen).
+
 `set` krever `gh` og docker logget inn i GAR (`gcloud auth configure-docker europe-north1-docker.pkg.dev`). Før den skriver, sjekker den dette:
 
 - Service-PR-en er åpen. e2e-PR-en er åpen, eller merget når du bytter en pin fra samme e2e-PR med `--erstatt`.
-- `br-<run_id>` er en grønn kjøring av «E2E med brancher» med hele suiten, mot head-commitene PR-ene har nå. Er e2e-PR-en merget (`--erstatt`), godtas også en kjøring på `main` startet etter mergen, uten e2e-branch.
+- `br-<run_id>` er en grønn kjøring av «E2E med brancher» med hele suiten, mot head-commitene PR-ene har nå. Er e2e-PR-en merget (`--erstatt`), godtas også en kjøring uten e2e-branch, når E2E Tests-kjøringen den startet, kjørte på `main` og ble opprettet etter mergen.
 - Ingen pin fra et annet par gjelder for tjenesten. En utløpt eller forlatt pin ryddes bort. En pin som bare regnes som utløpt fordi et oppslag feilet, står igjen og stopper `set` for samme tjeneste fra et annet par; kjør på nytt når oppslaget virker, eller bruk `--tving`.
 
 Flagg:
