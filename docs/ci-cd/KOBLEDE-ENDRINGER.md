@@ -31,11 +31,13 @@ Workflowen setter ingenting i kø. Merge selv med **Merge when ready**, i rekkef
 1. e2e-PR-en. e2e-køen kjører de nye testene mot `br`-imaget, fordi køens commit har `(#<e2e_pr>)` i emnet.
 2. Hver service-PR, når PR-en foran er merget og køen i service-repoet er tom. En annen PR foran i køen har ikke endringen og blir rød mot de nye testene. Si fra i kanalen at andre merger i repoet venter.
 
-**Prøv først med `dry_run`.** Jobbene leser og sjekker som vanlig, og skriveren viser verdien den ville skrevet, men variabelen endres ikke. Kjøringen heter da «… (prøvekjøring)». En prøvekjøring leser `E2E_PINS` slik den var da jobben startet, fordi `github.token` ikke kan lese variabler.
+**Prøv først med `dry_run`.** Jobbene leser og sjekker som vanlig, og skriveren viser verdien den ville skrevet, men variabelen endres ikke. Kjøringen heter da «… (prøvekjøring)». En prøvekjøring leser `E2E_PINS` slik den var da jobben startet, fordi `github.token` ikke kan lese variabler. Med flere service-PR-er viser den derfor hver pin for seg, uten pinnene foran den.
 
 **Rettigheter.** Workflowen leser PR-er og kjøringer med `github.token`; alle repoene er offentlige. Bare skrivingen av variabelen bruker et token fra app-en Melosys CI, avgrenset til melosys-e2e-tests. App-en trenger *Variables: write*. Uten den svarer GitHub `403 Resource not accessible by integration`, og jobben stopper før noe er skrevet. En prøvekjøring henter ikke app-token.
 
-**Én skriving om gangen.** API-et har ingen sammenlign-og-skriv for variabler, så skrivejobben har concurrency-gruppen `e2e-pins-variabel`. En prøvekjøring står utenfor gruppen.
+**Én skriving om gangen.** API-et har ingen sammenlign-og-skriv for variabler, så skrivejobben har concurrency-gruppen `e2e-pins-variabel`, og hele workflowen har en gruppe per tag. GitHub beholder bare én ventende kjøring per gruppe: starter en ny ekte kjøring mens én kjører og én venter, avbrytes den som venter, og pinnen for den er ikke skrevet. Start den på nytt. En prøvekjøring står utenfor begge gruppene og avbryter ingenting.
+
+**Feiler skrivingen for én av flere service-PR-er**, står pinnene for tjenestene foran den. Rett feilen og start på nytt med samme input: en pin som står fra før, skrives ikke på nytt.
 
 ## Skriveren
 

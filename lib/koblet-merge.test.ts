@@ -254,7 +254,6 @@ test('workflowen: to jobber, og inputene konsollen sender, står', () => {
   ]);
   for (const inp of ['tag', 'e2e_pr', 'tjenester', 'requested_by', 'dry_run']) assert.match(yml, new RegExp(`^      ${inp}:$`, 'm'));
   assert.match(yml, /^run-name: .*\$\{\{ inputs\.dry_run && ' \(prøvekjøring\)' \|\| '' \}\}"$/m);
-  assert.match(yml, /group: koblet-merge-\$\{\{ inputs\.tag \}\}\n  cancel-in-progress: false/);
   assert.match(yml, /GH_TOKEN: \$\{\{ github\.token \}\}/);
   assert.doesNotMatch(yml, /e2e-pins\.json|sett-i-ko|vent-merget|fjern-skriv|pin-skriv/);
 });
@@ -306,6 +305,20 @@ test('workflowen: skriveren kalles én gang per tjeneste, med --dry-run bare i e
   assert.equal(ekte.stdout, `node scripts/e2e-pins.mjs set melosys-api ${TAG} 380 100\nnode scripts/e2e-pins.mjs set melosys-web ${TAG} 380 3253\n`);
   const prøve = kjørSkrivSteg({ MATRIX, DRY_RUN: 'true' });
   assert.equal(prøve.stdout, `node scripts/e2e-pins.mjs set melosys-api ${TAG} 380 100 --dry-run\nnode scripts/e2e-pins.mjs set melosys-web ${TAG} 380 3253 --dry-run\n`);
+});
+
+test('workflowen: et tomt eller ugyldig utvalg av tjenester feiler i stedet for å skrive ingenting', () => {
+  for (const MATRIX of ['', '{oops', JSON.stringify({ include: [] })]) {
+    const r = kjørSkrivSteg({ MATRIX, DRY_RUN: 'false' });
+    assert.notEqual(r.status, 0, `MATRIX=${MATRIX} skal feile`);
+    assert.doesNotMatch(r.stdout, /^node /m, `MATRIX=${MATRIX}: ingen skriving`);
+    assert.match(r.stdout, /::error::Fant ingen tjenester/, `MATRIX=${MATRIX}`);
+  }
+});
+
+test('workflowen: en prøvekjøring står utenfor gruppen per tag, så den ikke avbryter en ekte kjøring som venter', () => {
+  const gruppe = /\nconcurrency:\n  group: (.+)\n  cancel-in-progress: false\n/.exec(yml)?.[1];
+  assert.equal(gruppe, "koblet-merge-${{ inputs.tag }}${{ inputs.dry_run && format('-prove-{0}', github.run_id) || '' }}");
 });
 
 test('workflowen: hver jobb tåler den lengste ventingen på timekvoten', async () => {

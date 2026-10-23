@@ -38,8 +38,10 @@ permissions:
   contents: read
   pull-requests: read
 
+# GitHub beholder én ventende kjøring per gruppe. En prøvekjøring får sin egen gruppe, så den
+# ikke avbryter en ekte kjøring for samme tag som venter.
 concurrency:
-  group: koblet-merge-${{ inputs.tag }}
+  group: koblet-merge-${{ inputs.tag }}${{ inputs.dry_run && format('-prove-{0}', github.run_id) || '' }}
   cancel-in-progress: false
 
 env:
@@ -82,8 +84,7 @@ jobs:
       # nais/login: skriveren leser revisjonen på latest for pinnene som står
       id-token: write
     # API-et har ingen sammenlign-og-skriv for variabler, så skrivingene går én om gangen.
-    # En prøvekjøring skriver ikke, og får en egen gruppe: i samme gruppe kunne den erstattet
-    # en ekte skriving som venter.
+    # En prøvekjøring skriver ikke, og står utenfor gruppen, som på workflow-nivå.
     concurrency:
       group: ${{ inputs.dry_run && format('e2e-pins-prove-{0}', github.run_id) || 'e2e-pins-variabel' }}
       cancel-in-progress: false
@@ -113,11 +114,15 @@ jobs:
           E2E_PINS_TOKEN: ${{ steps.token.outputs.token }}
           E2E_PINS_VAR: ${{ vars.E2E_PINS }}
           MATRIX: ${{ needs.sjekk.outputs.matrix }}
+        # Feiler set for en tjeneste, står pinnene før den; en ny kjøring med samme input
+        # skriver resten. jq -e feiler på tom eller ugyldig matrise i stedet for å skrive ingenting.
         run: |
           flagg=()
           if [ "$DRY_RUN" = "true" ]; then flagg=(--dry-run); fi
+          par=$(jq -er '.include[] | "\(.repo) \(.pr)"' <<< "$MATRIX") \
+            || { echo "::error::Fant ingen tjenester i utdataene fra «Sjekk paret»"; exit 1; }
           while read -r repo pr; do
             node scripts/e2e-pins.mjs set "$repo" "$TAG" "$E2E_PR" "$pr" "${flagg[@]}"
-          done < <(jq -r '.include[] | "\(.repo) \(.pr)"' <<< "$MATRIX")
+          done <<< "$par"
       - name: Neste steg
         run: node scripts/koblet-merge.mjs neste
