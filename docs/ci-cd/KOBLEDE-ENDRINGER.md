@@ -100,6 +100,7 @@ Andre regler:
 - **Du setter service-PR-en i kø før e2e-PR-en er merget.** Gaten kjører de gamle testene og blir rød. Bare din PR tas ut.
 - **e2e-PR-en merges uten parets pin for en åpen service-PR.** `set` setter ingen ny pin når e2e-PR-en er merget.
   - Står ingen pin for tjenesten, tester køkjøringer i andre repoer de nye testene mot `latest` uten endringen, og blir røde til `latest` har service-PR-en. Sett service-PR-en i køen med en gang, eller revert e2e-PR-en.
+  - Står en pin fra et annet par, avgjør statusen dens hvilket image kjøringene bruker. Sett service-PR-en i køen med en gang, eller revert e2e-PR-en.
   - Står en pin fra samme e2e-PR med en annen tag eller service-PR, avgjør statusen dens hvilket image kjøringene bruker (se [Slik virker pinnen](#slik-virker-pinnen)). Bytt den med `set --erstatt`.
 - **e2e-PR-en revertes.** Revert-commiten slår av startregelen. Fjern pinnen også: `node scripts/e2e-pins.mjs fjern <tjeneste>`.
 - **Service-PR-en lukkes eller erstattes.** Pinnen er forlatt, og kjøringene blir røde mot `latest`. Revert e2e-PR-en, eller kjør «E2E med brancher» på nytt med den nye service-PR-en og bytt med `set --erstatt <tjeneste> <ny br-tag> <e2e_pr> <ny service_pr>`.
