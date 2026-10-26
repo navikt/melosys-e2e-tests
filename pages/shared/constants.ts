@@ -85,6 +85,11 @@ export const BESTEMMELSER = {
   // Add more as needed
 } as const;
 
+/** Visningstekst (term) fra melosys-kodeverk, for felt som velges på tekst. */
+export const BESTEMMELSE_TERMER: Record<string, string> = {
+  [BESTEMMELSER.AUS_ART9_3]: 'Utsendt arbeidstaker - artikkel 9 nr. 3',
+};
+
 // EU/EØS constants
 export const EU_EOS_LAND = {
   DANMARK: 'Danmark',

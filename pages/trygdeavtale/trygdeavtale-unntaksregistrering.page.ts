@@ -1,5 +1,6 @@
 import { Page, expect } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+import { BESTEMMELSE_TERMER } from '../shared/constants';
 import { TrygdeavtaleUnntaksregistreringAssertions } from './trygdeavtale-unntaksregistrering.assertions';
 
 /**
@@ -69,7 +70,7 @@ export class TrygdeavtaleUnntaksregistreringPage extends BasePage {
     name: 'Ikke godkjenn'
   });
 
-  private readonly bestemmelseDropdown = this.page.getByLabel(/Bestemmelse/);
+  private readonly bestemmelseFelt = this.page.getByRole('combobox', { name: /^Bestemmelse/ });
 
   private readonly bekreftOgAvsluttButton = this.page.getByRole('button', {
     name: 'Bekreft og avslutt'
@@ -150,10 +151,14 @@ export class TrygdeavtaleUnntaksregistreringPage extends BasePage {
 
   /**
    * Velg «Godkjenn» og bestemmelse på «Unntak medlemskap»-steget.
-   * Bestemmelse-dropdownen populeres async (GET lovvalgsbestemmelser).
+   * Bestemmelse-feltet populeres async (GET lovvalgsbestemmelser).
+   *
+   * Feltet er enten en native <select> (velges på kode) eller en Aksel
+   * Combobox (velges på term), avhengig av web-versjonen (MELOSYS-8352).
    *
    * @param bestemmelse - Bestemmelse-kode (default 'AUS_ART9_3' — Utsendt
-   *                      arbeidstaker, artikkel 9 nr. 3)
+   *                      arbeidstaker, artikkel 9 nr. 3). Må ha term i
+   *                      BESTEMMELSE_TERMER for Combobox-varianten.
    */
   async godkjennMedBestemmelse(bestemmelse: string = 'AUS_ART9_3'): Promise<void> {
     // «Godkjenn» er disabled til skjemaet har sluttdato (tom) — den kommer
@@ -162,9 +167,23 @@ export class TrygdeavtaleUnntaksregistreringPage extends BasePage {
     await this.godkjennRadio.check();
     console.log('✅ Valgte «Godkjenn»');
 
-    await this.bestemmelseDropdown.waitFor({ state: 'visible', timeout: 15000 });
-    await this.waitForDropdownToPopulate(this.bestemmelseDropdown);
-    await this.bestemmelseDropdown.selectOption(bestemmelse);
+    await this.bestemmelseFelt.waitFor({ state: 'visible', timeout: 15000 });
+    const erNativeSelect = await this.bestemmelseFelt.evaluate((el) => el.tagName === 'SELECT');
+
+    if (erNativeSelect) {
+      await this.waitForDropdownToPopulate(this.bestemmelseFelt);
+      await this.bestemmelseFelt.selectOption(bestemmelse);
+    } else {
+      const bestemmelseTerm = BESTEMMELSE_TERMER[bestemmelse];
+      if (!bestemmelseTerm) {
+        throw new Error(`Mangler term for bestemmelse ${bestemmelse} i BESTEMMELSE_TERMER`);
+      }
+      await this.bestemmelseFelt.click();
+      await this.page
+        .getByRole('option', { name: bestemmelseTerm, exact: true })
+        .click({ timeout: 10000 });
+      await expect(this.bestemmelseFelt).toHaveValue(bestemmelseTerm);
+    }
     console.log(`✅ Valgte bestemmelse: ${bestemmelse}`);
   }
 
