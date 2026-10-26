@@ -98,10 +98,11 @@ Andre regler:
 ## Når noe går galt
 
 - **Du setter service-PR-en i kø før e2e-PR-en er merget.** Gaten kjører de gamle testene og blir rød. Bare din PR tas ut.
-- **e2e-PR-en merges uten parets pin for en åpen service-PR.** `set` setter ingen ny pin når e2e-PR-en er merget, bortsett fra med `--erstatt` for en pin fra samme e2e-PR. Hva du gjør, avhenger av pinnen tjenesten har i `E2E_PINS`:
-  - **Ingen pin, eller en pin fra et annet par som ikke er aktiv:** kjøringene bruker `latest`. Køkjøringer i andre repoer tester de nye testene mot `latest` uten endringen, og blir røde til `latest` har service-PR-en. Sett service-PR-en i køen med en gang, eller revert e2e-PR-en.
-  - **En aktiv pin fra et annet par:** kjøringene bruker br-imaget til det andre paret, som ikke har service-PR-en. De blir ikke grønne av at service-PR-en merges, bare når den andre pinnen er utløpt og `latest` har begge service-PR-ene. Revert e2e-PR-en.
-  - **En pin fra samme e2e-PR med en annen tag eller service-PR:** statusen avgjør hvilket image kjøringene bruker (se [Slik virker pinnen](#slik-virker-pinnen)). Bytt den med `set --erstatt`.
+- **e2e-PR-en er merget uten parets pin, og service-PR-en er åpen.** Når e2e-PR-en er merget, setter `set` bare en pin med `--erstatt`, og bare over en pin fra samme e2e-PR. Se `e2e_pr` i pinnen tjenesten har (`gh variable get E2E_PINS -R navikt/melosys-e2e-tests`):
+  - **Ingen pin, eller en pin fra et annet par:** `set` setter ikke parets pin, heller ikke med `--tving`. Revert e2e-PR-en.
+  - **En pin fra samme e2e-PR med en annen tag eller service-PR:** bytt den med `set --erstatt <tjeneste> <br-tag> <e2e_pr> <service_pr>` (se [Skriveren](#skriveren)), eller revert e2e-PR-en.
+
+  Revert av e2e-PR-en tar de nye testene ut av `main` uansett hvilken pin tjenesten har. Har emnet til revert-commiten «revert» og `#<e2e_pr>`, for eksempel `Revert e2e #388 (#401)`, starter ikke en pin fra samme e2e-PR lenger.
 - **e2e-PR-en revertes.** Revert-commiten slår av startregelen. Fjern pinnen også: `node scripts/e2e-pins.mjs fjern <tjeneste>`.
 - **Service-PR-en lukkes eller erstattes.** Pinnen er forlatt, og kjøringene blir røde mot `latest`. Revert e2e-PR-en, eller kjør «E2E med brancher» på nytt med den nye service-PR-en og bytt med `set --erstatt <tjeneste> <ny br-tag> <e2e_pr> <ny service_pr>`.
 - **Service-PR-en revertes etter merge.** `latest` er forbi merge-commiten, så pinnen er utløpt, og testene feiler mot et image uten endringen. Revert e2e-PR-en også.
