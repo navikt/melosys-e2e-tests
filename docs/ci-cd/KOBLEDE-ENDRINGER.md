@@ -99,11 +99,11 @@ Andre regler:
 
 - **Du setter service-PR-en i kø før e2e-PR-en er merget.** Gaten kjører de gamle testene og blir rød. Bare din PR tas ut.
 - **e2e-PR-en er merget uten parets pin, og service-PR-en er åpen.** Når e2e-PR-en er merget, setter `set` bare en pin med `--erstatt`, og bare over en pin fra samme e2e-PR. Se `e2e_pr` i pinnen tjenesten har (`gh variable get E2E_PINS -R navikt/melosys-e2e-tests`):
-  - **Ingen pin, eller en pin fra et annet par:** `set` setter ikke parets pin, heller ikke med `--tving`. Revert e2e-PR-en.
+  - **Ingen pin, eller en pin fra et annet par:** `set` setter ikke parets pin, heller ikke med `--tving`. Revert e2e-PR-en, og la en pin fra et annet par stå.
   - **En pin fra samme e2e-PR med en annen tag eller service-PR:** bytt den med `set --erstatt <tjeneste> <br-tag> <e2e_pr> <service_pr>` (se [Skriveren](#skriveren)), eller revert e2e-PR-en.
 
-  Revert av e2e-PR-en tar de nye testene ut av `main` uansett hvilken pin tjenesten har. Har emnet til revert-commiten «revert» og `#<e2e_pr>`, for eksempel `Revert e2e #388 (#401)`, starter ikke en pin fra samme e2e-PR lenger.
-- **e2e-PR-en revertes.** Revert-commiten slår av startregelen. Fjern pinnen også: `node scripts/e2e-pins.mjs fjern <tjeneste>`.
+  Revert av e2e-PR-en tar de nye testene ut av `main` uansett hvilken pin tjenesten har (se neste punkt).
+- **e2e-PR-en revertes.** Har emnet til revert-commiten «revert» og `#<e2e_pr>`, for eksempel `Revert e2e #388 (#401)`, starter ikke en pin fra den e2e-PR-en lenger. Er pinnen fra den e2e-PR-en, fjerner du den også: `node scripts/e2e-pins.mjs fjern <tjeneste>`. `fjern` fjerner pinnen tjenesten har, uansett hvilket par den er fra.
 - **Service-PR-en lukkes eller erstattes.** Pinnen er forlatt, og kjøringene blir røde mot `latest`. Revert e2e-PR-en, eller kjør «E2E med brancher» på nytt med den nye service-PR-en og bytt med `set --erstatt <tjeneste> <ny br-tag> <e2e_pr> <ny service_pr>`.
 - **Service-PR-en revertes etter merge.** `latest` er forbi merge-commiten, så pinnen er utløpt, og testene feiler mot et image uten endringen. Revert e2e-PR-en også.
 - **En pin står aktiv i mer enn tre dager.** Hver kjøring viser en advarsel. Sjekk om service-PR-en står fast.
