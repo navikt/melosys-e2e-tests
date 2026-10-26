@@ -184,7 +184,7 @@ export class TrygdeavtaleUnntaksregistreringPage extends BasePage {
         .click({ timeout: 10000 });
       // Aksel tømmer input-verdien ved enkeltvalg og viser valget som tekst ved siden av
       await expect(this.bestemmelseFelt).toHaveAttribute('aria-expanded', 'false');
-      await expect(this.page.getByText(bestemmelseTerm, { exact: true })).toBeVisible();
+      await expect(this.page.getByText(bestemmelseTerm, { exact: true }).first()).toBeVisible();
     }
     console.log(`✅ Valgte bestemmelse: ${bestemmelse}`);
   }
