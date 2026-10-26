@@ -182,7 +182,9 @@ export class TrygdeavtaleUnntaksregistreringPage extends BasePage {
       await this.page
         .getByRole('option', { name: bestemmelseTerm, exact: true })
         .click({ timeout: 10000 });
-      await expect(this.bestemmelseFelt).toHaveValue(bestemmelseTerm);
+      // Aksel tømmer input-verdien ved enkeltvalg og viser valget som tekst ved siden av
+      await expect(this.bestemmelseFelt).toHaveAttribute('aria-expanded', 'false');
+      await expect(this.page.getByText(bestemmelseTerm, { exact: true })).toBeVisible();
     }
     console.log(`✅ Valgte bestemmelse: ${bestemmelse}`);
   }
