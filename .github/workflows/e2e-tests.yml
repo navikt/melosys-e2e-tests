@@ -2317,6 +2317,8 @@ jobs:
         if: failure() || (always() && inputs.record_video == true)
         with:
           name: playwright-videos${{ env.ARTIFACT_SUFFIX }}
+          # «Re-run failed jobs» laster opp på nytt under samme navn; uten overwrite feiler steget og de gamle opptakene blir stående.
+          overwrite: true
           path: |
             test-results/**/video.webm
             test-results/opptak.json
