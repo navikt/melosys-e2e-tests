@@ -150,10 +150,10 @@ make pr-opptak PR=397
 | Variabel | Hva det gjør |
 |---|---|
 | `PR=<n>` | PR-en i melosys-e2e-tests. Påkrevd |
-| `LOKAL=1` | Kjører testene mot stacken som kjører lokalt, i stedet for på CI. Koden i arbeidstreet kjører, så stå i PR-ens branch |
-| `RUN=<id>` | Bruker opptakene fra en kjøring du har startet selv med `VIDEO=1`, for eksempel `make ci-grep GREP=8163 VIDEO=1`. Scriptet advarer når kjøringen er på en annen commit enn PR-en |
+| `LOKAL=1` | Kjører testene mot stacken som kjører lokalt, i stedet for på CI. Utvalget regnes fra committet kode, men Playwright kjører arbeidstreet, så stå i PR-ens branch. Har sporede filer ucommittede endringer, sier seksjonen fra |
+| `RUN=<id>` | Bruker opptakene fra en kjøring du har startet selv med `VIDEO=1`, for eksempel `make ci-grep GREP=8163 VIDEO=1`. Kjøringen må være fra PR-ens branch. Er den på en eldre commit, sier seksjonen hvilken |
 | `MAKS=<n>` | Største antall opptak. Standard er 20, og høyst 50, fordi `gh pr edit` tar maks 50 vedlegg per kall |
-| `TORRT=1` | Gjør alt unntatt å endre beskrivelsen, og skriver ut seksjonen og mappa med filene |
+| `TORRT=1` | Gjør alt unntatt å endre beskrivelsen, og skriver ut seksjonen og mappa med filene. Mappa slettes ikke |
 
 Du trenger:
 
@@ -161,6 +161,8 @@ Du trenger:
 - `ffmpeg`, som gjør opptakene om fra webm til mp4.
 
 Scriptet teller testene i utvalget med `playwright test --list` før det starter en kjøring, og stopper når de er flere enn `MAKS`. Tellingen bruker koden du står på, så stå på PR-ens siste commit. CI kjører det samme filteret. Snevre inn med `make ci-grep GREP=<mønster> VIDEO=1` og bruk `RUN=<id>`. Tester som hoppes over, har ikke opptak og telles bare i oppsummeringen. En rød kjøring får også opptak.
+
+Feiler scriptet etter at noe er lastet ned eller konvertert, beholdes den midlertidige mappa, og feilmeldingen sier hvor den ligger. Gjelder feilen en CI-kjøring, sier meldingen også hvordan du bruker kjøringen på nytt med `RUN=<id>`. Går alt bra, slettes mappa.
 
 ## Sharding
 

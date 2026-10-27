@@ -2,6 +2,11 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   advarslerOmShards,
+  arbeidstreAdvarsel,
+  LOKALT_UTVALG,
+  meldingVedFeil,
+  sjekkKjøring,
+  skalBeholde,
   ciArgumenter,
   planleggUtvalg,
   byggBeskrivelse,
@@ -275,4 +280,44 @@ test('en avbrutt test med opptak telles som avbrutt, ikke som hoppet over uten o
   const avbrutt = { status: 'skipped', resultat: 'interrupted', video: '/v' };
   assert.equal(oppsummer([{ status: 'expected', video: '/v' }, avbrutt]), '1 grønne, 1 avbrutt.');
   assert.equal(oppsummer([{ status: 'skipped', resultat: 'skipped', video: '/v' }, { status: 'skipped', video: null }]), '1 hoppet over. 1 hoppet over og har ikke opptak.');
+});
+
+// ---------------------------------------------------------------- fix-runde 1, batch 3
+
+const PR = { headRefName: 'min-branch', headRefOid: 'b'.repeat(40) };
+
+test('RUN fra en annen branch avvises', () => {
+  assert.throws(() => sjekkKjøring({ headBranch: 'annen-branch', headSha: 'b'.repeat(40) }, PR), /annen-branch, ikke min-branch/);
+});
+
+test('RUN på en eldre commit i samme branch gir en advarsel med kjøringens commit', () => {
+  assert.deepEqual(sjekkKjøring({ headBranch: 'min-branch', headSha: 'a'.repeat(40) }, PR), [
+    'Opptakene er fra commit aaaaaaa. PR-en står nå på bbbbbbb.',
+  ]);
+  assert.deepEqual(sjekkKjøring({ headBranch: 'min-branch', headSha: 'b'.repeat(40) }, PR), []);
+});
+
+test('lokalt utvalg regnes bare fra committet kode, så en ny ucommittet spec ikke velges', () => {
+  assert.ok(LOKALT_UTVALG.includes('--kun-committet'));
+});
+
+test('ucommittede endringer i arbeidstreet gir en advarsel i seksjonen', () => {
+  assert.equal(arbeidstreAdvarsel('', 'c'.repeat(40)), null);
+  assert.equal(
+    arbeidstreAdvarsel(' M pages/a.ts\nM  helpers/b.ts\n', 'c'.repeat(40)),
+    'Kjørt med ucommittede endringer i 2 filer, så koden er ikke nøyaktig commit ccccccc.',
+  );
+});
+
+test('mappa beholdes ved feil når den har filer, og etter en tørrkjøring', () => {
+  assert.equal(skalBeholde({ ok: false, torrt: false, harFiler: true }), true);
+  assert.equal(skalBeholde({ ok: false, torrt: false, harFiler: false }), false);
+  assert.equal(skalBeholde({ ok: true, torrt: false, harFiler: true }), false);
+  assert.equal(skalBeholde({ ok: true, torrt: true, harFiler: true }), true);
+  assert.equal(skalBeholde({ ok: true, torrt: true, harFiler: false }), false);
+});
+
+test('feilmeldingen sier hvor filene ligger og hvordan kjøringen brukes på nytt', () => {
+  assert.equal(meldingVedFeil('122 opptak er for mange.', '/tmp/pr-opptak-x', '40552156995'), '122 opptak er for mange.\nFilene ligger i /tmp/pr-opptak-x. Bruk RUN=40552156995 for å prøve igjen uten en ny kjøring.');
+  assert.equal(meldingVedFeil('ffmpeg feilet.', '/tmp/p', null), 'ffmpeg feilet.\nFilene ligger i /tmp/p.');
 });

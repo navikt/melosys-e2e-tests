@@ -264,6 +264,34 @@ export function planleggUtvalg({ utvalg, tellTester, maks }) {
 /** Filteret sendes ferdig utregnet, så CI kjører det samme utvalget som ble talt. */
 export const ciArgumenter = (branch, grep) => [...(grep ? ['--grep', grep] : []), '--branch', branch, '--video', '--no-wait'];
 
+/**
+ * En kjøring fra en annen branch viser en annen endring, så den avvises. Samme branch på en eldre
+ * commit er greit, for eksempel etter en push med bare dokumentasjon, men seksjonen sier det.
+ */
+export function sjekkKjøring(run, pr) {
+  if (run.headBranch !== pr.headRefName) {
+    throw new Error(`Kjøringen er fra branchen ${run.headBranch}, ikke ${pr.headRefName}. Bruk en kjøring av PR-ens branch.`);
+  }
+  return run.headSha === pr.headRefOid ? [] : [`Opptakene er fra commit ${run.headSha.slice(0, 7)}. PR-en står nå på ${pr.headRefOid.slice(0, 7)}.`];
+}
+
+/** Lokalt regnes utvalget fra committet kode, som i CI, så en ucommittet spec ikke velges. */
+export const LOKALT_UTVALG = ['--kun-committet'];
+
+/** Playwright kjører arbeidstreet, så ucommittede endringer i sporede filer sies fra om i seksjonen. */
+export function arbeidstreAdvarsel(porcelain, head) {
+  const filer = String(porcelain).split('\n').filter((l) => l.trim()).length;
+  return filer ? `Kjørt med ucommittede endringer i ${filer} filer, så koden er ikke nøyaktig commit ${head.slice(0, 7)}.` : null;
+}
+
+/** Mappa beholdes etter en tørrkjøring, og ved feil når noe er lastet ned eller konvertert. */
+export const skalBeholde = ({ ok, torrt, harFiler }) => harFiler && (!ok || torrt);
+
+export function meldingVedFeil(melding, katalog, runId) {
+  const gjenbruk = runId ? ` Bruk RUN=${runId} for å prøve igjen uten en ny kjøring.` : '';
+  return `${melding}\nFilene ligger i ${katalog}.${gjenbruk}`;
+}
+
 // ---------------------------------------------------------------- GitHub, git og ffmpeg
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -309,7 +337,7 @@ const vent = (ms) => new Promise((r) => setTimeout(r, ms));
 async function ventPåKjøring(id) {
   let forrige = '';
   for (;;) {
-    const r = ghJson('run', 'view', id, '--json', 'status,conclusion,headSha,url');
+    const r = ghJson('run', 'view', id, '--json', 'status,conclusion,headSha,headBranch,url');
     if (r.status === 'completed') return r;
     if (r.status !== forrige) logg(`⏳ Kjøringen er ${r.status}.`);
     forrige = r.status;
@@ -326,7 +354,7 @@ function påvirkedeTester(args) {
   return { ingenting: false, grep: r.stdout.trim() };
 }
 
-async function fraCi(pr, maks, katalog) {
+async function fraCi(pr, maks, katalog, tilstand) {
   // Utvalget telles i arbeidstreet før kjøringen startes, så det må være PR-ens kode.
   const head = kjørTekst('git', ['rev-parse', 'HEAD']).trim();
   if (head !== pr.headRefOid) {
@@ -343,14 +371,15 @@ async function fraCi(pr, maks, katalog) {
   if (kode !== 0) throw new Error(`ci-e2e.sh feilet med kode ${kode}.`);
   const run = finnRunId(ut);
   if (!run) throw new Error('Fant ikke run-lenken i utdataene fra ci-e2e.sh.');
-  return lastNedKjøring(run.id, pr, katalog);
+  return lastNedKjøring(run.id, pr, katalog, tilstand);
 }
 
-async function lastNedKjøring(id, pr, katalog) {
+async function lastNedKjøring(id, pr, katalog, tilstand) {
   const run = await ventPåKjøring(id);
+  const commitAdvarsler = sjekkKjøring(run, pr);
+  tilstand.runId = id;
   // En rød kjøring har også opptak: workflowen laster dem opp uansett utfall.
   logg(`Kjøringen er ferdig: ${run.conclusion} (${run.url}).`);
-  if (run.headSha !== pr.headRefOid) logg(`⚠️  Kjøringen er på commit ${run.headSha.slice(0, 7)}, men PR-en står på ${pr.headRefOid.slice(0, 7)}.`);
   const ned = join(katalog, 'nedlastet');
   try {
     gh('run', 'download', id, '-p', 'playwright-videos*', '-D', ned);
@@ -362,7 +391,7 @@ async function lastNedKjøring(id, pr, katalog) {
   const artefakter = existsSync(join(ned, 'opptak.json'))
     ? [{ navn: 'playwright-videos', harJson: true }]
     : readdirSync(ned, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => ({ navn: d.name, harJson: existsSync(join(ned, d.name, 'opptak.json')) }));
-  const advarsler = advarslerOmShards(tellShards(jobs), artefakter);
+  const advarsler = [...commitAdvarsler, ...advarslerOmShards(tellShards(jobs), artefakter)];
   for (const a of advarsler) logg(`⚠️  ${a}`);
   return { kilde: 'ci', runUrl: run.url, commit: run.headSha, konklusjon: run.conclusion, advarsler, jsonFiler: finnFiler(ned, 'opptak.json') };
 }
@@ -390,15 +419,17 @@ async function lokalt(pr, maks) {
     logg(`⚠️  Du står på ${branch} (${head.slice(0, 7)}), men PR-en er ${pr.headRefName} (${pr.headRefOid.slice(0, 7)}). Testene kjører koden i arbeidstreet.`);
   }
   // Teller før kjøringen, så hele suiten ikke kjøres bare for å bli avvist etterpå.
-  const plan = planleggUtvalg({ utvalg: påvirkedeTester([]), tellTester, maks });
+  const plan = planleggUtvalg({ utvalg: påvirkedeTester(LOKALT_UTVALG), tellTester, maks });
   if (!plan) return null;
   const grep = plan.grep ? ['--grep', plan.grep] : [];
   const json = join(ROOT, 'test-results', 'opptak.json');
   rmSync(json, { force: true });
+  const advarsel = arbeidstreAdvarsel(kjørTekst('git', ['status', '--porcelain', '--untracked-files=no']), head);
+  if (advarsel) logg(`⚠️  ${advarsel}`);
   const { kode } = await strøm('npx', ['playwright', 'test', '--project=chromium', ...grep], { env: { ...process.env, PW_VIDEO: 'on' } });
   if (!existsSync(json)) throw new Error(`Playwright avsluttet med kode ${kode} uten å skrive test-results/opptak.json.`);
   if (kode !== 0) logg(`Noen tester feilet (kode ${kode}). Opptakene legges likevel i beskrivelsen.`);
-  return { kilde: 'lokal', runUrl: null, commit: head, jsonFiler: [json] };
+  return { kilde: 'lokal', runUrl: null, commit: head, advarsler: advarsel ? [advarsel] : [], jsonFiler: [json] };
 }
 
 export async function konverter(opptak, katalog) {
@@ -432,28 +463,28 @@ async function main() {
   forhåndssjekk();
   const pr = ghJson('pr', 'view', a.pr, '--json', 'headRefName,headRefOid,url');
   const katalog = mkdtempSync(join(tmpdir(), 'pr-opptak-'));
-  // Mappa beholdes bare når du trenger filene: etter en tørrkjøring og når opplastingen feiler.
-  let behold = false;
+  const tilstand = { runId: null };
+  let ok = false;
   try {
-    behold = await lagOgLastOpp(a, pr, katalog);
+    await lagOgLastOpp(a, pr, katalog, tilstand);
+    ok = true;
   } catch (e) {
-    behold = Boolean(e.behold);
+    if (readdirSync(katalog).length) e.message = meldingVedFeil(e.message, katalog, tilstand.runId);
     throw e;
   } finally {
-    if (!behold) rmSync(katalog, { recursive: true, force: true });
+    if (!skalBeholde({ ok, torrt: a.torrt, harFiler: readdirSync(katalog).length > 0 })) rmSync(katalog, { recursive: true, force: true });
   }
 }
 
-/** Gir true når filene i katalogen skal beholdes. */
-async function lagOgLastOpp(a, pr, katalog) {
+async function lagOgLastOpp(a, pr, katalog, tilstand) {
   const resultat = a.lokal
     ? await lokalt(pr, a.maks)
     : a.run
-      ? await lastNedKjøring(a.run, pr, katalog)
-      : await fraCi(pr, a.maks, katalog);
+      ? await lastNedKjøring(a.run, pr, katalog, tilstand)
+      : await fraCi(pr, a.maks, katalog, tilstand);
   if (!resultat) {
     logg('✅ Ingen endringer påvirker e2e-testene, så det er ingenting å ta opp. Beskrivelsen er ikke endret.');
-    return false;
+    return;
   }
   if (!resultat.jsonFiler.length) throw new Error('Fant ingen opptak.json. Ble kjøringen startet med VIDEO=1?');
 
@@ -473,20 +504,18 @@ async function lagOgLastOpp(a, pr, katalog) {
 
   if (a.torrt) {
     logg(`\n🧪 Tørrkjøring: beskrivelsen er ikke endret. Filene ligger i ${ut}\n\n${seksjon}`);
-    return true;
+    return;
   }
   const vedlegg = opptak.flatMap((_, i) => ['--attach', join(ut, `opptak-${i + 1}.mp4`)]);
   const edit = spawnSync('gh', ['pr', 'edit', a.pr, '--body-file', bodyFil, ...vedlegg], { cwd: ROOT, stdio: 'inherit' });
-  const behold = (melding) => Object.assign(new Error(`${melding} Filene ligger i ${ut}`), { behold: true });
-  if (edit.status !== 0) throw behold(`gh pr edit feilet med kode ${edit.status}.`);
+  if (edit.status !== 0) throw new Error(`gh pr edit feilet med kode ${edit.status}.`);
 
   const { body } = ghJson('pr', 'view', a.pr, '--json', 'body');
   const { lenker, ulastet } = sjekkOpplastet(body);
   if (lenker < opptak.length || ulastet) {
-    throw behold(`Seksjonen har ${lenker} opplastede opptak av ${opptak.length}, og ${ulastet} som ikke er lastet opp.`);
+    throw new Error(`Seksjonen har ${lenker} opplastede opptak av ${opptak.length}, og ${ulastet} som ikke er lastet opp.`);
   }
   logg(`✅ ${opptak.length} opptak lagt i beskrivelsen: ${pr.url}`);
-  return false;
 }
 
 // Node løser opp symlinker i import.meta.url, men ikke i argv[1], så begge må løses opp.
