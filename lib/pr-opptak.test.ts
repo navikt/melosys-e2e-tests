@@ -2,6 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
   advarslerOmShards,
+  ciArgumenter,
+  planleggUtvalg,
   byggBeskrivelse,
   erstattSeksjon,
   finnRunId,
@@ -19,6 +21,8 @@ import {
   tellShards,
   // @ts-expect-error — .mjs uten typedeklarasjon; scriptet er ren node uten avhengigheter.
 } from '../scripts/pr-opptak.mjs';
+// @ts-expect-error — .mjs uten typedeklarasjon.
+import { utenE2eEffekt } from '../scripts/affected-tests.mjs';
 
 const RUNNER = '/home/runner/work/melosys-e2e-tests/melosys-e2e-tests/test-results';
 const video = (dir: string) => ({ name: 'video', contentType: 'video/webm', path: `${RUNNER}/${dir}/video.webm` });
@@ -242,4 +246,33 @@ test('færre opptak.json enn shards, og artefakter uten opptak.json, gir advarsl
     'Bare 1 av 6 shards har opptak.json, så opptak kan mangle.',
     'Artefaktet playwright-videos-shard-2 har ikke opptak.json.',
   ]);
+});
+
+// ---------------------------------------------------------------- fix-runde 1, batch 2
+
+test('utvalg over maks avvises før kjøringen, også når det ikke er hele suiten', () => {
+  const talt: string[] = [];
+  const tell = (antall: number) => (grep: string) => (talt.push(grep), antall);
+  assert.throws(() => planleggUtvalg({ utvalg: { ingenting: false, grep: 'a|b' }, tellTester: tell(21), maks: 20 }), /21 tester, flere enn grensen på 20/);
+  assert.deepEqual(talt, ['a|b']);
+  assert.deepEqual(planleggUtvalg({ utvalg: { ingenting: false, grep: 'a|b' }, tellTester: tell(20), maks: 20 }), { grep: 'a|b', antall: 20 });
+  assert.equal(planleggUtvalg({ utvalg: { ingenting: true }, tellTester: tell(0), maks: 20 }), null);
+  assert.throws(() => planleggUtvalg({ utvalg: { ingenting: false, grep: '' }, tellTester: tell(128), maks: 50 }), /128 tester/);
+});
+
+test('CI-kjøringen får det utregnede filteret, ikke --affected, så utvalget regnes én gang', () => {
+  assert.deepEqual(ciArgumenter('min-branch', 'a|b'), ['--grep', 'a|b', '--branch', 'min-branch', '--video', '--no-wait']);
+  assert.deepEqual(ciArgumenter('min-branch', ''), ['--branch', 'min-branch', '--video', '--no-wait']);
+});
+
+test('pr-opptak starter ikke e2e-suiten', () => {
+  assert.equal(utenE2eEffekt('scripts/pr-opptak.mjs'), true);
+  assert.equal(utenE2eEffekt('lib/pr-opptak.test.ts'), true);
+  assert.equal(utenE2eEffekt('.claude/skills/pr-opptak/SKILL.md'), true);
+});
+
+test('en avbrutt test med opptak telles som avbrutt, ikke som hoppet over uten opptak', () => {
+  const avbrutt = { status: 'skipped', resultat: 'interrupted', video: '/v' };
+  assert.equal(oppsummer([{ status: 'expected', video: '/v' }, avbrutt]), '1 grønne, 1 avbrutt.');
+  assert.equal(oppsummer([{ status: 'skipped', resultat: 'skipped', video: '/v' }, { status: 'skipped', video: null }]), '1 hoppet over. 1 hoppet over og har ikke opptak.');
 });

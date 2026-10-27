@@ -160,7 +160,7 @@ Du trenger:
 - `gh` 2.99 eller nyere, innlogget med `gh auth login`. GitHub spiller bare av video fra `user-attachments`-lenker, og bare `gh pr edit --attach` med en personlig innlogging lager dem. Er `GH_TOKEN` eller `GITHUB_TOKEN` satt, stopper scriptet, fordi `--attach` avviser tokens.
 - `ffmpeg`, som gjør opptakene om fra webm til mp4.
 
-Flere opptak enn `MAKS` avvises før noe lastes opp. Velger endringen hele suiten, stopper scriptet før det starter en kjøring. Snevre da inn med `make ci-grep GREP=<mønster> VIDEO=1` og bruk `RUN=<id>`. Tester som hoppes over, har ikke opptak og telles bare i oppsummeringen. En rød kjøring får også opptak.
+Scriptet teller testene i utvalget med `playwright test --list` før det starter en kjøring, og stopper når de er flere enn `MAKS`. Tellingen bruker koden du står på, så stå på PR-ens siste commit. CI kjører det samme filteret. Snevre inn med `make ci-grep GREP=<mønster> VIDEO=1` og bruk `RUN=<id>`. Tester som hoppes over, har ikke opptak og telles bare i oppsummeringen. En rød kjøring får også opptak.
 
 ## Sharding
 

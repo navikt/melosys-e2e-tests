@@ -120,15 +120,24 @@ export function velgOpptak(rader, maks) {
   return opptak;
 }
 
+/**
+ * Playwright gir en test som bare ble avbrutt utfallet skipped, men den har opptak og står i
+ * lista. Oppsummeringen teller derfor etter det lista viser.
+ */
+const utfall = (r) => {
+  if (r.resultat === 'interrupted') return 'avbrutt';
+  if (r.status === 'skipped') return r.video ? 'hoppet over' : 'uten opptak';
+  return { expected: 'grønne', unexpected: 'feilet', flaky: 'flaky' }[r.status] ?? r.status;
+};
+
 export function oppsummer(rader) {
-  const antall = (s) => rader.filter((r) => r.status === s).length;
-  const deler = [
-    [antall('expected'), 'grønne'],
-    [antall('unexpected'), 'feilet'],
-    [antall('flaky'), 'flaky'],
-  ].filter(([n]) => n > 0).map(([n, t]) => `${n} ${t}`);
+  const antall = (u) => rader.filter((r) => utfall(r) === u).length;
+  const deler = ['grønne', 'feilet', 'flaky', 'avbrutt', 'hoppet over']
+    .map((u) => [antall(u), u])
+    .filter(([n]) => n > 0)
+    .map(([n, u]) => `${n} ${u}`);
   let tekst = deler.length ? deler.join(', ') : 'ingen tester kjørt';
-  const hoppet = antall('skipped');
+  const hoppet = antall('uten opptak');
   if (hoppet) tekst += `. ${hoppet} hoppet over og har ikke opptak`;
   const utenVideo = rader.filter((r) => r.status !== 'skipped' && !r.video).length;
   if (utenVideo) tekst += `. ${utenVideo} mangler opptak`;
@@ -239,6 +248,22 @@ export function finnRunId(utdata) {
   return m ? { url: m[1], id: m[2] } : null;
 }
 
+/**
+ * Teller testene i utvalget og avviser flere enn maks før noe kjøres. Tom grep er hele suiten;
+ * null betyr at endringen ikke påvirker noen test.
+ */
+export function planleggUtvalg({ utvalg, tellTester, maks }) {
+  if (utvalg.ingenting) return null;
+  const antall = tellTester(utvalg.grep);
+  if (antall > maks) {
+    throw new Error(`Utvalget har ${antall} tester, flere enn grensen på ${maks}. Øk med MAKS=<n> (høyst ${MAKS_GRENSE}), eller kjør et smalere utvalg med make ci-grep GREP=<mønster> VIDEO=1 og bruk RUN=<id>.`);
+  }
+  return { grep: utvalg.grep, antall };
+}
+
+/** Filteret sendes ferdig utregnet, så CI kjører det samme utvalget som ble talt. */
+export const ciArgumenter = (branch, grep) => [...(grep ? ['--grep', grep] : []), '--branch', branch, '--video', '--no-wait'];
+
 // ---------------------------------------------------------------- GitHub, git og ffmpeg
 
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..');
@@ -302,21 +327,22 @@ function påvirkedeTester(args) {
 }
 
 async function fraCi(pr, maks, katalog) {
-  // Hele suiten er over grensen uansett, så den stoppes før en kjøring på 15 minutter starter.
-  const branch = pr.headRefName;
-  spawnSync('git', ['fetch', '--quiet', 'origin', '+refs/heads/main:refs/remotes/origin/main', `+refs/heads/${branch}:refs/remotes/origin/${branch}`], { cwd: ROOT });
-  const utvalg = påvirkedeTester(['--kun-committet', '--head', `origin/${branch}`]);
-  if (utvalg.ingenting) return null;
-  if (!utvalg.grep) {
-    throw new Error(`Endringen velger hele suiten, som gir flere opptak enn grensen på ${maks}. Kjør et smalere utvalg med make ci-grep GREP=<mønster> VIDEO=1 BRANCH=${branch}, og bruk RUN=<id>.`);
+  // Utvalget telles i arbeidstreet før kjøringen startes, så det må være PR-ens kode.
+  const head = kjørTekst('git', ['rev-parse', 'HEAD']).trim();
+  if (head !== pr.headRefOid) {
+    throw new Error(`Du står på ${head.slice(0, 7)}, men PR-en står på ${pr.headRefOid.slice(0, 7)} (${pr.headRefName}). Testene telles fra koden du står på: kjør git switch ${pr.headRefName} && git pull, eller bruk RUN=<id>.`);
   }
-  const { kode, ut } = await strøm('./scripts/ci-e2e.sh', ['--affected', '--branch', branch, '--video', '--no-wait']);
+  if (spawnSync('git', ['diff', '--quiet', 'HEAD'], { cwd: ROOT }).status !== 0) {
+    logg('⚠️  Du har ucommittede endringer. Testene telles med dem, men CI kjører det som er pushet.');
+  }
+  spawnSync('git', ['fetch', '--quiet', 'origin', '+refs/heads/main:refs/remotes/origin/main'], { cwd: ROOT });
+  const plan = planleggUtvalg({ utvalg: påvirkedeTester(['--kun-committet', '--head', pr.headRefOid]), tellTester, maks });
+  if (!plan) return null;
+  logg(`${plan.antall} tester i utvalget.`);
+  const { kode, ut } = await strøm('./scripts/ci-e2e.sh', ciArgumenter(pr.headRefName, plan.grep));
   if (kode !== 0) throw new Error(`ci-e2e.sh feilet med kode ${kode}.`);
   const run = finnRunId(ut);
-  if (!run) {
-    if (/Ingen endringer påvirker e2e-testene/.test(ut)) return null;
-    throw new Error('Fant ikke run-lenken i utdataene fra ci-e2e.sh.');
-  }
+  if (!run) throw new Error('Fant ikke run-lenken i utdataene fra ci-e2e.sh.');
   return lastNedKjøring(run.id, pr, katalog);
 }
 
@@ -348,21 +374,25 @@ function finnFiler(rot, navn) {
     .map((d) => join(d.parentPath ?? d.path, d.name));
 }
 
+/** Antall tester i utvalget, fra playwright test --list. Trenger ikke stacken. */
+function tellTester(grep) {
+  // --reporter=list overstyrer rapportørene i configen, som ellers skriver over playwright-report/.
+  const liste = kjørTekst('npx', ['playwright', 'test', '--project=chromium', '--list', '--reporter=list', ...(grep ? ['--grep', grep] : [])]);
+  const antall = Number(/^Total: (\d+) tests?/m.exec(liste)?.[1]);
+  if (!Number.isInteger(antall)) throw new Error('Fant ikke antall tester i utdataene fra playwright test --list.');
+  return antall;
+}
+
 async function lokalt(pr, maks) {
   const head = kjørTekst('git', ['rev-parse', 'HEAD']).trim();
   const branch = kjørTekst('git', ['rev-parse', '--abbrev-ref', 'HEAD']).trim();
   if (branch !== pr.headRefName || head !== pr.headRefOid) {
     logg(`⚠️  Du står på ${branch} (${head.slice(0, 7)}), men PR-en er ${pr.headRefName} (${pr.headRefOid.slice(0, 7)}). Testene kjører koden i arbeidstreet.`);
   }
-  const utvalg = påvirkedeTester([]);
-  if (utvalg.ingenting) return null;
-  const grep = utvalg.grep ? ['--grep', utvalg.grep] : [];
   // Teller før kjøringen, så hele suiten ikke kjøres bare for å bli avvist etterpå.
-  // --reporter=list overstyrer rapportørene i configen, som ellers skriver over playwright-report/.
-  const liste = kjørTekst('npx', ['playwright', 'test', '--project=chromium', '--list', '--reporter=list', ...grep]);
-  const antall = Number(/^Total: (\d+) tests?/m.exec(liste)?.[1]);
-  if (!Number.isInteger(antall)) throw new Error('Fant ikke antall tester i utdataene fra playwright test --list.');
-  if (antall > maks) throw new Error(`Utvalget har ${antall} tester, flere enn grensen på ${maks}. Øk med MAKS=<n> (høyst ${MAKS_GRENSE}) eller kjør et smalere utvalg.`);
+  const plan = planleggUtvalg({ utvalg: påvirkedeTester([]), tellTester, maks });
+  if (!plan) return null;
+  const grep = plan.grep ? ['--grep', plan.grep] : [];
   const json = join(ROOT, 'test-results', 'opptak.json');
   rmSync(json, { force: true });
   const { kode } = await strøm('npx', ['playwright', 'test', '--project=chromium', ...grep], { env: { ...process.env, PW_VIDEO: 'on' } });
