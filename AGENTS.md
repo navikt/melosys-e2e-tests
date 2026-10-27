@@ -903,6 +903,7 @@ Key steps:
 - **Known Errors**: `docs/guides/KNOWN-ERRORS.md` - Using @known-error tag for expected failures
 - **GitHub Actions**: `docs/ci-cd/GITHUB-ACTIONS.md` - CI/CD setup and usage
 - **Kjør e2e på CI**: `docs/ci-cd/KJOR-E2E-PA-CI.md` - `make ci-affected` før merge, og flaggene til `scripts/ci-e2e.sh`
+- **Koblede endringer**: `docs/ci-cd/KOBLEDE-ENDRINGER.md` - service-PR som krever nye e2e-tester: pin i Actions-variabelen `E2E_PINS` i stedet for bypass, med start og utløp i hver kjøring (`scripts/e2e-pins.mjs`). Workflowen `koblet-merge.yml` setter pinnen fra konsollen
 - **E2E Coverage**: `docs/ci-cd/E2E-COVERAGE.md` - E2E code coverage collection for melosys-api
 - **Spec-drevet testing**: `docs/SPEC-DRIVEN-TESTING.md` - spec-formatet i `specs/`, som testene genereres fra
 - **Arkiverte planer og handovers**: `melosys-kode-wiki/archive/melosys-e2e-tests/` - hører ikke hjemme i dette repoet

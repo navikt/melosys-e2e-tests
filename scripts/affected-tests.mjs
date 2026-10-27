@@ -124,8 +124,17 @@ const isSpec = (p) => p.endsWith('.spec.ts');
 const inGraph = (p) => p.endsWith('.ts') && GRAPH_DIRS.includes(p.split('/')[0]);
 export const isDoc = (p) => p.endsWith('.md') || p.startsWith('docs/');
 
-/** Verktøy som e2e-workflowen ikke leser. Et nytt script under scripts/ kan brukes av CI, så lista er eksplisitt. */
-const VERKTOY = ['Makefile', 'scripts/ci-e2e.sh', 'scripts/affected-tests.mjs'];
+/**
+ * Verktøy som e2e-workflowen ikke leser. Et nytt script under scripts/ kan brukes av CI, så lista er eksplisitt.
+ * scripts/e2e-pins.mjs står ikke her: «Determine image tags» kjører det.
+ */
+const VERKTOY = [
+  'Makefile',
+  'scripts/ci-e2e.sh',
+  'scripts/affected-tests.mjs',
+  'scripts/koblet-merge.mjs',
+  '.github/workflows/koblet-merge.yml',
+];
 export const utenE2eEffekt = (p) => isDoc(p) || VERKTOY.includes(p) || (p.startsWith('lib/') && p.endsWith('.test.ts'));
 
 /**

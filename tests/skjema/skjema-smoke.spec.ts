@@ -4,8 +4,8 @@ import { SkjemaAuthHelper } from '../../helpers/skjema-auth-helper';
 /**
  * Røyktest for melosys-skjema-web (digital «Utsendt arbeidstaker»-søknad).
  *
- * Dette er den FØRSTE e2e-testen mot skjema-stacken (melosys-skjema-web +
- * melosys-skjema-api), lagt til docker-compose under "skjema"-profilen.
+ * Testen går mot skjema-stacken (melosys-skjema-web + melosys-skjema-api), som
+ * docker-compose starter med "skjema"-profilen.
  *
  * Hva den verifiserer (hele kjeden, uten testdata-fixtures):
  *   wonderwall auto-login → mock-oauth2 (innbygger/ID-porten)

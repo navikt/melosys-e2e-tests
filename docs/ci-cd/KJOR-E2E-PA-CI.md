@@ -27,6 +27,8 @@ Merge queue virker bare på brancher med navn på høyst 15 tegn. `nais/login` a
 
 Sjekken `e2e-for-merge` er grønn på en PR før den står i kø, og betyr bare noe i køen. Merger noen med bypass på ruleset-et forbi køen, har ingen e2e-tester kjørt.
 
+Krever en PR i et service-repo nye e2e-tester, går begge PR-ene gjennom køene med en pin i Actions-variabelen `E2E_PINS`. Se [KOBLEDE-ENDRINGER.md](KOBLEDE-ENDRINGER.md).
+
 ## E2E-gate for kilderepoer
 
 `.github/workflows/e2e-gate.yml` er en gjenbrukbar workflow et kilderepo (først melosys-api) kaller fra en PR eller fra sin egen merge queue. Den svarer på ett spørsmål: er nøyaktig denne koden testet grønt før?
@@ -38,9 +40,9 @@ Sjekken `e2e-for-merge` er grønn på en PR før den står i kø, og betyr bare 
 
 Treet er nøkkelen, ikke SHA-en: merge-refen på PR-en, commiten i køen og commiten på master har samme tree når koden er den samme. Markøren sparer bare e2e-kjøringen; den gjør aldri et PR-image til et image som deployes.
 
-Kalleren sender `service`, `image` (GAR-sti uten tag), `tag` (commit-SHA-en imaget er bygget fra) og fra merge queue `queue_ref`. Den gir `permissions: { id-token: write, contents: read }` og sender `E2E_TRIGGER_PAT` (Actions: read and write på dette repoet) under `secrets:`. Gaten gir tilbake outputs `hit`, `tree` og `run_id` (ID-en til «E2E Tests», tom ved treff).
+Kalleren sender `service`, `image` (GAR-sti uten tag), `tag` (commit-SHA-en imaget er bygget fra) og fra merge queue `queue_ref`. Den gir `permissions: { id-token: write, contents: read }` og sender enten app-en Melosys CI, med `melosys_ci_client_id` under `with:` og `MELOSYS_CI_PRIVATE_KEY` under `secrets:`, eller `E2E_TRIGGER_PAT` under `secrets:`. Begge trenger Actions: read and write på dette repoet. Med app-en henter gaten et nytt token for avbrytingen, fordi et app-token varer én time. Gaten gir tilbake outputs `hit`, `tree` og `run_id` (ID-en til «E2E Tests», tom ved treff).
 
-En gate-kjøring er `workflow_dispatch` på `main`, så GitHub viser dette repoets siste commit og eieren av `E2E_TRIGGER_PAT` øverst på siden. Kilderepo, PR, PR-head og tree står i jobbsammendraget.
+En gate-kjøring er `workflow_dispatch` på `main`, så GitHub viser dette repoets siste commit og app-en eller eieren av `E2E_TRIGGER_PAT` øverst på siden. Kilderepo, PR, PR-head og tree står i jobbsammendraget.
 
 Gate-kjøringer sender ikke varsel til Slack; det gjør bare `repository_dispatch`-kjøringer. Svaret står i PR-en eller i køen.
 
@@ -111,7 +113,7 @@ gh workflow run e2e-brancher.yml -R navikt/melosys-e2e-tests \
 - Default-branchen (master/main) avvises: den kjører allerede som `latest`, og E2E Tests kjører fra `main` i melosys-e2e-tests.
 - Feiler et bygg, starter ikke E2E Tests. Jobbsammendraget lenker til hvert bygg og til E2E Tests.
 - En grønn kjøring setter ingen `e2e-ok-<tree>`-markør. Den gjelder kombinasjonen, ikke ett repo mot `latest`.
-- Workflowen bruker `E2E_TRIGGER_PAT` for å starte byggene i de andre repoene.
+- Workflowen bruker app-en Melosys CI (`MELOSYS_CI_CLIENT_ID` og `MELOSYS_CI_PRIVATE_KEY`) for å lese repoene og starte byggene. App-en må være installert på alle repoene med Actions: read and write og Contents: read.
 - `melosys-e2e-tests:<branch>` bygges ikke: E2E Tests startes fra den branchen. Den kan stå alene; da kjører alle tjenester som `latest`. `e2e-tests.yml` på branchen må ha inputene `branch_context`, `shards`, `repeat_each` og `disable_retries`, ellers ber kjøringen deg rebase på main.
 - `-f repeat_each=N` (1–30) kjører hver test N ganger, og `-f disable_retries=true` slår av retries. Bruk dem sammen med `test_grep` for å sjekke flaky tester. Shardene deler hele filer, så én fil med N gjentak kjører på én shard. En shard har 120 min, inkludert ca. 5 min oppsett.
 

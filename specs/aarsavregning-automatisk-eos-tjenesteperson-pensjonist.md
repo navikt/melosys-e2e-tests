@@ -331,3 +331,10 @@ brev-helperen `verifiserInnhentingsbrevSendt` (samme modul/mønster som i
     kommer ikke videre. Med «Oppgi beløp» fattes vedtaket, og årsavregningen blir AVSLUTTET uten
     feil. Dette står som `test.fixme` i art11-3b-testen, med henvisning til MELOSYS-6837 og
     MELOSYS-6815.
+- 2026-10-15 (toggle-betydningen er snudd, melosys-web#3253): `useErÅrsavregningIkkeStøttetSakstype`
+  blokkerer nå årsavregningsflyten når `melosys.arsavregning.eos_pensjonist` /
+  `melosys.arsavregning.eos_tjenesteperson` er **på**, ikke når de er av. Det som står over om
+  `disableFeature` for å få blokkering, gjelder ikke lenger. Endringer:
+  - Scenario B (`aarsavregning-automatisk-eos-pensjonist.spec.ts`) slår pensjonist-togglen **på**.
+  - art11-3b-testen slår tjenesteperson-togglen **på** (av som standard). `test.fixme`-en for
+    fullført årsavregning gjelder nå tilstanden uten blokkering, altså togglen av.

@@ -43,7 +43,10 @@ export class EuEosBehandlingPage extends BasePage {
   private readonly tilDatoField = this.page.getByRole('textbox', { name: 'Til' });
 
   // Locators - Land
-  private readonly landDropdown = this.page.locator('.css-19bb58m');
+  private readonly landDropdown = this.page.getByRole('combobox', {
+    name: 'I hvilke land skal arbeidet/næringen utføres i?',
+    exact: true
+  });
 
   // Locators - Yrkesaktiv/Selvstendig
   private readonly yrkesaktivRadio = this.page.getByRole('radio', {
@@ -194,31 +197,25 @@ export class EuEosBehandlingPage extends BasePage {
   }
 
   /**
-   * Velg land fra dropdown
-   * Bruker CSS-locator da denne dropdown-komponenten ikke har god label
+   * Søk etter landet i land-comboboxen og velg det
    *
    * @param landNavn - Navn på land (f.eks. 'Danmark', 'Sverige')
    */
   async velgLand(landNavn: string): Promise<void> {
-    await this.landDropdown.click();
+    await this.landDropdown.fill(landNavn);
     await this.page.getByRole('option', { name: landNavn, exact: true }).click();
+    await this.landDropdown.press('Escape');
+    await expect(this.page.getByRole('button', { name: `${landNavn} slett`, exact: true })).toBeVisible();
     console.log(`✅ Valgte land: ${landNavn}`);
   }
 
   /**
-   * Velg andre land fra dropdown (for "Arbeid i flere land")
-   * Dette er en multi-select dropdown - klikk samme dropdown igjen for å legge til flere land
+   * Velg andre land (for "Arbeid i flere land") - comboboxen er flervalg, så landet legges til de allerede valgte
    *
    * @param landNavn - Navn på land (f.eks. 'Norge')
    */
   async velgAndreLand(landNavn: string): Promise<void> {
-    // For "Arbeid i flere land" er det en multi-select dropdown
-    // Klikk samme dropdown igjen for å legge til flere land
-    await this.landDropdown.click();
-
-    // Velg landet fra listen
-    await this.page.getByRole('option', { name: landNavn, exact: true }).click();
-    console.log(`✅ Valgte andre land: ${landNavn}`);
+    await this.velgLand(landNavn);
   }
 
   /**
@@ -385,14 +382,15 @@ export class EuEosBehandlingPage extends BasePage {
   }
 
   /**
-   * Legg til begrunnelse for vurdering (combobox + "Legg til" knapp)
+   * Kryss av begrunnelse for at utsendingsbestemmelsen ikke er oppfylt
    * @param tekst - Begrunnelsestekst (f.eks. 'Erstatter en annen utsendt person...')
    */
   async leggTilBegrunnelseForVurdering(tekst: string): Promise<void> {
-    const combobox = this.page.getByRole('combobox', { name: 'Legg til begrunnelse for at' });
-    await combobox.click();
-    await combobox.fill(tekst);
-    await this.page.getByRole('button', { name: 'Legg til' }).click();
+    const gruppe = this.page.getByRole('group', {
+      name: 'Legg til begrunnelse for at utsendingsbestemmelse ikke er oppfylt',
+      exact: true
+    });
+    await gruppe.getByRole('checkbox', { name: tekst }).check();
     console.log(`✅ La til begrunnelse: ${tekst.substring(0, 50)}...`);
   }
 

@@ -29,7 +29,7 @@ export class MedlemskapAssertions {
     await this.page.getByRole('radio', { name: 'Velg land fra liste' }).check();
 
     // Then verify dropdown appears
-    const dropdown = this.page.locator('.css-19bb58m');
+    const dropdown = this.page.getByRole('combobox', { name: /^(Arbeids)?land$/i });
     await expect(dropdown).toBeVisible();
   }
 

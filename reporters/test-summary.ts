@@ -29,6 +29,8 @@ const TAG_ENV_VARS = [
   { key: 'melosys-eessi', envVar: 'MELOSYS_EESSI_TAG' },
   { key: 'melosys-mock', envVar: 'MELOSYS_MOCK_TAG' },
   { key: 'melosys-dokgen', envVar: 'MELOSYS_DOKGEN_TAG' },
+  { key: 'melosys-skjema-api', envVar: 'MELOSYS_SKJEMA_API_TAG' },
+  { key: 'melosys-skjema-web', envVar: 'MELOSYS_SKJEMA_WEB_TAG' },
 ];
 
 /**

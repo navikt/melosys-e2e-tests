@@ -1,4 +1,4 @@
-import { Page } from '@playwright/test';
+import { Page, expect } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
 import { MedlemskapAssertions } from './medlemskap.assertions';
 
@@ -40,8 +40,8 @@ export class MedlemskapPage extends BasePage {
     name: 'Flere land, ikke kjent hvilke'
   });
 
-  // React Select dropdown - uses CSS class
-  private readonly landDropdown = this.page.locator('.css-19bb58m');
+  // Skjult label er «Arbeidsland» for yrkesaktive, ellers «Land»
+  private readonly landDropdown = this.page.getByRole('combobox', { name: /^(Arbeids)?land$/i });
 
   private readonly trygdedekningDropdown = this.page.getByLabel('Trygdedekning');
 
@@ -100,22 +100,18 @@ export class MedlemskapPage extends BasePage {
   }
 
   /**
-   * Select land (country) from React Select dropdown
+   * Search for and select land (country) in the land combobox
    *
    * @param landNavn - Country name (e.g., "Afghanistan", "Norge")
-   *
-   * Note: This uses a React Select component which requires special handling
    */
   async velgLand(landNavn: string): Promise<void> {
     // Ensure radio button is selected
     await this.velgLandFraListe();
 
-    // Click the React Select dropdown
-    await this.landDropdown.click();
-
-    // Wait for and click the option
-    const landOption = this.page.getByRole('option', { name: landNavn });
-    await landOption.click();
+    await this.landDropdown.fill(landNavn);
+    await this.page.getByRole('option', { name: landNavn, exact: true }).click();
+    await this.landDropdown.press('Escape');
+    await expect(this.page.getByRole('button', { name: `${landNavn} slett`, exact: true })).toBeVisible();
   }
 
   /**
