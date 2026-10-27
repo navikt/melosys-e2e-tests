@@ -17,6 +17,7 @@ import {
   erstattSeksjon,
   finnSeksjon,
   finnRunId,
+  harEldreSeksjon,
   formaterTittel,
   ghVersjonHolder,
   lagSeksjon,
@@ -75,24 +76,6 @@ const RAPPORT = {
 // ---------------------------------------------------------------- seksjonen i beskrivelsen
 
 const SEKSJON = `${START}\nny\n${SLUTT}`;
-
-test('seksjonen byttes ut, og teksten før og etter står urørt', () => {
-  const body = `Intro\n\n${START}\ngammel\n${SLUTT}\n\nEtter seksjonen`;
-  assert.equal(erstattSeksjon(body, SEKSJON), `Intro\n\n${SEKSJON}\n\nEtter seksjonen`);
-});
-
-test('uten markører legges seksjonen til sist', () => {
-  assert.equal(erstattSeksjon('Intro\n\n', SEKSJON), `Intro\n\n${SEKSJON}\n`);
-});
-
-test('tom eller manglende beskrivelse gir bare seksjonen', () => {
-  assert.equal(erstattSeksjon('', SEKSJON), `${SEKSJON}\n`);
-  assert.equal(erstattSeksjon(null, SEKSJON), `${SEKSJON}\n`);
-});
-
-test('startmarkør uten sluttmarkør avvises i stedet for å slette resten av beskrivelsen', () => {
-  assert.throws(() => erstattSeksjon(`Intro\n${START}\nresten`, SEKSJON), /ikke <!-- e2e-opptak:end -->/);
-});
 
 // ---------------------------------------------------------------- opptak.json
 
@@ -198,32 +181,6 @@ test('etter opplasting: én user-attachments-lenke per opptak og ingen relative 
 
 // ---------------------------------------------------------------- fix-runde 1
 
-test('markører nevnt i løpende tekst er ikke seksjonen', () => {
-  const prosa = `Opptakene står mellom \`${START}\` og \`${SLUTT}\` i beskrivelsen.`;
-  const body = `${prosa}\n\nMer tekst`;
-  assert.equal(erstattSeksjon(body, SEKSJON), `${body}\n\n${SEKSJON}\n`);
-  const medSeksjon = `${prosa}\n\n${START}\ngammel\n${SLUTT}\nEtter`;
-  assert.equal(erstattSeksjon(medSeksjon, SEKSJON), `${prosa}\n\n${SEKSJON}\nEtter`);
-  const linjestart = `${START} står først i denne linja\nog ${SLUTT}`;
-  assert.equal(erstattSeksjon(linjestart, SEKSJON), `${linjestart}\n\n${SEKSJON}\n`);
-});
-
-test('markører på egen linje med CRLF og etterfølgende mellomrom gjelder', () => {
-  const body = `Intro\r\n${START}  \r\ngammel\r\n${SLUTT}\r\nEtter`;
-  assert.equal(erstattSeksjon(body, SEKSJON), `Intro\r\n${SEKSJON}\r\nEtter`);
-});
-
-test('to seksjoner avvises', () => {
-  const body = `${START}\na\n${SLUTT}\n\n${START}\nb\n${SLUTT}`;
-  assert.throws(() => erstattSeksjon(body, SEKSJON), /2 opptak-seksjoner/);
-});
-
-test('sjekken etter opplasting teller bare i seksjonen på egne linjer', () => {
-  const url = 'https://github.com/user-attachments/assets/a-1';
-  const body = `Se \`${START}\` ${url} \`${SLUTT}\`\n${START}\n${SLUTT}`;
-  assert.deepEqual(sjekkOpplastet(body), { lenker: 0, ulastet: 0 });
-});
-
 test('beskrivelsen hentes på nytt før den skrives, så endringer under kjøringen beholdes', () => {
   const kall: string[][] = [];
   const ghJson = (...args: string[]) => (kall.push(args), { body: 'Endret under kjøringen' });
@@ -312,28 +269,6 @@ test('ucommittede endringer i arbeidstreet gir en advarsel i seksjonen', () => {
 });
 
 // ---------------------------------------------------------------- fix-runde 2, batch 1
-
-test('markører i en kodeblokk er ikke seksjonen, og blokken står urørt', () => {
-  for (const gjerde of ['```', '~~~', '````']) {
-    const body = `Slik ser seksjonen ut:\n\n${gjerde}md\n${START}\nforfatterens tekst\n${SLUTT}\n${gjerde}\n\nSlutt.`;
-    assert.equal(erstattSeksjon(body, SEKSJON), `${body}\n\n${SEKSJON}\n`, gjerde);
-    assert.equal(finnSeksjon(body), null, gjerde);
-  }
-});
-
-test('en kodeblokk lukkes bare av samme tegn og minst like lang rekke', () => {
-  // ~~~ lukker ikke en ```-blokk, og ``` lukker ikke en ````-blokk: markørene står fortsatt i blokken.
-  const body = `\`\`\`\`\n~~~\n\`\`\`\n${START}\nx\n${SLUTT}\n\`\`\`\`\nEtter`;
-  assert.equal(finnSeksjon(body), null);
-  assert.equal(finnSeksjon(`\`\`\`\n~~~~\n${START}\nx\n${SLUTT}\n\`\`\``), null, '~~~~ lukker ikke en ```-blokk');
-  const etterBlokk = `\`\`\`\n${START}\n\`\`\`\n${START}\nny\n${SLUTT}`;
-  assert.deepEqual(erstattSeksjon(etterBlokk, SEKSJON), `\`\`\`\n${START}\n\`\`\`\n${SEKSJON}`);
-});
-
-test('sjekken etter opplasting ser bort fra markører i en kodeblokk', () => {
-  const url = 'https://github.com/user-attachments/assets/a-1';
-  assert.deepEqual(sjekkOpplastet(`\`\`\`\n${START}\n${url}\n${SLUTT}\n\`\`\``), { lenker: 0, ulastet: 0 });
-});
 
 test('en test som feilet og så ble avbrutt, telles som feilet', () => {
   const rapport = {
@@ -530,6 +465,91 @@ test('sjekken etter opplasting feiler: mappa beholdes og meldingen sier RUN', as
   try {
     await assert.rejects(kjørOpptak(argumenter({ torrt: false }), løp.d), /Seksjonen har 0 opplastede opptak av 2.*\nFilene ligger i .*\. Bruk RUN=123 for å prøve igjen uten en ny kjøring\./);
     assert.equal(existsSync(løp.katalog()), true);
+  } finally {
+    rydd(løp.katalog());
+  }
+});
+
+// ---------------------------------------------------------------- seksjonen står alltid sist
+
+const GAMMEL = `${START}\ngammel\n${SLUTT}`;
+const URL = (id: string) => `https://github.com/user-attachments/assets/${id}`;
+const KODEBLOKK = `\`\`\`md\n${START}\nforfatterens eksempel\n${SLUTT}\n\`\`\``;
+
+/** Hver tilstand: beskrivelsen før, beskrivelsen etter, og om en eldre seksjon står lenger opp. */
+const TILSTANDER: [string, string | null, string, boolean][] = [
+  ['1 tom', '', `${SEKSJON}\n`, false],
+  ['1 mangler', null, `${SEKSJON}\n`, false],
+  ['2 uten markører', 'Intro', `Intro\n\n${SEKSJON}\n`, false],
+  ['2 uten markører, avsluttende tomlinjer', 'Intro\n\n\n', `Intro\n\n${SEKSJON}\n`, false],
+  ['3 seksjon sist', `Intro\n\n${GAMMEL}`, `Intro\n\n${SEKSJON}\n`, false],
+  ['3 seksjon sist, tomlinjer etter', `Intro\n\n${GAMMEL}\n\n`, `Intro\n\n${SEKSJON}\n`, false],
+  ['4 CRLF og mellomrom etter slutt', `Intro\r\nlinje\r\n\r\n${START}\r\ngammel\r\n${SLUTT} \t\r\n`, `Intro\r\nlinje\r\n\r\n${SEKSJON}\n`, false],
+  ['5 markører i kodefont', `Se \`${START}\` og \`${SLUTT}\`.`, `Se \`${START}\` og \`${SLUTT}\`.\n\n${SEKSJON}\n`, false],
+  ['5 markører i en kodeblokk', `Eksempel:\n\n${KODEBLOKK}\n\nSlutt.`, `Eksempel:\n\n${KODEBLOKK}\n\nSlutt.\n\n${SEKSJON}\n`, true],
+  ['5 linje med backticks i info-strengen (ingen kodeblokk)', '```js `x` er ikke en kodeblokk\nTekst', `\`\`\`js \`x\` er ikke en kodeblokk\nTekst\n\n${SEKSJON}\n`, false],
+  ['5 kodeblokk som ikke lukkes', '```\nkode', `\`\`\`\nkode\n\n${SEKSJON}\n`, false],
+  ['5 tekst etter startmarkøren på samme linje', `${START} står først\nx\n${SLUTT}`, `${START} står først\nx\n${SLUTT}\n\n${SEKSJON}\n`, false],
+  ['5 tekst etter sluttmarkøren på samme linje', `${START}\nx\n${SLUTT} og mer`, `${START}\nx\n${SLUTT} og mer\n\n${SEKSJON}\n`, true],
+  ['5 markører i sitat', `> ${START}\n> x\n> ${SLUTT}`, `> ${START}\n> x\n> ${SLUTT}\n\n${SEKSJON}\n`, false],
+  ['6 markører i kodeblokk og seksjon sist', `${KODEBLOKK}\n\n${GAMMEL}`, `${KODEBLOKK}\n\n${SEKSJON}\n`, true],
+  ['7 tekst etter en eldre seksjon', `Intro\n\n${GAMMEL}\n\nNy tekst`, `Intro\n\n${GAMMEL}\n\nNy tekst\n\n${SEKSJON}\n`, true],
+  ['8 slutt uten start', `Intro\n${SLUTT}`, `Intro\n${SLUTT}\n\n${SEKSJON}\n`, false],
+  ['8 slutt mellom start og siste slutt', `${START}\na\n${SLUTT}\nb\n${SLUTT}`, `${START}\na\n${SLUTT}\nb\n${SLUTT}\n\n${SEKSJON}\n`, true],
+];
+
+const ANDRE = `${START}\nandre\n${SLUTT}`;
+
+for (const [navn, før, etter, eldre] of TILSTANDER) {
+  test(`seksjonen, tilstand ${navn}`, () => {
+    assert.equal(erstattSeksjon(før, SEKSJON), etter);
+    // En ny kjøring bytter ut seksjonen den forrige la til, og bare den.
+    assert.equal(erstattSeksjon(etter, ANDRE), etter.slice(0, -`${SEKSJON}\n`.length) + `${ANDRE}\n`, 'andre kjøring');
+    assert.equal(harEldreSeksjon(før), eldre, 'eldre seksjon lenger opp');
+  });
+}
+
+test('seksjonen, tilstand 9: to kjøringer gir én seksjon sist og uendret tekst over', () => {
+  const original = `Intro med \`${START}\`\n\n${KODEBLOKK}\n\nSlutt.`;
+  const resultat = erstattSeksjon(erstattSeksjon(original, SEKSJON), ANDRE);
+  assert.equal(resultat, `${original}\n\n${ANDRE}\n`);
+  assert.equal(erstattSeksjon(resultat, ANDRE), resultat);
+});
+
+/** sjekkOpplastet leser beskrivelsen etter opplastingen og teller bare i seksjonen sist. */
+const OPPLASTET: [string, string, { lenker: number; ulastet: number }][] = [
+  ['tom', '', { lenker: 0, ulastet: 0 }],
+  ['seksjon sist', `Intro\n\n${START}\n${URL('a')}\n${URL('b')}\n${SLUTT}`, { lenker: 2, ulastet: 0 }],
+  ['seksjon sist med en ulastet', `${START}\n${URL('a')}\n![](./opptak-2.mp4)\n${SLUTT}`, { lenker: 1, ulastet: 1 }],
+  ['CRLF', `Intro\r\n${START}\r\n${URL('a')}\r\n${SLUTT}\r\n`, { lenker: 1, ulastet: 0 }],
+  ['lenker over seksjonen telles ikke', `${URL('x')}\n\n${START}\n${URL('a')}\n${SLUTT}`, { lenker: 1, ulastet: 0 }],
+  ['lenker i en eldre seksjon telles ikke', `${START}\n${URL('x')}\n${URL('y')}\n${SLUTT}\n\n${START}\n![](./opptak-1.mp4)\n${SLUTT}`, { lenker: 0, ulastet: 1 }],
+  ['lenker i en kodeblokk med markører telles ikke', `\`\`\`\n${START}\n${URL('x')}\n${SLUTT}\n\`\`\`\n\n${START}\n${URL('a')}\n${SLUTT}`, { lenker: 1, ulastet: 0 }],
+  ['tekst etter seksjonen: ingen seksjon', `${START}\n${URL('a')}\n${SLUTT}\nEtter`, { lenker: 0, ulastet: 0 }],
+];
+
+for (const [navn, body, forventet] of OPPLASTET) {
+  test(`sjekken etter opplasting, ${navn}`, () => assert.deepEqual(sjekkOpplastet(body), forventet));
+}
+
+test('en eldre seksjon lenger opp gir en advarsel i loggen, og ingenting om den i PR-en', async () => {
+  const løp = lagLøp({ bodies: [`Intro\n\n${GAMMEL}\n\nNy tekst`] });
+  try {
+    await kjørOpptak(argumenter(), løp.d);
+    const body = readFileSync(join(løp.katalog(), 'opptak', 'body.md'), 'utf8');
+    assert.ok(body.startsWith(`Intro\n\n${GAMMEL}\n\nNy tekst\n\n${START}`));
+    assert.ok(!body.includes('eldre opptaksseksjon'));
+    assert.ok(løp.logg.includes('⚠️  En eldre opptaksseksjon står lenger opp i beskrivelsen; slett den hvis du vil.'));
+  } finally {
+    rydd(løp.katalog());
+  }
+});
+
+test('sjekken etter opplasting teller ikke lenker i en eldre seksjon', async () => {
+  const lest = `${START}\n${URL('x')}\n${URL('y')}\n${SLUTT}\n\nTekst\n\n${START}\n![](./opptak-1.mp4)\n![](./opptak-2.mp4)\n${SLUTT}`;
+  const løp = lagLøp({ bodies: ['Tekst', lest] });
+  try {
+    await assert.rejects(kjørOpptak(argumenter({ torrt: false }), løp.d), /Seksjonen har 0 opplastede opptak av 2, og 2 som ikke er lastet opp/);
   } finally {
     rydd(løp.katalog());
   }

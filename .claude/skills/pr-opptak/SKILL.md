@@ -10,8 +10,9 @@ description: |
 # Opptak i PR-beskrivelsen
 
 `make pr-opptak PR=<n>` kjører testene PR-en påvirker på CI med video, og legger ett opptak per
-test i PR-beskrivelsen, mellom `<!-- e2e-opptak:start -->` og `<!-- e2e-opptak:end -->`. En ny
-kjøring bytter bare ut den seksjonen.
+test i en seksjon sist i PR-beskrivelsen, mellom `<!-- e2e-opptak:start -->` og
+`<!-- e2e-opptak:end -->`. En ny kjøring bytter bare ut seksjonen sist. Har noen skrevet tekst
+etter en eldre seksjon, legges en ny seksjon til sist, og den eldre står urørt.
 
 ## Når
 

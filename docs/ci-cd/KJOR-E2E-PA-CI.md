@@ -141,7 +141,7 @@ Variablene leses bare fra kommandolinjen. En `BRANCH` eller `ENV` eksportert i s
 
 ## Opptak i PR-beskrivelsen
 
-`make pr-opptak PR=<n>` kjører testene PR-en påvirker på CI med `VIDEO=1`, venter på kjøringen og legger ett mp4-opptak per test i PR-beskrivelsen. Opptakene står mellom `<!-- e2e-opptak:start -->` og `<!-- e2e-opptak:end -->`, med en linje som lenker til kjøringen og teller grønne, røde og flaky tester. Kjører du på nytt, byttes bare den seksjonen ut. Mangler markørene, legges seksjonen til sist.
+`make pr-opptak PR=<n>` kjører testene PR-en påvirker på CI med `VIDEO=1`, venter på kjøringen og legger ett mp4-opptak per test i PR-beskrivelsen. Opptakene står i en seksjon sist i beskrivelsen, mellom `<!-- e2e-opptak:start -->` og `<!-- e2e-opptak:end -->`, med en linje som lenker til kjøringen og teller grønne, røde og flaky tester. Kjører du på nytt, byttes bare seksjonen sist ut, og teksten over står urørt. Står det tekst etter en eldre seksjon, legges en ny seksjon til sist; den eldre blir stående, og scriptet sier fra i terminalen. Markører andre steder i beskrivelsen, for eksempel i en kodeblokk, røres ikke. Har beskrivelsen en kodeblokk som ikke er lukket, viser GitHub seksjonen inne i den.
 
 ```bash
 make pr-opptak PR=397
@@ -160,7 +160,7 @@ Du trenger:
 - `gh` 2.99 eller nyere, innlogget med `gh auth login`. GitHub spiller bare av video fra `user-attachments`-lenker, og bare `gh pr edit --attach` med en personlig innlogging lager dem. Er `GH_TOKEN` eller `GITHUB_TOKEN` satt, stopper scriptet, fordi `--attach` avviser tokens.
 - `ffmpeg`, som gjør opptakene om fra webm til mp4.
 
-Scriptet teller testene i utvalget med `playwright test --list` før det starter en kjøring, og stopper når de er flere enn `MAKS`. Tellingen bruker koden du står på, så stå på PR-ens siste commit. CI kjører det samme filteret. Snevre inn med `make ci-grep GREP=<mønster> VIDEO=1` og bruk `RUN=<id>`. Tester som hoppes over, har ikke opptak og telles bare i oppsummeringen. En rød kjøring får også opptak.
+Scriptet teller testene i utvalget med `playwright test --list` før det starter en kjøring, og stopper når de er flere enn `MAKS`. Tellingen bruker koden du står på, så stå på PR-ens siste commit. CI kjører det samme filteret. Snevre inn med `make ci-grep GREP=<mønster> VIDEO=1` og bruk `RUN=<id>`. En test som hoppes over før den starter, har ikke opptak og telles bare i oppsummeringen. En avbrutt test, og en test som hoppes over etter at den har startet, har opptak og står i lista. En rød kjøring får også opptak.
 
 Den midlertidige mappa slettes, unntatt etter `TORRT=1` og når et nytt forsøk med `RUN=<id>` kan rette feilen: når opptakene er flere enn `MAKS`, men høyst 50, eller når `gh pr edit` eller sjekken etter opplastingen feiler. Da sier feilmeldingen hvor mappa ligger og hvilken kommando du kjører på nytt, for eksempel `RUN=<id> MAKS=<n>`. Et nytt forsøk laster ned opptakene på nytt; det bruker ikke mappa.
 

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Kjører e2e-testene en PR påvirker med video, og legger ett mp4-opptak per test i
- * PR-beskrivelsen, mellom <!-- e2e-opptak:start --> og <!-- e2e-opptak:end -->. En ny kjøring
- * bytter bare ut den seksjonen.
+ * PR-beskrivelsen, i en seksjon sist mellom <!-- e2e-opptak:start --> og <!-- e2e-opptak:end -->.
+ * En ny kjøring bytter bare ut seksjonen sist; teksten over står urørt.
  *
  * GitHub spiller bare av video fra user-attachments-lenker, og de lager bare `gh pr edit --attach`
  * med en personlig innlogging. GITHUB_TOKEN, GH_TOKEN og app-tokens avvises. Derfor kjører dette
@@ -182,67 +182,52 @@ export function lagSeksjon({ kilde, runUrl, commit, rader, opptak, konklusjon = 
   return linjer.join('\n');
 }
 
-/**
- * Markørlinjene utenfor kodeblokker: { index, lengde } per markør. En markør gjelder bare alene på
- * egen linje, så en markør nevnt i kodefont eller vist i en ```- eller ~~~-blokk ikke er seksjonen.
- * En blokk lukkes av samme tegn i minst like lang rekke, som i CommonMark.
- */
-function markørlinjer(tekst) {
-  const funnet = { [START]: [], [SLUTT]: [] };
-  let gjerde = null;
-  let index = 0;
-  for (const rå of tekst.split('\n')) {
-    const linje = rå.replace(/\r$/, '');
-    const åpner = /^ {0,3}(`{3,}|~{3,})/.exec(linje)?.[1];
-    if (gjerde) {
-      const lukker = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(linje)?.[1];
-      if (lukker && lukker[0] === gjerde[0] && lukker.length >= gjerde.length) gjerde = null;
-    } else if (åpner) {
-      gjerde = åpner;
-    } else {
-      for (const m of [START, SLUTT]) {
-        if (new RegExp(`^${m}[ \\t]*$`).test(linje)) funnet[m].push({ index, lengde: linje.length });
-      }
-    }
-    index += rå.length + 1;
-  }
-  return funnet;
-}
+/** Linja er markøren alene, med mellomrom, tab eller \r etter. */
+const erMarkør = (linje, m) => new RegExp(`^${m}[ \\t\\r]*$`).test(linje);
 
 /**
- * Finner seksjonen: { fra, til } rundt markørene, eller null uten markører. Start uten slutt og
- * flere seksjoner avvises, fordi en gjetning der kan slette tekst forfatteren har skrevet.
+ * Seksjonen står alltid sist i beskrivelsen: { fra } når siste linje (etter at avsluttende
+ * blanktegn er fjernet) er sluttmarkøren og nærmeste markørlinje over den er startmarkøren.
+ * Ellers finnes ingen seksjon. Markører andre steder (kodefont, kodeblokker, sitater, en eldre
+ * seksjon med tekst etter) røres aldri. Tilstandene:
+ *   tom eller uten seksjon sist → seksjonen legges til sist;
+ *   seksjon sist (også med CRLF og blanktegn etter) → bare den byttes ut;
+ *   slutt sist uten start rett over, eller en eldre seksjon med tekst etter → ny seksjon sist.
  */
 export function finnSeksjon(body) {
-  const { [START]: starter, [SLUTT]: slutter } = markørlinjer(body ?? '');
-  if (!starter.length) return null;
-  if (starter.length > 1 || slutter.length > 1) {
-    throw new Error(`Beskrivelsen har ${Math.max(starter.length, slutter.length)} opptak-seksjoner. Fjern alle unntatt én og prøv igjen.`);
+  const tekst = body ?? '';
+  const linjer = tekst.replace(/\s+$/, '').split('\n');
+  if (!erMarkør(linjer.at(-1), SLUTT)) return null;
+  let index = tekst.replace(/\s+$/, '').length - linjer.at(-1).length;
+  for (let i = linjer.length - 2; i >= 0; i--) {
+    index -= linjer[i].length + 1;
+    if (erMarkør(linjer[i], SLUTT)) return null;
+    if (erMarkør(linjer[i], START)) return { fra: index };
   }
-  const slutt = slutter.find((m) => m.index > starter[0].index);
-  if (!slutt) throw new Error(`Beskrivelsen har ${START}, men ikke ${SLUTT} etter den. Rett beskrivelsen for hånd og prøv igjen.`);
-  return { fra: starter[0].index, til: slutt.index + slutt.lengde };
+  return null;
 }
 
-/** Bytter ut seksjonen, eller legger den til sist. Resten av beskrivelsen står urørt. */
+/** En startmarkør over seksjonen sist, eller i en beskrivelse uten seksjon sist. */
+export function harEldreSeksjon(body) {
+  const tekst = body ?? '';
+  const over = tekst.slice(0, finnSeksjon(tekst)?.fra ?? tekst.length);
+  return over.split('\n').some((l) => erMarkør(l, START));
+}
+
+/** Bytter ut seksjonen sist, eller legger den til sist. Teksten over står urørt. */
 export function erstattSeksjon(body, seksjon) {
   const tekst = body ?? '';
   const funnet = finnSeksjon(tekst);
-  if (!funnet) {
-    const før = tekst.trimEnd();
-    return `${før ? `${før}\n\n` : ''}${seksjon}\n`;
-  }
-  return tekst.slice(0, funnet.fra) + seksjon + tekst.slice(funnet.til);
+  if (funnet) return `${tekst.slice(0, funnet.fra)}${seksjon}\n`;
+  const før = tekst.replace(/\s+$/, '');
+  return `${før ? `${før}\n\n` : ''}${seksjon}\n`;
 }
 
-/** Antall user-attachments-lenker i seksjonen, og om noen relative opptak-stier står igjen. */
+/** Antall user-attachments-lenker i seksjonen sist, og om noen relative opptak-stier står igjen. */
 export function sjekkOpplastet(body) {
-  let funnet = null;
-  try {
-    funnet = finnSeksjon(body);
-  } catch {}
+  const funnet = finnSeksjon(body);
   if (!funnet) return { lenker: 0, ulastet: 0 };
-  const seksjon = body.slice(funnet.fra, funnet.til);
+  const seksjon = body.slice(funnet.fra);
   const lenker = new Set(seksjon.match(/https:\/\/github\.com\/user-attachments\/assets\/[\w-]+/g) ?? []).size;
   const ulastet = (seksjon.match(/\.\/opptak-\d+\.mp4/g) ?? []).length;
   return { lenker, ulastet };
@@ -252,10 +237,11 @@ export function sjekkOpplastet(body) {
  * Henter beskrivelsen rett før den skrives. Kjøringen tar ofte et kvarter, og en endring gjort
  * i mellomtiden skal ikke overskrives av beskrivelsen slik den var da scriptet startet.
  */
-export function byggBeskrivelse(pr, seksjon, ghJson) {
+export function byggBeskrivelse(pr, seksjon, ghJson, logg = () => {}) {
   const { body } = ghJson('pr', 'view', pr, '--json', 'body');
   // En tom beskrivelse er lov. Mangler feltet, ville beskrivelsen blitt bare seksjonen.
   if (typeof body !== 'string') throw new Error('Fikk ikke beskrivelsen til PR-en fra gh pr view. Beskrivelsen er ikke endret.');
+  if (harEldreSeksjon(body)) logg('⚠️  En eldre opptaksseksjon står lenger opp i beskrivelsen; slett den hvis du vil.');
   return erstattSeksjon(body, seksjon);
 }
 
@@ -572,7 +558,7 @@ async function lagOgLastOpp(a, pr, katalog, tilstand, d) {
   const seksjon = lagSeksjon({ ...resultat, rader, opptak });
   // --attach løser stiene relativt til mappa der body-fila ligger.
   const bodyFil = join(ut, 'body.md');
-  writeFileSync(bodyFil, byggBeskrivelse(a.pr, seksjon, d.ghJson));
+  writeFileSync(bodyFil, byggBeskrivelse(a.pr, seksjon, d.ghJson, d.logg));
 
   if (a.torrt) {
     d.logg(`\n🧪 Tørrkjøring: beskrivelsen er ikke endret. Filene ligger i ${ut}\n\n${seksjon}`);
