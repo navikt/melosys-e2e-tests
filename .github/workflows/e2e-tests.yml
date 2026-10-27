@@ -36,6 +36,11 @@ on:
         required: false
         type: boolean
         default: false
+      record_video:
+        description: 'Ta opp video av hver test, også grønne, og last opp opptakene med opptak.json (make pr-opptak)'
+        required: false
+        type: boolean
+        default: false
       run_bdd:
         description: 'Run ONLY the opt-in ATDD/BDD example (atdd/features/ → --project=bdd) instead of chromium'
         required: false
@@ -1648,6 +1653,7 @@ jobs:
           REPEAT_EACH: ${{ inputs.repeat_each }}
           RETRIES_DISABLED: ${{ inputs.disable_retries == true }}
           RECORD_API: ${{ inputs.record_api == true && 'true' || '' }}
+          PW_VIDEO: ${{ inputs.record_video == true && 'on' || '' }}
           RUN_BDD: ${{ inputs.run_bdd == true && 'true' || '' }}
           UNLEASH_FORCE_DISABLE: ${{ inputs.unleash_force_disable }}
           UNLEASH_FORCE_ENABLE: ${{ inputs.unleash_force_enable }}
@@ -2307,10 +2313,13 @@ jobs:
 
       - name: Upload test videos
         uses: actions/upload-artifact@v4
-        if: failure()
+        # Med record_video lastes opptakene opp også når testene er grønne.
+        if: failure() || (always() && inputs.record_video == true)
         with:
           name: playwright-videos${{ env.ARTIFACT_SUFFIX }}
-          path: test-results/**/video.webm
+          path: |
+            test-results/**/video.webm
+            test-results/opptak.json
           retention-days: 7
 
       - name: Upload test traces

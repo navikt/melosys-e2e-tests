@@ -14,6 +14,7 @@
 #   ./scripts/ci-e2e.sh --affected --branch min-branch  en annen branch enn den du står på
 #   ./scripts/ci-e2e.sh --affected -p        skriver ut gh-kommandoen uten å starte noe
 #   ./scripts/ci-e2e.sh --shards 1           antall shards (1–8); uten flagget gjelder workflowens standard
+#   ./scripts/ci-e2e.sh --affected --video   tar opp video av hver test, også grønne
 #
 # Uten --branch spør scriptet om branchen du står på skal brukes, når det kjører i en terminal.
 #
@@ -34,6 +35,7 @@ WAIT=1
 VIS_FILTER=0
 RETRIES="true"   # disable_retries: uten retries ser du ekte flakiness
 SHARDS=""        # tomt: workflowens standardverdi
+VIDEO=0
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -55,6 +57,7 @@ while [ $# -gt 0 ]; do
     -p|--preview) PREVIEW=1; shift ;;
     --vis-filter) VIS_FILTER=1; shift ;;
     --retries)  RETRIES="false"; shift ;;
+    --video)    VIDEO=1; shift ;;
     --shards)
       if ! [[ "${2:-}" =~ ^[1-8]$ ]]; then
         echo "❌ --shards krever et tall fra 1 til 8." >&2
@@ -152,6 +155,7 @@ else
   [ "$VIS_FILTER" -eq 1 ] && printf '%s\n' "$GREP"
 fi
 [ -n "$SHARDS" ] && echo "   shards:      $SHARDS"
+[ "$VIDEO" -eq 1 ] && echo "   video:       på"
 if [ -n "$SAMMENDRAG" ]; then
   printf '%s\n' "$SAMMENDRAG" | sed 's/^/   /'
 fi
@@ -159,6 +163,8 @@ fi
 ARGS=(--ref "$BRANCH" -f environment="$ENVIRONMENT" -f disable_retries="$RETRIES")
 [ -n "$GREP" ] && ARGS+=(-f test_grep="$GREP")
 [ -n "$SHARDS" ] && ARGS+=(-f shards="$SHARDS")
+# Sendes bare når den er bedt om, så en branch uten inputen i workflowen fortsatt kan startes.
+[ "$VIDEO" -eq 1 ] && ARGS+=(-f record_video=true)
 
 if [ "$PREVIEW" -eq 1 ]; then
   # %q gir en linje du kan lime rett inn i skallet.
