@@ -1,6 +1,8 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import {
+  advarslerOmShards,
+  byggBeskrivelse,
   erstattSeksjon,
   finnRunId,
   formaterTittel,
@@ -14,6 +16,7 @@ import {
   løsOppVideo,
   START,
   SLUTT,
+  tellShards,
   // @ts-expect-error — .mjs uten typedeklarasjon; scriptet er ren node uten avhengigheter.
 } from '../scripts/pr-opptak.mjs';
 
@@ -177,4 +180,66 @@ test('etter opplasting: én user-attachments-lenke per opptak og ingen relative 
   assert.deepEqual(sjekkOpplastet(body), { lenker: 2, ulastet: 0 });
   assert.deepEqual(sjekkOpplastet(`${START}\n${url('a')}\n![](./opptak-2.mp4)\n${SLUTT}`), { lenker: 1, ulastet: 1 });
   assert.deepEqual(sjekkOpplastet('ingen seksjon'), { lenker: 0, ulastet: 0 });
+});
+
+// ---------------------------------------------------------------- fix-runde 1
+
+test('markører nevnt i løpende tekst er ikke seksjonen', () => {
+  const prosa = `Opptakene står mellom \`${START}\` og \`${SLUTT}\` i beskrivelsen.`;
+  const body = `${prosa}\n\nMer tekst`;
+  assert.equal(erstattSeksjon(body, SEKSJON), `${body}\n\n${SEKSJON}\n`);
+  const medSeksjon = `${prosa}\n\n${START}\ngammel\n${SLUTT}\nEtter`;
+  assert.equal(erstattSeksjon(medSeksjon, SEKSJON), `${prosa}\n\n${SEKSJON}\nEtter`);
+  const linjestart = `${START} står først i denne linja\nog ${SLUTT}`;
+  assert.equal(erstattSeksjon(linjestart, SEKSJON), `${linjestart}\n\n${SEKSJON}\n`);
+});
+
+test('markører på egen linje med CRLF og etterfølgende mellomrom gjelder', () => {
+  const body = `Intro\r\n${START}  \r\ngammel\r\n${SLUTT}\r\nEtter`;
+  assert.equal(erstattSeksjon(body, SEKSJON), `Intro\r\n${SEKSJON}\r\nEtter`);
+});
+
+test('to seksjoner avvises', () => {
+  const body = `${START}\na\n${SLUTT}\n\n${START}\nb\n${SLUTT}`;
+  assert.throws(() => erstattSeksjon(body, SEKSJON), /2 opptak-seksjoner/);
+});
+
+test('sjekken etter opplasting teller bare i seksjonen på egne linjer', () => {
+  const url = 'https://github.com/user-attachments/assets/a-1';
+  const body = `Se \`${START}\` ${url} \`${SLUTT}\`\n${START}\n${SLUTT}`;
+  assert.deepEqual(sjekkOpplastet(body), { lenker: 0, ulastet: 0 });
+});
+
+test('beskrivelsen hentes på nytt før den skrives, så endringer under kjøringen beholdes', () => {
+  const kall: string[][] = [];
+  const ghJson = (...args: string[]) => (kall.push(args), { body: 'Endret under kjøringen' });
+  assert.equal(byggBeskrivelse('397', SEKSJON, ghJson), `Endret under kjøringen\n\n${SEKSJON}\n`);
+  assert.deepEqual(kall, [['pr', 'view', '397', '--json', 'body']]);
+});
+
+test('rød kjøring: konklusjonen står i seksjonen', () => {
+  const rader = lesOpptak(RAPPORT, '/x');
+  const felles = { kilde: 'ci', runUrl: 'u', commit: 'abcdef1', rader, opptak: velgOpptak(rader, 20) };
+  assert.match(lagSeksjon({ ...felles, konklusjon: 'failure' }), /\n\nKjøringen endte med failure\.\n/);
+  assert.doesNotMatch(lagSeksjon({ ...felles, konklusjon: 'success' }), /endte med/);
+});
+
+test('advarsler står i seksjonen', () => {
+  const rader = lesOpptak(RAPPORT, '/x');
+  const s = lagSeksjon({ kilde: 'ci', runUrl: 'u', commit: 'abcdef1', rader, opptak: [], konklusjon: 'success', advarsler: ['2 av 6 shards mangler opptak.json.'] });
+  assert.match(s, /\n\n⚠️ 2 av 6 shards mangler opptak\.json\.\n/);
+});
+
+test('antall shards telles fra test-jobbene i kjøringen', () => {
+  const jobs = ['Planlegg shards', 'e2e-tests (6)', 'e2e-tests (1)', 'e2e-tests (2)', 'Slå sammen shards', 'Last opp e2e-tests-rapport', 'Notify'].map((name) => ({ name }));
+  assert.equal(tellShards(jobs), 3);
+  assert.equal(tellShards([{ name: 'e2e-tests' }, { name: 'Notify' }]), 1);
+});
+
+test('færre opptak.json enn shards, og artefakter uten opptak.json, gir advarsler', () => {
+  assert.deepEqual(advarslerOmShards(2, [{ navn: 'playwright-videos-shard-1', harJson: true }, { navn: 'playwright-videos-shard-2', harJson: true }]), []);
+  assert.deepEqual(advarslerOmShards(6, [{ navn: 'playwright-videos-shard-1', harJson: true }, { navn: 'playwright-videos-shard-2', harJson: false }]), [
+    'Bare 1 av 6 shards har opptak.json, så opptak kan mangle.',
+    'Artefaktet playwright-videos-shard-2 har ikke opptak.json.',
+  ]);
 });

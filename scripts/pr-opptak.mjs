@@ -151,10 +151,12 @@ export function formaterTittel(tittel) {
     .join('');
 }
 
-export function lagSeksjon({ kilde, runUrl, commit, rader, opptak }) {
+export function lagSeksjon({ kilde, runUrl, commit, rader, opptak, konklusjon = null, advarsler = [] }) {
   const kort = String(commit).slice(0, 7);
   const hvor = kilde === 'ci' ? `Kjørt i CI ([kjøring](${runUrl}))` : 'Kjørt lokalt mot stacken';
   const linjer = [START, '## Opptak av testene', '', `${hvor} på commit \`${kort}\`: ${oppsummer(rader)}`, ''];
+  if (konklusjon && konklusjon !== 'success') linjer.push(`Kjøringen endte med ${konklusjon}.`, '');
+  for (const a of advarsler) linjer.push(`⚠️ ${a}`, '');
   opptak.forEach((o, i) => {
     const merknad = o.status === 'flaky' ? 'flaky' : o.resultat !== 'passed' ? o.resultat : null;
     const tid = formaterVarighet(o.varighet) + (merknad ? `, ${merknad}` : '');
@@ -164,29 +166,71 @@ export function lagSeksjon({ kilde, runUrl, commit, rader, opptak }) {
   return linjer.join('\n');
 }
 
+/**
+ * En markør gjelder bare alene på egen linje, så en markør nevnt i kodefont i teksten ikke er
+ * seksjonen. `$` med flagget m matcher også foran \r, så CRLF-linjer virker.
+ */
+const markørlinje = (m) => new RegExp(`^${m}[ \\t]*$`, 'gm');
+
+/**
+ * Finner seksjonen: { fra, til } rundt markørene, eller null uten markører. Start uten slutt og
+ * flere seksjoner avvises, fordi en gjetning der kan slette tekst forfatteren har skrevet.
+ */
+export function finnSeksjon(body) {
+  const tekst = body ?? '';
+  const starter = [...tekst.matchAll(markørlinje(START))];
+  const slutter = [...tekst.matchAll(markørlinje(SLUTT))];
+  if (!starter.length) return null;
+  if (starter.length > 1 || slutter.length > 1) {
+    throw new Error(`Beskrivelsen har ${Math.max(starter.length, slutter.length)} opptak-seksjoner. Fjern alle unntatt én og prøv igjen.`);
+  }
+  const slutt = slutter.find((m) => m.index > starter[0].index);
+  if (!slutt) throw new Error(`Beskrivelsen har ${START}, men ikke ${SLUTT} etter den. Rett beskrivelsen for hånd og prøv igjen.`);
+  return { fra: starter[0].index, til: slutt.index + slutt[0].length };
+}
+
 /** Bytter ut seksjonen, eller legger den til sist. Resten av beskrivelsen står urørt. */
 export function erstattSeksjon(body, seksjon) {
   const tekst = body ?? '';
-  const s = tekst.indexOf(START);
-  if (s < 0) {
+  const funnet = finnSeksjon(tekst);
+  if (!funnet) {
     const før = tekst.trimEnd();
     return `${før ? `${før}\n\n` : ''}${seksjon}\n`;
   }
-  const e = tekst.indexOf(SLUTT, s);
-  if (e < 0) throw new Error(`Beskrivelsen har ${START}, men ikke ${SLUTT}. Rett beskrivelsen for hånd og prøv igjen.`);
-  return tekst.slice(0, s) + seksjon + tekst.slice(e + SLUTT.length);
+  return tekst.slice(0, funnet.fra) + seksjon + tekst.slice(funnet.til);
 }
 
 /** Antall user-attachments-lenker i seksjonen, og om noen relative opptak-stier står igjen. */
 export function sjekkOpplastet(body) {
-  const tekst = body ?? '';
-  const s = tekst.indexOf(START);
-  const e = tekst.indexOf(SLUTT, s);
-  if (s < 0 || e < 0) return { lenker: 0, ulastet: 0 };
-  const seksjon = tekst.slice(s, e);
+  let funnet = null;
+  try {
+    funnet = finnSeksjon(body);
+  } catch {}
+  if (!funnet) return { lenker: 0, ulastet: 0 };
+  const seksjon = body.slice(funnet.fra, funnet.til);
   const lenker = new Set(seksjon.match(/https:\/\/github\.com\/user-attachments\/assets\/[\w-]+/g) ?? []).size;
   const ulastet = (seksjon.match(/\.\/opptak-\d+\.mp4/g) ?? []).length;
   return { lenker, ulastet };
+}
+
+/**
+ * Henter beskrivelsen rett før den skrives. Kjøringen tar ofte et kvarter, og en endring gjort
+ * i mellomtiden skal ikke overskrives av beskrivelsen slik den var da scriptet startet.
+ */
+export function byggBeskrivelse(pr, seksjon, ghJson) {
+  return erstattSeksjon(ghJson('pr', 'view', pr, '--json', 'body').body, seksjon);
+}
+
+/** Test-shardene heter «e2e-tests (<n>)» i en kjøring av E2E Tests. */
+export const tellShards = (jobs) => jobs.filter((j) => /^e2e-tests( \(\d+\))?$/.test(j.name)).length;
+
+/** En shard uten opptak.json gir en seksjon som ser komplett ut, men mangler testene den kjørte. */
+export function advarslerOmShards(shards, artefakter) {
+  const advarsler = [];
+  const medJson = artefakter.filter((a) => a.harJson).length;
+  if (medJson < shards) advarsler.push(`Bare ${medJson} av ${shards} shards har opptak.json, så opptak kan mangle.`);
+  for (const a of artefakter.filter((x) => !x.harJson)) advarsler.push(`Artefaktet ${a.navn} har ikke opptak.json.`);
+  return advarsler;
 }
 
 /** `ci-e2e.sh` skriver «run: <url>» når kjøringen er startet. */
@@ -287,7 +331,14 @@ async function lastNedKjøring(id, pr, katalog) {
   } catch (e) {
     throw new Error(`Fant ingen playwright-videos-artefakter i kjøringen. Ble den startet med VIDEO=1? (${String(e.stderr ?? e.message).trim()})`);
   }
-  return { kilde: 'ci', runUrl: run.url, commit: run.headSha, jsonFiler: finnFiler(ned, 'opptak.json') };
+  const { jobs } = ghJson('run', 'view', id, '--json', 'jobs');
+  // Med én artefakt kan gh legge filene rett i mappa i stedet for i en undermappe.
+  const artefakter = existsSync(join(ned, 'opptak.json'))
+    ? [{ navn: 'playwright-videos', harJson: true }]
+    : readdirSync(ned, { withFileTypes: true }).filter((d) => d.isDirectory()).map((d) => ({ navn: d.name, harJson: existsSync(join(ned, d.name, 'opptak.json')) }));
+  const advarsler = advarslerOmShards(tellShards(jobs), artefakter);
+  for (const a of advarsler) logg(`⚠️  ${a}`);
+  return { kilde: 'ci', runUrl: run.url, commit: run.headSha, konklusjon: run.conclusion, advarsler, jsonFiler: finnFiler(ned, 'opptak.json') };
 }
 
 function finnFiler(rot, navn) {
@@ -349,7 +400,7 @@ async function main() {
   if (a.hjelp) return logg(HJELP);
 
   forhåndssjekk();
-  const pr = ghJson('pr', 'view', a.pr, '--json', 'headRefName,headRefOid,body,url');
+  const pr = ghJson('pr', 'view', a.pr, '--json', 'headRefName,headRefOid,url');
   const katalog = mkdtempSync(join(tmpdir(), 'pr-opptak-'));
   // Mappa beholdes bare når du trenger filene: etter en tørrkjøring og når opplastingen feiler.
   let behold = false;
@@ -388,7 +439,7 @@ async function lagOgLastOpp(a, pr, katalog) {
   const seksjon = lagSeksjon({ ...resultat, rader, opptak });
   // --attach løser stiene relativt til mappa der body-fila ligger.
   const bodyFil = join(ut, 'body.md');
-  writeFileSync(bodyFil, erstattSeksjon(pr.body, seksjon));
+  writeFileSync(bodyFil, byggBeskrivelse(a.pr, seksjon, ghJson));
 
   if (a.torrt) {
     logg(`\n🧪 Tørrkjøring: beskrivelsen er ikke endret. Filene ligger i ${ut}\n\n${seksjon}`);
