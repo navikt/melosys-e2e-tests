@@ -162,7 +162,7 @@ Du trenger:
 
 Scriptet teller testene i utvalget med `playwright test --list` før det starter en kjøring, og stopper når de er flere enn `MAKS`. Tellingen bruker koden du står på, så stå på PR-ens siste commit. CI kjører det samme filteret. Snevre inn med `make ci-grep GREP=<mønster> VIDEO=1` og bruk `RUN=<id>`. Tester som hoppes over, har ikke opptak og telles bare i oppsummeringen. En rød kjøring får også opptak.
 
-Feiler scriptet etter at noe er lastet ned eller konvertert, beholdes den midlertidige mappa, og feilmeldingen sier hvor den ligger. Gjelder feilen en CI-kjøring, sier meldingen også hvordan du bruker kjøringen på nytt med `RUN=<id>`. Går alt bra, slettes mappa.
+Den midlertidige mappa slettes, unntatt etter `TORRT=1` og når et nytt forsøk med `RUN=<id>` kan rette feilen: når opptakene er flere enn `MAKS`, men høyst 50, eller når `gh pr edit` eller sjekken etter opplastingen feiler. Da sier feilmeldingen hvor mappa ligger og hvilken kommando du kjører på nytt, for eksempel `RUN=<id> MAKS=<n>`. Et nytt forsøk laster ned opptakene på nytt; det bruker ikke mappa.
 
 ## Sharding
 

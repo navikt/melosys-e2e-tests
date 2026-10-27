@@ -1,7 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { copyFileSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
@@ -9,9 +9,8 @@ import {
   arbeidstreAdvarsel,
   lagPåvirkedeTester,
   lokalt,
-  meldingVedFeil,
+  kjørOpptak,
   sjekkKjøring,
-  skalBeholde,
   ciArgumenter,
   planleggUtvalg,
   byggBeskrivelse,
@@ -312,19 +311,6 @@ test('ucommittede endringer i arbeidstreet gir en advarsel i seksjonen', () => {
   );
 });
 
-test('mappa beholdes ved feil når den har filer, og etter en tørrkjøring', () => {
-  assert.equal(skalBeholde({ ok: false, torrt: false, harFiler: true }), true);
-  assert.equal(skalBeholde({ ok: false, torrt: false, harFiler: false }), false);
-  assert.equal(skalBeholde({ ok: true, torrt: false, harFiler: true }), false);
-  assert.equal(skalBeholde({ ok: true, torrt: true, harFiler: true }), true);
-  assert.equal(skalBeholde({ ok: true, torrt: true, harFiler: false }), false);
-});
-
-test('feilmeldingen sier hvor filene ligger og hvordan kjøringen brukes på nytt', () => {
-  assert.equal(meldingVedFeil('122 opptak er for mange.', '/tmp/pr-opptak-x', '40552156995'), '122 opptak er for mange.\nFilene ligger i /tmp/pr-opptak-x. Bruk RUN=40552156995 for å prøve igjen uten en ny kjøring.');
-  assert.equal(meldingVedFeil('ffmpeg feilet.', '/tmp/p', null), 'ffmpeg feilet.\nFilene ligger i /tmp/p.');
-});
-
 // ---------------------------------------------------------------- fix-runde 2, batch 1
 
 test('markører i en kodeblokk er ikke seksjonen, og blokken står urørt', () => {
@@ -407,5 +393,144 @@ test('LOKAL velger ikke en usporet spec, og seksjonen sier fra om den', async ()
     assert.ok(logg.some((l) => l.includes('tests/ny.spec.ts')));
   } finally {
     rmSync(rot, { recursive: true, force: true });
+  }
+});
+
+// ---------------------------------------------------------------- fix-runde 2, batch 2: hele løpet med RUN=
+
+/**
+ * Et falskt gh for kjørOpptak med RUN=: PR-en, kjøringen, nedlastingen og gh pr edit. Nedlastingen
+ * lager én artefakt med `antall` tester, hver med et opptak på disk.
+ */
+function lagLøp({ bodies = ['Forfatterens tekst'], runs = [{ status: 'completed' }], antall = 2, editStatus = 0, utenJson = false, headBranch = 'min-branch' } = {}) {
+  const kall: string[][] = [];
+  const logg: string[] = [];
+  let ventet = 0;
+  let katalog = '';
+  const pr = { headRefName: 'min-branch', headRefOid: 'b'.repeat(40), url: 'https://github.com/navikt/melosys-e2e-tests/pull/7' };
+  const run = (r: any) => ({ conclusion: 'success', headSha: pr.headRefOid, headBranch, url: 'https://github.com/navikt/melosys-e2e-tests/actions/runs/123', ...r });
+  const runKø = [...runs];
+  const bodyKø = [...bodies];
+  const d = {
+    ghJson: (...args: string[]) => {
+      kall.push(args);
+      if (args[0] === 'pr' && args.includes('body')) return { body: bodyKø.shift() };
+      if (args[0] === 'pr') return pr;
+      if (args[0] === 'run' && args.includes('jobs')) return { jobs: [{ name: 'e2e-tests' }] };
+      return run(runKø.length > 1 ? runKø.shift() : runKø[0]);
+    },
+    gh: (...args: string[]) => {
+      kall.push(args);
+      const ned = join(args[args.indexOf('-D') + 1], 'playwright-videos');
+      mkdirSync(ned, { recursive: true });
+      const specs = Array.from({ length: antall }, (_, i) => {
+        mkdirSync(join(ned, `t${i}`), { recursive: true });
+        writeFileSync(join(ned, `t${i}`, 'video.webm'), 'webm');
+        return { title: `test ${i}`, tests: [{ status: 'expected', results: [resultat('passed', 1000, [video(`t${i}`)])] }] };
+      });
+      if (!utenJson) writeFileSync(join(ned, 'opptak.json'), JSON.stringify({ suites: [{ title: 'f.spec.ts', specs }] }));
+      return '';
+    },
+    ghEdit: (args: string[]) => (kall.push(args), editStatus),
+    konverter: async (opptak: any[], ut: string) => opptak.forEach((_, i) => writeFileSync(join(ut, `opptak-${i + 1}.mp4`), 'mp4')),
+    lagKatalog: () => (katalog = mkdtempSync(join(tmpdir(), 'pr-opptak-løp-'))),
+    vent: async () => void ventet++,
+    logg: (t: string) => logg.push(t),
+  };
+  return { d, kall, logg, katalog: () => katalog, ventet: () => ventet };
+}
+
+const argumenter = (felt: Record<string, any> = {}) => ({ pr: '7', run: '123', lokal: false, maks: 20, torrt: true, ...felt });
+const rydd = (k: string) => k && rmSync(k, { recursive: true, force: true });
+
+test('beskrivelsen som skrives er den som hentes rett før, med forfatterens nye tekst og én seksjon', async () => {
+  const løp = lagLøp({ bodies: ['Ny tekst skrevet mens kjøringen gikk'] });
+  try {
+    await kjørOpptak(argumenter(), løp.d);
+    const body = readFileSync(join(løp.katalog(), 'opptak', 'body.md'), 'utf8');
+    assert.ok(body.startsWith('Ny tekst skrevet mens kjøringen gikk\n\n' + START));
+    assert.equal(body.split(START).length - 1, 1);
+    assert.deepEqual(løp.kall.filter((k) => k[0] === 'pr' && k.includes('body')), [['pr', 'view', '7', '--json', 'body']]);
+  } finally {
+    rydd(løp.katalog());
+  }
+});
+
+test('mangler beskrivelsen i svaret, skrives ingenting; en tom beskrivelse er lov', async () => {
+  const løp = lagLøp({ bodies: [undefined as any] });
+  try {
+    await assert.rejects(kjørOpptak(argumenter(), løp.d), /Fikk ikke beskrivelsen til PR-en/);
+    assert.equal(existsSync(join(løp.katalog(), 'opptak', 'body.md')), false);
+  } finally {
+    rydd(løp.katalog());
+  }
+  const tom = lagLøp({ bodies: [''] });
+  try {
+    await kjørOpptak(argumenter(), tom.d);
+    assert.ok(readFileSync(join(tom.katalog(), 'opptak', 'body.md'), 'utf8').startsWith(START));
+  } finally {
+    rydd(tom.katalog());
+  }
+});
+
+test('over MAKS, men under 50: mappa beholdes og meldingen sier RUN og MAKS', async () => {
+  const løp = lagLøp({ antall: 3 });
+  try {
+    await assert.rejects(kjørOpptak(argumenter({ maks: 2, torrt: false }), løp.d), /Bruk RUN=123 MAKS=3 for å prøve igjen uten en ny kjøring\./);
+    assert.equal(existsSync(løp.katalog()), true);
+  } finally {
+    rydd(løp.katalog());
+  }
+});
+
+test('over 50: mappa slettes, og meldingen foreslår ikke RUN', async () => {
+  const løp = lagLøp({ antall: 51 });
+  try {
+    await assert.rejects(kjørOpptak(argumenter({ maks: 50, torrt: false }), løp.d), (e: any) => !/RUN=123|Filene ligger/.test(e.message) && /51 opptak/.test(e.message));
+    assert.equal(existsSync(løp.katalog()), false);
+  } finally {
+    rydd(løp.katalog());
+  }
+});
+
+test('uten opptak.json: mappa slettes, og meldingen foreslår ikke RUN', async () => {
+  const løp = lagLøp({ utenJson: true });
+  try {
+    await assert.rejects(kjørOpptak(argumenter({ torrt: false }), løp.d), (e: any) => !/RUN=123|Filene ligger/.test(e.message) && /opptak\.json/.test(e.message));
+    assert.equal(existsSync(løp.katalog()), false);
+  } finally {
+    rydd(løp.katalog());
+  }
+});
+
+test('gh pr edit feiler: mappa beholdes og meldingen sier RUN', async () => {
+  const løp = lagLøp({ editStatus: 1 });
+  try {
+    await assert.rejects(kjørOpptak(argumenter({ torrt: false }), løp.d), /gh pr edit feilet med kode 1\.\nFilene ligger i .*\. Bruk RUN=123 for å prøve igjen uten en ny kjøring\./);
+    assert.equal(existsSync(løp.katalog()), true);
+  } finally {
+    rydd(løp.katalog());
+  }
+});
+
+test('RUN fra en annen branch avvises før scriptet venter på kjøringen', async () => {
+  const løp = lagLøp({ runs: [{ status: 'in_progress' }, { status: 'completed' }], headBranch: 'annen-branch' });
+  try {
+    await assert.rejects(kjørOpptak(argumenter(), løp.d), /annen-branch, ikke min-branch/);
+    assert.equal(løp.ventet(), 0);
+    assert.equal(løp.kall.filter((k) => k[0] === 'run' && k[1] === 'view').length, 1);
+    assert.equal(existsSync(løp.katalog()), false);
+  } finally {
+    rydd(løp.katalog());
+  }
+});
+
+test('sjekken etter opplasting feiler: mappa beholdes og meldingen sier RUN', async () => {
+  const løp = lagLøp({ bodies: ['Tekst', `Tekst\n\n${START}\n![](./opptak-1.mp4)\n${SLUTT}`] });
+  try {
+    await assert.rejects(kjørOpptak(argumenter({ torrt: false }), løp.d), /Seksjonen har 0 opplastede opptak av 2.*\nFilene ligger i .*\. Bruk RUN=123 for å prøve igjen uten en ny kjøring\./);
+    assert.equal(existsSync(løp.katalog()), true);
+  } finally {
+    rydd(løp.katalog());
   }
 });
