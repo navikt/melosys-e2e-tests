@@ -42,6 +42,8 @@ const slowMo = process.env.SLOWMO && Number.isFinite(slowMoFraEnv)
   ? slowMoFraEnv
   : process.env.CI ? 0 : 100;
 
+const OPPTAK = process.env.PW_VIDEO === 'on';
+
 /**
  * See https://playwright.dev/docs/test-configuration.
  */
@@ -84,6 +86,8 @@ export default defineConfig({
     ...(process.env.E2E_BLOB_REPORT
       ? [['blob', { fileName: `report-shard-${process.env.SHARD ?? '1'}.zip` }] as const]
       : []),
+    // Kobler hvert opptak til testnavnet for make pr-opptak.
+    ...(OPPTAK ? [['json', { outputFile: 'test-results/opptak.json' }] as const] : []),
   ],
 
   /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
@@ -96,7 +100,8 @@ export default defineConfig({
      * kjøring produserer altså ingen tunge artefakter. */
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
-    video: 'on-first-retry',
+    // PW_VIDEO=on tar opp hver test, også grønne, til opptak i PR-beskrivelsen.
+    video: OPPTAK ? { mode: 'on', size: { width: 1280, height: 720 } } : 'on-first-retry',
     
     /* Maximum time each action such as `click()` can take */
     actionTimeout: 10000,

@@ -154,7 +154,7 @@ test-debug: ## Run tests in debug mode
 # ==============================================================================
 
 # Variablene tilsvarer flaggene i scripts/ci-e2e.sh (se docs/ci-cd/KJOR-E2E-PA-CI.md):
-# BRANCH=<navn>, ENV=<tagger>, SHARDS=<1–8>, PREVIEW=1, RETRIES=1, VIS_FILTER=1, NO_WAIT=1.
+# BRANCH=<navn>, ENV=<tagger>, SHARDS=<1–8>, PREVIEW=1, RETRIES=1, VIS_FILTER=1, VIDEO=1, NO_WAIT=1.
 # De leses bare fra kommandolinjen, så en BRANCH eller ENV eksportert i skallet ikke styrer CI stille.
 fra_kommandolinje = $(if $(filter command line,$(origin $(1))),$($(1)))
 BRANCH_ARG = $(call fra_kommandolinje,BRANCH)
@@ -166,6 +166,7 @@ CI_FLAGG = $(if $(BRANCH_ARG),--branch "$(BRANCH_ARG)") \
 	$(if $(call fra_kommandolinje,PREVIEW),--preview) \
 	$(if $(call fra_kommandolinje,RETRIES),--retries) \
 	$(if $(call fra_kommandolinje,VIS_FILTER),--vis-filter) \
+	$(if $(call fra_kommandolinje,VIDEO),--video) \
 	$(if $(call fra_kommandolinje,NO_WAIT),--no-wait)
 
 .PHONY: list-affected

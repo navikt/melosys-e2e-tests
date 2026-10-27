@@ -133,6 +133,7 @@ make ci-affected ENV=melosys-api:min-tag RETRIES=1
 | `PREVIEW=1` | `--preview` | Skriver ut `gh`-kommandoen som ville blitt sendt, uten å starte kjøringen |
 | `RETRIES=1` | `--retries` | Slår på retries. Standard er av, så flaky tester synes |
 | `VIS_FILTER=1` | `--vis-filter` | Skriver ut hele filteret som sendes |
+| `VIDEO=1` | `--video` | Tar opp video av hver test, også grønne. Opptakene og `opptak.json` lastes opp som `playwright-videos-shard-<n>`, eller `playwright-videos` når kjøringen har én shard (se [Sharding](#sharding)). Opptaket gjør testene litt tregere, så en tidsfølsom test kan bli flaky. Branchen må ha `record_video` i workflowen, altså main flettet inn etter at inputen kom |
 | `NO_WAIT=1` | `--no-wait` | Starter kjøringen og returnerer med én gang |
 
 Variablene leses bare fra kommandolinjen. En `BRANCH` eller `ENV` eksportert i skallet styrer ikke CI.
