@@ -906,7 +906,7 @@ Key steps:
 - **Koblede endringer**: `docs/ci-cd/KOBLEDE-ENDRINGER.md` - service-PR som krever nye e2e-tester: pin i Actions-variabelen `E2E_PINS` i stedet for bypass, med start og utløp i hver kjøring (`scripts/e2e-pins.mjs`). Workflowen `koblet-merge.yml` setter pinnen fra konsollen
 - **E2E Coverage**: `docs/ci-cd/E2E-COVERAGE.md` - E2E code coverage collection for melosys-api
 - **Spec-drevet testing**: `docs/SPEC-DRIVEN-TESTING.md` - spec-formatet i `specs/`, som testene genereres fra
-- **Arkiverte planer og handovers**: `melosys-kode-wiki/archive/melosys-e2e-tests/` - hører ikke hjemme i dette repoet
+- **Planer og rapporter**: hører ikke hjemme i dette repoet. Planer, kjøreplaner, Jira-utkast og analyser med åpne neste steg skrives i `melosys-kode-wiki/plans/` med `plan_status`; ferdige rapporter og handovers i `melosys-kode-wiki/archive/melosys-e2e-tests/`
 - [Playwright Documentation](https://playwright.dev) - Official Playwright docs
 - [Playwright Best Practices](https://playwright.dev/docs/best-practices)
 - [Trace Viewer Guide](https://playwright.dev/docs/trace-viewer)
