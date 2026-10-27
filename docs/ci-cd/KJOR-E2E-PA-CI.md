@@ -95,6 +95,7 @@ Grafen ser bare statiske importer. Når endringen din når testene via kjøretid
 | `make ci` | Kjører hele suiten mot `latest` |
 | `make ci-grep GREP=8163` | Kjører tester som matcher et eget filter |
 | `make ci-images ENV=melosys-api:min-tag,melosys-web:min-tag` | Kjører hele suiten mot egne images |
+| `make pr-opptak PR=<n>` | Legger opptak av de påvirkede testene i PR-beskrivelsen. Se [Opptak i PR-beskrivelsen](#opptak-i-pr-beskrivelsen) |
 
 Egne images bygger du med «Build and Push Image»-workflowen i hvert repo. Workflow-fila må finnes på branchen du bygger fra.
 
@@ -137,6 +138,29 @@ make ci-affected ENV=melosys-api:min-tag RETRIES=1
 | `NO_WAIT=1` | `--no-wait` | Starter kjøringen og returnerer med én gang |
 
 Variablene leses bare fra kommandolinjen. En `BRANCH` eller `ENV` eksportert i skallet styrer ikke CI.
+
+## Opptak i PR-beskrivelsen
+
+`make pr-opptak PR=<n>` kjører testene PR-en påvirker på CI med `VIDEO=1`, venter på kjøringen og legger ett mp4-opptak per test i PR-beskrivelsen. Opptakene står mellom `<!-- e2e-opptak:start -->` og `<!-- e2e-opptak:end -->`, med en linje som lenker til kjøringen og teller grønne, røde og flaky tester. Kjører du på nytt, byttes bare den seksjonen ut. Mangler markørene, legges seksjonen til sist.
+
+```bash
+make pr-opptak PR=397
+```
+
+| Variabel | Hva det gjør |
+|---|---|
+| `PR=<n>` | PR-en i melosys-e2e-tests. Påkrevd |
+| `LOKAL=1` | Kjører testene mot stacken som kjører lokalt, i stedet for på CI. Koden i arbeidstreet kjører, så stå i PR-ens branch |
+| `RUN=<id>` | Bruker opptakene fra en kjøring du har startet selv med `VIDEO=1`, for eksempel `make ci-grep GREP=8163 VIDEO=1`. Scriptet advarer når kjøringen er på en annen commit enn PR-en |
+| `MAKS=<n>` | Største antall opptak. Standard er 20, og høyst 50, fordi `gh pr edit` tar maks 50 vedlegg per kall |
+| `TORRT=1` | Gjør alt unntatt å endre beskrivelsen, og skriver ut seksjonen og mappa med filene |
+
+Du trenger:
+
+- `gh` 2.99 eller nyere, innlogget med `gh auth login`. GitHub spiller bare av video fra `user-attachments`-lenker, og bare `gh pr edit --attach` med en personlig innlogging lager dem. Er `GH_TOKEN` eller `GITHUB_TOKEN` satt, stopper scriptet, fordi `--attach` avviser tokens.
+- `ffmpeg`, som gjør opptakene om fra webm til mp4.
+
+Flere opptak enn `MAKS` avvises før noe lastes opp. Velger endringen hele suiten, stopper scriptet før det starter en kjøring. Snevre da inn med `make ci-grep GREP=<mønster> VIDEO=1` og bruk `RUN=<id>`. Tester som hoppes over, har ikke opptak og telles bare i oppsummeringen. En rød kjøring får også opptak.
 
 ## Sharding
 

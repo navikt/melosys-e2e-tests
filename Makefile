@@ -196,6 +196,20 @@ endif
 ci-images: ## Run the full suite on CI against your own images, e.g. make ci-images ENV=melosys-api:my-tag
 	@./scripts/ci-e2e.sh $(CI_FLAGG)
 
+# PR=<n>, RUN=<id>, LOKAL=1, MAKS=<n>, TORRT=1 — se docs/ci-cd/KJOR-E2E-PA-CI.md.
+PR_ARG = $(call fra_kommandolinje,PR)
+RUN_ARG = $(call fra_kommandolinje,RUN)
+MAKS_ARG = $(call fra_kommandolinje,MAKS)
+
+.PHONY: pr-opptak
+pr-opptak: ## Record the tests a PR affects and put the videos in its description, e.g. make pr-opptak PR=397
+	$(if $(PR_ARG),,$(error pr-opptak krever PR=<nummer> på kommandolinjen, for eksempel make pr-opptak PR=397))
+	@node scripts/pr-opptak.mjs "$(PR_ARG)" \
+		$(if $(RUN_ARG),--run "$(RUN_ARG)") \
+		$(if $(MAKS_ARG),--maks "$(MAKS_ARG)") \
+		$(if $(call fra_kommandolinje,LOKAL),--lokal) \
+		$(if $(call fra_kommandolinje,TORRT),--torrt)
+
 # ==============================================================================
 # Development
 # ==============================================================================
