@@ -150,7 +150,7 @@ make pr-opptak PR=397
 | Variabel | Hva det gjør |
 |---|---|
 | `PR=<n>` | PR-en i melosys-e2e-tests. Påkrevd |
-| `LOKAL=1` | Kjører testene mot stacken som kjører lokalt, i stedet for på CI. Utvalget regnes fra committet kode, men Playwright kjører arbeidstreet, så stå i PR-ens branch. Har sporede filer ucommittede endringer, sier seksjonen fra |
+| `LOKAL=1` | Kjører testene mot stacken som kjører lokalt, i stedet for på CI. Utvalget regnes fra committet kode, men Playwright kjører arbeidstreet, så stå i PR-ens branch. Har sporede filer ucommittede endringer, eller ligger det spec-filer under `tests/` som ikke er lagt til i git, sier seksjonen fra |
 | `RUN=<id>` | Bruker opptakene fra en kjøring du har startet selv med `VIDEO=1`, for eksempel `make ci-grep GREP=8163 VIDEO=1`. Kjøringen må være fra PR-ens branch. Er den på en eldre commit, sier seksjonen hvilken |
 | `MAKS=<n>` | Største antall opptak. Standard er 20, og høyst 50, fordi `gh pr edit` tar maks 50 vedlegg per kall |
 | `TORRT=1` | Gjør alt unntatt å endre beskrivelsen, og skriver ut seksjonen og mappa med filene. Mappa slettes ikke |

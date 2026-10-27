@@ -125,7 +125,8 @@ export function velgOpptak(rader, maks) {
  * lista. Oppsummeringen teller derfor etter det lista viser.
  */
 const utfall = (r) => {
-  if (r.resultat === 'interrupted') return 'avbrutt';
+  // En test med et rødt forsøk før avbruddet er unexpected og telles som feilet.
+  if (r.status === 'skipped' && r.resultat === 'interrupted') return 'avbrutt';
   if (r.status === 'skipped') return r.video ? 'hoppet over' : 'uten opptak';
   return { expected: 'grønne', unexpected: 'feilet', flaky: 'flaky' }[r.status] ?? r.status;
 };
@@ -176,26 +177,45 @@ export function lagSeksjon({ kilde, runUrl, commit, rader, opptak, konklusjon = 
 }
 
 /**
- * En markør gjelder bare alene på egen linje, så en markør nevnt i kodefont i teksten ikke er
- * seksjonen. `$` med flagget m matcher også foran \r, så CRLF-linjer virker.
+ * Markørlinjene utenfor kodeblokker: { index, lengde } per markør. En markør gjelder bare alene på
+ * egen linje, så en markør nevnt i kodefont eller vist i en ```- eller ~~~-blokk ikke er seksjonen.
+ * En blokk lukkes av samme tegn i minst like lang rekke, som i CommonMark.
  */
-const markørlinje = (m) => new RegExp(`^${m}[ \\t]*$`, 'gm');
+function markørlinjer(tekst) {
+  const funnet = { [START]: [], [SLUTT]: [] };
+  let gjerde = null;
+  let index = 0;
+  for (const rå of tekst.split('\n')) {
+    const linje = rå.replace(/\r$/, '');
+    const åpner = /^ {0,3}(`{3,}|~{3,})/.exec(linje)?.[1];
+    if (gjerde) {
+      const lukker = /^ {0,3}(`{3,}|~{3,})[ \t]*$/.exec(linje)?.[1];
+      if (lukker && lukker[0] === gjerde[0] && lukker.length >= gjerde.length) gjerde = null;
+    } else if (åpner) {
+      gjerde = åpner;
+    } else {
+      for (const m of [START, SLUTT]) {
+        if (new RegExp(`^${m}[ \\t]*$`).test(linje)) funnet[m].push({ index, lengde: linje.length });
+      }
+    }
+    index += rå.length + 1;
+  }
+  return funnet;
+}
 
 /**
  * Finner seksjonen: { fra, til } rundt markørene, eller null uten markører. Start uten slutt og
  * flere seksjoner avvises, fordi en gjetning der kan slette tekst forfatteren har skrevet.
  */
 export function finnSeksjon(body) {
-  const tekst = body ?? '';
-  const starter = [...tekst.matchAll(markørlinje(START))];
-  const slutter = [...tekst.matchAll(markørlinje(SLUTT))];
+  const { [START]: starter, [SLUTT]: slutter } = markørlinjer(body ?? '');
   if (!starter.length) return null;
   if (starter.length > 1 || slutter.length > 1) {
     throw new Error(`Beskrivelsen har ${Math.max(starter.length, slutter.length)} opptak-seksjoner. Fjern alle unntatt én og prøv igjen.`);
   }
   const slutt = slutter.find((m) => m.index > starter[0].index);
   if (!slutt) throw new Error(`Beskrivelsen har ${START}, men ikke ${SLUTT} etter den. Rett beskrivelsen for hånd og prøv igjen.`);
-  return { fra: starter[0].index, til: slutt.index + slutt[0].length };
+  return { fra: starter[0].index, til: slutt.index + slutt.lengde };
 }
 
 /** Bytter ut seksjonen, eller legger den til sist. Resten av beskrivelsen står urørt. */
@@ -275,13 +295,25 @@ export function sjekkKjøring(run, pr) {
   return run.headSha === pr.headRefOid ? [] : [`Opptakene er fra commit ${run.headSha.slice(0, 7)}. PR-en står nå på ${pr.headRefOid.slice(0, 7)}.`];
 }
 
-/** Lokalt regnes utvalget fra committet kode, som i CI, så en ucommittet spec ikke velges. */
-export const LOKALT_UTVALG = ['--kun-committet'];
+/**
+ * Lokalt regnes utvalget fra committet kode, som i CI. Uten --head bygger affected-tests grafen
+ * fra arbeidstreet, og da velges en usporet spec som importerer en endret helper.
+ */
+const lokaltUtvalg = (head) => ['--kun-committet', '--head', head];
 
 /** Playwright kjører arbeidstreet, så ucommittede endringer i sporede filer sies fra om i seksjonen. */
 export function arbeidstreAdvarsel(porcelain, head) {
   const filer = String(porcelain).split('\n').filter((l) => l.trim()).length;
-  return filer ? `Kjørt med ucommittede endringer i ${filer} filer, så koden er ikke nøyaktig commit ${head.slice(0, 7)}.` : null;
+  return filer ? `Kjørt med ucommittede endringer i ${filer} ${filer === 1 ? 'fil' : 'filer'}, så koden er ikke nøyaktig commit ${head.slice(0, 7)}.` : null;
+}
+
+/** Playwright kjører arbeidstreet, så en usporet spec under tests/ kan komme med i kjøringen. */
+export function usporetAdvarsel(lsFiles) {
+  const specs = String(lsFiles).split('\n').map((l) => l.trim()).filter((l) => l.endsWith('.spec.ts'));
+  if (!specs.length) return null;
+  return specs.length === 1
+    ? `Kjørt med en spec som ikke er lagt til i git: ${specs[0]}. Playwright kjører den hvis filteret treffer den.`
+    : `Kjørt med ${specs.length} spec-er som ikke er lagt til i git: ${specs.join(', ')}. Playwright kjører dem hvis filteret treffer dem.`;
 }
 
 /** Mappa beholdes etter en tørrkjøring, og ved feil når noe er lastet ned eller konvertert. */
@@ -346,13 +378,14 @@ async function ventPåKjøring(id) {
 }
 
 /** Utvalget fra affected-tests: exit 3 er ingenting å kjøre, tom utdata er hele suiten. */
-function påvirkedeTester(args) {
-  const r = spawnSync('node', ['scripts/affected-tests.mjs', ...args], { cwd: ROOT, encoding: 'utf8' });
+export const lagPåvirkedeTester = (rot) => (args) => {
+  const r = spawnSync('node', ['scripts/affected-tests.mjs', ...args], { cwd: rot, encoding: 'utf8' });
   process.stderr.write(r.stderr ?? '');
   if (r.status === 3) return { ingenting: true };
   if (r.status !== 0) throw new Error(`affected-tests.mjs feilet med kode ${r.status}.`);
   return { ingenting: false, grep: r.stdout.trim() };
-}
+};
+const påvirkedeTester = lagPåvirkedeTester(ROOT);
 
 async function fraCi(pr, maks, katalog, tilstand) {
   // Utvalget telles i arbeidstreet før kjøringen startes, så det må være PR-ens kode.
@@ -412,24 +445,38 @@ function tellTester(grep) {
   return antall;
 }
 
-async function lokalt(pr, maks) {
-  const head = kjørTekst('git', ['rev-parse', 'HEAD']).trim();
-  const branch = kjørTekst('git', ['rev-parse', '--abbrev-ref', 'HEAD']).trim();
+/** git, utvalget og Playwright for LOKAL; testene bytter dem ut. */
+const lokaleAvhengigheter = () => ({
+  git: (args) => kjørTekst('git', args),
+  påvirkedeTester,
+  tellTester,
+  logg,
+  kjørPlaywright: async (grep) => {
+    const json = join(ROOT, 'test-results', 'opptak.json');
+    rmSync(json, { force: true });
+    const { kode } = await strøm('npx', ['playwright', 'test', '--project=chromium', ...(grep ? ['--grep', grep] : [])], { env: { ...process.env, PW_VIDEO: 'on' } });
+    return { kode, json: existsSync(json) ? json : null };
+  },
+});
+
+export async function lokalt(pr, maks, d = lokaleAvhengigheter()) {
+  const head = d.git(['rev-parse', 'HEAD']).trim();
+  const branch = d.git(['rev-parse', '--abbrev-ref', 'HEAD']).trim();
   if (branch !== pr.headRefName || head !== pr.headRefOid) {
-    logg(`⚠️  Du står på ${branch} (${head.slice(0, 7)}), men PR-en er ${pr.headRefName} (${pr.headRefOid.slice(0, 7)}). Testene kjører koden i arbeidstreet.`);
+    d.logg(`⚠️  Du står på ${branch} (${head.slice(0, 7)}), men PR-en er ${pr.headRefName} (${pr.headRefOid.slice(0, 7)}). Testene kjører koden i arbeidstreet.`);
   }
   // Teller før kjøringen, så hele suiten ikke kjøres bare for å bli avvist etterpå.
-  const plan = planleggUtvalg({ utvalg: påvirkedeTester(LOKALT_UTVALG), tellTester, maks });
+  const plan = planleggUtvalg({ utvalg: d.påvirkedeTester(lokaltUtvalg(head)), tellTester: d.tellTester, maks });
   if (!plan) return null;
-  const grep = plan.grep ? ['--grep', plan.grep] : [];
-  const json = join(ROOT, 'test-results', 'opptak.json');
-  rmSync(json, { force: true });
-  const advarsel = arbeidstreAdvarsel(kjørTekst('git', ['status', '--porcelain', '--untracked-files=no']), head);
-  if (advarsel) logg(`⚠️  ${advarsel}`);
-  const { kode } = await strøm('npx', ['playwright', 'test', '--project=chromium', ...grep], { env: { ...process.env, PW_VIDEO: 'on' } });
-  if (!existsSync(json)) throw new Error(`Playwright avsluttet med kode ${kode} uten å skrive test-results/opptak.json.`);
-  if (kode !== 0) logg(`Noen tester feilet (kode ${kode}). Opptakene legges likevel i beskrivelsen.`);
-  return { kilde: 'lokal', runUrl: null, commit: head, advarsler: advarsel ? [advarsel] : [], jsonFiler: [json] };
+  const advarsler = [
+    arbeidstreAdvarsel(d.git(['status', '--porcelain', '--untracked-files=no']), head),
+    usporetAdvarsel(d.git(['ls-files', '--others', '--exclude-standard', 'tests'])),
+  ].filter(Boolean);
+  for (const a of advarsler) d.logg(`⚠️  ${a}`);
+  const { kode, json } = await d.kjørPlaywright(plan.grep);
+  if (!json) throw new Error(`Playwright avsluttet med kode ${kode} uten å skrive test-results/opptak.json.`);
+  if (kode !== 0) d.logg(`Noen tester feilet (kode ${kode}). Opptakene legges likevel i beskrivelsen.`);
+  return { kilde: 'lokal', runUrl: null, commit: head, advarsler, jsonFiler: [json] };
 }
 
 export async function konverter(opptak, katalog) {

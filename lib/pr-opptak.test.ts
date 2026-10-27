@@ -1,9 +1,14 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
+import { copyFileSync, mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   advarslerOmShards,
   arbeidstreAdvarsel,
-  LOKALT_UTVALG,
+  lagPåvirkedeTester,
+  lokalt,
   meldingVedFeil,
   sjekkKjøring,
   skalBeholde,
@@ -11,6 +16,7 @@ import {
   planleggUtvalg,
   byggBeskrivelse,
   erstattSeksjon,
+  finnSeksjon,
   finnRunId,
   formaterTittel,
   ghVersjonHolder,
@@ -297,9 +303,6 @@ test('RUN på en eldre commit i samme branch gir en advarsel med kjøringens com
   assert.deepEqual(sjekkKjøring({ headBranch: 'min-branch', headSha: 'b'.repeat(40) }, PR), []);
 });
 
-test('lokalt utvalg regnes bare fra committet kode, så en ny ucommittet spec ikke velges', () => {
-  assert.ok(LOKALT_UTVALG.includes('--kun-committet'));
-});
 
 test('ucommittede endringer i arbeidstreet gir en advarsel i seksjonen', () => {
   assert.equal(arbeidstreAdvarsel('', 'c'.repeat(40)), null);
@@ -320,4 +323,89 @@ test('mappa beholdes ved feil når den har filer, og etter en tørrkjøring', ()
 test('feilmeldingen sier hvor filene ligger og hvordan kjøringen brukes på nytt', () => {
   assert.equal(meldingVedFeil('122 opptak er for mange.', '/tmp/pr-opptak-x', '40552156995'), '122 opptak er for mange.\nFilene ligger i /tmp/pr-opptak-x. Bruk RUN=40552156995 for å prøve igjen uten en ny kjøring.');
   assert.equal(meldingVedFeil('ffmpeg feilet.', '/tmp/p', null), 'ffmpeg feilet.\nFilene ligger i /tmp/p.');
+});
+
+// ---------------------------------------------------------------- fix-runde 2, batch 1
+
+test('markører i en kodeblokk er ikke seksjonen, og blokken står urørt', () => {
+  for (const gjerde of ['```', '~~~', '````']) {
+    const body = `Slik ser seksjonen ut:\n\n${gjerde}md\n${START}\nforfatterens tekst\n${SLUTT}\n${gjerde}\n\nSlutt.`;
+    assert.equal(erstattSeksjon(body, SEKSJON), `${body}\n\n${SEKSJON}\n`, gjerde);
+    assert.equal(finnSeksjon(body), null, gjerde);
+  }
+});
+
+test('en kodeblokk lukkes bare av samme tegn og minst like lang rekke', () => {
+  // ~~~ lukker ikke en ```-blokk, og ``` lukker ikke en ````-blokk: markørene står fortsatt i blokken.
+  const body = `\`\`\`\`\n~~~\n\`\`\`\n${START}\nx\n${SLUTT}\n\`\`\`\`\nEtter`;
+  assert.equal(finnSeksjon(body), null);
+  assert.equal(finnSeksjon(`\`\`\`\n~~~~\n${START}\nx\n${SLUTT}\n\`\`\``), null, '~~~~ lukker ikke en ```-blokk');
+  const etterBlokk = `\`\`\`\n${START}\n\`\`\`\n${START}\nny\n${SLUTT}`;
+  assert.deepEqual(erstattSeksjon(etterBlokk, SEKSJON), `\`\`\`\n${START}\n\`\`\`\n${SEKSJON}`);
+});
+
+test('sjekken etter opplasting ser bort fra markører i en kodeblokk', () => {
+  const url = 'https://github.com/user-attachments/assets/a-1';
+  assert.deepEqual(sjekkOpplastet(`\`\`\`\n${START}\n${url}\n${SLUTT}\n\`\`\``), { lenker: 0, ulastet: 0 });
+});
+
+test('en test som feilet og så ble avbrutt, telles som feilet', () => {
+  const rapport = {
+    suites: [{ title: 'f.spec.ts', specs: [{ title: 't', tests: [{ status: 'unexpected', results: [resultat('failed', 5000, [video('a')]), resultat('interrupted', 2000, [video('a-retry1')])] }] }] }],
+  };
+  assert.equal(oppsummer(lesOpptak(rapport, '/x')), '1 feilet.');
+  const bareAvbrutt = { suites: [{ title: 'f.spec.ts', specs: [{ title: 't', tests: [{ status: 'skipped', results: [resultat('interrupted', 2000, [video('a')])] }] }] }] };
+  assert.equal(oppsummer(lesOpptak(bareAvbrutt, '/x')), '1 avbrutt.');
+});
+
+test('én ucommittet fil står i entall', () => {
+  assert.equal(arbeidstreAdvarsel(' M pages/a.ts\n', 'c'.repeat(40)), 'Kjørt med ucommittede endringer i 1 fil, så koden er ikke nøyaktig commit ccccccc.');
+});
+
+/**
+ * Et lite repo med affected-tests.mjs: en committet endring i en helper, og en ny spec som
+ * importerer helperen, men ikke er lagt til i git.
+ */
+function lagRepo() {
+  const rot = mkdtempSync(join(tmpdir(), 'pr-opptak-test-'));
+  const git = (...a: string[]) => execFileSync('git', ['-c', 'user.name=t', '-c', 'user.email=t@t', ...a], { cwd: rot, encoding: 'utf8' });
+  const skriv = (sti: string, innhold: string) => (mkdirSync(join(rot, sti, '..'), { recursive: true }), writeFileSync(join(rot, sti), innhold));
+  mkdirSync(join(rot, 'scripts'));
+  copyFileSync(join(__dirname, '..', 'scripts', 'affected-tests.mjs'), join(rot, 'scripts', 'affected-tests.mjs'));
+  skriv('helpers/h.ts', 'export const h = 1;\n');
+  skriv('tests/a.spec.ts', "import { h } from '../helpers/h';\n");
+  for (const n of ['b', 'c', 'd', 'e']) skriv(`tests/${n}.spec.ts`, 'export {};\n');
+  git('init', '-q');
+  git('add', '.');
+  git('commit', '-qm', 'start');
+  git('update-ref', 'refs/remotes/origin/main', 'HEAD');
+  skriv('helpers/h.ts', 'export const h = 2;\n');
+  git('commit', '-qam', 'endre helper');
+  skriv('tests/ny.spec.ts', "import { h } from '../helpers/h';\n");
+  return { rot, git, head: git('rev-parse', 'HEAD').trim() };
+}
+
+test('LOKAL velger ikke en usporet spec, og seksjonen sier fra om den', async () => {
+  const { rot, git, head } = lagRepo();
+  try {
+    const kall: string[][] = [];
+    const ekte = lagPåvirkedeTester(rot);
+    const talt: string[] = [];
+    const logg: string[] = [];
+    // PR-en står på en annen commit, så testen ser at seksjonen bruker commiten som faktisk kjørte.
+    const res = await lokalt({ headRefName: 'annen', headRefOid: 'f'.repeat(40) }, 20, {
+      git: (args: string[]) => git(...args),
+      påvirkedeTester: (args: string[]) => (kall.push(args), ekte(args)),
+      tellTester: (grep: string) => (talt.push(grep), 1),
+      kjørPlaywright: async () => ({ kode: 0, json: '/x/opptak.json' }),
+      logg: (t: string) => logg.push(t),
+    });
+    assert.deepEqual(talt, ['a\\.spec\\.ts'], 'bare den committede spec-en er valgt');
+    assert.deepEqual(kall, [['--kun-committet', '--head', head]]);
+    assert.equal(res.commit, head);
+    assert.deepEqual(res.advarsler, ['Kjørt med en spec som ikke er lagt til i git: tests/ny.spec.ts. Playwright kjører den hvis filteret treffer den.']);
+    assert.ok(logg.some((l) => l.includes('tests/ny.spec.ts')));
+  } finally {
+    rmSync(rot, { recursive: true, force: true });
+  }
 });
