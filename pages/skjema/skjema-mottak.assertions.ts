@@ -104,6 +104,40 @@ export class SkjemaMottakAssertions {
     forventet: Record<string, number | boolean>,
     timeoutMs = 45000
   ): Promise<void> {
+    const juridiskArbeidsgiverNorge =
+      (await this.hentMottatteOpplysninger(saksnummer, timeoutMs)).juridiskArbeidsgiverNorge ?? {};
+    for (const [felt, verdi] of Object.entries(forventet)) {
+      const faktisk = juridiskArbeidsgiverNorge[felt];
+      expect(faktisk, `juridiskArbeidsgiverNorge.${felt} skal være oppgitt`).not.toBeNull();
+      expect(faktisk, `juridiskArbeidsgiverNorge.${felt} skal finnes`).not.toBeUndefined();
+      expect(
+        typeof verdi === 'number' ? Number(faktisk) : faktisk,
+        `juridiskArbeidsgiverNorge.${felt}`
+      ).toBe(verdi);
+    }
+    console.log(`✅ juridiskArbeidsgiverNorge for ${saksnummer}:`, forventet);
+  }
+
+  /**
+   * Verifiser at arbeidsstedet på land fra søknaden er mappet til mottatte opplysninger
+   * (`arbeidPaaLand.fysiskeArbeidssteder`). Statsansatte som sender før arbeidsgiveren oppgir
+   * arbeidsstedet i arbeidstakers del (MELOSYS-7694).
+   */
+  async verifiserArbeidsstedPaaLand(saksnummer: string, virksomhetNavn: string, timeoutMs = 45000): Promise<void> {
+    const data = await this.hentMottatteOpplysninger(saksnummer, timeoutMs);
+    const navn = (data.arbeidPaaLand?.fysiskeArbeidssteder ?? []).map((a) => a.virksomhetNavn);
+    expect(navn, 'arbeidPaaLand.fysiskeArbeidssteder[].virksomhetNavn').toContain(virksomhetNavn);
+    console.log(`✅ Arbeidssted på land for ${saksnummer}: ${virksomhetNavn}`);
+  }
+
+  /** Poll til melosys-api har lagret mottatte opplysninger for saken, og returner JSON-dataene. */
+  private async hentMottatteOpplysninger(
+    saksnummer: string,
+    timeoutMs: number
+  ): Promise<{
+    juridiskArbeidsgiverNorge?: Record<string, unknown>;
+    arbeidPaaLand?: { fysiskeArbeidssteder?: { virksomhetNavn?: string }[] };
+  }> {
     const deadline = Date.now() + timeoutMs;
     let data: string | null = null;
     while (Date.now() < deadline && data === null) {
@@ -120,18 +154,7 @@ export class SkjemaMottakAssertions {
       if (data === null) await new Promise((r) => setTimeout(r, 2000));
     }
     expect(data, `MOTTATTEOPPLYSNINGER for ${saksnummer} skal finnes`).not.toBeNull();
-
-    const juridiskArbeidsgiverNorge = JSON.parse(data!).juridiskArbeidsgiverNorge ?? {};
-    for (const [felt, verdi] of Object.entries(forventet)) {
-      const faktisk = juridiskArbeidsgiverNorge[felt];
-      expect(faktisk, `juridiskArbeidsgiverNorge.${felt} skal være oppgitt`).not.toBeNull();
-      expect(faktisk, `juridiskArbeidsgiverNorge.${felt} skal finnes`).not.toBeUndefined();
-      expect(
-        typeof verdi === 'number' ? Number(faktisk) : faktisk,
-        `juridiskArbeidsgiverNorge.${felt}`
-      ).toBe(verdi);
-    }
-    console.log(`✅ juridiskArbeidsgiverNorge for ${saksnummer}:`, forventet);
+    return JSON.parse(data!);
   }
 
   /** Antall fagsaker totalt (databasen ryddes per test, så dette er saker opprettet i testen). */

@@ -1,5 +1,12 @@
 import { Page, expect } from '@playwright/test';
-import { ddmmyyyy, lagreOgFortsett, standardUtsendingsperiode, startSoknadViaIntroside, svarRadio } from './skjema-utils';
+import {
+  ddmmyyyy,
+  fyllArbeidsstedForStatligArbeidsgiver,
+  fyllUtsendingsperiodeOgLand,
+  lagreOgFortsett,
+  startSoknadViaIntroside,
+  svarRadio,
+} from './skjema-utils';
 
 /**
  * Page Object for den digitale «Utsendt arbeidstaker»-søknaden i melosys-skjema-web,
@@ -13,6 +20,11 @@ import { ddmmyyyy, lagreOgFortsett, standardUtsendingsperiode, startSoknadViaInt
  *   oversikt → skjema/start (bekreft) → utsendingsperiode-og-land → arbeidssituasjon
  *   → skatteforhold-og-inntekt → familiemedlemmer → tilleggsopplysninger → vedlegg
  *   → oppsummering → kvittering
+ *
+ * Statsansatt (statlig arbeidsgiver + arbeidsforhold i AAREG, MELOSYS-7694) som sender før
+ * arbeidsgiveren, oppgir selv arbeidsstedet og svarer på lønn i skatteforhold-steget:
+ *   utsendingsperiode-og-land → arbeidssituasjon → arbeidssted-i-utlandet
+ *   → skatteforhold-og-inntekt → familiemedlemmer → tilleggsopplysninger → vedlegg → oppsummering
  *
  * Steg-metodene for arbeidssituasjon t.o.m. oppsummering deles med arbeidsgiver-varianten
  * (begge deler) — se soknad-arbeidsgiver.page.ts som komponerer denne POM-en for AT-stegene.
@@ -43,22 +55,44 @@ export class SoknadUtsendtArbeidstakerPage {
     return hentSkjemaIdFraUrl(page);
   }
 
-  async fyllUtsendingsperiodeOgLand(land = 'Frankrike'): Promise<void> {
-    const page = this.page;
-    await expect(page.getByRole('heading', { name: 'Utenlandsperiode og land' })).toBeVisible();
-    await page.getByLabel('I hvilket land skal arbeidet utføres?').selectOption({ label: land });
-
-    const { fraDato, tilDato } = standardUtsendingsperiode();
-    await page.getByRole('textbox', { name: 'Fra dato' }).fill(fraDato);
-    await page.getByRole('textbox', { name: 'Til dato' }).fill(tilDato);
-
-    await lagreOgFortsett(page, /\/arbeidssituasjon/);
+  async fyllUtsendingsperiodeOgLand(land = 'Frankrike', aaregVarsel?: 'vises' | 'vises-ikke'): Promise<void> {
+    await fyllUtsendingsperiodeOgLand(this.page, land, /\/arbeidssituasjon/, aaregVarsel);
   }
 
   async fyllArbeidssituasjon(): Promise<void> {
     await svarRadio(this.page, /lønnet arbeid i Norge/, 'Ja');
     await svarRadio(this.page, /selvstendig virksomhet eller arbeide for en annen/, 'Nei');
     await lagreOgFortsett(this.page, /\/skatteforhold-og-inntekt/);
+  }
+
+  /** Statsansatt: spørsmålet om lønnet arbeid før utsending vises ikke. */
+  async fyllArbeidssituasjonSomStatsansatt(): Promise<void> {
+    const page = this.page;
+    await expect(page.getByRole('heading', { name: 'Arbeidssituasjon', level: 1 })).toBeVisible();
+    await expect(page.getByRole('radiogroup', { name: /lønnet arbeid i Norge/ })).toHaveCount(0);
+    await svarRadio(page, /selvstendig virksomhet eller arbeide for en annen/, 'Nei');
+    await lagreOgFortsett(page, /\/arbeidssted-i-utlandet/);
+  }
+
+  /** Statsansatt som sender først: oppgir selv arbeidsstedet (du-form, kun på land). */
+  async fyllArbeidsstedSomStatsansatt(): Promise<void> {
+    await expect(
+      this.page.getByRole('radiogroup', { name: 'Har du fast arbeidssted i dette landet, eller veksler det ofte?' })
+    ).toBeVisible();
+    await fyllArbeidsstedForStatligArbeidsgiver(this.page, /\/skatteforhold-og-inntekt/);
+  }
+
+  /**
+   * Statsansatt som sender først: svarer på om arbeidsgiveren utbetaler all lønn, og får ikke
+   * spørsmålene om inntektskilder og inntektstype.
+   */
+  async fyllSkatteforholdSomStatsansatt(): Promise<void> {
+    const page = this.page;
+    await svarRadio(page, /Utbetaler arbeidsgiveren din all lønn/, 'Ja');
+    await svarRadio(page, /skattepliktig til Norge/, 'Ja');
+    await expect(page.getByRole('checkbox', { name: 'Lønnsinntekt' })).toHaveCount(0);
+    await svarRadio(page, /pengestøtte fra et annet EØS-land/, 'Nei');
+    await lagreOgFortsett(page, /\/familiemedlemmer/);
   }
 
   async fyllSkatteforholdOgInntekt(): Promise<void> {
@@ -145,6 +179,27 @@ export class SoknadUtsendtArbeidstakerPage {
     await this.fyllFamiliemedlemmer();
     await this.fyllTilleggsopplysninger();
     await this.fyllVedlegg(vedleggFilsti);
+    const referanse = await this.sendInnOgHentReferanse();
+    return { skjemaId, referanse };
+  }
+
+  /**
+   * Fyll ut og send inn arbeidstakers del som statsansatt før arbeidsgiveren har sendt sin del.
+   * Krever en arbeidstaker med arbeidsforhold i AAREG hos den statlige arbeidsgiveren
+   * (JUNIOR 77777777777 hos 666666666 i mocken), så AAREG-varselet skal ikke vises.
+   */
+  async fyllUtOgSendInnSomStatsansatt(
+    arbeidsgiverOrgnr: string,
+    land: string
+  ): Promise<{ skjemaId: string; referanse: string }> {
+    const skjemaId = await this.startSoknadSomDegSelv(arbeidsgiverOrgnr);
+    await this.fyllUtsendingsperiodeOgLand(land, 'vises-ikke');
+    await this.fyllArbeidssituasjonSomStatsansatt();
+    await this.fyllArbeidsstedSomStatsansatt();
+    await this.fyllSkatteforholdSomStatsansatt();
+    await this.fyllFamiliemedlemmer();
+    await this.fyllTilleggsopplysninger();
+    await this.fyllVedlegg();
     const referanse = await this.sendInnOgHentReferanse();
     return { skjemaId, referanse };
   }
