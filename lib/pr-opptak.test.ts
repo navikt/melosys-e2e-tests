@@ -526,6 +526,9 @@ const OPPLASTET: [string, string, { lenker: number; ulastet: number }][] = [
   ['lenker i en eldre seksjon telles ikke', `${START}\n${URL('x')}\n${URL('y')}\n${SLUTT}\n\n${START}\n![](./opptak-1.mp4)\n${SLUTT}`, { lenker: 0, ulastet: 1 }],
   ['lenker i en kodeblokk med markører telles ikke', `\`\`\`\n${START}\n${URL('x')}\n${SLUTT}\n\`\`\`\n\n${START}\n${URL('a')}\n${SLUTT}`, { lenker: 1, ulastet: 0 }],
   ['tekst etter seksjonen: ingen seksjon', `${START}\n${URL('a')}\n${SLUTT}\nEtter`, { lenker: 0, ulastet: 0 }],
+  ['lenke inne i en annen URL telles ikke', `${START}\nhttps://evil.example/?u=${URL('x')}\n${SLUTT}`, { lenker: 0, ulastet: 0 }],
+  ['lenke med en annen vert etter telles ikke', `${START}\n${URL('x')}.evil.example/\n${SLUTT}`, { lenker: 0, ulastet: 0 }],
+  ['lenke med mellomrom etter telles', `${START}\n${URL('a')} \t\r\n${SLUTT}`, { lenker: 1, ulastet: 0 }],
 ];
 
 for (const [navn, body, forventet] of OPPLASTET) {

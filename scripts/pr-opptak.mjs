@@ -228,7 +228,8 @@ export function sjekkOpplastet(body) {
   const funnet = finnSeksjon(body);
   if (!funnet) return { lenker: 0, ulastet: 0 };
   const seksjon = body.slice(funnet.fra);
-  const lenker = new Set(seksjon.match(/https:\/\/github\.com\/user-attachments\/assets\/[\w-]+/g) ?? []).size;
+  // gh setter hver opplastede URL på en egen linje. Ankeret hindrer at en URL inne i en annen lenke telles.
+  const lenker = new Set(seksjon.match(/^https:\/\/github\.com\/user-attachments\/assets\/[\w-]+(?=[ \t]*\r?$)/gm) ?? []).size;
   const ulastet = (seksjon.match(/\.\/opptak-\d+\.mp4/g) ?? []).length;
   return { lenker, ulastet };
 }
