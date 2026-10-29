@@ -760,7 +760,7 @@ jobs:
             echo "::error::shards må være et heltall fra 1 til 8, var: $(printf '%q' "$requested")"
             exit 1
           fi
-          # Sjekkes her, før stacken startes. playwright.config.ts leser en ugyldig verdi som standarden.
+          # Sjekkes her, før stacken startes. playwright.config.ts godtar -5 og 1e3, og leser 800ms som standarden.
           if ! [[ "${INPUT_SLOWMO:-}" =~ ^[0-9]*$ ]]; then
             echo "::error::slowmo må være et antall millisekunder, for eksempel 800, var: $(printf '%q' "$INPUT_SLOWMO")"
             exit 1
