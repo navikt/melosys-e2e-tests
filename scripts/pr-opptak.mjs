@@ -283,7 +283,7 @@ export function planleggUtvalg({ utvalg, tellTester, maks }) {
 
 /** Filteret sendes ferdig utregnet, så CI kjører det samme utvalget som ble talt. */
 export const ciArgumenter = (branch, grep, slowmo = null) =>
-  [...(grep ? ['--grep', grep] : []), '--branch', branch, '--video', ...(slowmo !== null ? ['--slowmo', slowmo] : []), '--no-wait'];
+  [...(grep ? ['--grep', grep] : []), '--branch', branch, '--video', ...(slowmo != null ? ['--slowmo', slowmo] : []), '--no-wait'];
 
 /**
  * En kjøring fra en annen branch viser en annen endring, så den avvises. Samme branch på en eldre
@@ -386,8 +386,8 @@ export const lagPåvirkedeTester = (rot) => (args) => {
 };
 const påvirkedeTester = lagPåvirkedeTester(ROOT);
 
-async function fraCi(pr, maks, slowmo, katalog, tilstand, d) {
-  // Utvalget telles i arbeidstreet før kjøringen startes, så det må være PR-ens kode.
+/** Utvalget telles i arbeidstreet før kjøringen startes, så det må være PR-ens kode. */
+function planleggCi(pr, maks) {
   const head = kjørTekst('git', ['rev-parse', 'HEAD']).trim();
   if (head !== pr.headRefOid) {
     throw new Error(`Du står på ${head.slice(0, 7)}, men PR-en står på ${pr.headRefOid.slice(0, 7)} (${pr.headRefName}). Testene telles fra koden du står på: kjør git switch ${pr.headRefName} && git pull, eller bruk RUN=<id>.`);
@@ -396,10 +396,14 @@ async function fraCi(pr, maks, slowmo, katalog, tilstand, d) {
     logg('⚠️  Du har ucommittede endringer. Testene telles med dem, men CI kjører det som er pushet.');
   }
   spawnSync('git', ['fetch', '--quiet', 'origin', '+refs/heads/main:refs/remotes/origin/main'], { cwd: ROOT });
-  const plan = planleggUtvalg({ utvalg: påvirkedeTester(['--kun-committet', '--head', pr.headRefOid]), tellTester, maks });
+  return planleggUtvalg({ utvalg: påvirkedeTester(['--kun-committet', '--head', pr.headRefOid]), tellTester, maks });
+}
+
+async function fraCi(pr, maks, slowmo, katalog, tilstand, d) {
+  const plan = d.planleggCi(pr, maks);
   if (!plan) return null;
   logg(`${plan.antall} tester i utvalget.`);
-  const { kode, ut } = await strøm('./scripts/ci-e2e.sh', ciArgumenter(pr.headRefName, plan.grep, slowmo));
+  const { kode, ut } = await d.startCi(ciArgumenter(pr.headRefName, plan.grep, slowmo));
   if (kode !== 0) throw new Error(`ci-e2e.sh feilet med kode ${kode}.`);
   const run = finnRunId(ut);
   if (!run) throw new Error('Fant ikke run-lenken i utdataene fra ci-e2e.sh.');
@@ -446,6 +450,12 @@ function tellTester(grep) {
   return antall;
 }
 
+/** Miljøet Playwright kjøres med i LOKAL. En SLOWMO eksportert i skallet styrer ikke opptaket. */
+export function lokalEnv(base, slowmo) {
+  const { SLOWMO: _skall, ...env } = base;
+  return { ...env, PW_VIDEO: 'on', ...(slowmo != null ? { SLOWMO: slowmo } : {}) };
+}
+
 /** git, utvalget og Playwright for LOKAL; testene bytter dem ut. */
 const lokaleAvhengigheter = (slowmo = null) => ({
   git: (args) => kjørTekst('git', args),
@@ -455,7 +465,7 @@ const lokaleAvhengigheter = (slowmo = null) => ({
   kjørPlaywright: async (grep) => {
     const json = join(ROOT, 'test-results', 'opptak.json');
     rmSync(json, { force: true });
-    const { kode } = await strøm('npx', ['playwright', 'test', '--project=chromium', ...(grep ? ['--grep', grep] : [])], { env: { ...process.env, PW_VIDEO: 'on', ...(slowmo !== null ? { SLOWMO: slowmo } : {}) } });
+    const { kode } = await strøm('npx', ['playwright', 'test', '--project=chromium', ...(grep ? ['--grep', grep] : [])], { env: lokalEnv(process.env, slowmo) });
     return { kode, json: existsSync(json) ? json : null };
   },
 });
@@ -498,8 +508,11 @@ export async function konverter(opptak, katalog) {
   await Promise.all(Array.from({ length: Math.min(4, opptak.length) }, arbeider));
 }
 
-/** gh, ffmpeg, ventingen og den midlertidige mappa; testene bytter dem ut. */
+/** gh, ffmpeg, CI-kjøringen, ventingen og den midlertidige mappa; testene bytter dem ut. */
 const standardAvhengigheter = () => ({
+  planleggCi,
+  startCi: (args) => strøm('./scripts/ci-e2e.sh', args),
+  lokale: lokaleAvhengigheter,
   gh,
   ghJson,
   ghEdit: (args) => spawnSync('gh', args, { cwd: ROOT, stdio: 'inherit' }).status,
@@ -542,7 +555,7 @@ export async function kjørOpptak(a, d = standardAvhengigheter()) {
 
 async function lagOgLastOpp(a, pr, katalog, tilstand, d) {
   const resultat = a.lokal
-    ? await lokalt(pr, a.maks, lokaleAvhengigheter(a.slowmo))
+    ? await lokalt(pr, a.maks, d.lokale(a.slowmo))
     : a.run
       ? await lastNedKjøring(a.run, pr, katalog, tilstand, d)
       : await fraCi(pr, a.maks, a.slowmo, katalog, tilstand, d);

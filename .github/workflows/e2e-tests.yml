@@ -740,6 +740,7 @@ jobs:
         env:
           INPUT_SHARDS: ${{ inputs.shards }}
           INPUT_RUNNER: ${{ inputs.runner }}
+          INPUT_SLOWMO: ${{ inputs.slowmo }}
           RUN_BDD: ${{ inputs.run_bdd == true }}
           COLLECT_COVERAGE: ${{ inputs.collect_coverage == true }}
         # repository_dispatch og workflow_call har ingen shards- eller runner-input og får
@@ -757,6 +758,11 @@ jobs:
           requested="${INPUT_SHARDS:-6}"
           if ! [[ "$requested" =~ ^[1-8]$ ]]; then
             echo "::error::shards må være et heltall fra 1 til 8, var: $(printf '%q' "$requested")"
+            exit 1
+          fi
+          # Sjekkes her, før stacken startes. playwright.config.ts leser en ugyldig verdi som standarden.
+          if ! [[ "${INPUT_SLOWMO:-}" =~ ^[0-9]*$ ]]; then
+            echo "::error::slowmo må være et antall millisekunder, for eksempel 800, var: $(printf '%q' "$INPUT_SLOWMO")"
             exit 1
           fi
           if [ "$requested" -gt 1 ] && [ "$RUN_BDD" = "true" ]; then
