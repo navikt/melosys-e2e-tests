@@ -665,6 +665,7 @@ services:
       # Eksterne integrasjoner -> mockes i melosys-mock
       PDL_URL: "http://melosys-mock.melosys.docker-internal:8083/graphql"
       EREG_URL: "http://melosys-mock.melosys.docker-internal:8083/ereg"
+      AAREG_URL: "http://melosys-mock.melosys.docker-internal:8083/aareg-services"
       REPR_URL: "http://melosys-mock.melosys.docker-internal:8083/repr"
       ARBEIDSGIVER_ALTINN_TILGANGER_URL: "http://melosys-mock.melosys.docker-internal:8083"
       ARBEIDSGIVER_NOTIFIKASJON_URL: "http://melosys-mock.melosys.docker-internal:8083/arbeidsgiver-notifikasjon"
