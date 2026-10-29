@@ -135,7 +135,7 @@ make ci-affected ENV=melosys-api:min-tag RETRIES=1
 | `RETRIES=1` | `--retries` | Slår på retries. Standard er av, så flaky tester synes |
 | `VIS_FILTER=1` | `--vis-filter` | Skriver ut hele filteret som sendes |
 | `VIDEO=1` | `--video` | Tar opp video av hver test, også grønne. Opptakene og `opptak.json` lastes opp som `playwright-videos-shard-<n>`, eller `playwright-videos` når kjøringen har én shard (se [Sharding](#sharding)). Opptaket gjør testene litt tregere, så en tidsfølsom test kan bli flaky. Branchen må ha `record_video` i workflowen, altså main flettet inn etter at inputen kom |
-| `SLOWMO=<ms>` | `--slowmo <ms>` | Pause i millisekunder etter hver handling i nettleseren, så opptaket er lettere å følge. Uten er pausen 400 ms med `VIDEO=1` og 0 ellers. `SLOWMO=0` gir full fart. Pausen gjør kjøringen lengre, og en test som er nær timeouten sin kan gå ut på tid; sett da en lavere verdi. Branchen må ha `slowmo` i workflowen |
+| `SLOWMO=<ms>` | `--slowmo <ms>` | Pause i millisekunder etter hver handling i nettleseren, så opptaket er lettere å følge. Uten er pausen 400 ms med `VIDEO=1` og 0 ellers. `SLOWMO=0` gir full fart. Pausen gjør kjøringen lengre, og en test som er nær timeouten sin kan gå ut på tid; sett da en lavere verdi. Hver shard-jobb har 120 minutter, så hele suiten med video på én shard (`SHARDS=1`) kan gå ut på tid. Branchen må ha `slowmo` i workflowen |
 | `NO_WAIT=1` | `--no-wait` | Starter kjøringen og returnerer med én gang |
 
 Variablene leses bare fra kommandolinjen. En `BRANCH` eller `ENV` eksportert i skallet styrer ikke CI.
