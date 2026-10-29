@@ -95,6 +95,7 @@ Grafen ser bare statiske importer. Når endringen din når testene via kjøretid
 | `make ci` | Kjører hele suiten mot `latest` |
 | `make ci-grep GREP=8163` | Kjører tester som matcher et eget filter |
 | `make ci-images ENV=melosys-api:min-tag,melosys-web:min-tag` | Kjører hele suiten mot egne images |
+| `make pr-opptak PR=<n>` | Legger opptak av de påvirkede testene i PR-beskrivelsen. Se [Opptak i PR-beskrivelsen](#opptak-i-pr-beskrivelsen) |
 
 Egne images bygger du med «Build and Push Image»-workflowen i hvert repo. Workflow-fila må finnes på branchen du bygger fra.
 
@@ -137,6 +138,31 @@ make ci-affected ENV=melosys-api:min-tag RETRIES=1
 | `NO_WAIT=1` | `--no-wait` | Starter kjøringen og returnerer med én gang |
 
 Variablene leses bare fra kommandolinjen. En `BRANCH` eller `ENV` eksportert i skallet styrer ikke CI.
+
+## Opptak i PR-beskrivelsen
+
+`make pr-opptak PR=<n>` kjører testene PR-en påvirker på CI med `VIDEO=1`, venter på kjøringen og legger ett mp4-opptak per test i PR-beskrivelsen. Opptakene står i en seksjon sist i beskrivelsen, mellom `<!-- e2e-opptak:start -->` og `<!-- e2e-opptak:end -->`, med en linje som lenker til kjøringen og teller grønne, røde og flaky tester. Kjører du på nytt, byttes bare seksjonen sist ut, og teksten over står urørt. Står det tekst etter en eldre seksjon, legges en ny seksjon til sist; den eldre blir stående, og scriptet sier fra i terminalen. Markører andre steder i beskrivelsen røres ikke, med ett unntak: slutter beskrivelsen med et kodeeksempel som har startmarkøren og så sluttmarkøren på egne linjer, tar scriptet eksempelet for seksjonen og bytter det ut. Vis markørene i kodefont (`` `<!-- e2e-opptak:start -->` ``) i stedet. Har beskrivelsen en kodeblokk som ikke er lukket, viser GitHub seksjonen inne i den.
+
+```bash
+make pr-opptak PR=397
+```
+
+| Variabel | Hva det gjør |
+|---|---|
+| `PR=<n>` | PR-en i melosys-e2e-tests. Påkrevd |
+| `LOKAL=1` | Kjører testene mot stacken som kjører lokalt, i stedet for på CI. Utvalget regnes fra committet kode, men Playwright kjører arbeidstreet, så stå i PR-ens branch. Har sporede filer ucommittede endringer, eller ligger det spec-filer under `tests/` som ikke er lagt til i git, sier seksjonen fra |
+| `RUN=<id>` | Bruker opptakene fra en kjøring du har startet selv med `VIDEO=1`, for eksempel `make ci-grep GREP=8163 VIDEO=1`. Kjøringen må være fra PR-ens branch. Er den på en eldre commit, sier seksjonen hvilken |
+| `MAKS=<n>` | Største antall opptak. Standard er 20, og høyst 50, fordi `gh pr edit` tar maks 50 vedlegg per kall |
+| `TORRT=1` | Gjør alt unntatt å endre beskrivelsen, og skriver ut seksjonen og mappa med filene. Mappa slettes ikke |
+
+Du trenger:
+
+- `gh` 2.99 eller nyere, innlogget med `gh auth login`. GitHub spiller bare av video fra `user-attachments`-lenker, og bare `gh pr edit --attach` med en personlig innlogging lager dem. Er `GH_TOKEN` eller `GITHUB_TOKEN` satt, stopper scriptet, fordi `--attach` avviser tokens.
+- `ffmpeg`, som gjør opptakene om fra webm til mp4.
+
+Scriptet teller testene i utvalget med `playwright test --list` før det starter en kjøring, og stopper når de er flere enn `MAKS`. Tellingen bruker koden du står på, så stå på PR-ens siste commit. CI kjører det samme filteret. Snevre inn med `make ci-grep GREP=<mønster> VIDEO=1` og bruk `RUN=<id>`. En test som hoppes over før den starter, har ikke opptak og telles bare i oppsummeringen. En avbrutt test, og en test som hoppes over etter at den har startet, har opptak og står i lista. En rød kjøring får også opptak.
+
+Den midlertidige mappa slettes, unntatt etter `TORRT=1` og når et nytt forsøk med `RUN=<id>` kan rette feilen: når opptakene er flere enn `MAKS`, men høyst 50, eller når `gh pr edit` eller sjekken etter opplastingen feiler. Da sier feilmeldingen hvor mappa ligger og hvilken kommando du kjører på nytt, for eksempel `RUN=<id> MAKS=<n>`. Et nytt forsøk laster ned opptakene på nytt; det bruker ikke mappa.
 
 ## Sharding
 

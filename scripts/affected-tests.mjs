@@ -133,6 +133,7 @@ const VERKTOY = [
   'scripts/ci-e2e.sh',
   'scripts/affected-tests.mjs',
   'scripts/koblet-merge.mjs',
+  'scripts/pr-opptak.mjs',
   '.github/workflows/koblet-merge.yml',
 ];
 export const utenE2eEffekt = (p) => isDoc(p) || VERKTOY.includes(p) || (p.startsWith('lib/') && p.endsWith('.test.ts'));
