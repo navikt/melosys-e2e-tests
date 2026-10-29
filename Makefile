@@ -154,12 +154,13 @@ test-debug: ## Run tests in debug mode
 # ==============================================================================
 
 # Variablene tilsvarer flaggene i scripts/ci-e2e.sh (se docs/ci-cd/KJOR-E2E-PA-CI.md):
-# BRANCH=<navn>, ENV=<tagger>, SHARDS=<1–8>, PREVIEW=1, RETRIES=1, VIS_FILTER=1, VIDEO=1, NO_WAIT=1.
+# BRANCH=<navn>, ENV=<tagger>, SHARDS=<1–8>, PREVIEW=1, RETRIES=1, VIS_FILTER=1, VIDEO=1, SLOWMO=<ms>, NO_WAIT=1.
 # De leses bare fra kommandolinjen, så en BRANCH eller ENV eksportert i skallet ikke styrer CI stille.
 fra_kommandolinje = $(if $(filter command line,$(origin $(1))),$($(1)))
 BRANCH_ARG = $(call fra_kommandolinje,BRANCH)
 ENV_ARG = $(call fra_kommandolinje,ENV)
 SHARDS_ARG = $(call fra_kommandolinje,SHARDS)
+SLOWMO_ARG = $(call fra_kommandolinje,SLOWMO)
 CI_FLAGG = $(if $(BRANCH_ARG),--branch "$(BRANCH_ARG)") \
 	$(if $(ENV_ARG),--env "$(ENV_ARG)") \
 	$(if $(SHARDS_ARG),--shards "$(SHARDS_ARG)") \
@@ -167,6 +168,7 @@ CI_FLAGG = $(if $(BRANCH_ARG),--branch "$(BRANCH_ARG)") \
 	$(if $(call fra_kommandolinje,RETRIES),--retries) \
 	$(if $(call fra_kommandolinje,VIS_FILTER),--vis-filter) \
 	$(if $(call fra_kommandolinje,VIDEO),--video) \
+	$(if $(SLOWMO_ARG),--slowmo "$(SLOWMO_ARG)") \
 	$(if $(call fra_kommandolinje,NO_WAIT),--no-wait)
 
 .PHONY: list-affected
@@ -196,7 +198,7 @@ endif
 ci-images: ## Run the full suite on CI against your own images, e.g. make ci-images ENV=melosys-api:my-tag
 	@./scripts/ci-e2e.sh $(CI_FLAGG)
 
-# PR=<n>, RUN=<id>, LOKAL=1, MAKS=<n>, TORRT=1 — se docs/ci-cd/KJOR-E2E-PA-CI.md.
+# PR=<n>, RUN=<id>, LOKAL=1, MAKS=<n>, SLOWMO=<ms>, TORRT=1 — se docs/ci-cd/KJOR-E2E-PA-CI.md.
 PR_ARG = $(call fra_kommandolinje,PR)
 RUN_ARG = $(call fra_kommandolinje,RUN)
 MAKS_ARG = $(call fra_kommandolinje,MAKS)
@@ -207,6 +209,7 @@ pr-opptak: ## Record the tests a PR affects and put the videos in its descriptio
 	@node scripts/pr-opptak.mjs "$(PR_ARG)" \
 		$(if $(RUN_ARG),--run "$(RUN_ARG)") \
 		$(if $(MAKS_ARG),--maks "$(MAKS_ARG)") \
+		$(if $(SLOWMO_ARG),--slowmo "$(SLOWMO_ARG)") \
 		$(if $(call fra_kommandolinje,LOKAL),--lokal) \
 		$(if $(call fra_kommandolinje,TORRT),--torrt)
 

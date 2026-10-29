@@ -22,6 +22,7 @@ import {
   ghVersjonHolder,
   lagSeksjon,
   lesArgumenter,
+  lokalEnv,
   lesOpptak,
   oppsummer,
   sjekkOpplastet,
@@ -230,6 +231,25 @@ test('utvalg over maks avvises før kjøringen, også når det ikke er hele suit
 test('CI-kjøringen får det utregnede filteret, ikke --affected, så utvalget regnes én gang', () => {
   assert.deepEqual(ciArgumenter('min-branch', 'a|b'), ['--grep', 'a|b', '--branch', 'min-branch', '--video', '--no-wait']);
   assert.deepEqual(ciArgumenter('min-branch', ''), ['--branch', 'min-branch', '--video', '--no-wait']);
+});
+
+test('LOKAL bruker bare SLOWMO fra kommandolinjen, ikke en SLOWMO eksportert i skallet', () => {
+  const skall = { PATH: '/bin', SLOWMO: '0' };
+  assert.deepEqual(lokalEnv(skall, null), { PATH: '/bin', PW_VIDEO: 'on' });
+  assert.deepEqual(lokalEnv(skall, '800'), { PATH: '/bin', PW_VIDEO: 'on', SLOWMO: '800' });
+  assert.equal(skall.SLOWMO, '0');
+});
+
+test('SLOWMO sendes videre til CI bare når den er satt, og 0 er en gyldig verdi', () => {
+  assert.deepEqual(ciArgumenter('b', 'a', '800'), ['--grep', 'a', '--branch', 'b', '--video', '--slowmo', '800', '--no-wait']);
+  assert.deepEqual(ciArgumenter('b', 'a', '0'), ['--grep', 'a', '--branch', 'b', '--video', '--slowmo', '0', '--no-wait']);
+  assert.equal(lesArgumenter(['1']).slowmo, null);
+  assert.equal(lesArgumenter(['1', '--slowmo', '0']).slowmo, '0');
+  assert.equal(lesArgumenter(['1', '--slowmo', '800', '--lokal']).slowmo, '800');
+  for (const ugyldig of [['--slowmo'], ['--slowmo', '-5'], ['--slowmo', '1.5'], ['--slowmo', 'fort']]) {
+    assert.throws(() => lesArgumenter(['1', ...ugyldig]), /antall millisekunder/);
+  }
+  assert.throws(() => lesArgumenter(['1', '--run', '9', '--slowmo', '800']), /virker ikke med RUN=/);
 });
 
 test('pr-opptak starter ikke e2e-suiten', () => {
@@ -553,6 +573,38 @@ test('sjekken etter opplasting teller ikke lenker i en eldre seksjon', async () 
   const løp = lagLøp({ bodies: ['Tekst', lest] });
   try {
     await assert.rejects(kjørOpptak(argumenter({ torrt: false }), løp.d), /Seksjonen har 0 opplastede opptak av 2, og 2 som ikke er lastet opp/);
+  } finally {
+    rydd(løp.katalog());
+  }
+});
+
+// ---------------------------------------------------------------- SLOWMO fra make til kjøringen
+
+test('SLOWMO når ci-e2e.sh i CI-modus, og sendes ikke når den mangler', async () => {
+  for (const [slowmo, forventet] of [['800', ['--slowmo', '800']], [null, []]] as const) {
+    const løp = lagLøp();
+    let sendt: string[] = [];
+    const d = {
+      ...løp.d,
+      planleggCi: () => ({ grep: 'a', antall: 1 }),
+      startCi: async (args: string[]) => ((sendt = args), { kode: 1, ut: '' }),
+    };
+    try {
+      await assert.rejects(kjørOpptak(argumenter({ run: null, slowmo }), d), /ci-e2e\.sh feilet med kode 1/);
+      assert.deepEqual(sendt, ['--grep', 'a', '--branch', 'min-branch', '--video', ...forventet, '--no-wait']);
+    } finally {
+      rydd(løp.katalog());
+    }
+  }
+});
+
+test('SLOWMO når Playwright-miljøet i LOKAL-modus', async () => {
+  const løp = lagLøp();
+  let fått: unknown;
+  const d = { ...løp.d, lokale: (slowmo: unknown) => { fått = slowmo; throw new Error('stopp før kjøringen'); } };
+  try {
+    await assert.rejects(kjørOpptak(argumenter({ run: null, lokal: true, slowmo: '800' }), d), /stopp før kjøringen/);
+    assert.equal(fått, '800');
   } finally {
     rydd(løp.katalog());
   }
