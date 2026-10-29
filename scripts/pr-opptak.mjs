@@ -22,7 +22,7 @@ export const MAKS_GRENSE = 50;
 export const MAKS_STANDARD = 20;
 const MINSTE_GH = [2, 99];
 
-const HJELP = `Bruk: node scripts/pr-opptak.mjs <pr> [--run <id>] [--lokal] [--maks <n>] [--torrt]
+const HJELP = `Bruk: node scripts/pr-opptak.mjs <pr> [--run <id>] [--lokal] [--maks <n>] [--slowmo <ms>] [--torrt]
 
 Kjører e2e-testene PR-en påvirker med video, og legger ett opptak per test i PR-beskrivelsen.
 
@@ -30,15 +30,16 @@ Kjører e2e-testene PR-en påvirker med video, og legger ett opptak per test i P
   --run <id>    bruk opptakene fra en kjøring startet med VIDEO=1, i stedet for å starte en ny
   --lokal       kjør testene mot stacken som kjører lokalt, i stedet for på CI
   --maks <n>    største antall opptak (standard ${MAKS_STANDARD}, høyst ${MAKS_GRENSE})
+  --slowmo <ms> pause etter hver handling i nettleseren (standard 400)
   --torrt       gjør alt unntatt å endre PR-beskrivelsen, og skriv ut seksjonen
 
 Krever gh ${MINSTE_GH.join('.')} eller nyere med personlig innlogging (gh auth login), og ffmpeg.
-Fra make: make pr-opptak PR=<n> [RUN=<id>] [LOKAL=1] [MAKS=<n>] [TORRT=1]`;
+Fra make: make pr-opptak PR=<n> [RUN=<id>] [LOKAL=1] [MAKS=<n>] [SLOWMO=<ms>] [TORRT=1]`;
 
 // ---------------------------------------------------------------- rene funksjoner
 
 export function lesArgumenter(argv) {
-  const a = { pr: null, run: null, lokal: false, maks: MAKS_STANDARD, torrt: false, hjelp: false };
+  const a = { pr: null, run: null, lokal: false, maks: MAKS_STANDARD, slowmo: null, torrt: false, hjelp: false };
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === '-h' || arg === '--help') a.hjelp = true;
@@ -46,6 +47,7 @@ export function lesArgumenter(argv) {
     else if (arg === '--torrt') a.torrt = true;
     else if (arg === '--run') a.run = argv[++i];
     else if (arg === '--maks') a.maks = argv[++i];
+    else if (arg === '--slowmo') a.slowmo = argv[++i];
     else if (!arg.startsWith('-') && a.pr === null) a.pr = arg;
     else throw new Error(`Ukjent argument «${arg}». Se --help.`);
   }
@@ -56,6 +58,8 @@ export function lesArgumenter(argv) {
   if (!/^[1-9][0-9]*$/.test(String(a.maks))) throw new Error('--maks (MAKS=) må være et positivt heltall.');
   a.maks = Number(a.maks);
   if (a.maks > MAKS_GRENSE) throw new Error(`MAKS kan være høyst ${MAKS_GRENSE}, fordi gh pr edit tar maks ${MAKS_GRENSE} vedlegg per kall.`);
+  if (a.slowmo !== null && !/^[0-9]+$/.test(a.slowmo ?? '')) throw new Error('--slowmo (SLOWMO=) må være et antall millisekunder, for eksempel 800.');
+  if (a.slowmo !== null && a.run !== null) throw new Error('SLOWMO= virker ikke med RUN=, fordi opptakene i kjøringen allerede er tatt.');
   return a;
 }
 
@@ -278,7 +282,8 @@ export function planleggUtvalg({ utvalg, tellTester, maks }) {
 }
 
 /** Filteret sendes ferdig utregnet, så CI kjører det samme utvalget som ble talt. */
-export const ciArgumenter = (branch, grep) => [...(grep ? ['--grep', grep] : []), '--branch', branch, '--video', '--no-wait'];
+export const ciArgumenter = (branch, grep, slowmo = null) =>
+  [...(grep ? ['--grep', grep] : []), '--branch', branch, '--video', ...(slowmo !== null ? ['--slowmo', slowmo] : []), '--no-wait'];
 
 /**
  * En kjøring fra en annen branch viser en annen endring, så den avvises. Samme branch på en eldre
@@ -381,7 +386,7 @@ export const lagPåvirkedeTester = (rot) => (args) => {
 };
 const påvirkedeTester = lagPåvirkedeTester(ROOT);
 
-async function fraCi(pr, maks, katalog, tilstand, d) {
+async function fraCi(pr, maks, slowmo, katalog, tilstand, d) {
   // Utvalget telles i arbeidstreet før kjøringen startes, så det må være PR-ens kode.
   const head = kjørTekst('git', ['rev-parse', 'HEAD']).trim();
   if (head !== pr.headRefOid) {
@@ -394,7 +399,7 @@ async function fraCi(pr, maks, katalog, tilstand, d) {
   const plan = planleggUtvalg({ utvalg: påvirkedeTester(['--kun-committet', '--head', pr.headRefOid]), tellTester, maks });
   if (!plan) return null;
   logg(`${plan.antall} tester i utvalget.`);
-  const { kode, ut } = await strøm('./scripts/ci-e2e.sh', ciArgumenter(pr.headRefName, plan.grep));
+  const { kode, ut } = await strøm('./scripts/ci-e2e.sh', ciArgumenter(pr.headRefName, plan.grep, slowmo));
   if (kode !== 0) throw new Error(`ci-e2e.sh feilet med kode ${kode}.`);
   const run = finnRunId(ut);
   if (!run) throw new Error('Fant ikke run-lenken i utdataene fra ci-e2e.sh.');
@@ -442,7 +447,7 @@ function tellTester(grep) {
 }
 
 /** git, utvalget og Playwright for LOKAL; testene bytter dem ut. */
-const lokaleAvhengigheter = () => ({
+const lokaleAvhengigheter = (slowmo = null) => ({
   git: (args) => kjørTekst('git', args),
   påvirkedeTester,
   tellTester,
@@ -450,7 +455,7 @@ const lokaleAvhengigheter = () => ({
   kjørPlaywright: async (grep) => {
     const json = join(ROOT, 'test-results', 'opptak.json');
     rmSync(json, { force: true });
-    const { kode } = await strøm('npx', ['playwright', 'test', '--project=chromium', ...(grep ? ['--grep', grep] : [])], { env: { ...process.env, PW_VIDEO: 'on' } });
+    const { kode } = await strøm('npx', ['playwright', 'test', '--project=chromium', ...(grep ? ['--grep', grep] : [])], { env: { ...process.env, PW_VIDEO: 'on', ...(slowmo !== null ? { SLOWMO: slowmo } : {}) } });
     return { kode, json: existsSync(json) ? json : null };
   },
 });
@@ -537,10 +542,10 @@ export async function kjørOpptak(a, d = standardAvhengigheter()) {
 
 async function lagOgLastOpp(a, pr, katalog, tilstand, d) {
   const resultat = a.lokal
-    ? await lokalt(pr, a.maks)
+    ? await lokalt(pr, a.maks, lokaleAvhengigheter(a.slowmo))
     : a.run
       ? await lastNedKjøring(a.run, pr, katalog, tilstand, d)
-      : await fraCi(pr, a.maks, katalog, tilstand, d);
+      : await fraCi(pr, a.maks, a.slowmo, katalog, tilstand, d);
   if (!resultat) {
     d.logg('✅ Ingen endringer påvirker e2e-testene, så det er ingenting å ta opp. Beskrivelsen er ikke endret.');
     return;

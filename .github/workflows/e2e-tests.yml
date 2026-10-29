@@ -41,6 +41,11 @@ on:
         required: false
         type: boolean
         default: false
+      slowmo:
+        description: 'Pause i millisekunder etter hver handling i nettleseren. Tom: 400 med record_video, ellers 0'
+        required: false
+        type: string
+        default: ''
       run_bdd:
         description: 'Run ONLY the opt-in ATDD/BDD example (atdd/features/ → --project=bdd) instead of chromium'
         required: false
@@ -1654,6 +1659,7 @@ jobs:
           RETRIES_DISABLED: ${{ inputs.disable_retries == true }}
           RECORD_API: ${{ inputs.record_api == true && 'true' || '' }}
           PW_VIDEO: ${{ inputs.record_video == true && 'on' || '' }}
+          SLOWMO: ${{ inputs.slowmo }}
           RUN_BDD: ${{ inputs.run_bdd == true && 'true' || '' }}
           UNLEASH_FORCE_DISABLE: ${{ inputs.unleash_force_disable }}
           UNLEASH_FORCE_ENABLE: ${{ inputs.unleash_force_enable }}

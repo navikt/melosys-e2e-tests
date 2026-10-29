@@ -33,16 +33,17 @@ const bddTestDir = defineBddConfig({
   language: 'no',
 });
 
+const OPPTAK = process.env.PW_VIDEO === 'on';
+
 /**
  * Pause etter hver handling. 0 på CI (sparte 4–5 min per kjøring); lokalt 100 ms for å
- * kunne følge med i headed-modus. Overstyr med SLOWMO=<ms>.
+ * kunne følge med i headed-modus. Opptak får 400 ms, så den som ser videoen rekker å følge
+ * med. Overstyr med SLOWMO=<ms>.
  */
 const slowMoFraEnv = Number(process.env.SLOWMO);
 const slowMo = process.env.SLOWMO && Number.isFinite(slowMoFraEnv)
   ? slowMoFraEnv
-  : process.env.CI ? 0 : 100;
-
-const OPPTAK = process.env.PW_VIDEO === 'on';
+  : OPPTAK ? 400 : process.env.CI ? 0 : 100;
 
 /**
  * See https://playwright.dev/docs/test-configuration.

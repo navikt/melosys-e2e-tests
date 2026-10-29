@@ -28,6 +28,7 @@ make pr-opptak PR=<n>              # påvirkede tester på CI, venter til kjøri
 make pr-opptak PR=<n> LOKAL=1      # mot stacken som kjører lokalt, uten CI
 make pr-opptak PR=<n> RUN=<id>     # gjenbruk en kjøring startet med VIDEO=1
 make pr-opptak PR=<n> TORRT=1      # alt unntatt å endre beskrivelsen
+make pr-opptak PR=<n> SLOWMO=800   # tregere opptak; standard er 400 ms etter hver handling
 ```
 
 Krever gh 2.99 eller nyere med personlig innlogging og ffmpeg. `GH_TOKEN` og `GITHUB_TOKEN` må

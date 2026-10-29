@@ -15,6 +15,7 @@
 #   ./scripts/ci-e2e.sh --affected -p        skriver ut gh-kommandoen uten å starte noe
 #   ./scripts/ci-e2e.sh --shards 1           antall shards (1–8); uten flagget gjelder workflowens standard
 #   ./scripts/ci-e2e.sh --affected --video   tar opp video av hver test, også grønne
+#   ./scripts/ci-e2e.sh --video --slowmo 800 pause i ms etter hver handling (standard 400 med video, ellers 0)
 #
 # Uten --branch spør scriptet om branchen du står på skal brukes, når det kjører i en terminal.
 #
@@ -36,6 +37,7 @@ VIS_FILTER=0
 RETRIES="true"   # disable_retries: uten retries ser du ekte flakiness
 SHARDS=""        # tomt: workflowens standardverdi
 VIDEO=0
+SLOWMO=""        # tomt: 400 ms med video, ellers 0 (playwright.config.ts)
 
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -58,6 +60,12 @@ while [ $# -gt 0 ]; do
     --vis-filter) VIS_FILTER=1; shift ;;
     --retries)  RETRIES="false"; shift ;;
     --video)    VIDEO=1; shift ;;
+    --slowmo)
+      if ! [[ "${2:-}" =~ ^[0-9]+$ ]]; then
+        echo "❌ --slowmo krever et antall millisekunder, for eksempel 800." >&2
+        exit 2
+      fi
+      SLOWMO="$2"; shift 2 ;;
     --shards)
       if ! [[ "${2:-}" =~ ^[1-8]$ ]]; then
         echo "❌ --shards krever et tall fra 1 til 8." >&2
@@ -156,6 +164,7 @@ else
 fi
 [ -n "$SHARDS" ] && echo "   shards:      $SHARDS"
 [ "$VIDEO" -eq 1 ] && echo "   video:       på"
+[ -n "$SLOWMO" ] && echo "   slowmo:      $SLOWMO ms"
 if [ -n "$SAMMENDRAG" ]; then
   printf '%s\n' "$SAMMENDRAG" | sed 's/^/   /'
 fi
@@ -165,6 +174,7 @@ ARGS=(--ref "$BRANCH" -f environment="$ENVIRONMENT" -f disable_retries="$RETRIES
 [ -n "$SHARDS" ] && ARGS+=(-f shards="$SHARDS")
 # Sendes bare når den er bedt om, så en branch uten inputen i workflowen fortsatt kan startes.
 [ "$VIDEO" -eq 1 ] && ARGS+=(-f record_video=true)
+[ -n "$SLOWMO" ] && ARGS+=(-f slowmo="$SLOWMO")
 
 if [ "$PREVIEW" -eq 1 ]; then
   # %q gir en linje du kan lime rett inn i skallet.

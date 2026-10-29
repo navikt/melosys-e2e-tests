@@ -232,6 +232,18 @@ test('CI-kjøringen får det utregnede filteret, ikke --affected, så utvalget r
   assert.deepEqual(ciArgumenter('min-branch', ''), ['--branch', 'min-branch', '--video', '--no-wait']);
 });
 
+test('SLOWMO sendes videre til CI bare når den er satt, og 0 er en gyldig verdi', () => {
+  assert.deepEqual(ciArgumenter('b', 'a', '800'), ['--grep', 'a', '--branch', 'b', '--video', '--slowmo', '800', '--no-wait']);
+  assert.deepEqual(ciArgumenter('b', 'a', '0'), ['--grep', 'a', '--branch', 'b', '--video', '--slowmo', '0', '--no-wait']);
+  assert.equal(lesArgumenter(['1']).slowmo, null);
+  assert.equal(lesArgumenter(['1', '--slowmo', '0']).slowmo, '0');
+  assert.equal(lesArgumenter(['1', '--slowmo', '800', '--lokal']).slowmo, '800');
+  for (const ugyldig of [['--slowmo'], ['--slowmo', '-5'], ['--slowmo', '1.5'], ['--slowmo', 'fort']]) {
+    assert.throws(() => lesArgumenter(['1', ...ugyldig]), /antall millisekunder/);
+  }
+  assert.throws(() => lesArgumenter(['1', '--run', '9', '--slowmo', '800']), /virker ikke med RUN=/);
+});
+
 test('pr-opptak starter ikke e2e-suiten', () => {
   assert.equal(utenE2eEffekt('scripts/pr-opptak.mjs'), true);
   assert.equal(utenE2eEffekt('lib/pr-opptak.test.ts'), true);
