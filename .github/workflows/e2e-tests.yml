@@ -41,6 +41,11 @@ on:
         required: false
         type: boolean
         default: false
+      slowmo:
+        description: 'Pause i millisekunder etter hver handling i nettleseren. Tom: 400 med record_video, ellers 0'
+        required: false
+        type: string
+        default: ''
       run_bdd:
         description: 'Run ONLY the opt-in ATDD/BDD example (atdd/features/ → --project=bdd) instead of chromium'
         required: false
@@ -735,6 +740,7 @@ jobs:
         env:
           INPUT_SHARDS: ${{ inputs.shards }}
           INPUT_RUNNER: ${{ inputs.runner }}
+          INPUT_SLOWMO: ${{ inputs.slowmo }}
           RUN_BDD: ${{ inputs.run_bdd == true }}
           COLLECT_COVERAGE: ${{ inputs.collect_coverage == true }}
         # repository_dispatch og workflow_call har ingen shards- eller runner-input og får
@@ -752,6 +758,11 @@ jobs:
           requested="${INPUT_SHARDS:-6}"
           if ! [[ "$requested" =~ ^[1-8]$ ]]; then
             echo "::error::shards må være et heltall fra 1 til 8, var: $(printf '%q' "$requested")"
+            exit 1
+          fi
+          # Sjekkes her, før stacken startes. playwright.config.ts godtar -5 og 1e3, og leser 800ms som standarden.
+          if ! [[ "${INPUT_SLOWMO:-}" =~ ^[0-9]*$ ]]; then
+            echo "::error::slowmo må være et antall millisekunder, for eksempel 800, var: $(printf '%q' "$INPUT_SLOWMO")"
             exit 1
           fi
           if [ "$requested" -gt 1 ] && [ "$RUN_BDD" = "true" ]; then
@@ -1654,6 +1665,7 @@ jobs:
           RETRIES_DISABLED: ${{ inputs.disable_retries == true }}
           RECORD_API: ${{ inputs.record_api == true && 'true' || '' }}
           PW_VIDEO: ${{ inputs.record_video == true && 'on' || '' }}
+          SLOWMO: ${{ inputs.slowmo }}
           RUN_BDD: ${{ inputs.run_bdd == true && 'true' || '' }}
           UNLEASH_FORCE_DISABLE: ${{ inputs.unleash_force_disable }}
           UNLEASH_FORCE_ENABLE: ${{ inputs.unleash_force_enable }}

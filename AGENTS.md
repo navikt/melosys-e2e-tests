@@ -336,7 +336,7 @@ Key settings in `playwright.config.ts`:
 - **Trace**: On retry only (`trace: 'on-first-retry'`) - spares ressurser på grønne kjøringer; på CI (retries=1) fanges trace fra 2. forsøk. Lokalt (retries=0) skjer ingen retry → bruk `--trace on` ved behov.
 - **Screenshots**: On failure only (`screenshot: 'only-on-failure'`)
 - **Video**: On retry only (`video: 'on-first-retry'`) - samme retry-logikk som trace
-- **Slow motion**: 0 on CI, 100 ms locally between actions; override with `SLOWMO=<ms>`
+- **Slow motion**: 0 on CI, 100 ms locally between actions, 400 ms when recording video (`PW_VIDEO=on`); override with `SLOWMO=<ms>`
 - **Parallel execution**: Disabled (`fullyParallel: false`)
 - **Workers**: 1 on CI, unlimited locally
 - **Browser**: Chromium only (Firefox/WebKit commented out)
