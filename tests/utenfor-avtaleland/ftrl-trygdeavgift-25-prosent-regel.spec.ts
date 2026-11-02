@@ -157,8 +157,7 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
 
   test('25%-regelen begrenser avgiften', async ({ page, request }) => {
     test.setTimeout(120000);
-    // Pensjonsdelen fra dagens dato blir for kort til å nå taket utover høsten,
-    // og ble ORDINÆR fra 02.11.2026 (5 204 kr < tak 5 228 kr).
+    // Pensjonsdel for hele året, så beregningsregelen ikke avhenger av kjøredatoen.
     const trygdeavgift = await opprettSakFrivilligHelsePensjon(page, request, { pensjonsdelHeleÅret: true });
 
     // Litt over minstebeløpet, men lav nok til at 25%-regelen treffer.
