@@ -196,6 +196,45 @@ export class ResultatPeriodePage extends BasePage {
   }
 
   /**
+   * Erstatt forslaget med én innvilget periode med valgt trygdedekning, og gå videre.
+   *
+   * Er søknadsperioden påbegynt, foreslår steget pensjonsdelen fra dagens dato. Da
+   * avhenger trygdeavgiften av datoen testen kjører på.
+   *
+   * @param fom - Fra og med, DD.MM.ÅÅÅÅ
+   * @param tom - Til og med, DD.MM.ÅÅÅÅ
+   * @param trygdedekning - Verdien i «Trygdedekning», f.eks. 'FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON'
+   */
+  async innvilgÉnPeriode(fom: string, tom: string, trygdedekning: string): Promise<void> {
+    await this.ventPåPeriodeLagring();
+
+    // «Slett periode» vises bare når det finnes mer enn én periode.
+    const rader = this.page.getByLabel(/^Resultat periode \d+$/);
+    const slettKnapper = this.page.getByRole('button', { name: 'Slett periode' });
+    for (let antall = await rader.count(); antall > 1; antall--) {
+      await slettKnapper.nth(antall - 1).click();
+      await expect(rader).toHaveCount(antall - 1);
+    }
+
+    await this.datofelt(1, 'Fra og med').fill(fom);
+    await this.datofelt(1, 'Fra og med').press('Tab');
+    await this.datofelt(1, 'Til og med').fill(tom);
+    await this.datofelt(1, 'Til og med').press('Tab');
+    await this.page.getByLabel('Trygdedekning periode 1').selectOption(trygdedekning);
+    await this.page.getByLabel('Resultat periode 1').selectOption('INNVILGET');
+
+    await this.ventPåPeriodeLagring();
+    await expect(rader).toHaveCount(1);
+    await expect(this.datofelt(1, 'Fra og med')).toHaveValue(fom);
+    await expect(this.datofelt(1, 'Til og med')).toHaveValue(tom);
+    await expect(this.page.getByLabel('Trygdedekning periode 1')).toHaveValue(trygdedekning);
+    await expect(this.page.getByLabel('Resultat periode 1')).toHaveValue('INNVILGET');
+    console.log(`✅ Én innvilget periode ${fom}–${tom} (${trygdedekning})`);
+
+    await this.klikkBekreftOgFortsett();
+  }
+
+  /**
    * Click "Bekreft og fortsett" button with retry logic for reliable step transitions
    */
   async klikkBekreftOgFortsett(): Promise<void> {
