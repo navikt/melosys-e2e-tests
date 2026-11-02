@@ -129,7 +129,9 @@ trygdeavgiftssteget med varselet «skal fastsettes på årsavregning».
 
 Er perioden påbegynt, innvilger Perioder-steget som standard pensjonsdelen først fra *dagens
 dato*. En periode som starter i fortiden gir derfor kortere pensjonsdel enn helsedel, og andre
-beløp enn en ren framtidig periode.
+beløp enn en ren framtidig periode. Når testen sjekker beløpet eller beregningsregelen for
+pensjonsdelen, bruk `resultatPeriode.innvilgÉnPeriode(fom, tom, dekning)`. Ellers endrer
+resultatet seg med kjøredatoen.
 
 ## Testfiler
 

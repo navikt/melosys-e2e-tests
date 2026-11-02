@@ -20,7 +20,8 @@ import {
 import { UnleashHelper } from '../../helpers/unleash-helper';
 import { hentMinstebeløp } from '../../helpers/trygdeavgift-beregning-helper';
 
-const TESTÅR = 2026;
+/** Året perioden i testene ligger i. Minstebeløpet hentes for samme år. */
+const TESTÅR = new Date().getFullYear();
 
 /**
  * FTRL Trygdeavgift — 25%-regelen og minstebeløp
@@ -71,8 +72,15 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
    *  Bruker full årsperiode (01.01-31.12) for stabile beregninger.
    *  NB: currentYearPeriod varierer i lengde (6 mnd fremover), som
    *  påvirker om inntekt havner over/under minstebeløpet.
+   *
+   *  Perioder-steget foreslår pensjonsdelen fra dagens dato. Med
+   *  `pensjonsdelHeleÅret` innvilges helse- og pensjonsdel for hele året i stedet.
    */
-  async function opprettSakFrivilligHelsePensjon(page: Page, request: any): Promise<TrygdeavgiftPage> {
+  async function opprettSakFrivilligHelsePensjon(
+    page: Page,
+    request: any,
+    { pensjonsdelHeleÅret = false } = {},
+  ): Promise<TrygdeavgiftPage> {
     await fellesOppsett(page, request);
 
     const medlemskap = new MedlemskapPage(page);
@@ -95,7 +103,13 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
     await lovvalg.klikkBekreftOgFortsett();
 
     await resultatPeriode.ventPåSideLastet();
-    await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
+    if (pensjonsdelHeleÅret) {
+      await resultatPeriode.innvilgÉnPeriode(
+        `01.01.${year}`, `31.12.${year}`, 'FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON'
+      );
+    } else {
+      await resultatPeriode.fyllUtResultatPeriode('INNVILGET');
+    }
 
     const trygdeavgift = new TrygdeavgiftPage(page);
     await trygdeavgift.ventPåSideLastet();
@@ -143,7 +157,8 @@ test.describe('FTRL Trygdeavgift — 25%-regelen', () => {
 
   test('25%-regelen begrenser avgiften', async ({ page, request }) => {
     test.setTimeout(120000);
-    const trygdeavgift = await opprettSakFrivilligHelsePensjon(page, request);
+    // Pensjonsdel for hele året, så beregningsregelen ikke avhenger av kjøredatoen.
+    const trygdeavgift = await opprettSakFrivilligHelsePensjon(page, request, { pensjonsdelHeleÅret: true });
 
     // Litt over minstebeløpet, men lav nok til at 25%-regelen treffer.
     // Ratio 1.21 speiler det forholdet som fungerte med tidligere hardkodet
@@ -495,7 +510,7 @@ test.describe('FTRL Pensjonist — 25%-regelen', () => {
 
     // Inngang (Medlemskap) — frivillig helse+pensjon-dekning
     const medlemskap = new MedlemskapPage(page);
-    await medlemskap.velgPeriode('01.01.2026', '31.12.2026');
+    await medlemskap.velgPeriode(`01.01.${TESTÅR}`, `31.12.${TESTÅR}`);
     await medlemskap.velgFlereLandIkkeKjentHvilke();
     await medlemskap.velgTrygdedekning('FTRL_2_9_FØRSTE_LEDD_C_HELSE_PENSJON');
     await medlemskap.klikkBekreftOgFortsett();
