@@ -162,10 +162,11 @@ export class SoknadArbeidsgiverPage {
   /** Steg 2: arbeidsgiverens virksomhet i Norge (privat virksomhet med ordinær drift). */
   async fyllArbeidsgiverensVirksomhet(samletVirksomhet?: SamletVirksomhet): Promise<void> {
     const page = this.page;
-    await svarRadio(page, /bemannings- eller vikarbyrå/, 'Nei');
     if (samletVirksomhet) {
+      await expect(page.getByRole('radiogroup', { name: /bemannings- eller vikarbyrå/ })).toHaveCount(0);
       await this.fyllSamletVirksomhet(samletVirksomhet);
     } else {
+      await svarRadio(page, /bemannings- eller vikarbyrå/, 'Nei');
       await svarRadio(page, /Opprettholder arbeidsgiveren vanlig drift/, 'Ja');
     }
     await lagreOgFortsett(page, /\/utenlandsoppdraget/);
