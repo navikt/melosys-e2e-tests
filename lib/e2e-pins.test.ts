@@ -575,7 +575,9 @@ test('vurderPar: en lukket leder-PR gjør pinnen forlatt', async () => {
 test('set med leder: br-kjøringen har ingen branch i melosys-e2e-tests og kjørte testene fra main', () => {
   const k = brancher().kontekst;
   const påMain = { ...k, headBranch: 'main', branchContext: { branches: [k.branchContext.branches[0]] } };
-  assert.doesNotThrow(() => sjekkBrancherKjøring(brancher({ kontekst: påMain, e2e: null })));
+  const leder = { repo: 'melosys-web', head: sha('1') };
+  assert.doesNotThrow(() => sjekkBrancherKjøring(brancher({ kontekst: påMain, e2e: null, leder })));
+  assert.throws(() => sjekkBrancherKjøring(brancher({ kontekst: påMain, e2e: null })), /Mangler leder-PR-en/);
   assert.throws(() => sjekkBrancherKjøring(brancher({ e2e: null })), /testet en branch i melosys-e2e-tests, men paret har ingen e2e-PR/);
   assert.throws(() => sjekkBrancherKjøring(brancher({ kontekst: { ...påMain, headBranch: 'gren' }, e2e: null })), /kjørte testene fra gren, ikke main/);
 });
@@ -652,7 +654,8 @@ test('skriv: set oppretter variabelen når den mangler, med kjøringen fra siste
 
 test('skriv: set med leder slår opp leder-PR-en og krever en br-kjøring uten e2e-branch', async () => {
   const k = brancher().kontekst;
-  const kontekst = { ...k, headBranch: 'main', branchContext: { branches: [{ repo: 'melosys-skjema-web', sha: sha('1') }] } };
+  const branches = [{ repo: 'melosys-skjema-web', sha: sha('1') }, { repo: 'melosys-skjema-api', sha: sha('5') }];
+  const kontekst = { ...k, headBranch: 'main', branchContext: { branches } };
   const åpen = (head: string) => ({ state: 'open', merged: false, head: { sha: head } });
   const prer = { [LEDER]: åpen(sha('5')), 'melosys-skjema-web#695': åpen(sha('1')) };
   const g = lagGitHub({ prer, kontekst });
@@ -661,6 +664,14 @@ test('skriv: set med leder slår opp leder-PR-en og krever en br-kjøring uten e
   assert.ok(g.io.hent.kall.includes(`pr ${LEDER}`));
   assert.ok(!g.io.hent.kall.some((c: string) => c.startsWith('pr melosys-e2e-tests')));
   await assert.rejects(skriv(SET_LEDER, lagGitHub({ prer }).io), /paret har ingen e2e-PR/);
+  for (const verdi of [undefined, JSON.stringify({ 'melosys-skjema-web': nyLeder })]) {
+    const mangler = lagGitHub({ verdi, prer, kontekst: { ...kontekst, branchContext: { branches: [branches[0]] } } });
+    await assert.rejects(skriv(SET_LEDER, mangler.io), /testet ikke en branch i melosys-skjema-api/);
+    assert.equal(mangler.lagret.verdi, verdi);
+    const endret = lagGitHub({ verdi, prer: { ...prer, [LEDER]: åpen(sha('6')) }, kontekst });
+    await assert.rejects(skriv(SET_LEDER, endret.io), /testet melosys-skjema-api på 5555555, men leder-PR-en har 6666666 nå/);
+    assert.equal(endret.lagret.verdi, verdi);
+  }
 });
 
 test('skriv: set rydder en utløpt pin og skriver med PATCH', async () => {
