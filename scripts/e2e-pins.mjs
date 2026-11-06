@@ -196,7 +196,7 @@ const innenfor = (nå, tidspunkt, grense) => nå - Date.parse(tidspunkt) <= gren
  * Etter den perioden er pinnen 'utløpt' med `feil: true`: kjøringen bruker den ikke, men skriveren
  * sletter den ikke, fordi den kan gjelde igjen når oppslaget virker.
  */
-export async function vurderService(tjeneste, servicePr, hent, { nå, satt }) {
+export async function vurderService(tjeneste, servicePr, hent, { nå, satt, styrer }) {
   const navn = `${tjeneste} #${servicePr}`;
   let pr;
   try {
@@ -212,7 +212,7 @@ export async function vurderService(tjeneste, servicePr, hent, { nå, satt }) {
       return {
         status: 'forlatt',
         grunn: `${navn} er lukket uten merge`,
-        advarsel: `${navn} er lukket uten merge, så pinnen gjelder ikke. Revert e2e-PR-en, eller sett pinnen på nytt med den nye service-PR-en (docs/ci-cd/KOBLEDE-ENDRINGER.md).`,
+        advarsel: `${navn} er lukket uten merge, så pinnen gjelder ikke. Revert ${styrer}, eller sett pinnen på nytt med den nye service-PR-en (docs/ci-cd/KOBLEDE-ENDRINGER.md).`,
       };
     }
     return { status: 'aktiv', grunn: `${navn} er ikke merget` };
@@ -258,7 +258,7 @@ export async function vurderPin(tjeneste, pin, { tagger, emner, hent, nå, kilde
     start = startStatus(emner, pin.e2e_pr);
   }
   if (!start.startet) return { ...felt, status: 'ikke startet', grunn: start.grunn, advarsel: start.advarsel ?? null };
-  const service = await vurderService(tjeneste, pin.service_pr, hent, { nå, satt: pin.satt });
+  const service = await vurderService(tjeneste, pin.service_pr, hent, { nå, satt: pin.satt, styrer: parNavn(pin) });
   let advarsel = service.advarsel ?? null;
   if (service.status === 'aktiv' && pin.satt && nå - Date.parse(pin.satt) > TRE_DAGER) {
     const gammel = `Pinnen for ${tjeneste} ble satt ${pin.satt.slice(0, 10)}, for mer enn tre dager siden. Sjekk om ${tjeneste} #${pin.service_pr} står fast.`;
@@ -390,7 +390,7 @@ export async function vurderPar(tjeneste, pin, hent, nå) {
     if (e.status === 404) return finnesIkke(navn);
     return { status: 'aktiv', grunn: `fikk ikke lest ${navn} (${vask(e.message)})` };
   }
-  return vurderService(tjeneste, pin.service_pr, hent, { nå, satt: pin.satt });
+  return vurderService(tjeneste, pin.service_pr, hent, { nå, satt: pin.satt, styrer: navn });
 }
 
 /**

@@ -123,7 +123,7 @@ Andre regler:
 
   Revert av e2e-PR-en tar de nye testene ut av `main` uansett hvilken pin tjenesten har (se neste punkt).
 - **e2e-PR-en revertes.** Har emnet til revert-commiten «revert» og `#<e2e_pr>`, for eksempel `Revert e2e #388 (#401)`, starter ikke en pin fra den e2e-PR-en lenger. Er pinnen fra den e2e-PR-en, fjerner du den også: `node scripts/e2e-pins.mjs fjern <tjeneste>`. `fjern` fjerner pinnen tjenesten har, uansett hvilket par den er fra.
-- **Service-PR-en lukkes eller erstattes.** Pinnen er forlatt, og kjøringene blir røde mot `latest`. Revert e2e-PR-en, eller kjør «E2E med brancher» på nytt med den nye service-PR-en og bytt med `set --erstatt <tjeneste> <ny br-tag> <e2e_pr> <ny service_pr>`.
+- **Service-PR-en lukkes eller erstattes.** Pinnen er forlatt, og kjøringene blir røde mot `latest`. Revert e2e-PR-en (eller leder-PR-en for et par uten e2e-PR), eller kjør «E2E med brancher» på nytt med den nye service-PR-en og bytt med `set --erstatt <tjeneste> <ny br-tag> <e2e_pr> <ny service_pr>`.
 - **Service-PR-en revertes etter merge.** `latest` er forbi merge-commiten, så pinnen er utløpt, og testene feiler mot et image uten endringen. Revert e2e-PR-en også.
 - **En pin står aktiv i mer enn tre dager.** Hver kjøring viser en advarsel. Sjekk om service-PR-en står fast.
 - **`br`-taggen er ryddet bort fra GAR.** GAR beholder versjoner i minst 90 dager. Kjøringene blir røde når imaget hentes. Fjern pinnen, eller kjør paret på nytt og bytt taggen.

@@ -151,9 +151,12 @@ test('revisjonen leses fra multi-arch og fra et image med én plattform', () => 
 
 test('utløp: åpen service-PR er aktiv, lukket uten merge er forlatt', async () => {
   assert.deepEqual(await vurderService('melosys-web', 3267, lagHenter(), { nå: NÅ, satt: PIN.satt }), { status: 'aktiv', grunn: 'melosys-web #3267 er ikke merget' });
-  const lukket = await vurderService('melosys-web', 3267, lagHenter({ pr: { 'melosys-web#3267': { state: 'closed', merged: false } } }), { nå: NÅ, satt: PIN.satt });
+  const lukketHenter = lagHenter({ pr: { 'melosys-web#3267': { state: 'closed', merged: false } } });
+  const lukket = await vurderService('melosys-web', 3267, lukketHenter, { nå: NÅ, satt: PIN.satt, styrer: 'e2e #388' });
   assert.equal(lukket.status, 'forlatt');
-  assert.match(lukket.advarsel, /lukket uten merge/);
+  assert.match(lukket.advarsel, /lukket uten merge, så pinnen gjelder ikke\. Revert e2e #388,/);
+  const lederLukket = await vurderService('melosys-web', 3267, lukketHenter, { nå: NÅ, satt: PIN.satt, styrer: 'leder melosys-api #4100' });
+  assert.match(lederLukket.advarsel, /Revert leder melosys-api #4100,/);
 });
 
 test('utløp: en service-PR som ikke finnes (404), er forlatt, ikke en forbigående feil', async () => {
