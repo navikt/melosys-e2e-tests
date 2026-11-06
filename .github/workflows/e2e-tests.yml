@@ -363,7 +363,8 @@ jobs:
           # En tjeneste som fortsatt har latest, får pinnen; tjenesten under test beholder sin
           # egen tag. Ved en koblet endring pinner variabelen tjenesten til imaget paret er
           # testet mot (docs/ci-cd/KOBLEDE-ENDRINGER.md). En pin gjelder fra testene har
-          # e2e-PR-en til latest har service-PR-en. En ugyldig variabel gir ingen pinner.
+          # e2e-PR-en, eller fra lederens kø eller merge for et par uten e2e-PR, til latest
+          # har service-PR-en. En ugyldig variabel gir ingen pinner.
           # Statusen per pin havner i trigger-konteksten (pinner, pinnerFeil).
           export MELOSYS_API_TAG FAKTURERINGSKOMPONENTEN_TAG MELOSYS_WEB_TAG \
                  MELOSYS_TRYGDEAVGIFT_TAG MELOSYS_TRYGDEAVTALE_TAG \

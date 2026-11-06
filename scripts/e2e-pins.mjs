@@ -102,7 +102,7 @@ export function lesVariabel(tekst) {
     if (!TJENESTER_MED_KO.includes(tjeneste)) {
       throw new Error(`ukjent tjeneste «${vask(tjeneste)}». Gyldige: ${TJENESTER_MED_KO.join(', ')}`);
     }
-    if (!erObjekt(pin)) throw new Error(`pinnen for ${tjeneste} skal være et objekt med tag, e2e_pr og service_pr`);
+    if (!erObjekt(pin)) throw new Error(`pinnen for ${tjeneste} skal være et objekt med tag, e2e_pr eller leder, og service_pr`);
     if (Object.keys(pin).some((k) => !['tag', 'e2e_pr', 'leder', 'service_pr', 'satt'].includes(k))) {
       throw new Error(`pinnen for ${tjeneste} har ukjente felt`);
     }
@@ -421,7 +421,7 @@ export function sjekkBrancherKjøring({ runId, orkestrator, e2eKjøring, konteks
     if (tester) feil.push(`${br} testet en branch i ${E2E_REPO}, men paret har ingen e2e-PR. Kjør «E2E med brancher» uten e2e-branch, eller koble med e2e-PR-en.`);
     else if (kontekst.headBranch !== 'main') feil.push(`${br} kjørte testene fra ${vask(kontekst.headBranch ?? 'ukjent')}, ikke main.`);
     if (!leder) feil.push('Mangler leder-PR-en for å kontrollere br-kjøringen.');
-    else sjekkHead(leder.repo, leder.head, 'leder-PR-en');
+    else if (leder.repo !== tjeneste) sjekkHead(leder.repo, leder.head, 'leder-PR-en');
   } else if (tester) {
     if (tester.sha !== e2e.head) feil.push(`${br} testet ${E2E_REPO} på ${kort(tester.sha)}, men e2e-PR-en har ${kort(e2e.head)} nå. Kjør «E2E med brancher» på nytt.`);
   } else if (!e2e.merget || kontekst.headBranch !== 'main' || !(Date.parse(e2eKjøring.created_at) >= Date.parse(e2e.mergedAt))) {
