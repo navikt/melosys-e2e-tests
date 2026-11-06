@@ -5,6 +5,10 @@
  * `{ tag, e2e_pr, service_pr, satt }`. En pin gjelder fra testene har e2e-PR-en (start) til
  * `latest` har service-PR-en (utløp), og slår seg dermed av selv.
  *
+ * Et par uten e2e-PR har `leder: "<repo>#<pr>"` i stedet for `e2e_pr`: den første service-PR-en i
+ * merge-rekkefølgen. Pinnene starter når leder-PR-en er merget, eller når kjøringen tester lederen
+ * på en commit som har den (lederens merge-kø).
+ *
  * Bare tjenester som har `latest` i kjøringen, får en pin. En tjeneste under test (eksplisitt tag
  * fra gaten, dispatch eller «E2E med brancher») beholder sin egen tag.
  *
@@ -13,7 +17,10 @@
  *       «Determine image tags»: skriver «<variabel> <tjeneste> <tag>» per pin som brukes, og
  *       statusen per pin til <ut-fil> (feltene pinner og pinnerFeil i trigger-context.json).
  *       En ugyldig variabel gir ingen pinner.
+ *       Med gate_context i INPUT_GATE_CONTEXT ser startregelen for `leder` hvilken commit gaten
+ *       tester.
  *   e2e-pins.mjs set <tjeneste> <tag> <e2e_pr> <service_pr> [--erstatt] [--tving] [--dry-run]
+ *   e2e-pins.mjs set <tjeneste> <tag> <service_pr> --leder=<repo>#<pr> [--erstatt] [--tving] [--dry-run]
  *   e2e-pins.mjs fjern <tjeneste> [--dry-run]
  *       Skriver variabelen. Krever et token med Variables: write i melosys-e2e-tests, i
  *       E2E_PINS_TOKEN eller GH_TOKEN, og docker logget inn i GAR for å se om eksisterende pinner
@@ -67,6 +74,18 @@ export const vask = (t) => String(t).replace(/[\r\n]+/g, ' ').replace(/::/g, ': 
 const kort = (sha) => sha.slice(0, 7);
 const erObjekt = (v) => v !== null && typeof v === 'object' && !Array.isArray(v);
 
+/** `leder`-feltet: «<repo>#<pr>» for et repo med merge-kø. null når teksten ikke er det. */
+export function lesLeder(tekst) {
+  const m = /^([A-Za-z0-9._-]+)#([1-9][0-9]{0,9})$/.exec(typeof tekst === 'string' ? tekst : '');
+  return m && TJENESTER_MED_KO.includes(m[1]) ? { repo: m[1], pr: Number(m[2]) } : null;
+}
+
+/** PR-en som styrer starten: «e2e #388» eller «leder melosys-skjema-api #12». */
+export function parNavn(pin) {
+  const leder = lesLeder(pin.leder);
+  return leder ? `leder ${leder.repo} #${leder.pr}` : `e2e #${pin.e2e_pr}`;
+}
+
 // ---------------------------------------------------------------- variabelen
 
 /** Tom tekst betyr ingen pinner. Kaster med en melding uten verdiene fra variabelen. */
@@ -84,12 +103,16 @@ export function lesVariabel(tekst) {
       throw new Error(`ukjent tjeneste «${vask(tjeneste)}». Gyldige: ${TJENESTER_MED_KO.join(', ')}`);
     }
     if (!erObjekt(pin)) throw new Error(`pinnen for ${tjeneste} skal være et objekt med tag, e2e_pr og service_pr`);
-    if (Object.keys(pin).some((k) => !['tag', 'e2e_pr', 'service_pr', 'satt'].includes(k))) {
+    if (Object.keys(pin).some((k) => !['tag', 'e2e_pr', 'leder', 'service_pr', 'satt'].includes(k))) {
       throw new Error(`pinnen for ${tjeneste} har ukjente felt`);
     }
     if (typeof pin.tag !== 'string' || !DOCKER_TAG.test(pin.tag)) throw new Error(`taggen for ${tjeneste} er ikke en gyldig docker-tag`);
     if (pin.tag === 'latest') throw new Error(`${tjeneste} er pinnet til latest, som ikke endrer noe`);
-    for (const felt of ['e2e_pr', 'service_pr']) {
+    if (Object.hasOwn(pin, 'e2e_pr') === Object.hasOwn(pin, 'leder')) throw new Error(`pinnen for ${tjeneste} skal ha enten e2e_pr eller leder`);
+    if (Object.hasOwn(pin, 'leder') && !lesLeder(pin.leder)) {
+      throw new Error(`leder for ${tjeneste} er ikke <repo>#<pr> for et av repoene ${TJENESTER_MED_KO.join(', ')}`);
+    }
+    for (const felt of Object.hasOwn(pin, 'e2e_pr') ? ['e2e_pr', 'service_pr'] : ['service_pr']) {
       if (!Number.isSafeInteger(pin[felt]) || pin[felt] < 1) throw new Error(`${felt} for ${tjeneste} er ikke et positivt heltall`);
     }
     if (pin.satt !== undefined && (typeof pin.satt !== 'string' || !TIDSPUNKT.test(pin.satt) || Number.isNaN(Date.parse(pin.satt)))) {
@@ -104,16 +127,45 @@ export function lesVariabel(tekst) {
  * en commit har emne som slutter på «(#<e2e_pr>)» (squash-merge på main og commiten i merge-køen),
  * og ingen senere commit er en revert av den. GitHubs revert-knapp gir «Revert "<PR-tittel>" (#M)»
  * uten det opprinnelige nummeret (melosys-api #3413 for #3409), så begge formene gjenkjennes.
+ * `navn` og `hvor` gir teksten i grunnen; standard er e2e-PR-en i testene.
  */
-export function startStatus(emner, e2ePr) {
+export function startStatus(emner, e2ePr, navn = `e2e #${e2ePr}`, hvor = 'testene') {
   const merke = `(#${e2ePr})`;
   const i = emner.findLastIndex((e) => e.trimEnd().endsWith(merke));
-  if (i === -1) return { startet: false, grunn: `testene har ikke e2e #${e2ePr}` };
+  if (i === -1) return { startet: false, grunn: `${hvor} har ikke ${navn}` };
   const tittel = emner[i].trimEnd().slice(0, -merke.length).trimEnd();
   const nummer = new RegExp(`#${e2ePr}(?!\\d)`);
   const revert = emner.slice(0, i).find((e) => e.startsWith(`Revert "${tittel}"`) || (/revert/i.test(e) && nummer.test(e)));
-  if (revert) return { startet: false, grunn: `e2e #${e2ePr} er revertert («${vask(revert)}»)` };
-  return { startet: true, grunn: `testene har e2e #${e2ePr}` };
+  if (revert) return { startet: false, revertert: true, grunn: `${navn} er revertert («${vask(revert)}»)` };
+  return { startet: true, grunn: `${hvor} har ${navn}` };
+}
+
+/**
+ * Startregelen for en pin med `leder`. Den starter når leder-PR-en er merget og ikke revertert i
+ * historikken på base-branchen, eller når gaten tester lederen på en commit som har leder-PR-en:
+ * lederens egen køkjøring og PR-ene bak den i samme kø. `kilde` er repoet og commiten fra
+ * gate_context. Andre kjøringer får ikke pinnen før mergen, så ingen tester mot kode som kan bli
+ * tatt ut av køen. Feiler et oppslag, regnes pinnen som ikke startet, og kjøringen bruker latest.
+ */
+export async function lederStart(leder, { kilde, hent }) {
+  const { repo, pr: nr } = lesLeder(leder);
+  const navn = `${repo} #${nr}`;
+  try {
+    const pr = await hent.pr(repo, nr);
+    if (pr.merged) {
+      const status = startStatus(await hent.emner(repo, pr.base.ref), nr, navn, pr.base.ref);
+      // Ligger mergen lenger bak enn historikken vi henter, finnes heller ingen revert etter den der.
+      return status.revertert ? status : { startet: true, grunn: `${navn} er merget` };
+    }
+    if (kilde?.repo === repo) return startStatus(await hent.emner(repo, kilde.sha), nr, navn, `${repo} ${kort(kilde.sha)}`);
+    return { startet: false, grunn: `${navn} er ikke merget` };
+  } catch (e) {
+    return {
+      startet: false,
+      grunn: `fikk ikke sjekket ${navn}`,
+      advarsel: `Fikk ikke sjekket ${navn} (${vask(e.message)}), så pinnene fra ${navn} gjelder ikke i denne kjøringen.`,
+    };
+  }
 }
 
 /**
@@ -190,13 +242,22 @@ export async function vurderService(tjeneste, servicePr, hent, { nå, satt }) {
   return beholdes(`${par} har gått hver sin vei`, `${par} har gått hver sin vei (compare: ${vask(status)})`);
 }
 
-/** Status for én pin i variabelen: 'under test', 'ikke startet', 'aktiv', 'utløpt' eller 'forlatt'. */
-export async function vurderPin(tjeneste, pin, { tagger, emner, hent, nå }) {
-  const felt = { tjeneste, tag: pin.tag, e2ePr: pin.e2e_pr, servicePr: pin.service_pr, satt: pin.satt ?? null };
+/**
+ * Status for én pin i variabelen: 'under test', 'ikke startet', 'aktiv', 'utløpt' eller 'forlatt'.
+ * `ledere` husker startregelen per leder, så pinnene i samme par slår den opp én gang.
+ */
+export async function vurderPin(tjeneste, pin, { tagger, emner, hent, nå, kilde = null, ledere = new Map() }) {
+  const felt = { tjeneste, tag: pin.tag, e2ePr: pin.e2e_pr ?? null, leder: pin.leder ?? null, servicePr: pin.service_pr, satt: pin.satt ?? null };
   const egen = tagger[TJENESTER[tjeneste]] ?? '';
   if (egen !== 'latest') return { ...felt, status: 'under test', grunn: `kjøringen har taggen «${vask(egen)}» for ${tjeneste}`, advarsel: null };
-  const start = startStatus(emner, pin.e2e_pr);
-  if (!start.startet) return { ...felt, status: 'ikke startet', grunn: start.grunn, advarsel: null };
+  let start;
+  if (pin.leder) {
+    if (!ledere.has(pin.leder)) ledere.set(pin.leder, lederStart(pin.leder, { kilde, hent }));
+    start = await ledere.get(pin.leder);
+  } else {
+    start = startStatus(emner, pin.e2e_pr);
+  }
+  if (!start.startet) return { ...felt, status: 'ikke startet', grunn: start.grunn, advarsel: start.advarsel ?? null };
   const service = await vurderService(tjeneste, pin.service_pr, hent, { nå, satt: pin.satt });
   let advarsel = service.advarsel ?? null;
   if (service.status === 'aktiv' && pin.satt && nå - Date.parse(pin.satt) > TRE_DAGER) {
@@ -209,9 +270,9 @@ export async function vurderPin(tjeneste, pin, { tagger, emner, hent, nå }) {
 /**
  * Avgjørelsen i «Determine image tags». `logg` har nivåene info, warning og error. En ugyldig
  * variabel gir ingen pinner og en melding i `pinnerFeil`, fordi variabelen gjelder alle køer med
- * en gang.
+ * en gang. `gate` er repoet og commiten gaten tester (gateKilde), eller null.
  */
-export async function velgPinner({ tekst, kilde, tagger, emner, hent, nå }) {
+export async function velgPinner({ tekst, kilde, tagger, emner, hent, nå, gate = null }) {
   const logg = [];
   let variabel = {};
   let pinnerFeil = null;
@@ -222,10 +283,11 @@ export async function velgPinner({ tekst, kilde, tagger, emner, hent, nå }) {
     logg.push({ nivå: 'error', tekst: `${pinnerFeil}. Kjøringen bruker ingen pinner fra ${kilde}.` });
   }
   const pinner = [];
+  const ledere = new Map();
   for (const [tjeneste, pin] of Object.entries(variabel)) {
-    const vurdert = await vurderPin(tjeneste, pin, { tagger, emner, hent, nå });
+    const vurdert = await vurderPin(tjeneste, pin, { tagger, emner, hent, nå, kilde: gate, ledere });
     pinner.push(vurdert);
-    logg.push({ nivå: 'info', tekst: `📌 ${tjeneste} → ${pin.tag} (e2e #${pin.e2e_pr}, ${tjeneste} #${pin.service_pr}): ${vurdert.status}, ${vurdert.grunn}.` });
+    logg.push({ nivå: 'info', tekst: `📌 ${tjeneste} → ${pin.tag} (${parNavn(pin)}, ${tjeneste} #${pin.service_pr}): ${vurdert.status}, ${vurdert.grunn}.` });
     if (vurdert.advarsel) logg.push({ nivå: 'warning', tekst: `📌 ${vurdert.advarsel}` });
   }
   const bruk = pinner
@@ -233,7 +295,7 @@ export async function velgPinner({ tekst, kilde, tagger, emner, hent, nå }) {
     .map((p) => ({ variabel: TJENESTER[p.tjeneste], tjeneste: p.tjeneste, tag: p.tag }));
   for (const p of bruk) {
     const pin = variabel[p.tjeneste];
-    logg.push({ nivå: 'warning', tekst: `📌 ${p.tjeneste} er pinnet til ${p.tag} i ${kilde} (e2e #${pin.e2e_pr}). Pinnen slutter å gjelde når ${p.tjeneste}:latest har ${p.tjeneste} #${pin.service_pr}.` });
+    logg.push({ nivå: 'warning', tekst: `📌 ${p.tjeneste} er pinnet til ${p.tag} i ${kilde} (${parNavn(pin)}). Pinnen slutter å gjelde når ${p.tjeneste}:latest har ${p.tjeneste} #${pin.service_pr}.` });
   }
   return { bruk, pinner, pinnerFeil, logg };
 }
@@ -244,50 +306,65 @@ export async function velgPinner({ tekst, kilde, tagger, emner, hent, nå }) {
 export function lesArgumenter(argv) {
   const flagg = argv.filter((a) => a.startsWith('--'));
   const [kommando, ...rest] = argv.filter((a) => !a.startsWith('--'));
-  const ukjente = flagg.filter((f) => !['--erstatt', '--tving', '--dry-run'].includes(f));
+  const lederFlagg = flagg.filter((f) => f.startsWith('--leder='));
+  const ukjente = flagg.filter((f) => !['--erstatt', '--tving', '--dry-run'].includes(f) && !f.startsWith('--leder='));
   if (ukjente.length) throw new Error(`ukjent flagg ${vask(ukjente.join(' '))}`);
   const dryRun = flagg.includes('--dry-run');
+  const medLeder = lederFlagg.length > 0;
   if (kommando === 'fjern') {
     if (rest.length !== 1 || flagg.some((f) => f !== '--dry-run')) throw new Error('bruk: fjern <tjeneste> [--dry-run]');
-  } else if (kommando !== 'set' || rest.length !== 4) {
-    throw new Error('bruk: set <tjeneste> <tag> <e2e_pr> <service_pr> [--erstatt] [--tving] [--dry-run]');
+  } else if (kommando !== 'set' || lederFlagg.length > 1 || rest.length !== (medLeder ? 3 : 4)) {
+    throw new Error('bruk: set <tjeneste> <tag> <e2e_pr> <service_pr>, eller set <tjeneste> <tag> <service_pr> --leder=<repo>#<pr>; begge med [--erstatt] [--tving] [--dry-run]');
   }
   const tjeneste = rest[0];
   if (!TJENESTER_MED_KO.includes(tjeneste)) throw new Error(`tjenesten må være en av ${TJENESTER_MED_KO.join(', ')}`);
   if (kommando === 'fjern') return { kommando, tjeneste, dryRun };
-  const [, tag, e2ePr, servicePr] = rest;
+  const tag = rest[1];
   if (!/^br-[1-9][0-9]{0,19}$/.test(tag)) throw new Error('taggen må være br-<run_id> fra «E2E med brancher»');
+  const [e2ePr, servicePr] = medLeder ? [null, rest[2]] : rest.slice(2);
   for (const [navn, nr] of [['e2e_pr', e2ePr], ['service_pr', servicePr]]) {
-    if (!/^[1-9][0-9]{0,9}$/.test(nr)) throw new Error(`${navn} må være et PR-nummer`);
+    if (nr !== null && !/^[1-9][0-9]{0,9}$/.test(nr)) throw new Error(`${navn} må være et PR-nummer`);
   }
-  return { kommando, tjeneste, tag, e2ePr: Number(e2ePr), servicePr: Number(servicePr), erstatt: flagg.includes('--erstatt'), tving: flagg.includes('--tving'), dryRun };
+  const felles = { servicePr: Number(servicePr), erstatt: flagg.includes('--erstatt'), tving: flagg.includes('--tving'), dryRun };
+  if (!medLeder) return { kommando, tjeneste, tag, e2ePr: Number(e2ePr), ...felles };
+  const leder = lederFlagg[0].slice('--leder='.length);
+  if (!lesLeder(leder)) throw new Error(`--leder må være <repo>#<pr> for et av repoene ${TJENESTER_MED_KO.join(', ')}`);
+  return { kommando, tjeneste, tag, leder, ...felles };
 }
 
 /** 'åpen' | 'merget' | 'lukket' fra REST-svaret for en PR. */
 export const prStatus = (pr) => (pr.merged ? 'merget' : pr.state === 'open' ? 'åpen' : 'lukket');
 
+/** Repoet og nummeret til PR-en som styrer starten: e2e-PR-en eller leder-PR-en. */
+function styrendePr(pin) {
+  const leder = lesLeder(pin.leder);
+  return leder ?? { repo: E2E_REPO, pr: pin.e2e_pr };
+}
+
 /**
  * Den nye variabelen for `set`. `vurdering` har status per eksisterende pin (vurderPar); utløpte
  * og forlatte pinner ryddes bort, unntatt en pin med `feil: true`, som bare regnes som utløpt
  * fordi et oppslag feilet og kan gjelde igjen. En pin fra et annet par overskrives bare med
- * `tving`, og samme par (samme e2e_pr) får ny tag eller service-PR bare med `erstatt`.
+ * `tving`, og samme par (samme e2e_pr eller leder) får ny tag eller service-PR bare med `erstatt`.
+ * `e2e` er statusen til PR-en som styrer paret: e2e-PR-en, eller leder-PR-en når `args.leder` er satt.
  */
 export function planleggSet({ pinner, vurdering, args, e2e, service, nå }) {
-  const { tjeneste, tag, e2ePr, servicePr, erstatt, tving } = args;
+  const { tjeneste, tag, e2ePr, leder, servicePr, erstatt, tving } = args;
   const feil = [];
   const gammel = pinner[tjeneste];
-  const sammePar = gammel?.e2e_pr === e2ePr;
+  const navn = parNavn({ e2e_pr: e2ePr, leder });
+  const sammePar = Boolean(gammel) && (leder ? gammel.leder === leder : gammel.e2e_pr === e2ePr);
   const ryddet = Object.keys(pinner).filter((t) => ['utløpt', 'forlatt'].includes(vurdering[t]?.status) && !vurdering[t].feil);
-  if (e2e === 'lukket') feil.push(`e2e #${e2ePr} er lukket uten merge.`);
-  if (e2e === 'merget' && !(erstatt && sammePar)) feil.push(`e2e #${e2ePr} er merget. En merget e2e-PR godtas bare med --erstatt for en pin fra samme e2e-PR.`);
+  if (e2e === 'lukket') feil.push(`${navn} er lukket uten merge.`);
+  if (e2e === 'merget' && !(erstatt && sammePar)) feil.push(`${navn} er merget. En merget PR godtas bare med --erstatt for en pin fra samme par.`);
   if (service !== 'åpen') feil.push(`${tjeneste} #${servicePr} er ${service}; pinnen trengs bare mens service-PR-en er åpen.`);
-  if (erstatt && !sammePar) feil.push(`--erstatt: ${tjeneste} har ingen pin fra e2e #${e2ePr}.`);
+  if (erstatt && !sammePar) feil.push(`--erstatt: ${tjeneste} har ingen pin fra ${navn}.`);
   if (gammel && sammePar && !erstatt && (gammel.tag !== tag || gammel.service_pr !== servicePr)) {
-    feil.push(`${tjeneste} er allerede pinnet til ${gammel.tag} for e2e #${e2ePr} og ${tjeneste} #${gammel.service_pr}. Bruk --erstatt for å bytte tag og service-PR.`);
+    feil.push(`${tjeneste} er allerede pinnet til ${gammel.tag} for ${navn} og ${tjeneste} #${gammel.service_pr}. Bruk --erstatt for å bytte tag og service-PR.`);
   }
   if (gammel && !sammePar && !ryddet.includes(tjeneste) && !tving) {
     const v = vurdering[tjeneste];
-    const par = `${tjeneste} er pinnet for e2e #${gammel.e2e_pr} og ${tjeneste} #${gammel.service_pr}`;
+    const par = `${tjeneste} er pinnet for ${parNavn(gammel)} og ${tjeneste} #${gammel.service_pr}`;
     feil.push(
       v?.feil
         ? `${par} (${v.grunn}; oppslaget feilet, så pinnen kan gjelde igjen). Kjør på nytt når oppslaget virker, eller bruk --tving.`
@@ -298,17 +375,20 @@ export function planleggSet({ pinner, vurdering, args, e2e, service, nå }) {
   const nye = Object.fromEntries(Object.entries(pinner).filter(([t]) => !ryddet.includes(t)));
   const uendret = Boolean(gammel && sammePar && gammel.tag === tag && gammel.service_pr === servicePr && !ryddet.includes(tjeneste));
   const tvunget = Boolean(gammel && !sammePar && !ryddet.includes(tjeneste));
-  if (!uendret) nye[tjeneste] = { tag, e2e_pr: e2ePr, service_pr: servicePr, satt: new Date(nå).toISOString().replace(/\.\d{3}Z$/, 'Z') };
+  const satt = new Date(nå).toISOString().replace(/\.\d{3}Z$/, 'Z');
+  if (!uendret) nye[tjeneste] = leder ? { tag, leder, service_pr: servicePr, satt } : { tag, e2e_pr: e2ePr, service_pr: servicePr, satt };
   return { pinner: nye, ryddet, uendret, tvunget };
 }
 
-/** Status for en eksisterende pin i skriveren: som utløpsregelen, og forlatt når e2e-PR-en er lukket. */
+/** Status for en eksisterende pin i skriveren: som utløpsregelen, og forlatt når e2e- eller leder-PR-en er lukket. */
 export async function vurderPar(tjeneste, pin, hent, nå) {
+  const { repo, pr } = styrendePr(pin);
+  const navn = parNavn(pin);
   try {
-    if (prStatus(await hent.pr(E2E_REPO, pin.e2e_pr)) === 'lukket') return { status: 'forlatt', grunn: `e2e #${pin.e2e_pr} er lukket uten merge` };
+    if (prStatus(await hent.pr(repo, pr)) === 'lukket') return { status: 'forlatt', grunn: `${navn} er lukket uten merge` };
   } catch (e) {
-    if (e.status === 404) return finnesIkke(`e2e #${pin.e2e_pr}`);
-    return { status: 'aktiv', grunn: `fikk ikke lest e2e #${pin.e2e_pr} (${vask(e.message)})` };
+    if (e.status === 404) return finnesIkke(navn);
+    return { status: 'aktiv', grunn: `fikk ikke lest ${navn} (${vask(e.message)})` };
   }
   return vurderService(tjeneste, pin.service_pr, hent, { nå, satt: pin.satt });
 }
@@ -316,7 +396,8 @@ export async function vurderPar(tjeneste, pin, hent, nå) {
 /**
  * Sjekker at br-<run_id> er en grønn kjøring av «E2E med brancher» med hele suiten, mot head-
  * commitene PR-ene har nå. `kontekst` er trigger-context.json fra E2E Tests-kjøringen den startet.
- * For en merget e2e-PR (--erstatt) godtas også en kjøring på main etter mergen.
+ * For en merget e2e-PR (--erstatt) godtas også en kjøring på main etter mergen. Et par uten
+ * e2e-PR (`e2e` er null) skal ha kjørt testene på main, uten en branch i melosys-e2e-tests.
  */
 export function sjekkBrancherKjøring({ runId, orkestrator, e2eKjøring, kontekst, tjeneste, serviceHead, e2e }) {
   const feil = [];
@@ -332,7 +413,10 @@ export function sjekkBrancherKjøring({ runId, orkestrator, e2eKjøring, konteks
   if (!service) feil.push(`${br} testet ikke en branch i ${tjeneste}.`);
   else if (service.sha !== serviceHead) feil.push(`${br} testet ${tjeneste} på ${kort(service.sha)}, men service-PR-en har ${kort(serviceHead)} nå. Kjør «E2E med brancher» på nytt.`);
   const tester = branches.find((b) => b.repo === E2E_REPO);
-  if (tester) {
+  if (!e2e) {
+    if (tester) feil.push(`${br} testet en branch i ${E2E_REPO}, men paret har ingen e2e-PR. Kjør «E2E med brancher» uten e2e-branch, eller koble med e2e-PR-en.`);
+    else if (kontekst.headBranch !== 'main') feil.push(`${br} kjørte testene fra ${vask(kontekst.headBranch ?? 'ukjent')}, ikke main.`);
+  } else if (tester) {
     if (tester.sha !== e2e.head) feil.push(`${br} testet ${E2E_REPO} på ${kort(tester.sha)}, men e2e-PR-en har ${kort(e2e.head)} nå. Kjør «E2E med brancher» på nytt.`);
   } else if (!e2e.merget || kontekst.headBranch !== 'main' || !(Date.parse(e2eKjøring.created_at) >= Date.parse(e2e.mergedAt))) {
     feil.push(`${br} testet ikke e2e-PR-en: kjøringen hadde ingen branch i ${E2E_REPO}.`);
@@ -386,11 +470,16 @@ const krev = (svar, hva) => {
   throw Object.assign(new Error(`${hva} ga HTTP ${svar.status}${svar.data?.message ? `: ${vask(svar.data.message)}` : ''}`), { status: svar.status });
 };
 
-/** Oppslagene reglene trenger: PR, revisjon på latest og compare. */
+/** Oppslagene reglene trenger: PR, revisjon på latest, compare og commit-emner. */
 export function lagHenter(github, { docker = kjørProsess } = {}) {
   return {
     pr: async (repo, nr) => krev(await github('GET', `/repos/${EIER}/${repo}/pulls/${nr}`), `${repo} #${nr}`),
     compare: async (repo, base, head) => krev(await github('GET', `/repos/${EIER}/${repo}/compare/${base}...${head}?per_page=1`), `compare i ${repo}`).status,
+    /** Emnene til de siste 100 commitene fra `ref`, nyeste først. */
+    emner: async (repo, ref) =>
+      krev(await github('GET', `/repos/${EIER}/${repo}/commits?sha=${encodeURIComponent(ref)}&per_page=100`), `historikken til ${repo}`).map(
+        (c) => c.commit.message.split('\n')[0],
+      ),
     revisjon: async (repo) => {
       const { stdout } = await docker('docker', ['buildx', 'imagetools', 'inspect', `${GAR}/${repo}:latest`, '--format', '{{json .Image}}'], { timeout: 60_000 });
       return revisjonFraImage(JSON.parse(stdout));
@@ -466,14 +555,16 @@ export async function skriv(args, io) {
     if (!Object.hasOwn(pinner, args.tjeneste)) return logg(`${args.tjeneste} har ingen pin i ${VARIABEL}; ingenting å fjerne.`);
     nye = Object.fromEntries(Object.entries(pinner).filter(([t]) => t !== args.tjeneste));
   } else {
-    const [e2ePr, servicePr] = await Promise.all([io.hent.pr(E2E_REPO, args.e2ePr), io.hent.pr(args.tjeneste, args.servicePr)]);
+    const styrer = args.leder ? lesLeder(args.leder) : { repo: E2E_REPO, pr: args.e2ePr };
+    const navn = parNavn({ e2e_pr: args.e2ePr, leder: args.leder });
+    const [styrerPr, servicePr] = await Promise.all([io.hent.pr(styrer.repo, styrer.pr), io.hent.pr(args.tjeneste, args.servicePr)]);
     const vurdering = {};
     for (const [t, pin] of Object.entries(pinner)) {
       vurdering[t] = await vurderPar(t, pin, io.hent, io.nå());
       if (vurdering[t].advarsel) logg(`${t}: ${vurdering[t].advarsel}`);
       if (vurdering[t].feil) logg(`Beholder pinnen for ${t}: ${vurdering[t].grunn}, og oppslaget feilet, så den ryddes ikke.`);
     }
-    const plan = planleggSet({ pinner, vurdering, args, e2e: prStatus(e2ePr), service: prStatus(servicePr), nå: io.nå() });
+    const plan = planleggSet({ pinner, vurdering, args, e2e: prStatus(styrerPr), service: prStatus(servicePr), nå: io.nå() });
     // Også en lik pin sjekkes: har PR-ene fått nye commits siden br-kjøringen, er imaget utdatert.
     const runId = args.tag.slice('br-'.length);
     sjekkBrancherKjøring({
@@ -481,11 +572,11 @@ export async function skriv(args, io) {
       ...(await hentBrancherKjøring(github, runId, io.lastNed)),
       tjeneste: args.tjeneste,
       serviceHead: servicePr.head.sha,
-      e2e: { head: e2ePr.head.sha, merget: Boolean(e2ePr.merged), mergedAt: e2ePr.merged_at },
+      e2e: args.leder ? null : { head: styrerPr.head.sha, merget: Boolean(styrerPr.merged), mergedAt: styrerPr.merged_at },
     });
     for (const t of plan.ryddet) logg(`Rydder bort pinnen for ${t}: ${vurdering[t].status}, ${vurdering[t].grunn}.`);
-    if (plan.uendret && !plan.ryddet.length) return logg(`${args.tjeneste} er allerede pinnet til ${args.tag} for e2e #${args.e2ePr}; ingenting å skrive.`);
-    if (plan.tvunget) logg(`--tving: overskriver pinnen for ${args.tjeneste} fra e2e #${pinner[args.tjeneste].e2e_pr}.`);
+    if (plan.uendret && !plan.ryddet.length) return logg(`${args.tjeneste} er allerede pinnet til ${args.tag} for ${navn}; ingenting å skrive.`);
+    if (plan.tvunget) logg(`--tving: overskriver pinnen for ${args.tjeneste} fra ${parNavn(pinner[args.tjeneste])}.`);
     nye = plan.pinner;
   }
 
@@ -515,11 +606,20 @@ function historikk() {
   return { grunn, emner };
 }
 
+/** Repoet og commiten gaten tester, fra gate_context. null for andre kjøringer og ugyldig tekst. */
+export function gateKilde(tekst) {
+  try {
+    const g = JSON.parse(tekst ?? '');
+    if (erObjekt(g) && TJENESTER_MED_KO.includes(g.source_repo) && SHA.test(g.source_sha ?? '')) return { repo: g.source_repo, sha: g.source_sha };
+  } catch {}
+  return null;
+}
+
 async function velg(utFil, env) {
   const fraInput = (env.E2E_PINS_INPUT ?? '').trim() !== '';
   const kilde = fraInput ? 'input e2e_pins' : VARIABEL;
   const tekst = fraInput ? env.E2E_PINS_INPUT : (env.E2E_PINS_VAR ?? '');
-  const felles = { kilde, tagger: env, hent: lagHenter(lagGitHub({ token: env.GH_TOKEN })), nå: Date.now() };
+  const felles = { kilde, tagger: env, hent: lagHenter(lagGitHub({ token: env.GH_TOKEN })), nå: Date.now(), gate: gateKilde(env.INPUT_GATE_CONTEXT) };
   if (fraInput) console.error(`📌 Input e2e_pins erstatter ${VARIABEL} i denne kjøringen.`);
   let resultat;
   try {

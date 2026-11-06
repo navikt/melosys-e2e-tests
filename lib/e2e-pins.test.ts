@@ -16,6 +16,10 @@ import {
   startStatus,
   TJENESTER,
   TJENESTER_MED_KO,
+  gateKilde,
+  lederStart,
+  lesLeder,
+  parNavn,
   velgPinner,
   vurderPar,
   vurderPin,
@@ -42,7 +46,7 @@ const NÅ = Date.parse('2026-10-22T15:00:00Z');
 const PIN = { tag: 'br-39778214986', e2e_pr: 388, service_pr: 3267, satt: '2026-10-22T14:00:00Z' };
 
 /** Henter med faste svar. `pr` er nøklet på «<repo>#<nr>»; en Error-verdi kastes. */
-function lagHenter({ pr = {}, revisjon = sha('b'), compare = 'ahead' }: { pr?: Obj; revisjon?: any; compare?: any } = {}) {
+function lagHenter({ pr = {}, revisjon = sha('b'), compare = 'ahead', emner = {} }: { pr?: Obj; revisjon?: any; compare?: any; emner?: Obj } = {}) {
   const kall: string[] = [];
   const svar = (v: any) => (v instanceof Error ? Promise.reject(v) : Promise.resolve(v));
   return {
@@ -50,6 +54,8 @@ function lagHenter({ pr = {}, revisjon = sha('b'), compare = 'ahead' }: { pr?: O
     pr: (repo: string, nr: number) => (kall.push(`pr ${repo}#${nr}`), svar(pr[`${repo}#${nr}`] ?? { state: 'open', merged: false, head: { sha: sha('9') } })),
     revisjon: (repo: string) => (kall.push(`revisjon ${repo}`), svar(revisjon)),
     compare: (repo: string, base: string, head: string) => (kall.push(`compare ${repo} ${base.slice(0, 1)}...${head.slice(0, 1)}`), svar(compare)),
+    /** `emner` er nøklet på «<repo>@<ref>». */
+    emner: (repo: string, ref: string) => (kall.push(`emner ${repo}@${ref.slice(0, 7)}`), svar(emner[`${repo}@${ref}`] ?? [])),
   };
 }
 const merget = { state: 'closed', merged: true, merge_commit_sha: sha('a'), merged_at: '2026-10-22T14:30:00Z' };
@@ -435,8 +441,147 @@ test('set --erstatt for merget e2e-PR: en kjøring på main etter mergen godtas'
   assert.throws(() => sjekkBrancherKjøring(brancher({ kontekst: { ...påMain, headBranch: 'gren' }, e2e })), /testet ikke e2e-PR-en/);
 });
 
+// ---------------------------------------------------------------- par uten e2e-PR (leder)
+
+const LEDER = 'melosys-skjema-api#422';
+const LEDER_PIN = { tag: 'br-39778214986', leder: LEDER, service_pr: 695, satt: '2026-10-22T14:00:00Z' };
+const lederMerget = { ...merget, base: { ref: 'main' } };
+const KØ_SHA = sha('c');
+
+test('variabelen: en pin har enten e2e_pr eller leder, og lederen er <repo>#<pr> med merge-kø', () => {
+  assert.deepEqual(lesVariabel(JSON.stringify({ 'melosys-skjema-web': LEDER_PIN })), { 'melosys-skjema-web': LEDER_PIN });
+  const med = (felt: Obj) => JSON.stringify({ 'melosys-skjema-web': { ...LEDER_PIN, ...felt } });
+  assert.throws(() => lesVariabel(med({ e2e_pr: 388 })), /enten e2e_pr eller leder/);
+  assert.throws(() => lesVariabel(JSON.stringify({ 'melosys-web': { tag: 'br-1', service_pr: 2 } })), /enten e2e_pr eller leder/);
+  for (const leder of ['melosys-mock#1', 'melosys-skjema-api', 'melosys-skjema-api#0', 422, null]) {
+    assert.throws(() => lesVariabel(med({ leder })), /leder for melosys-skjema-web er ikke <repo>#<pr>/, String(leder));
+  }
+  assert.throws(() => lesVariabel(med({ service_pr: 0 })), /service_pr .* positivt heltall/);
+  assert.deepEqual(lesLeder(LEDER), { repo: 'melosys-skjema-api', pr: 422 });
+  assert.equal(parNavn(LEDER_PIN), 'leder melosys-skjema-api #422');
+  assert.equal(parNavn(PIN), 'e2e #388');
+});
+
+test('leder: merget og ikke revertert har startet, og en merge bak historikken regnes som startet', async () => {
+  const hent = lagHenter({ pr: { [LEDER]: lederMerget }, emner: { 'melosys-skjema-api@main': ['nyere (#430)', 'Bump typer (#422)'] } });
+  assert.deepEqual(await lederStart(LEDER, { kilde: null, hent }), { startet: true, grunn: 'melosys-skjema-api #422 er merget' });
+  assert.deepEqual(hent.kall, ['pr melosys-skjema-api#422', 'emner melosys-skjema-api@main']);
+  const lengeSiden = lagHenter({ pr: { [LEDER]: lederMerget } });
+  assert.equal((await lederStart(LEDER, { kilde: null, hent: lengeSiden })).startet, true);
+});
+
+test('leder: en revert på base-branchen slår av pinnen', async () => {
+  const emner = { 'melosys-skjema-api@main': ['Revert "Bump typer" (#431)', 'Bump typer (#422)'] };
+  const start = await lederStart(LEDER, { kilde: null, hent: lagHenter({ pr: { [LEDER]: lederMerget }, emner }) });
+  assert.equal(start.startet, false);
+  assert.match(start.grunn, /melosys-skjema-api #422 er revertert/);
+});
+
+test('leder: før mergen starter pinnen bare når gaten tester lederens repo på en commit som har leder-PR-en', async () => {
+  const emner = { [`melosys-skjema-api@${KØ_SHA}`]: ['Bump typer (#422)', 'eldre (#420)'] };
+  const iKø = await lederStart(LEDER, { kilde: { repo: 'melosys-skjema-api', sha: KØ_SHA }, hent: lagHenter({ emner }) });
+  assert.deepEqual(iKø, { startet: true, grunn: 'melosys-skjema-api ccccccc har melosys-skjema-api #422' });
+  // PR-sjekken til leder-PR-en: branch-commitene har ikke (#422).
+  const prSjekk = await lederStart(LEDER, { kilde: { repo: 'melosys-skjema-api', sha: sha('d') }, hent: lagHenter({ emner }) });
+  assert.equal(prSjekk.startet, false);
+  // En annen kø ser ikke kode som ennå kan tas ut av lederens kø.
+  const annenKø = lagHenter({ emner });
+  assert.deepEqual(await lederStart(LEDER, { kilde: { repo: 'melosys-skjema-web', sha: KØ_SHA }, hent: annenKø }), {
+    startet: false,
+    grunn: 'melosys-skjema-api #422 er ikke merget',
+  });
+  assert.deepEqual(annenKø.kall, ['pr melosys-skjema-api#422']);
+  assert.equal((await lederStart(LEDER, { kilde: null, hent: lagHenter() })).startet, false);
+});
+
+test('leder: et oppslag som feiler, gir ikke startet med en advarsel', async () => {
+  const start = await lederStart(LEDER, { kilde: null, hent: lagHenter({ pr: { [LEDER]: new Error('HTTP 502') } }) });
+  assert.equal(start.startet, false);
+  assert.match(start.advarsel, /Fikk ikke sjekket melosys-skjema-api #422 \(HTTP 502\)/);
+  const emner = lagHenter({ pr: { [LEDER]: lederMerget } });
+  emner.emner = () => Promise.reject(new Error('HTTP 500'));
+  assert.equal((await lederStart(LEDER, { kilde: null, hent: emner })).startet, false);
+});
+
+test('vurderPin: leder-pinnene i samme par slår opp lederen én gang, og ikke startet har advarselen', async () => {
+  const hent = lagHenter({ pr: { [LEDER]: lederMerget, 'melosys-skjema-web#695': { state: 'open', merged: false } } });
+  const ledere = new Map();
+  const web = await vurderPin('melosys-skjema-web', LEDER_PIN, { tagger: alleLatest, emner: [], hent, nå: NÅ, ledere });
+  const api = await vurderPin('melosys-skjema-api', { ...LEDER_PIN, service_pr: 422 }, { tagger: alleLatest, emner: [], hent, nå: NÅ, ledere });
+  assert.equal(web.status, 'aktiv');
+  assert.deepEqual({ e2ePr: web.e2ePr, leder: web.leder }, { e2ePr: null, leder: LEDER });
+  assert.equal(api.status, 'utløpt', 'latest har leder-PR-en (compare: ahead)');
+  assert.equal(hent.kall.filter((k) => k === `pr ${LEDER}`).length, 2, 'én for startregelen, én for utløpsregelen til api-pinnen');
+  assert.equal(hent.kall.filter((k) => k.startsWith('emner')).length, 1);
+  const feiler = await vurderPin('melosys-skjema-web', LEDER_PIN, { tagger: alleLatest, emner: [], hent: lagHenter({ pr: { [LEDER]: new Error('nede') } }), nå: NÅ });
+  assert.equal(feiler.status, 'ikke startet');
+  assert.match(feiler.advarsel, /Fikk ikke sjekket/);
+});
+
+test('velg: i lederens køkjøring gjelder pinnen for følgeren, mens lederen er under test', async () => {
+  const tekst = JSON.stringify({ 'melosys-skjema-api': { ...LEDER_PIN, service_pr: 422 }, 'melosys-skjema-web': LEDER_PIN });
+  const tagger = { ...alleLatest, MELOSYS_SKJEMA_API_TAG: 'mq-abc' };
+  const hent = lagHenter({ emner: { [`melosys-skjema-api@${KØ_SHA}`]: ['Bump typer (#422)'] } });
+  const r = await velg({ tekst, tagger, hent, gate: { repo: 'melosys-skjema-api', sha: KØ_SHA } });
+  assert.deepEqual(r.pinner.map((p: Obj) => [p.tjeneste, p.status]), [
+    ['melosys-skjema-api', 'under test'],
+    ['melosys-skjema-web', 'aktiv'],
+  ]);
+  assert.deepEqual(r.bruk, [{ variabel: 'MELOSYS_SKJEMA_WEB_TAG', tjeneste: 'melosys-skjema-web', tag: LEDER_PIN.tag }]);
+  assert.ok(r.logg.some((l: Obj) => /leder melosys-skjema-api #422/.test(l.tekst)));
+  const andreKøer = await velg({ tekst, hent: lagHenter(), gate: { repo: 'melosys-web', sha: KØ_SHA } });
+  assert.deepEqual(andreKøer.bruk, []);
+});
+
+test('gateKilde: repoet og commiten fra gate_context, ellers null', () => {
+  const ok = { source_repo: 'melosys-skjema-api', source_sha: KØ_SHA, annet: 1 };
+  assert.deepEqual(gateKilde(JSON.stringify(ok)), { repo: 'melosys-skjema-api', sha: KØ_SHA });
+  for (const tekst of [undefined, '', '{', 'null', '[]', JSON.stringify({ ...ok, source_repo: 'melosys-mock' }), JSON.stringify({ ...ok, source_sha: 'abc' })]) {
+    assert.equal(gateKilde(tekst), null, String(tekst));
+  }
+});
+
+test('argumentene til set med --leder', () => {
+  assert.deepEqual(lesArgumenter(['set', 'melosys-skjema-web', 'br-123', '695', `--leder=${LEDER}`, '--dry-run']), {
+    kommando: 'set', tjeneste: 'melosys-skjema-web', tag: 'br-123', leder: LEDER, servicePr: 695, erstatt: false, tving: false, dryRun: true,
+  });
+  assert.throws(() => lesArgumenter(['set', 'melosys-skjema-web', 'br-123', '1', '695', `--leder=${LEDER}`]), /bruk: set/);
+  assert.throws(() => lesArgumenter(['set', 'melosys-skjema-web', 'br-123', '695', `--leder=${LEDER}`, '--leder=melosys-web#1']), /bruk: set/);
+  assert.throws(() => lesArgumenter(['set', 'melosys-skjema-web', 'br-123', '695', '--leder=melosys-mock#1']), /--leder må være <repo>#<pr>/);
+  assert.throws(() => lesArgumenter(['set', 'melosys-skjema-web', 'br-123', '0', `--leder=${LEDER}`]), /service_pr/);
+});
+
+const SET_LEDER = { kommando: 'set', tjeneste: 'melosys-skjema-web', tag: 'br-500', leder: LEDER, servicePr: 695, erstatt: false, tving: false, dryRun: false };
+const nyLeder = { tag: 'br-500', leder: LEDER, service_pr: 695, satt: '2026-10-22T15:00:00Z' };
+
+test('set med leder: pinnen har leder i stedet for e2e_pr, og samme par er samme leder', () => {
+  assert.deepEqual(planlegg({ args: SET_LEDER }).pinner, { 'melosys-skjema-web': nyLeder });
+  const aktiv = { 'melosys-skjema-web': { status: 'aktiv', grunn: 'g' } };
+  const sammeLeder = { 'melosys-skjema-web': { ...nyLeder, service_pr: 690 } };
+  assert.throws(() => planlegg({ args: SET_LEDER, pinner: sammeLeder, vurdering: aktiv }), /pinnet til br-500 for leder melosys-skjema-api #422 .*--erstatt/);
+  assert.deepEqual(planlegg({ args: { ...SET_LEDER, erstatt: true }, pinner: sammeLeder, vurdering: aktiv }).pinner, { 'melosys-skjema-web': nyLeder });
+  const annenLeder = { 'melosys-skjema-web': { ...nyLeder, leder: 'melosys-skjema-api#400' } };
+  assert.throws(() => planlegg({ args: SET_LEDER, pinner: annenLeder, vurdering: aktiv }), /pinnet for leder melosys-skjema-api #400 .*--tving/);
+  const e2ePin = { 'melosys-skjema-web': { ...PIN, service_pr: 695 } };
+  assert.throws(() => planlegg({ args: SET_LEDER, pinner: e2ePin, vurdering: aktiv }), /pinnet for e2e #388/);
+  assert.throws(() => planlegg({ args: SET_LEDER, e2e: 'merget' }), /leder melosys-skjema-api #422 er merget/);
+});
+
+test('vurderPar: en lukket leder-PR gjør pinnen forlatt', async () => {
+  const hent = lagHenter({ pr: { [LEDER]: { state: 'closed', merged: false } } });
+  assert.deepEqual(await vurderPar('melosys-skjema-web', LEDER_PIN, hent, NÅ), { status: 'forlatt', grunn: 'leder melosys-skjema-api #422 er lukket uten merge' });
+});
+
+test('set med leder: br-kjøringen har ingen branch i melosys-e2e-tests og kjørte testene fra main', () => {
+  const k = brancher().kontekst;
+  const påMain = { ...k, headBranch: 'main', branchContext: { branches: [k.branchContext.branches[0]] } };
+  assert.doesNotThrow(() => sjekkBrancherKjøring(brancher({ kontekst: påMain, e2e: null })));
+  assert.throws(() => sjekkBrancherKjøring(brancher({ e2e: null })), /testet en branch i melosys-e2e-tests, men paret har ingen e2e-PR/);
+  assert.throws(() => sjekkBrancherKjøring(brancher({ kontekst: { ...påMain, headBranch: 'gren' }, e2e: null })), /kjørte testene fra gren, ikke main/);
+});
+
 /** Falsk GitHub for skriveren: variabelen, kjøringene og PR-ene. */
-function lagGitHub({ verdi, prer = {}, ikkeLagre = false, kjøringerPerSide = false, alleKjøringer, orkestrator = {}, underveis }: {
+function lagGitHub({ verdi, prer = {}, ikkeLagre = false, kjøringerPerSide = false, alleKjøringer, orkestrator = {}, underveis, kontekst }: {
   verdi?: string;
   prer?: Obj;
   ikkeLagre?: boolean;
@@ -446,6 +591,8 @@ function lagGitHub({ verdi, prer = {}, ikkeLagre = false, kjøringerPerSide = fa
   orkestrator?: Obj;
   /** Kjøres mens skriveren laster ned trigger-konteksten, for en samtidig skriving. */
   underveis?: (lagret: { verdi?: string }) => void;
+  /** trigger-context.json til br-kjøringen; standard er brancher().kontekst. */
+  kontekst?: Obj;
 }) {
   const kall: string[] = [];
   const lagret: { verdi?: string } = { verdi };
@@ -490,7 +637,7 @@ function lagGitHub({ verdi, prer = {}, ikkeLagre = false, kjøringerPerSide = fa
   const åpen = (head: string) => ({ state: 'open', merged: false, head: { sha: head } });
   const hent = lagHenter({ pr: { 'melosys-e2e-tests#390': åpen(sha('2')), 'melosys-web#3300': åpen(sha('1')), ...prer } });
   const lastet: number[] = [];
-  const lastNed = async (id: number) => (lastet.push(id), underveis?.(lagret), brancher().kontekst);
+  const lastNed = async (id: number) => (lastet.push(id), underveis?.(lagret), kontekst ?? brancher().kontekst);
   const logg: string[] = [];
   return { kall, lagret, lastet, logg, io: { github, hent, lastNed, nå: () => NÅ, logg: (t: string) => logg.push(t) } };
 }
@@ -501,6 +648,19 @@ test('skriv: set oppretter variabelen når den mangler, med kjøringen fra siste
   assert.deepEqual(JSON.parse(g.lagret.verdi!), { 'melosys-web': ny });
   assert.ok(g.kall.includes('POST /repos/navikt/melosys-e2e-tests/actions/variables'));
   assert.deepEqual(g.lastet, [8]);
+});
+
+test('skriv: set med leder slår opp leder-PR-en og krever en br-kjøring uten e2e-branch', async () => {
+  const k = brancher().kontekst;
+  const kontekst = { ...k, headBranch: 'main', branchContext: { branches: [{ repo: 'melosys-skjema-web', sha: sha('1') }] } };
+  const åpen = (head: string) => ({ state: 'open', merged: false, head: { sha: head } });
+  const prer = { [LEDER]: åpen(sha('5')), 'melosys-skjema-web#695': åpen(sha('1')) };
+  const g = lagGitHub({ prer, kontekst });
+  await skriv(SET_LEDER, g.io);
+  assert.deepEqual(JSON.parse(g.lagret.verdi!), { 'melosys-skjema-web': nyLeder });
+  assert.ok(g.io.hent.kall.includes(`pr ${LEDER}`));
+  assert.ok(!g.io.hent.kall.some((c: string) => c.startsWith('pr melosys-e2e-tests')));
+  await assert.rejects(skriv(SET_LEDER, lagGitHub({ prer }).io), /paret har ingen e2e-PR/);
 });
 
 test('skriv: set rydder en utløpt pin og skriver med PATCH', async () => {

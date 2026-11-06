@@ -45,12 +45,26 @@ Workflowen setter ingenting i kø. Merge selv med **Merge when ready**, i rekkef
 - **Service-PR-en er lukket uten merge:** paret er forlatt; se [Når noe går galt](#når-noe-går-galt). Skal ikke paret videre, fjerner du pinnene foran med `fjern <tjeneste>`.
 - **Service-PR-en er merget:** den trenger ingen pin, og «Sjekk paret» avviser en ny start med en merget PR. Sett pinnene for resten for hånd med `set` (se [Skriveren](#skriveren)).
 
+## Par uten e2e-PR
+
+Noen service-PR-er må merges sammen uten at testene endres, for eksempel en versjonsbump i melosys-skjema-api og melosys-skjema-web som må være i takt. Hver kø alene tester den nye versjonen mot den gamle `latest` i det andre repoet og blir rød.
+
+Kjør paret grønt med «E2E med brancher» uten en branch her, så testene kjører fra `main`, og start «Koblet merge» uten `e2e_pr`. Da trengs minst to service-PR-er, og den første er **lederen**: PR-en som styrer når pinnene starter. Workflowen pinner alle tjenestene i paret, også lederen, med `leder` i stedet for `e2e_pr`.
+
+En pin med `leder` starter når
+
+- gaten tester lederens repo på en commit som har leder-PR-en, det vil si lederens egen køkjøring og PR-er bak den i samme kø, eller
+- leder-PR-en er merget og ikke revertert på default-branchen.
+
+Andre køer får ikke pinnen før lederen er merget, så ingen tester mot kode som ennå kan tas ut av lederens kø. Merge lederen først, og de andre når lederen er merget og køen i repoet er tom. Lederens egen pin dekker tiden fra mergen til `latest` har den.
+
 ## Skriveren
 
 `scripts/e2e-pins.mjs` setter og fjerner pinner. Workflowen bruker den, og du kan kjøre den selv med ditt eget gh-token:
 
 ```bash
 GH_TOKEN=$(gh auth token) node scripts/e2e-pins.mjs set melosys-web br-39400000000 388 3300
+GH_TOKEN=$(gh auth token) node scripts/e2e-pins.mjs set melosys-skjema-web br-39400000000 695 --leder=melosys-skjema-api#422
 GH_TOKEN=$(gh auth token) node scripts/e2e-pins.mjs fjern melosys-web
 ```
 
@@ -58,22 +72,27 @@ For hånd går skriveren utenom «Sjekk paret» og rekkefølgen i sammendraget. 
 
 `set` krever `gh` og docker logget inn i GAR (`gcloud auth configure-docker europe-north1-docker.pkg.dev`). Før den skriver, sjekker den dette:
 
-- Service-PR-en er åpen. e2e-PR-en er åpen, eller merget når du bytter en pin fra samme e2e-PR med `--erstatt`.
+- Service-PR-en er åpen. e2e-PR-en (eller leder-PR-en med `--leder`) er åpen, eller merget når du bytter en pin fra samme par med `--erstatt`.
+- Med `--leder` har br-kjøringen ingen branch i melosys-e2e-tests, og E2E Tests-kjøringen kjørte testene fra `main`.
 - `br-<run_id>` er en grønn kjøring av «E2E med brancher» med hele suiten, mot head-commitene PR-ene har nå. Er e2e-PR-en merget (`--erstatt`), godtas også en kjøring uten e2e-branch, når E2E Tests-kjøringen den startet, kjørte på `main` og ble opprettet etter mergen.
 - Ingen pin fra et annet par gjelder for tjenesten. En utløpt eller forlatt pin ryddes bort. En pin som bare regnes som utløpt fordi et oppslag feilet, står igjen og stopper `set` for samme tjeneste fra et annet par; kjør på nytt når oppslaget virker, eller bruk `--tving`.
 
 Flagg:
 
-- `--erstatt`: bytt tag og service-PR for en pin fra samme e2e-PR, for eksempel når service-PR-en er erstattet.
+- `--leder=<repo>#<pr>`: pinnen er for et par uten e2e-PR (se [Par uten e2e-PR](#par-uten-e2e-pr)); da er argumentene `<tjeneste> <tag> <service_pr>`.
+- `--erstatt`: bytt tag og service-PR for en pin fra samme par, for eksempel når service-PR-en er erstattet.
 - `--tving`: overskriv en pin fra et annet par.
 - `--dry-run`: vis verdien uten å skrive.
 
 `gh variable set E2E_PINS -R navikt/melosys-e2e-tests` skriver variabelen uten noen av sjekkene. Kjøringene validerer verdien selv, og en ugyldig verdi slår av alle pinnene med en feilmelding. Skriv ikke for hånd mens «Koblet merge» skriver.
 
-Verdien er ett JSON-objekt, én pin per tjeneste:
+Verdien er ett JSON-objekt, én pin per tjeneste, med enten `e2e_pr` eller `leder`:
 
 ```json
-{ "melosys-web": { "tag": "br-39400000000", "e2e_pr": 388, "service_pr": 3300, "satt": "2026-10-23T08:00:00Z" } }
+{
+  "melosys-web": { "tag": "br-39400000000", "e2e_pr": 388, "service_pr": 3300, "satt": "2026-10-23T08:00:00Z" },
+  "melosys-skjema-web": { "tag": "br-39400000001", "leder": "melosys-skjema-api#422", "service_pr": 695, "satt": "2026-10-23T08:00:00Z" }
+}
 ```
 
 ## Slik virker pinnen
@@ -81,7 +100,7 @@ Verdien er ett JSON-objekt, én pin per tjeneste:
 Steget «Determine image tags» i E2E Tests leser `vars.E2E_PINS` og avgjør hver pin for seg:
 
 - **Under test:** har tjenesten en annen tag enn `latest` i kjøringen, beholder den taggen. Gaten, dispatch etter merge og «E2E med brancher» tester alltid imaget de er startet med.
-- **Ikke startet:** ingen commit i historikken har emne som slutter på `(#<e2e_pr>)`, eller e2e-PR-en er revertert. Kjøringen bruker `latest`.
+- **Ikke startet:** ingen commit i historikken har emne som slutter på `(#<e2e_pr>)`, eller e2e-PR-en er revertert. For en pin med `leder` gjelder startregelen i [Par uten e2e-PR](#par-uten-e2e-pr). Kjøringen bruker `latest`.
 - **Aktiv:** testene har e2e-PR-en, og service-PR-en er åpen, eller `latest` er bygd før merge-commiten. Kjøringen bruker pin-taggen og viser en advarsel i sammendraget.
 - **Utløpt:** revisjonen på `latest` (labelen `org.opencontainers.image.revision`) har merge-commiten til service-PR-en. Kjøringen bruker `latest`.
 - **Forlatt:** service-PR-en er lukket uten merge, eller finnes ikke. Kjøringen bruker `latest` og viser en advarsel.
