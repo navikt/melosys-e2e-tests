@@ -74,7 +74,7 @@ For hånd går skriveren utenom «Sjekk paret» og rekkefølgen i sammendraget. 
 
 - Service-PR-en er åpen. e2e-PR-en (eller leder-PR-en med `--leder`) er åpen, eller merget når du bytter en pin fra samme par med `--erstatt`.
 - Med `--leder` har br-kjøringen ingen branch i melosys-e2e-tests, og E2E Tests-kjøringen kjørte testene fra `main` mot både lederens og service-PR-ens nåværende head.
-- `br-<run_id>` er en grønn kjøring av «E2E med brancher» med hele suiten, mot head-commitene PR-ene har nå. Er e2e-PR-en merget (`--erstatt`), godtas også en kjøring uten e2e-branch, når E2E Tests-kjøringen den startet, kjørte på `main` og ble opprettet etter mergen.
+- `br-<run_id>` er en grønn kjøring av «E2E med brancher» med hele suiten, mot head-commitene PR-ene har nå. Er e2e-PR-en merget (`--erstatt`), godtas også en kjøring uten e2e-branch, når E2E Tests-kjøringen den startet, kjørte på `main` og ble opprettet etter mergen. Er leder-PR-en merget (`--erstatt --leder`), godtas på samme måte en kjøring uten branch i lederens repo, når E2E Tests-kjøringen ble opprettet etter mergen.
 - Ingen pin fra et annet par gjelder for tjenesten. En utløpt eller forlatt pin ryddes bort. En pin som bare regnes som utløpt fordi et oppslag feilet, står igjen og stopper `set` for samme tjeneste fra et annet par; kjør på nytt når oppslaget virker, eller bruk `--tving`.
 
 Flagg:
@@ -123,7 +123,7 @@ Andre regler:
 
   Revert av e2e-PR-en tar de nye testene ut av `main` uansett hvilken pin tjenesten har (se neste punkt).
 - **e2e-PR-en revertes.** Har emnet til revert-commiten «revert» og `#<e2e_pr>`, for eksempel `Revert e2e #388 (#401)`, starter ikke en pin fra den e2e-PR-en lenger. Er pinnen fra den e2e-PR-en, fjerner du den også: `node scripts/e2e-pins.mjs fjern <tjeneste>`. `fjern` fjerner pinnen tjenesten har, uansett hvilket par den er fra.
-- **Service-PR-en lukkes eller erstattes.** Pinnen er forlatt, og kjøringene blir røde mot `latest`. Revert e2e-PR-en (eller leder-PR-en for et par uten e2e-PR), eller kjør «E2E med brancher» på nytt med den nye service-PR-en og bytt med `set --erstatt <tjeneste> <ny br-tag> <e2e_pr> <ny service_pr>`.
+- **Service-PR-en lukkes eller erstattes.** Pinnen er forlatt, og kjøringene blir røde mot `latest`. Revert e2e-PR-en (eller leder-PR-en for et par uten e2e-PR), eller kjør «E2E med brancher» på nytt med den nye service-PR-en og bytt med `set --erstatt <tjeneste> <ny br-tag> <e2e_pr> <ny service_pr>` (for et par uten e2e-PR: `set --erstatt <tjeneste> <ny br-tag> <ny service_pr> --leder=<repo>#<pr>`).
 - **Service-PR-en revertes etter merge.** `latest` er forbi merge-commiten, så pinnen er utløpt, og testene feiler mot et image uten endringen. Revert e2e-PR-en også.
 - **En pin står aktiv i mer enn tre dager.** Hver kjøring viser en advarsel. Sjekk om service-PR-en står fast.
 - **`br`-taggen er ryddet bort fra GAR.** GAR beholder versjoner i minst 90 dager. Kjøringene blir røde når imaget hentes. Fjern pinnen, eller kjør paret på nytt og bytt taggen.
