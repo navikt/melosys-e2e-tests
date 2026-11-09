@@ -19,7 +19,7 @@ For de andre tjenestene, for eksempel melosys-mock, melosys-trygdeavgift-beregni
 
 ## Automatisk fra konsollen
 
-Knappen «Koblet merge» i melosys-console starter workflowen «Koblet merge» (`.github/workflows/koblet-merge.yml`) på `main`. Kjør paret grønt med «E2E med brancher» først, uten `test_grep`. Knappen trenger taggen `br-<run_id>`, e2e-PR-en og service-PR-ene i den rekkefølgen de skal merges.
+Knappen «Koblet merge» i melosys-console starter workflowen «Koblet merge» (`.github/workflows/koblet-merge.yml`) på `main`. Kjør paret grønt med «E2E med brancher» først, uten `test_grep`. Knappen trenger taggen `br-<run_id>`, e2e-PR-en og service-PR-ene i den rekkefølgen de skal merges. Rekkefølgen er backendene før frontendene, men kan endres i konsollen før starten, f.eks. når frontenden tåler både gammel og ny backend og skal deployes først. For et par uten e2e-PR bestemmer rekkefølgen lederen, så den kan ikke endres når «Koblet merge» har skrevet pinnene.
 
 Workflowen har to jobber:
 
