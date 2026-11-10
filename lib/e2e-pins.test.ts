@@ -551,11 +551,10 @@ test('velg: i lederens køkjøring gjelder pinnen for følgeren, mens lederen er
   assert.deepEqual(andreKøer.bruk, []);
 });
 
-test('gateKilde: repoet og commiten fra gate_context, ellers null', () => {
-  const ok = { source_repo: 'melosys-skjema-api', source_sha: KØ_SHA, annet: 1 };
-  assert.deepEqual(gateKilde(JSON.stringify(ok)), { repo: 'melosys-skjema-api', sha: KØ_SHA });
-  for (const tekst of [undefined, '', '{', 'null', '[]', JSON.stringify({ ...ok, source_repo: 'melosys-mock' }), JSON.stringify({ ...ok, source_sha: 'abc' })]) {
-    assert.equal(gateKilde(tekst), null, String(tekst));
+test('gateKilde: repoet og commiten fra de validerte gate-feltene, ellers null', () => {
+  assert.deepEqual(gateKilde({ GATE_SOURCE_REPO: 'melosys-skjema-api', GATE_SOURCE_SHA: KØ_SHA }), { repo: 'melosys-skjema-api', sha: KØ_SHA });
+  for (const env of [{}, { GATE_SOURCE_REPO: 'melosys-skjema-api' }, { GATE_SOURCE_SHA: KØ_SHA }, { GATE_SOURCE_REPO: '', GATE_SOURCE_SHA: '' }]) {
+    assert.equal(gateKilde(env), null, JSON.stringify(env));
   }
 });
 

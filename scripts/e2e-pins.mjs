@@ -17,8 +17,8 @@
  *       «Determine image tags»: skriver «<variabel> <tjeneste> <tag>» per pin som brukes, og
  *       statusen per pin til <ut-fil> (feltene pinner og pinnerFeil i trigger-context.json).
  *       En ugyldig variabel gir ingen pinner.
- *       Med gate_context i INPUT_GATE_CONTEXT ser startregelen for `leder` hvilken commit gaten
- *       tester.
+ *       Med GATE_SOURCE_REPO og GATE_SOURCE_SHA (gate_context, validert i workflowen) ser
+ *       startregelen for `leder` hvilken commit gaten tester.
  *   e2e-pins.mjs set <tjeneste> <tag> <e2e_pr> <service_pr> [--erstatt] [--tving] [--dry-run]
  *   e2e-pins.mjs set <tjeneste> <tag> <service_pr> --leder=<repo>#<pr> [--erstatt] [--tving] [--dry-run]
  *   e2e-pins.mjs fjern <tjeneste> [--dry-run]
@@ -638,20 +638,21 @@ function historikk() {
   return { grunn, emner };
 }
 
-/** Repoet og commiten gaten tester, fra gate_context. null for andre kjøringer og ugyldig tekst. */
-export function gateKilde(tekst) {
-  try {
-    const g = JSON.parse(tekst ?? '');
-    if (erObjekt(g) && TJENESTER_MED_KO.includes(g.source_repo) && SHA.test(g.source_sha ?? '')) return { repo: g.source_repo, sha: g.source_sha };
-  } catch {}
-  return null;
+/**
+ * Repoet og commiten gaten tester. Workflowen validerer gate_context og setter GATE_SOURCE_REPO og
+ * GATE_SOURCE_SHA fra sourceRepo og sourceSha; de er tomme for andre kjøringer og ugyldig gate_context.
+ */
+export function gateKilde(env) {
+  const repo = env.GATE_SOURCE_REPO ?? '';
+  const sha = env.GATE_SOURCE_SHA ?? '';
+  return repo && sha ? { repo, sha } : null;
 }
 
 async function velg(utFil, env) {
   const fraInput = (env.E2E_PINS_INPUT ?? '').trim() !== '';
   const kilde = fraInput ? 'input e2e_pins' : VARIABEL;
   const tekst = fraInput ? env.E2E_PINS_INPUT : (env.E2E_PINS_VAR ?? '');
-  const felles = { kilde, tagger: env, hent: lagHenter(lagGitHub({ token: env.GH_TOKEN })), nå: Date.now(), gate: gateKilde(env.INPUT_GATE_CONTEXT) };
+  const felles = { kilde, tagger: env, hent: lagHenter(lagGitHub({ token: env.GH_TOKEN })), nå: Date.now(), gate: gateKilde(env) };
   if (fraInput) console.error(`📌 Input e2e_pins erstatter ${VARIABEL} i denne kjøringen.`);
   let resultat;
   try {
