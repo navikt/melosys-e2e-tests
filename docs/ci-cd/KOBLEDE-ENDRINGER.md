@@ -80,7 +80,7 @@ For hånd går skriveren utenom «Sjekk paret» og rekkefølgen i sammendraget. 
 
 - Service-PR-en er åpen. e2e-PR-en (eller leder-PR-en med `--leder`) er åpen, eller merget når du bytter en pin fra samme par med `--erstatt`.
 - Med `--leder` har br-kjøringen ingen branch i melosys-e2e-tests, og E2E Tests-kjøringen kjørte testene fra `main` mot både lederens og service-PR-ens nåværende head.
-- `br-<run_id>` er en grønn kjøring av «E2E med brancher» med hele suiten, mot head-commitene PR-ene har nå. Er e2e-PR-en merget (`--erstatt`), godtas også en kjøring uten e2e-branch, når E2E Tests-kjøringen den startet, kjørte på `main` og ble opprettet etter mergen. Er leder-PR-en merget (`--erstatt --leder`), godtas på samme måte en kjøring uten branch i lederens repo, når E2E Tests-kjøringen ble opprettet etter mergen.
+- `br-<run_id>` er en grønn kjøring av «E2E med brancher» med hele suiten, mot head-commitene PR-ene har nå. Er e2e-PR-en merget (`--erstatt`), godtas også en kjøring uten e2e-branch, når E2E Tests-kjøringen den startet, kjørte på `main` og ble opprettet etter mergen. Er leder-PR-en merget (`--erstatt --leder`), godtas på samme måte en kjøring uten branch i lederens repo, når E2E Tests-kjøringen ble opprettet etter mergen og lederens egen pin var aktiv eller utløpt i kjøringen (`pinner` i `trigger-context.json`). Da hadde lederens image leder-PR-en, enten som br-image eller som `latest`. Er lederens pin fjernet eller ryddet bort, godtas ikke kjøringen.
 - Ingen pin fra et annet par gjelder for tjenesten. En utløpt eller forlatt pin ryddes bort. En pin som bare regnes som utløpt fordi et oppslag feilet, står igjen og stopper `set` for samme tjeneste fra et annet par; kjør på nytt når oppslaget virker, eller bruk `--tving`.
 
 Flagg:

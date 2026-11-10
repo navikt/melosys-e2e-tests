@@ -602,11 +602,21 @@ test('set med leder: br-kjøringen har ingen branch i melosys-e2e-tests og kjør
   assert.throws(() => sjekkBrancherKjøring(brancher({ kontekst: { ...påMain, headBranch: 'gren' }, e2e: null })), /kjørte testene fra gren, ikke main/);
 });
 
-test('set --erstatt med merget leder-PR: en kjøring uten lederens branch etter mergen godtas', () => {
+test('set --erstatt med merget leder-PR: en kjøring uten lederens branch etter mergen godtas når lederens pin gjaldt', () => {
   const k = brancher().kontekst;
-  const påMain = { ...k, headBranch: 'main', branchContext: { branches: [k.branchContext.branches[0]] } };
-  const leder = { repo: 'melosys-api', head: sha('5'), merget: true, mergedAt: '2026-10-22T11:00:00Z' };
+  const lederPin = (status: string) => ({ tjeneste: 'melosys-api', leder: 'melosys-api#7', status });
+  const påMain = { ...k, headBranch: 'main', branchContext: { branches: [k.branchContext.branches[0]] }, pinner: [lederPin('aktiv')] };
+  const leder = { repo: 'melosys-api', pr: 7, head: sha('5'), merget: true, mergedAt: '2026-10-22T11:00:00Z' };
   assert.doesNotThrow(() => sjekkBrancherKjøring(brancher({ kontekst: påMain, e2e: null, leder })));
+  assert.doesNotThrow(() => sjekkBrancherKjøring(brancher({ kontekst: { ...påMain, pinner: [lederPin('utløpt')] }, e2e: null, leder })));
+  // Uten lederens pin, eller med en pin som ikke gjaldt, kan lederen ha kjørt som en latest uten leder-PR-en.
+  for (const pinner of [undefined, [], [lederPin('ikke startet')], [{ ...lederPin('aktiv'), leder: 'melosys-api#8' }], [{ ...lederPin('aktiv'), tjeneste: 'melosys-web' }]]) {
+    assert.throws(
+      () => sjekkBrancherKjøring(brancher({ kontekst: { ...påMain, pinner }, e2e: null, leder })),
+      /pinnen for melosys-api \(leder melosys-api #7\) var verken aktiv eller utløpt i kjøringen/,
+      JSON.stringify(pinner),
+    );
+  }
   assert.throws(
     () => sjekkBrancherKjøring(brancher({ kontekst: påMain, e2e: null, leder: { ...leder, mergedAt: '2026-10-22T13:00:00Z' } })),
     /testet ikke en branch i melosys-api, og kjøringen ble opprettet før leder-PR-en ble merget/,

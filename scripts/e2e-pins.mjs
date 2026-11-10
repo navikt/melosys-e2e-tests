@@ -402,13 +402,19 @@ export async function vurderPar(tjeneste, pin, hent, nå) {
   return vurderService(tjeneste, pin.service_pr, hent, { nå, satt: pin.satt, styrer: navn });
 }
 
+const lederensPinGjaldt = (kontekst, leder) =>
+  (kontekst.pinner ?? []).some(
+    (p) => p.tjeneste === leder.repo && p.leder === `${leder.repo}#${leder.pr}` && ['aktiv', 'utløpt'].includes(p.status),
+  );
+
 /**
  * Sjekker at br-<run_id> er en grønn kjøring av «E2E med brancher» med hele suiten, mot head-
  * commitene PR-ene har nå. `kontekst` er trigger-context.json fra E2E Tests-kjøringen den startet.
  * For en merget e2e-PR (--erstatt) godtas også en kjøring på main etter mergen. Et par uten
  * e2e-PR (`e2e` er null) skal ha kjørt testene på main, uten en branch i melosys-e2e-tests,
  * og ha testet både lederen og tjenesten på head-commitene deres. For en merget leder-PR
- * (--erstatt) godtas også en kjøring uten branch i lederens repo, opprettet etter mergen.
+ * (--erstatt) godtas også en kjøring uten branch i lederens repo, opprettet etter mergen, når
+ * lederens egen pin var aktiv (br-imaget) eller utløpt (latest har leder-PR-en) i kjøringen.
  */
 export function sjekkBrancherKjøring({ runId, orkestrator, e2eKjøring, kontekst, tjeneste, serviceHead, e2e, leder }) {
   const feil = [];
@@ -435,6 +441,10 @@ export function sjekkBrancherKjøring({ runId, orkestrator, e2eKjøring, konteks
       if (!leder.merget || branches.some((b) => b.repo === leder.repo)) sjekkHead(leder.repo, leder.head, 'leder-PR-en');
       else if (!(Date.parse(e2eKjøring.created_at) >= Date.parse(leder.mergedAt))) {
         feil.push(`${br} testet ikke en branch i ${leder.repo}, og kjøringen ble opprettet før leder-PR-en ble merget.`);
+      } else if (!lederensPinGjaldt(kontekst, leder)) {
+        feil.push(
+          `${br} testet ikke en branch i ${leder.repo}, og pinnen for ${leder.repo} (leder ${leder.repo} #${leder.pr}) var verken aktiv eller utløpt i kjøringen, så ${leder.repo} kan ha kjørt uten leder-PR-en.`,
+        );
       }
     }
   } else if (tester) {
@@ -594,7 +604,7 @@ export async function skriv(args, io) {
       tjeneste: args.tjeneste,
       serviceHead: servicePr.head.sha,
       e2e: args.leder ? null : { head: styrerPr.head.sha, merget: Boolean(styrerPr.merged), mergedAt: styrerPr.merged_at },
-      leder: args.leder ? { repo: styrer.repo, head: styrerPr.head.sha, merget: Boolean(styrerPr.merged), mergedAt: styrerPr.merged_at } : null,
+      leder: args.leder ? { repo: styrer.repo, pr: styrer.pr, head: styrerPr.head.sha, merget: Boolean(styrerPr.merged), mergedAt: styrerPr.merged_at } : null,
     });
     for (const t of plan.ryddet) logg(`Rydder bort pinnen for ${t}: ${vurdering[t].status}, ${vurdering[t].grunn}.`);
     if (plan.uendret && !plan.ryddet.length) return logg(`${args.tjeneste} er allerede pinnet til ${args.tag} for ${navn}; ingenting å skrive.`);
