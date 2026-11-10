@@ -144,21 +144,26 @@ export function startStatus(emner, e2ePr, navn = `e2e #${e2ePr}`, hvor = 'testen
  * Startregelen for en pin med `leder`. Den starter når leder-PR-en er merget og ikke revertert i
  * historikken på base-branchen, eller når gaten tester lederen på en commit som har leder-PR-en:
  * lederens egen køkjøring og PR-ene bak den i samme kø. `kilde` er repoet og commiten fra
- * gate_context. Andre kjøringer får ikke pinnen før mergen, så ingen tester mot kode som kan bli
- * tatt ut av køen. Feiler et oppslag, regnes pinnen som ikke startet, og kjøringen bruker latest.
+ * gate_context. Tester gaten lederens repo, leses historikken på den commiten også etter mergen,
+ * så en revert av lederen som står i køen, slår av pinnen. Andre kjøringer får ikke pinnen før
+ * mergen, så ingen tester mot kode som kan bli tatt ut av køen. Feiler et oppslag, regnes pinnen
+ * som ikke startet, og kjøringen bruker latest.
  */
 export async function lederStart(leder, { kilde, hent }) {
   const { repo, pr: nr } = lesLeder(leder);
   const navn = `${repo} #${nr}`;
   try {
     const pr = await hent.pr(repo, nr);
-    if (pr.merged) {
-      const status = startStatus(await hent.emner(repo, pr.base.ref), nr, navn, pr.base.ref);
-      // Ligger mergen lenger bak enn historikken vi henter, finnes heller ingen revert etter den der.
-      return status.revertert ? status : { startet: true, grunn: `${navn} er merget` };
-    }
-    if (kilde?.repo === repo) return startStatus(await hent.emner(repo, kilde.sha), nr, navn, `${repo} ${kort(kilde.sha)}`);
-    return { startet: false, grunn: `${navn} er ikke merget` };
+    const status =
+      kilde?.repo === repo
+        ? startStatus(await hent.emner(repo, kilde.sha), nr, navn, `${repo} ${kort(kilde.sha)}`)
+        : pr.merged
+          ? startStatus(await hent.emner(repo, pr.base.ref), nr, navn, pr.base.ref)
+          : { startet: false, grunn: `${navn} er ikke merget` };
+    // Revert-sjekken ser bare en merge med «(#<pr>)» i emnet blant de siste 100 commitene. Ligger
+    // mergen lenger bak, eller er den en merge-commit («Merge pull request #<pr> …»), regnes en
+    // merget leder som startet uten revert-sjekk. Køene squasher, så emnet har alltid «(#<pr>)».
+    return pr.merged && !status.revertert ? { startet: true, grunn: `${navn} er merget` } : status;
   } catch (e) {
     return {
       startet: false,
@@ -328,7 +333,11 @@ export function lesArgumenter(argv) {
   const felles = { servicePr: Number(servicePr), erstatt: flagg.includes('--erstatt'), tving: flagg.includes('--tving'), dryRun };
   if (!medLeder) return { kommando, tjeneste, tag, e2ePr: Number(e2ePr), ...felles };
   const leder = lederFlagg[0].slice('--leder='.length);
-  if (!lesLeder(leder)) throw new Error(`--leder må være <repo>#<pr> for et av repoene ${TJENESTER_MED_KO.join(', ')}`);
+  const l = lesLeder(leder);
+  if (!l) throw new Error(`--leder må være <repo>#<pr> for et av repoene ${TJENESTER_MED_KO.join(', ')}`);
+  if (l.repo === tjeneste && l.pr !== felles.servicePr) {
+    throw new Error(`--leder er ${tjeneste} #${l.pr}, men service-PR-en er #${felles.servicePr}. Lederens egen pin har leder-PR-en som service-PR.`);
+  }
   return { kommando, tjeneste, tag, leder, ...felles };
 }
 

@@ -56,7 +56,13 @@ En pin med `leder` starter når
 - gaten tester lederens repo på en commit som har leder-PR-en, det vil si lederens egen køkjøring og PR-er bak den i samme kø, eller
 - leder-PR-en er merget og ikke revertert på default-branchen.
 
+Tester gaten lederens repo, leses historikken på commiten gaten tester, også etter mergen. En revert av lederen som står i lederens kø, slår dermed av pinnen, så reverten kan komme gjennom gaten. En merget leder starter uten krav til emnet, også ved rebase-merge, og revert-sjekken ser bare en merge med `(#<pr>)` i emnet blant de siste 100 commitene.
+
 Andre køer får ikke pinnen før lederen er merget, så ingen tester mot kode som ennå kan tas ut av lederens kø. Merge lederen først, og de andre når lederen er merget og køen i repoet er tom. Lederens egen pin dekker tiden fra mergen til `latest` har den.
+
+Startregelen for `leder` slår opp leder-PR-en i GitHub. Feiler oppslaget, starter ikke pinnen, og kjøringen bruker `latest` med en advarsel.
+
+Eldre versjoner av `scripts/e2e-pins.mjs` kjenner ikke feltet `leder` og avviser hele variabelen, så alle pinnene slås av, også pinner med `e2e_pr`. Det gjelder «E2E med brancher» med en e2e-branch som ikke har denne støtten, fordi E2E Tests da kjører fra e2e-branchen. Rebase åpne e2e-brancher på `main` før den første pinnen med `leder` skrives.
 
 ## Skriveren
 
@@ -79,7 +85,7 @@ For hånd går skriveren utenom «Sjekk paret» og rekkefølgen i sammendraget. 
 
 Flagg:
 
-- `--leder=<repo>#<pr>`: pinnen er for et par uten e2e-PR (se [Par uten e2e-PR](#par-uten-e2e-pr)); da er argumentene `<tjeneste> <tag> <service_pr>`.
+- `--leder=<repo>#<pr>`: pinnen er for et par uten e2e-PR (se [Par uten e2e-PR](#par-uten-e2e-pr)); da er argumentene `<tjeneste> <tag> <service_pr>`. For lederens egen pin er `service_pr` leder-PR-en.
 - `--erstatt`: bytt tag og service-PR for en pin fra samme par, for eksempel når service-PR-en er erstattet.
 - `--tving`: overskriv en pin fra et annet par.
 - `--dry-run`: vis verdien uten å skrive.
@@ -101,7 +107,7 @@ Steget «Determine image tags» i E2E Tests leser `vars.E2E_PINS` og avgjør hve
 
 - **Under test:** har tjenesten en annen tag enn `latest` i kjøringen, beholder den taggen. Gaten, dispatch etter merge og «E2E med brancher» tester alltid imaget de er startet med.
 - **Ikke startet:** ingen commit i historikken har emne som slutter på `(#<e2e_pr>)`, eller e2e-PR-en er revertert. For en pin med `leder` gjelder startregelen i [Par uten e2e-PR](#par-uten-e2e-pr). Kjøringen bruker `latest`.
-- **Aktiv:** testene har e2e-PR-en, og service-PR-en er åpen, eller `latest` er bygd før merge-commiten. Kjøringen bruker pin-taggen og viser en advarsel i sammendraget.
+- **Aktiv:** pinnen har startet (testene har e2e-PR-en, eller startregelen for `leder` slår til), og service-PR-en er åpen, eller `latest` er bygd før merge-commiten. Kjøringen bruker pin-taggen og viser en advarsel i sammendraget.
 - **Utløpt:** revisjonen på `latest` (labelen `org.opencontainers.image.revision`) har merge-commiten til service-PR-en. Kjøringen bruker `latest`.
 - **Forlatt:** service-PR-en er lukket uten merge, eller finnes ikke. Kjøringen bruker `latest` og viser en advarsel.
 
@@ -110,8 +116,8 @@ Statusen per pin står i `pinner` i `trigger-context.json`, som konsollen viser.
 Andre regler:
 
 - En eksplisitt `latest` regnes ikke som under test: `environment=melosys-web:latest` får pin-taggen for web så lenge pinnen er aktiv.
-- Startregelen ser etter `(#<e2e_pr>)` i emnet. Squash-merge gjennom køen gir alltid det. En rebase-merge forbi køen gir ikke det, og pinnen starter ikke.
-- Feiler et oppslag mot GitHub eller GAR, beholdes en aktiv pin en kort tid med en advarsel: et døgn etter at service-PR-en er merget, eller tre dager etter at pinnen ble satt hvis selve PR-oppslaget feiler.
+- Startregelen ser etter `(#<e2e_pr>)` i emnet. Squash-merge gjennom køen gir alltid det. En rebase-merge forbi køen gir ikke det, og pinnen starter ikke. For `leder` gjelder [Par uten e2e-PR](#par-uten-e2e-pr).
+- Feiler et oppslag mot GitHub eller GAR, beholdes en aktiv pin en kort tid med en advarsel: et døgn etter at service-PR-en er merget, eller tre dager etter at pinnen ble satt hvis selve PR-oppslaget feiler. Det gjelder utløpsregelen. Startregelen for `leder` beholder ikke pinnen når oppslaget feiler (se [Par uten e2e-PR](#par-uten-e2e-pr)).
 - En utløpt pin kan stå i variabelen. Den er en linje i loggen, og neste `set` som skriver, rydder den bort, med mindre den bare regnes som utløpt fordi et oppslag feilet.
 
 ## Når noe går galt

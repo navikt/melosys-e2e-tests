@@ -480,6 +480,21 @@ test('leder: en revert på base-branchen slår av pinnen', async () => {
   assert.match(start.grunn, /melosys-skjema-api #422 er revertert/);
 });
 
+test('leder: en revert av merget leder i lederens kø slår av pinnen, før den er på base-branchen', async () => {
+  const emner = {
+    'melosys-skjema-api@main': ['Bump typer (#422)'],
+    [`melosys-skjema-api@${KØ_SHA}`]: ['Revert "Bump typer" (#431)', 'Bump typer (#422)'],
+  };
+  const hent = lagHenter({ pr: { [LEDER]: lederMerget }, emner });
+  const iKø = await lederStart(LEDER, { kilde: { repo: 'melosys-skjema-api', sha: KØ_SHA }, hent });
+  assert.equal(iKø.startet, false);
+  assert.match(iKø.grunn, /melosys-skjema-api #422 er revertert/);
+  assert.deepEqual(await lederStart(LEDER, { kilde: { repo: 'melosys-skjema-web', sha: KØ_SHA }, hent }), { startet: true, grunn: 'melosys-skjema-api #422 er merget' });
+  // Mergen bak historikken til køcommiten: merget leder regnes som startet.
+  const lengeSiden = lagHenter({ pr: { [LEDER]: lederMerget } });
+  assert.equal((await lederStart(LEDER, { kilde: { repo: 'melosys-skjema-api', sha: KØ_SHA }, hent: lengeSiden })).startet, true);
+});
+
 test('leder: før mergen starter pinnen bare når gaten tester lederens repo på en commit som har leder-PR-en', async () => {
   const emner = { [`melosys-skjema-api@${KØ_SHA}`]: ['Bump typer (#422)', 'eldre (#420)'] };
   const iKø = await lederStart(LEDER, { kilde: { repo: 'melosys-skjema-api', sha: KØ_SHA }, hent: lagHenter({ emner }) });
@@ -552,6 +567,8 @@ test('argumentene til set med --leder', () => {
   assert.throws(() => lesArgumenter(['set', 'melosys-skjema-web', 'br-123', '695', `--leder=${LEDER}`, '--leder=melosys-web#1']), /bruk: set/);
   assert.throws(() => lesArgumenter(['set', 'melosys-skjema-web', 'br-123', '695', '--leder=melosys-mock#1']), /--leder må være <repo>#<pr>/);
   assert.throws(() => lesArgumenter(['set', 'melosys-skjema-web', 'br-123', '0', `--leder=${LEDER}`]), /service_pr/);
+  assert.equal(lesArgumenter(['set', 'melosys-skjema-api', 'br-123', '422', `--leder=${LEDER}`]).servicePr, 422);
+  assert.throws(() => lesArgumenter(['set', 'melosys-skjema-api', 'br-123', '423', `--leder=${LEDER}`]), /--leder er melosys-skjema-api #422, men service-PR-en er #423/);
 });
 
 const SET_LEDER = { kommando: 'set', tjeneste: 'melosys-skjema-web', tag: 'br-500', leder: LEDER, servicePr: 695, erstatt: false, tving: false, dryRun: false };
