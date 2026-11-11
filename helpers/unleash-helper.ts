@@ -415,6 +415,9 @@ export class UnleashHelper {
       { name: 'melosys.vis-pensjonsopptjening-popp', enabled: true },
       // Periode- og trygdeavgiftssteg for EU/EØS arbeid kun i Norge (MELOSYS-8397)
       { name: 'melosys.arbeid-kun-norge.forskuddsfakturering', enabled: true },
+      // faktureringskomponenten setter datoBestilt til i dag, så cronjobben (hvert minutt) sender
+      // fakturaene til OEBS med en gang. Ukjent toggle er på lokalt; står her for å gjøre det eksplisitt.
+      { name: 'melosys.faktureringskomponent.send_faktura_instant', enabled: true },
     ];
 
     const parseList = (value?: string): string[] =>
