@@ -85,7 +85,7 @@ export class PgDatabaseHelper {
 
   /**
    * Clean all data tables in the schema.
-   * Skips Flyway migration history table.
+   * Skips Flyway migration history and ShedLock tables.
    */
   async cleanDatabase(silent = false): Promise<{ cleanedCount: number; totalRowsDeleted: number }> {
     if (!this.client) {
@@ -114,7 +114,9 @@ export class PgDatabaseHelper {
       for (const table of tables) {
         const tableName = table.tablename;
 
-        if (tableName === 'flyway_schema_history') {
+        // ShedLock husker at låseraden finnes og prøver bare UPDATE etterpå. Slettes raden, får
+        // faktureringskomponentens cronjob aldri lås igjen, og fakturaer sendes ikke til OEBS.
+        if (tableName === 'flyway_schema_history' || tableName === 'shedlock') {
           skippedTables.push(tableName);
           continue;
         }
