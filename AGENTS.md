@@ -224,7 +224,7 @@ import { UnleashHelper } from '../helpers/unleash-helper';
 
 test('my test with unleash', async ({ page, request }) => {
   // Toggles start in the default state (the fixture resets them automatically)
-  // Default state: All toggles ON except 'melosys.arsavregning.uten.flyt' and 'melosys.arsavregning.eos_tjenesteperson', which are OFF
+  // Default state: All toggles ON except 'melosys.arsavregning.uten.flyt', 'melosys.arsavregning.eos_tjenesteperson' and 'melosys.avtaleland.forskuddsfakturering', which are OFF
 
   const unleash = new UnleashHelper(request);
 
@@ -239,7 +239,7 @@ test('my test with unleash', async ({ page, request }) => {
 
 **Key Points:**
 - **All tests start with consistent state**: The first test in a worker process resets ALL default toggles; Playwright starts a new worker after every failure and retry. After that the fixture resets the toggles changed through `enableFeature`/`disableFeature` (tracked at module level, across `UnleashHelper` instances), plus any default toggle that one call to the Unleash admin API shows in the wrong state — after each test, also when the process wait fails, and again before the next test.
-- **Default state**: All toggles enabled except `melosys.arsavregning.uten.flyt` and `melosys.arsavregning.eos_tjenesteperson` (disabled)
+- **Default state**: All toggles enabled except `melosys.arsavregning.uten.flyt`, `melosys.arsavregning.eos_tjenesteperson` and `melosys.avtaleland.forskuddsfakturering` (disabled)
 - **New toggle in a test?** Add it to the default list in `helpers/unleash-helper.ts`. A changed toggle without a default is not reset; the fixture logs `⚠️ ... har ingen standardverdi` and the state leaks to the next test.
 - **Change toggles through `UnleashHelper`**: a toggle without a default that is changed directly against the Unleash API is neither tracked nor reset.
 - **Local debugging**: Set `SKIP_UNLEASH_CLEANUP_AFTER=true` in `.env` to preserve toggle state after failed tests
