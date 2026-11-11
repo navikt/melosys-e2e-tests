@@ -48,6 +48,7 @@ export const BEHANDLINGSTEMA = {
   UTSENDT_ARBEIDSTAKER: 'UTSENDT_ARBEIDSTAKER',
   ARBEID_FLERE_LAND: 'ARBEID_FLERE_LAND',
   ARBEID_TJENESTEPERSON_ELLER_FLY: 'ARBEID_TJENESTEPERSON_ELLER_FLY',
+  ARBEID_KUN_NORGE: 'ARBEID_KUN_NORGE',
   PENSJONIST: 'PENSJONIST',
   IKKE_YRKESAKTIV: 'IKKE_YRKESAKTIV',
 } as const;
@@ -112,6 +113,8 @@ export const EU_EOS_LAND = {
 export const EU_EOS_LOVVALG = {
   // Offentlig tjenesteperson, jf. rfo. 883/2004 art.11(3)(b) (FO_883_2004_ART11_3B)
   ART_11_3_B: 'Rfo. 883/2004 art.11(3)(b)',
+  // Arbeid kun i Norge, jf. rfo. 883/2004 art.11(3)(a) (FO_883_2004_ART11_3A)
+  ART_11_3_A: 'Rfo. 883/2004 art.11(3)(a)',
 } as const;
 
 // POPP-kilde-enum (verbatim — slik POPP-API leverer dem, jf. MELOSYS-8073).

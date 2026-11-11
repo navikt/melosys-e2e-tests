@@ -141,7 +141,8 @@ export class DatabaseHelper {
           'SAKSOPPLYSNING_KILDESYSTEM',    // Source system definitions
           'UTENLANDSK_MYNDIGHET',          // Foreign authority reference data
           'UTENLANDSK_MYNDIGHET_PREF',     // Foreign authority preferences
-          'flyway_schema_history'          // Database migration history
+          'flyway_schema_history',         // Database migration history
+          'SHEDLOCK'                       // ShedLock gjør bare UPDATE på kjente låser; slettes raden, stopper jobben
         ];
 
         if (tableName.endsWith('_TYPE') ||
