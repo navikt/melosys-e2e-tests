@@ -413,6 +413,8 @@ export class UnleashHelper {
       { name: 'melosys.trygdeavgift.vis_beregningsforklaring', enabled: true },
       { name: 'melosys.vis_pensjonsopptjening_popp', enabled: true },
       { name: 'melosys.vis-pensjonsopptjening-popp', enabled: true },
+      // Periode- og trygdeavgiftssteg for EU/EØS arbeid kun i Norge (MELOSYS-8397)
+      { name: 'melosys.arbeid-kun-norge.forskuddsfakturering', enabled: true },
     ];
 
     const parseList = (value?: string): string[] =>
