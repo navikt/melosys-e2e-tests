@@ -413,6 +413,10 @@ export class UnleashHelper {
       { name: 'melosys.trygdeavgift.vis_beregningsforklaring', enabled: true },
       { name: 'melosys.vis_pensjonsopptjening_popp', enabled: true },
       { name: 'melosys.vis-pensjonsopptjening-popp', enabled: true },
+      // Forskuddsfakturering for Avtaleland (MELOSYS-8397) er ikke rullet ut. Lokalt er togglen på: api
+      // oppretter togglene i ToggleName.kt som på, og regner en ukjent toggle som på. Uten linja
+      // under kjører alle Avtaleland-testene den nye flyten. Tester for den nye flyten slår den på selv.
+      { name: 'melosys.avtaleland.forskuddsfakturering', enabled: false },
     ];
 
     const parseList = (value?: string): string[] =>
