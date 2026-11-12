@@ -269,7 +269,7 @@ export async function vurderPin(tjeneste, pin, { tagger, emner, hent, nå, kilde
     const gammel = `Pinnen for ${tjeneste} ble satt ${pin.satt.slice(0, 10)}, for mer enn tre dager siden. Sjekk om ${tjeneste} #${pin.service_pr} står fast.`;
     advarsel = advarsel ? `${advarsel} ${gammel}` : gammel;
   }
-  return { ...felt, status: service.status, grunn: service.grunn, advarsel };
+  return { ...felt, status: service.status, grunn: service.grunn, advarsel, ...(service.feil && { feil: true }) };
 }
 
 /**
@@ -402,9 +402,10 @@ export async function vurderPar(tjeneste, pin, hent, nå) {
   return vurderService(tjeneste, pin.service_pr, hent, { nå, satt: pin.satt, styrer: navn });
 }
 
+// En pin som bare regnes som utløpt fordi et oppslag feilet (`feil`), viser ikke at latest hadde leder-PR-en.
 const lederensPinGjaldt = (kontekst, leder) =>
   (kontekst.pinner ?? []).some(
-    (p) => p.tjeneste === leder.repo && p.leder === `${leder.repo}#${leder.pr}` && ['aktiv', 'utløpt'].includes(p.status),
+    (p) => p.tjeneste === leder.repo && p.leder === `${leder.repo}#${leder.pr}` && ['aktiv', 'utløpt'].includes(p.status) && p.feil !== true,
   );
 
 /**
@@ -414,7 +415,8 @@ const lederensPinGjaldt = (kontekst, leder) =>
  * e2e-PR (`e2e` er null) skal ha kjørt testene på main, uten en branch i melosys-e2e-tests,
  * og ha testet både lederen og tjenesten på head-commitene deres. For en merget leder-PR
  * (--erstatt) godtas også en kjøring uten branch i lederens repo, opprettet etter mergen, når
- * lederens egen pin var aktiv (br-imaget) eller utløpt (latest har leder-PR-en) i kjøringen.
+ * lederens egen pin var aktiv (br-imaget) eller utløpt (latest har leder-PR-en) i kjøringen. En pin
+ * som bare regnes som utløpt fordi et oppslag feilet, godtas ikke.
  */
 export function sjekkBrancherKjøring({ runId, orkestrator, e2eKjøring, kontekst, tjeneste, serviceHead, e2e, leder }) {
   const feil = [];
@@ -443,7 +445,7 @@ export function sjekkBrancherKjøring({ runId, orkestrator, e2eKjøring, konteks
         feil.push(`${br} testet ikke en branch i ${leder.repo}, og kjøringen ble opprettet før leder-PR-en ble merget.`);
       } else if (!lederensPinGjaldt(kontekst, leder)) {
         feil.push(
-          `${br} testet ikke en branch i ${leder.repo}, og pinnen for ${leder.repo} (leder ${leder.repo} #${leder.pr}) var verken aktiv eller utløpt i kjøringen, så ${leder.repo} kan ha kjørt uten leder-PR-en.`,
+          `${br} testet ikke en branch i ${leder.repo}, og pinnen for ${leder.repo} (leder ${leder.repo} #${leder.pr}) var verken aktiv eller bekreftet utløpt i kjøringen, så ${leder.repo} kan ha kjørt uten leder-PR-en.`,
         );
       }
     }

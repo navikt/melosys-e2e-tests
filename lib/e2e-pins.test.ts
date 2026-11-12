@@ -260,7 +260,10 @@ test('vurderPin og vurderPar sender nå og satt videre til utløpsregelen', asyn
   const gammel = { ...PIN, satt: '2026-10-18T15:00:00Z' };
   const pin = (p: Obj) => vurderPin('melosys-web', p, { tagger: alleLatest, emner: ['x (#388)'], hent: feiler(), nå: NÅ });
   assert.equal((await pin(fersk)).status, 'aktiv');
-  assert.equal((await pin(gammel)).status, 'utløpt');
+  const utløpt = await pin(gammel);
+  assert.equal(utløpt.status, 'utløpt');
+  // feil skiller en pin som bare regnes som utløpt, fra en der latest har service-PR-en.
+  assert.equal(utløpt.feil, true);
   assert.equal((await vurderPar('melosys-web', fersk, feiler(), NÅ)).status, 'aktiv');
   assert.equal((await vurderPar('melosys-web', gammel, feiler(), NÅ)).status, 'utløpt');
 });
@@ -288,6 +291,7 @@ test('vurderPin: en aktiv pin eldre enn tre dager gir en advarsel, en utløpt gi
   const utløpt = await vurderPin('melosys-web', gammel, { tagger: alleLatest, emner: ['x (#388)'], hent: lagHenter({ pr: { 'melosys-web#3267': merget } }), nå: NÅ });
   assert.equal(utløpt.status, 'utløpt');
   assert.equal(utløpt.advarsel, null);
+  assert.equal(utløpt.feil, undefined);
 });
 
 // ---------------------------------------------------------------- avgjørelsen
@@ -609,10 +613,10 @@ test('set --erstatt med merget leder-PR: en kjøring uten lederens branch etter 
   assert.doesNotThrow(() => sjekkBrancherKjøring(brancher({ kontekst: påMain, e2e: null, leder })));
   assert.doesNotThrow(() => sjekkBrancherKjøring(brancher({ kontekst: { ...påMain, pinner: [lederPin('utløpt')] }, e2e: null, leder })));
   // Uten lederens pin, eller med en pin som ikke gjaldt, kan lederen ha kjørt som en latest uten leder-PR-en.
-  for (const pinner of [undefined, [], [lederPin('ikke startet')], [{ ...lederPin('aktiv'), leder: 'melosys-api#8' }], [{ ...lederPin('aktiv'), tjeneste: 'melosys-web' }]]) {
+  for (const pinner of [undefined, [], [lederPin('ikke startet')], [{ ...lederPin('utløpt'), feil: true }], [{ ...lederPin('aktiv'), leder: 'melosys-api#8' }], [{ ...lederPin('aktiv'), tjeneste: 'melosys-web' }]]) {
     assert.throws(
       () => sjekkBrancherKjøring(brancher({ kontekst: { ...påMain, pinner }, e2e: null, leder })),
-      /pinnen for melosys-api \(leder melosys-api #7\) var verken aktiv eller utløpt i kjøringen/,
+      /pinnen for melosys-api \(leder melosys-api #7\) var verken aktiv eller bekreftet utløpt i kjøringen/,
       JSON.stringify(pinner),
     );
   }
