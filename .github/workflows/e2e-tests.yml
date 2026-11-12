@@ -359,69 +359,6 @@ jobs:
             fi
           fi
 
-          # ---- Pinner fra E2E_PINS ----
-          # En tjeneste som fortsatt har latest, får pinnen; tjenesten under test beholder sin
-          # egen tag. Ved en koblet endring pinner variabelen tjenesten til imaget paret er
-          # testet mot (docs/ci-cd/KOBLEDE-ENDRINGER.md). En pin gjelder fra testene har
-          # e2e-PR-en til latest har service-PR-en. En ugyldig variabel gir ingen pinner.
-          # Statusen per pin havner i trigger-konteksten (pinner, pinnerFeil).
-          export MELOSYS_API_TAG FAKTURERINGSKOMPONENTEN_TAG MELOSYS_WEB_TAG \
-                 MELOSYS_TRYGDEAVGIFT_TAG MELOSYS_TRYGDEAVTALE_TAG \
-                 MELOSYS_INNGANGSVILKAR_TAG MELOSYS_EESSI_TAG MELOSYS_MOCK_TAG \
-                 MELOSYS_DOKGEN_TAG MELOSYS_SKJEMA_API_TAG MELOSYS_SKJEMA_WEB_TAG
-          PINNER_FIL="$RUNNER_TEMP/pinner.json"
-          PINNER=$(node scripts/e2e-pins.mjs velg "$PINNER_FIL") \
-            || { echo "::error::Pinvalget feilet, se meldingen over"; exit 1; }
-          while read -r tag_var _tjeneste tag; do
-            [ -n "$tag_var" ] || continue
-            printf -v "$tag_var" '%s' "$tag"
-          done <<< "$PINNER"
-          PINNER_FELT=$(jq -c '{pinner, pinnerFeil}' "$PINNER_FIL") \
-            || PINNER_FELT='{"pinner":[],"pinnerFeil":"fant ikke resultatet av pinvalget"}'
-
-          # ---- Trigger-kontekst for melosys-console ----
-          # Konsollen leser trigger-konteksten fra test-summary-artefakten: runs-API-et
-          # eksponerer ikke client_payload, og triggering_actor er app-en eller PAT-eieren, ikke
-          # personen som trigget. Fila skrives her — før docker compose, health checks og
-          # Playwright — slik at den finnes også når kjøringen dør tidlig.
-          #
-          # Den skrives til $RUNNER_TEMP, ikke rett i playwright-report/: Playwrights
-          # html-reporter sletter hele rapportkatalogen ved slutten av kjøringen
-          # (removeFolders i reporters/html.js), så en fil lagt der nå ville vært borte
-          # når artefakten lastes opp. Steget "Copy trigger context into report directory"
-          # legger den på plass igjen rett før opplasting.
-          #
-          # Nøklene i resolvedTags speiler tags-objektet i test-summary.json
-          # (reporters/test-summary.ts) — samme navn, samme verdier.
-          TRIGGER_CONTEXT_FILE="$RUNNER_TEMP/trigger-context.json"
-
-          RESOLVED_TAGS=$(jq -n \
-            --arg melosysApi "$MELOSYS_API_TAG" \
-            --arg melosysWeb "$MELOSYS_WEB_TAG" \
-            --arg faktureringskomponenten "$FAKTURERINGSKOMPONENTEN_TAG" \
-            --arg trygdeavgift "$MELOSYS_TRYGDEAVGIFT_TAG" \
-            --arg trygdeavtale "$MELOSYS_TRYGDEAVTALE_TAG" \
-            --arg inngangsvilkar "$MELOSYS_INNGANGSVILKAR_TAG" \
-            --arg eessi "$MELOSYS_EESSI_TAG" \
-            --arg mock "$MELOSYS_MOCK_TAG" \
-            --arg dokgen "$MELOSYS_DOKGEN_TAG" \
-            --arg skjemaApi "$MELOSYS_SKJEMA_API_TAG" \
-            --arg skjemaWeb "$MELOSYS_SKJEMA_WEB_TAG" \
-            '{
-              "melosys-api": $melosysApi,
-              "melosys-web": $melosysWeb,
-              "faktureringskomponenten": $faktureringskomponenten,
-              "melosys-trygdeavgift-beregning": $trygdeavgift,
-              "melosys-trygdeavtale": $trygdeavtale,
-              "melosys-inngangsvilkar": $inngangsvilkar,
-              "melosys-eessi": $eessi,
-              "melosys-mock": $mock,
-              "melosys-dokgen": $dokgen,
-              "melosys-skjema-api": $skjemaApi,
-              "melosys-skjema-web": $skjemaWeb
-            }
-            | with_entries(select(.value != ""))') || RESOLVED_TAGS=""
-
           # Felles jq-hjelpere: tomme strenger skal bli null, ikke "" eller "null".
           JQ_HELPERS='
             def nz: if . == "" then null else . end;
@@ -432,9 +369,10 @@ jobs:
 
           # ---- Gate-kontekst fra e2e-gate.yml ----
           # Skrives til egne felt, så repository/commitSha/actor er uendret og console
-          # viser gate-kjøringer som før til den leser feltene. Ugyldig gate_context gir
-          # en advarsel og null i gate-feltene; testene trenger den ikke, så kjøringen
-          # går videre. Feilmeldingen er vår egen tekst, aldri input-verdien.
+          # viser gate-kjøringer som før til den leser feltene. Valideres før pinvalget,
+          # som leser sourceRepo og sourceSha herfra. Ugyldig gate_context gir en advarsel,
+          # null i gate-feltene og ingen gate-commit i pinvalget; testene trenger den ikke,
+          # så kjøringen går videre. Feilmeldingen er vår egen tekst, aldri input-verdien.
           # correlation_id og source_repo får bare tegnene gaten selv bruker; da kan de
           # heller ikke bli en workflow-kommando når fila logges under.
           CORRELATION_ID=""
@@ -496,6 +434,74 @@ jobs:
               echo "::warning::Ugyldig gate_context, kjøringen fortsetter uten gate-felt: $(tr '\n\r' '  ' < "$RUNNER_TEMP/gate-context.err")"
             fi
           fi
+          GATE_SOURCE_REPO=$(jq -r '.sourceRepo // empty' <<< "$GATE_FIELDS") || GATE_SOURCE_REPO=""
+          GATE_SOURCE_SHA=$(jq -r '.sourceSha // empty' <<< "$GATE_FIELDS") || GATE_SOURCE_SHA=""
+          export GATE_SOURCE_REPO GATE_SOURCE_SHA
+
+          # ---- Pinner fra E2E_PINS ----
+          # En tjeneste som fortsatt har latest, får pinnen; tjenesten under test beholder sin
+          # egen tag. Ved en koblet endring pinner variabelen tjenesten til imaget paret er
+          # testet mot (docs/ci-cd/KOBLEDE-ENDRINGER.md). En pin gjelder fra testene har
+          # e2e-PR-en, eller fra lederens kø eller merge for et par uten e2e-PR, til latest
+          # har service-PR-en. En ugyldig variabel gir ingen pinner. Lederens kø ser pinvalget
+          # i GATE_SOURCE_REPO og GATE_SOURCE_SHA, de validerte gate-feltene over.
+          # Statusen per pin havner i trigger-konteksten (pinner, pinnerFeil).
+          export MELOSYS_API_TAG FAKTURERINGSKOMPONENTEN_TAG MELOSYS_WEB_TAG \
+                 MELOSYS_TRYGDEAVGIFT_TAG MELOSYS_TRYGDEAVTALE_TAG \
+                 MELOSYS_INNGANGSVILKAR_TAG MELOSYS_EESSI_TAG MELOSYS_MOCK_TAG \
+                 MELOSYS_DOKGEN_TAG MELOSYS_SKJEMA_API_TAG MELOSYS_SKJEMA_WEB_TAG
+          PINNER_FIL="$RUNNER_TEMP/pinner.json"
+          PINNER=$(node scripts/e2e-pins.mjs velg "$PINNER_FIL") \
+            || { echo "::error::Pinvalget feilet, se meldingen over"; exit 1; }
+          while read -r tag_var _tjeneste tag; do
+            [ -n "$tag_var" ] || continue
+            printf -v "$tag_var" '%s' "$tag"
+          done <<< "$PINNER"
+          PINNER_FELT=$(jq -c '{pinner, pinnerFeil}' "$PINNER_FIL") \
+            || PINNER_FELT='{"pinner":[],"pinnerFeil":"fant ikke resultatet av pinvalget"}'
+
+          # ---- Trigger-kontekst for melosys-console ----
+          # Konsollen leser trigger-konteksten fra test-summary-artefakten: runs-API-et
+          # eksponerer ikke client_payload, og triggering_actor er app-en eller PAT-eieren, ikke
+          # personen som trigget. Fila skrives her — før docker compose, health checks og
+          # Playwright — slik at den finnes også når kjøringen dør tidlig.
+          #
+          # Den skrives til $RUNNER_TEMP, ikke rett i playwright-report/: Playwrights
+          # html-reporter sletter hele rapportkatalogen ved slutten av kjøringen
+          # (removeFolders i reporters/html.js), så en fil lagt der nå ville vært borte
+          # når artefakten lastes opp. Steget "Copy trigger context into report directory"
+          # legger den på plass igjen rett før opplasting.
+          #
+          # Nøklene i resolvedTags speiler tags-objektet i test-summary.json
+          # (reporters/test-summary.ts) — samme navn, samme verdier.
+          TRIGGER_CONTEXT_FILE="$RUNNER_TEMP/trigger-context.json"
+
+          RESOLVED_TAGS=$(jq -n \
+            --arg melosysApi "$MELOSYS_API_TAG" \
+            --arg melosysWeb "$MELOSYS_WEB_TAG" \
+            --arg faktureringskomponenten "$FAKTURERINGSKOMPONENTEN_TAG" \
+            --arg trygdeavgift "$MELOSYS_TRYGDEAVGIFT_TAG" \
+            --arg trygdeavtale "$MELOSYS_TRYGDEAVTALE_TAG" \
+            --arg inngangsvilkar "$MELOSYS_INNGANGSVILKAR_TAG" \
+            --arg eessi "$MELOSYS_EESSI_TAG" \
+            --arg mock "$MELOSYS_MOCK_TAG" \
+            --arg dokgen "$MELOSYS_DOKGEN_TAG" \
+            --arg skjemaApi "$MELOSYS_SKJEMA_API_TAG" \
+            --arg skjemaWeb "$MELOSYS_SKJEMA_WEB_TAG" \
+            '{
+              "melosys-api": $melosysApi,
+              "melosys-web": $melosysWeb,
+              "faktureringskomponenten": $faktureringskomponenten,
+              "melosys-trygdeavgift-beregning": $trygdeavgift,
+              "melosys-trygdeavtale": $trygdeavtale,
+              "melosys-inngangsvilkar": $inngangsvilkar,
+              "melosys-eessi": $eessi,
+              "melosys-mock": $mock,
+              "melosys-dokgen": $dokgen,
+              "melosys-skjema-api": $skjemaApi,
+              "melosys-skjema-web": $skjemaWeb
+            }
+            | with_entries(select(.value != ""))') || RESOLVED_TAGS=""
 
           # ---- Brancher fra e2e-brancher.yml ----
           # Hvilke brancher som ble bygget og hvem som bestilte; melosys-console viser
