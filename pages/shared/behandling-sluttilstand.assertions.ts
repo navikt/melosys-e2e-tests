@@ -18,6 +18,8 @@ export interface BehandlingSluttilstandForventning {
   behandlingId?: string | null;
   /** Assert BEHANDLINGSRESULTAT.RESULTAT_TYPE = denne (f.eks. MEDLEM_I_FOLKETRYGDEN). */
   forventetResultatType?: string;
+  /** Standard er AVSLUTTET. Foreløpige artikkel 13-vedtak står som MIDLERTIDIG_LOVVALGSBESLUTNING. */
+  forventetStatus?: string;
   /** Assert BEHANDLINGSRESULTAT.TRYGDEAVGIFT_TYPE = denne (f.eks. FORELØPIG). */
   forventetTrygdeavgiftType?: string;
   /** En PROSESS_TYPE som MÅ finnes og være FERDIG (f.eks. IVERKSETT_VEDTAK_FTRL). */
@@ -60,10 +62,10 @@ export async function verifiserBehandlingSluttilstand(
     expect(behandling, 'Forventet behandling i DB').not.toBeNull();
     expect(
       behandling!.STATUS,
-      'Behandling skal være AVSLUTTET etter fattet/iverksatt vedtak'
-    ).toBe('AVSLUTTET');
+      `Behandling skal være ${forventet.forventetStatus ?? 'AVSLUTTET'} etter fattet/iverksatt vedtak`
+    ).toBe(forventet.forventetStatus ?? 'AVSLUTTET');
     const id = behandling!.ID;
-    console.log(`✅ Behandling ${id} AVSLUTTET`);
+    console.log(`✅ Behandling ${id} ${forventet.forventetStatus ?? 'AVSLUTTET'}`);
 
     const resultat = await db.queryOne<{ RESULTAT_TYPE: string; TRYGDEAVGIFT_TYPE: string | null }>(
       `SELECT RESULTAT_TYPE, TRYGDEAVGIFT_TYPE FROM BEHANDLINGSRESULTAT WHERE BEHANDLING_ID = :id`,

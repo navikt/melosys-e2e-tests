@@ -115,6 +115,13 @@ export const EU_EOS_LOVVALG = {
   ART_11_3_B: 'Rfo. 883/2004 art.11(3)(b)',
   // Arbeid kun i Norge, jf. rfo. 883/2004 art.11(3)(a) (FO_883_2004_ART11_3A)
   ART_11_3_A: 'Rfo. 883/2004 art.11(3)(a)',
+  // Arbeid i flere land, artikkel 13 (vises som tekst i periodesteget)
+  ART_13_1_A: 'Rfo. 883/2004 art.13(1)(a)',
+  ART_13_1_B_I: 'Rfo. 883/2004 art.13(1)(b)(i)',
+  ART_13_2_A: 'Rfo. 883/2004 art.13(2)(a)',
+  ART_13_2_B: 'Rfo. 883/2004 art.13(2)(b)',
+  ART_13_3: 'Rfo. 883/2004 art.13(3)',
+  ART_13_4: 'Rfo. 883/2004 art.13(4)',
 } as const;
 
 // POPP-kilde-enum (verbatim — slik POPP-API leverer dem, jf. MELOSYS-8073).

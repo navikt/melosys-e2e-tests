@@ -116,4 +116,30 @@ export class ArbeidFlereLandBehandlingAssertions {
 
     console.log('✅ "Arbeid i flere land" behandling verifisert fullstendig');
   }
+
+  /** Verifiserer lovvalgsperioden som er lagret fra periodesteget ved norsk lovvalg etter artikkel 13 */
+  async verifiserNorskLovvalgsperiode(behandlingId: string, bestemmelse: string): Promise<void> {
+    await withDatabase(async (db) => {
+      const perioder = await db.query<{
+        LOVVALGSLAND: string;
+        LOVVALG_BESTEMMELSE: string;
+        INNVILGELSE_RESULTAT: string;
+        MEDLEMSKAPSTYPE: string;
+        TRYGDE_DEKNING: string;
+      }>(
+        `SELECT LOVVALGSLAND, LOVVALG_BESTEMMELSE, INNVILGELSE_RESULTAT, MEDLEMSKAPSTYPE, TRYGDE_DEKNING
+         FROM LOVVALG_PERIODE WHERE BEH_RESULTAT_ID = :id`,
+        { id: behandlingId }
+      );
+      expect(perioder, 'Forventet nøyaktig én lovvalgsperiode').toHaveLength(1);
+      expect(perioder[0]).toEqual({
+        LOVVALGSLAND: 'NO',
+        LOVVALG_BESTEMMELSE: bestemmelse,
+        INNVILGELSE_RESULTAT: 'INNVILGET',
+        MEDLEMSKAPSTYPE: 'PLIKTIG',
+        TRYGDE_DEKNING: 'FULL_DEKNING_EOSFO',
+      });
+      console.log(`✅ Lovvalgsperiode ${bestemmelse}, NO, PLIKTIG, FULL_DEKNING_EOSFO`);
+    });
+  }
 }
