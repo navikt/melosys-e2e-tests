@@ -5,6 +5,7 @@ import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  REPOER_MED_KO,
   hentMedNyeForsok,
   kjor,
   lagKlient,
@@ -18,7 +19,7 @@ import { utenE2eEffekt } from '../scripts/affected-tests.mjs';
 /**
  * Feilene som koster mest: en prøvekjøring som skriver variabelen, en prøvekjøring som tar plassen
  * til en ekte skriving i køen av skrivinger, en pin satt mens en PR allerede er i kø, og et
- * app-token som brukes til mer enn variabelen.
+ * skrive-token som brukes til mer enn variabelen.
  */
 
 const TAG = 'br-38725776923';
@@ -296,7 +297,7 @@ test('workflowen: to jobber, og inputene konsollen sender, står', () => {
   ]);
   for (const inp of ['tag', 'e2e_pr', 'tjenester', 'requested_by', 'dry_run']) assert.match(yml, new RegExp(`^      ${inp}:$`, 'm'));
   assert.match(yml, /^run-name: .*\$\{\{ inputs\.dry_run && ' \(prøvekjøring\)' \|\| '' \}\}"$/m);
-  assert.match(yml, /GH_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.doesNotMatch(yml, /\$\{\{ github\.token \}\}/, 'github.token ser ikke de private repoene');
   assert.doesNotMatch(yml, /e2e-pins\.json|sett-i-ko|vent-merget|fjern-skriv|pin-skriv/);
 });
 
@@ -307,23 +308,41 @@ test('workflowen: skrivingene går én om gangen, og en prøvekjøring står ute
   assert.doesNotMatch(jobb('sjekk'), /concurrency:/);
 });
 
-test('workflowen: app-tokenet er bare for melosys-e2e-tests, bare uten dry_run, og bare for variabelen', () => {
-  const token = stegI(yml).filter((s) => /\buses: actions\/create-github-app-token@/.test(s));
+const appToken = (tekst: string) => stegI(tekst).filter((s) => /\buses: actions\/create-github-app-token@/.test(s));
+const repoerI = (steg: string) => (/\n\s+repositories: \|\n((?:\s+[a-z0-9-]+\n)+)/.exec(steg)?.[1] ?? '').split(/\s+/).filter(Boolean);
+const tillatelserI = (steg: string) => [...steg.matchAll(/\n\s+permission-([a-z-]+): ([a-z]+)/g)].map(([, p, v]) => `${p}: ${v}`);
+
+test('workflowen: skrive-tokenet er bare for melosys-e2e-tests, bare uten dry_run, og bare for variabelen', () => {
+  const token = appToken(yml).filter((s) => /\n\s+id: token\n/.test(s));
   assert.equal(token.length, 1);
   assert.match(token[0], /\n\s+if: \$\{\{ !inputs\.dry_run \}\}\n/);
   assert.match(token[0], /\n\s+repositories: melosys-e2e-tests\n/);
   assert.doesNotMatch(token[0], /permission-/);
-  assert.equal((yml.match(/MELOSYS_CI_PRIVATE_KEY/g) ?? []).length, 1);
   assert.equal((yml.match(/steps\.token\.outputs\.token/g) ?? []).length, 1);
   const skriv = stegI(jobb('pin')).find((s) => s.includes('e2e-pins.mjs set'))!;
   assert.match(skriv, /\n\s+E2E_PINS_TOKEN: \$\{\{ steps\.token\.outputs\.token \}\}\n/);
   assert.match(skriv, /\n\s+E2E_PINS_VAR: \$\{\{ vars\.E2E_PINS \}\}\n/);
-  assert.doesNotMatch(skriv, /GH_TOKEN:/, 'GH_TOKEN er github.token fra env på toppen');
 });
 
-test('workflowen: skrivejobben logger inn i GAR før skriveren, med id-token og actions: read', () => {
+test('workflowen: lesingen bruker et lesetoken for repoene med merge-kø, også i en prøvekjøring', () => {
+  // Mangler et repo i lista, svarer GitHub «Could not resolve to a Repository» for et privat repo.
+  const forventet = [...REPOER_MED_KO, 'melosys-e2e-tests'].sort();
+  const forventetTillatelser = { sjekk: ['contents: read', 'pull-requests: read'], pin: ['contents: read', 'pull-requests: read', 'actions: read'] };
+  for (const id of ['sjekk', 'pin'] as const) {
+    const lesetoken = appToken(jobb(id)).filter((s) => /\n\s+id: lesetoken\n/.test(s));
+    assert.equal(lesetoken.length, 1, id);
+    assert.doesNotMatch(lesetoken[0], /\n\s+if:/, `${id}: lesetokenet hentes også i en prøvekjøring`);
+    assert.deepEqual(repoerI(lesetoken[0]).sort(), forventet, id);
+    assert.deepEqual(tillatelserI(lesetoken[0]), forventetTillatelser[id], id);
+  }
+  const sjekk = stegI(jobb('sjekk')).find((s) => s.includes('koblet-merge.mjs sjekk'))!;
+  const skriv = stegI(jobb('pin')).find((s) => s.includes('e2e-pins.mjs set'))!;
+  for (const steg of [sjekk, skriv]) assert.match(steg, /\n\s+GH_TOKEN: \$\{\{ steps\.lesetoken\.outputs\.token \}\}\n/);
+});
+
+test('workflowen: skrivejobben logger inn i GAR før skriveren, med id-token', () => {
   const pin = jobb('pin');
-  for (const r of ['contents: read', 'pull-requests: read', 'actions: read', 'id-token: write']) assert.match(pin, new RegExp(`\\n      ${r}\\n`), r);
+  for (const r of ['contents: read', 'id-token: write']) assert.match(pin, new RegExp(`\\n      ${r}\\n`), r);
   const login = pin.indexOf('uses: nais/login@v0');
   assert.ok(login !== -1 && login < pin.indexOf('e2e-pins.mjs set'));
   assert.ok(pin.indexOf('e2e-pins.mjs set') < pin.indexOf('koblet-merge.mjs neste'));

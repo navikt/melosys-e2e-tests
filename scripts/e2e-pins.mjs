@@ -51,8 +51,8 @@ export const TJENESTER = {
 };
 
 /**
- * Repoene med merge-kø. Bare de kan ha en pin i variabelen: de er offentlige, så github.token kan
- * lese service-PR-en, og repo-, image- og tjenestenavn er like.
+ * Repoene med merge-kø. Bare de kan ha en pin i variabelen: lesetokenene i koblet-merge.yml og
+ * e2e-tests.yml har tilgang til nettopp dem, og repo-, image- og tjenestenavn er like.
  */
 export const TJENESTER_MED_KO = ['melosys-api', 'melosys-web', 'melosys-skjema-api', 'melosys-skjema-web', 'melosys-eessi', 'faktureringskomponenten'];
 
@@ -568,7 +568,7 @@ function lastNedTriggerKontekst(id) {
 /**
  * set og fjern. `io` har github, hent, lastNed, nå og logg; testene sender inn sine egne.
  * `io.variabel` leser og skriver variabelen (standard: github). Med --dry-run og `io.lagretVerdi`
- * leses verdien derfra: «Koblet merge» har bare github.token i en prøvekjøring, og det kan ikke
+ * leses verdien derfra: «Koblet merge» har bare et lesetoken i en prøvekjøring, og det kan ikke
  * lese variabler.
  */
 export async function skriv(args, io) {

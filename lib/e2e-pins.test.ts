@@ -978,3 +978,20 @@ test('plan-jobben henter hele historikken og logger inn før taggvalget', () => 
   // Begge trigger-kontekstene får pinnene.
   assert.equal([...yml.matchAll(/\+ \$gate \+ \$branch \+ \$pinner'\)/g)].length, 2);
 });
+
+test('pinvalget leser tjenestene som kan ha en pin, med et lesetoken som ser de private repoene', () => {
+  // Mangler et repo i lista, feiler oppslagene for pinnen dets: startregelen gir latest, og
+  // utløpsregelen holder pinnen aktiv en tid etter merge.
+  const plan = yml.slice(yml.indexOf('  plan:\n'), yml.indexOf('- name: Pin image-tagger til digest'));
+  const tokenSteg = plan.indexOf('- name: Hent lesetoken for pinvalget');
+  assert.ok(tokenSteg !== -1 && tokenSteg < plan.indexOf('- name: Determine image tags from trigger source'));
+  const steg = plan.slice(tokenSteg, plan.indexOf('\n      - ', tokenSteg));
+  assert.match(steg, /\n\s+id: lesetoken\n/);
+  assert.doesNotMatch(steg, /\n\s+if:/);
+  const repoer = (/\n\s+repositories: \|\n((?:\s+[a-z0-9-]+\n)+)/.exec(steg)?.[1] ?? '').split(/\s+/).filter(Boolean);
+  assert.deepEqual(repoer.sort(), [...TJENESTER_MED_KO].sort());
+  assert.deepEqual([...steg.matchAll(/permission-([a-z-]+): ([a-z]+)/g)].map(([, p, v]) => `${p}: ${v}`), ['contents: read', 'pull-requests: read']);
+  const tagger = plan.slice(plan.indexOf('- name: Determine image tags from trigger source'));
+  assert.match(tagger, /\n\s+GH_TOKEN: \$\{\{ steps\.lesetoken\.outputs\.token \}\}\n/);
+  assert.doesNotMatch(tagger, /github\.token/);
+});
