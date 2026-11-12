@@ -260,7 +260,7 @@ test('neste: bestilleren vises som kode, så markdown i requested_by ikke blir e
   assert.match(logg.at(-1)!, /Bestilt av `` \[klikk\]\(https:\/\/example\.com\) `x` ``\.$/);
 });
 
-test('ingen steg skriver til GitHub med github.token', async () => {
+test('ingen steg i koblet-merge.mjs skriver til GitHub', async () => {
   for (const steg of ['pin-skriv', 'sett-i-ko', 'fjern-skriv', 'e2e-klar', 'vent-merget']) {
     await assert.rejects(kjorSteg(par(), steg), /Ukjent steg/, steg);
   }
@@ -318,6 +318,9 @@ test('workflowen: skrive-tokenet er bare for melosys-e2e-tests, bare uten dry_ru
   assert.match(token[0], /\n\s+if: \$\{\{ !inputs\.dry_run \}\}\n/);
   assert.match(token[0], /\n\s+repositories: melosys-e2e-tests\n/);
   assert.doesNotMatch(token[0], /permission-/);
+  // Et nytt app-token uten permission-* får alle rettighetene installasjonen har.
+  const ider = appToken(yml).map((s) => /\n\s+id: ([a-z-]+)\n/.exec(s)?.[1]);
+  assert.deepEqual(ider.sort(), ['lesetoken', 'lesetoken', 'token'], 'bare skrive-tokenet og de to lesetokenene');
   assert.equal((yml.match(/steps\.token\.outputs\.token/g) ?? []).length, 1);
   const skriv = stegI(jobb('pin')).find((s) => s.includes('e2e-pins.mjs set'))!;
   assert.match(skriv, /\n\s+E2E_PINS_TOKEN: \$\{\{ steps\.token\.outputs\.token \}\}\n/);

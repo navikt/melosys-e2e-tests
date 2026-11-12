@@ -76,7 +76,7 @@ test('variabelen: ugyldige verdier avvises', () => {
   const med = (felt: Obj, tjeneste = 'melosys-web') => JSON.stringify({ [tjeneste]: { ...PIN, ...felt } });
   assert.throws(() => lesVariabel('{"melosys-web": '), /ikke gyldig JSON/);
   for (const tekst of ['null', '[]', '"x"', '1']) assert.throws(() => lesVariabel(tekst), /skal være et objekt/, tekst);
-  // melosys-mock har ingen merge-kø, og service-PR-en kan ikke leses med github.token.
+  // melosys-mock og melosys-dokgen har ingen merge-kø, så de kan ikke ha en pin.
   for (const nøkkel of ['melosys-mock', 'melosys-dokgen', '__proto__', 'constructor']) {
     assert.throws(() => lesVariabel(med({}, nøkkel)), /ukjent tjeneste/, nøkkel);
   }
@@ -750,7 +750,7 @@ test('skriv: en utløpt pin med feil etter mergen står igjen, og loggen sier at
 });
 
 test('skriv: --dry-run med verdien fra vars leser ikke variabelen med API-et', async () => {
-  // I «Koblet merge» har dry_run bare github.token, som ikke kan lese variabler.
+  // I «Koblet merge» har dry_run bare lesetokenet, som ikke kan lese variabler.
   const lagret = JSON.stringify({ 'melosys-api': PIN });
   const g = lagGitHub({});
   await skriv({ ...SET, dryRun: true }, { ...g.io, lagretVerdi: lagret });
@@ -980,8 +980,8 @@ test('plan-jobben henter hele historikken og logger inn før taggvalget', () => 
 });
 
 test('pinvalget leser tjenestene som kan ha en pin, med et lesetoken som ser de private repoene', () => {
-  // Mangler et repo i lista, feiler oppslagene for pinnen dets: startregelen gir latest, og
-  // utløpsregelen holder pinnen aktiv en tid etter merge.
+  // Mangler et repo i lista, svarer GitHub 404 for PR-ene der. En pin med e2e_pr regnes da som
+  // forlatt, og en pin med leder som ikke startet; kjøringen bruker latest i begge tilfeller.
   const plan = yml.slice(yml.indexOf('  plan:\n'), yml.indexOf('- name: Pin image-tagger til digest'));
   const tokenSteg = plan.indexOf('- name: Hent lesetoken for pinvalget');
   assert.ok(tokenSteg !== -1 && tokenSteg < plan.indexOf('- name: Determine image tags from trigger source'));
