@@ -35,16 +35,16 @@ export class JournalforingPage extends BasePage {
   private readonly journalforingForm = this.page.locator('form.journalforingform');
 
   // Avsender type radio buttons (who sent the document)
-  private readonly avsenderBrukerRadio = this.page.locator('input[name="avsenderType-radiogroup"][value="PERSON"]');
-  private readonly avsenderAnnenRadio = this.page.locator('input[name="avsenderType-radiogroup"][value="ANNEN_PERSON_ELLER_VIRKSOMHET"]');
-  private readonly avsenderUtenlandskRadio = this.page.locator('input[name="avsenderType-radiogroup"][value="UTENLANDSK_TRYGDEMYNDIGHET"]');
-  private readonly avsenderFritekstRadio = this.page.locator('input[name="avsenderType-radiogroup"][value="FRITEKST"]');
+  private readonly avsenderBrukerRadio = this.page.locator('input[name="avsenderType"][value="PERSON"]');
+  private readonly avsenderAnnenRadio = this.page.locator('input[name="avsenderType"][value="ANNEN_PERSON_ELLER_VIRKSOMHET"]');
+  private readonly avsenderUtenlandskRadio = this.page.locator('input[name="avsenderType"][value="UTENLANDSK_TRYGDEMYNDIGHET"]');
+  private readonly avsenderFritekstRadio = this.page.locator('input[name="avsenderType"][value="FRITEKST"]');
 
   // Dropdown fields - using name attribute as discovered
   private readonly sakstypeDropdown = this.journalforingForm.locator('select[name="sakstype"]');
   private readonly sakstemaDropdown = this.journalforingForm.locator('select[name="sakstema"]');
-  private readonly behandlingstemaDropdown = this.journalforingForm.locator('select[name="opprettnysak_behandlingstema"]');
-  private readonly behandlingstypeDropdown = this.journalforingForm.locator('select[name="opprettnysak_behandlingstype"]');
+  private readonly behandlingstemaDropdown = this.journalforingForm.locator('select[name="behandlingstema"]');
+  private readonly behandlingstypeDropdown = this.journalforingForm.locator('select[name="behandlingstype"]');
 
   // Input fields
   private readonly brukerIDInput = this.page.locator('input[name="brukerID"]');
