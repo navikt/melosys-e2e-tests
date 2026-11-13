@@ -1,5 +1,7 @@
 import { Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+import { velgIComboboxMedAutocomplete } from '../shared/combobox';
+import { LANDNAVN } from '../shared/constants';
 import { EuEosPensjonistInngangAssertions } from './eu-eos-pensjonist-inngang.assertions';
 
 /**
@@ -23,7 +25,7 @@ export class EuEosPensjonistInngangPage extends BasePage {
 
   private readonly fraOgMedField = this.page.getByRole('textbox', { name: 'Fra og med' });
   private readonly tilOgMedField = this.page.getByRole('textbox', { name: 'Til og med' });
-  private readonly bostedslandSelect = this.page.getByLabel('Bostedsland');
+  private readonly bostedslandSelect = this.page.getByRole('combobox', { name: 'Bostedsland' });
   private readonly bekreftKnapp = this.page.getByRole('button', { name: 'Bekreft og fortsett' });
 
   constructor(page: Page) {
@@ -66,7 +68,7 @@ export class EuEosPensjonistInngangPage extends BasePage {
       },
       { timeout: 10000 },
     );
-    await this.bostedslandSelect.selectOption({ value: landkode });
+    await velgIComboboxMedAutocomplete(this.bostedslandSelect, LANDNAVN[landkode]);
     await savePromise;
   }
 

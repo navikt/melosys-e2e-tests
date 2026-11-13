@@ -1,4 +1,5 @@
 import { Page } from '@playwright/test';
+import { velgIComboboxMedAutocomplete } from '../shared/combobox';
 import { EuEosBehandlingPage } from './eu-eos-behandling.page';
 import { EuEosSkipBehandlingAssertions } from './eu-eos-skip-behandling.assertions';
 
@@ -146,10 +147,7 @@ export class EuEosSkipBehandlingPage extends EuEosBehandlingPage {
    * @param land - Land med format "LandNavn (Kode)" (f.eks. 'Frankrike (FR)')
    */
   async velgFlaggstat(land: string): Promise<void> {
-    await this.flaggstatCombobox.click();
-    await this.flaggstatCombobox.fill(land);
-    // Press Enter to confirm selection and trigger any API calls
-    await this.flaggstatCombobox.press('Enter');
+    await velgIComboboxMedAutocomplete(this.flaggstatCombobox, land);
     await this.page.waitForTimeout(300);
     console.log(`✅ Valgte flaggstat: ${land}`);
   }

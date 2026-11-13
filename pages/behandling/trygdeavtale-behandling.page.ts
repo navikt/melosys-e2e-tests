@@ -1,5 +1,7 @@
 import { Page } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+import { velgIComboboxMedAutocomplete } from '../shared/combobox';
+import { LANDNAVN } from '../shared/constants';
 import { TrygdeavtaleBehandlingAssertions } from './trygdeavtale-behandling.assertions';
 
 /**
@@ -124,7 +126,7 @@ export class TrygdeavtaleBehandlingPage extends BasePage {
    * @param landkode - Country code (e.g., 'AU' for Australia, 'SE' for Sweden)
    */
   async velgArbeidsland(landkode: string): Promise<void> {
-    await this.arbeidslandDropdown.selectOption(landkode);
+    await velgIComboboxMedAutocomplete(this.arbeidslandDropdown, LANDNAVN[landkode]);
     console.log(`✅ Selected arbeidsland: ${landkode}`);
   }
 

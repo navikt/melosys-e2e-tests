@@ -1,5 +1,6 @@
 import { Page, type Response as PlaywrightResponse } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+import { velgIComboboxMedAutocomplete } from '../shared/combobox';
 import { erSkrivekallMotApi, sporKall, utførOgVentPåApi, ventPåAutolagringHvisDenStarter } from '../shared/kall-sporing';
 import { ArbeidFlereLandBehandlingAssertions } from './arbeid-flere-land-behandling.assertions';
 
@@ -506,15 +507,13 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
   }
 
   /**
-   * Fyll inn kompetent land i fritekst-felt
-   * Feltet har ingen label, brukes med getByLabel('', { exact: true })
+   * Velg kompetent land i bostedsland-velgeren (Combobox med autocomplete)
    *
    * @param land - Land med kode (f.eks. 'Sverige (SE)')
    */
   async fyllInnKompetentLand(land: string): Promise<void> {
-    const field = this.page.getByLabel('', { exact: true });
-    await field.click();
-    await field.fill(land);
+    const field = this.page.getByRole('combobox', { name: 'Bostedsland', exact: true });
+    await velgIComboboxMedAutocomplete(field, land);
     console.log(`✅ Fylte inn kompetent land: ${land}`);
   }
 

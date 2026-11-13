@@ -1,6 +1,7 @@
 import { Page, expect } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
-import { BESTEMMELSE_TERMER } from '../shared/constants';
+import { velgIComboboxMedAutocomplete } from '../shared/combobox';
+import { BESTEMMELSE_TERMER, LANDNAVN } from '../shared/constants';
 import { TrygdeavtaleUnntaksregistreringAssertions } from './trygdeavtale-unntaksregistrering.assertions';
 
 /**
@@ -48,7 +49,7 @@ export class TrygdeavtaleUnntaksregistreringPage extends BasePage {
     name: /^Til og med/
   });
 
-  private readonly avsenderlandDropdown = this.page.getByLabel(/Avsenderland/);
+  private readonly avsenderlandDropdown = this.page.getByRole('combobox', { name: /Avsenderland/ });
 
   private readonly bekreftOgFortsettButton = this.page.getByRole('button', {
     name: 'Bekreft og fortsett'
@@ -111,7 +112,7 @@ export class TrygdeavtaleUnntaksregistreringPage extends BasePage {
     await this.tilOgMedField.fill(tilOgMed);
     console.log(`✅ Fylte "Til og med": ${tilOgMed}`);
 
-    await this.avsenderlandDropdown.selectOption(avsenderland);
+    await velgIComboboxMedAutocomplete(this.avsenderlandDropdown, LANDNAVN[avsenderland]);
     console.log(`✅ Valgte avsenderland: ${avsenderland}`);
   }
 
