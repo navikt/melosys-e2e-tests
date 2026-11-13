@@ -1,6 +1,7 @@
 import { Page, expect } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
-import { TIMEOUT_LONG, TIMEOUT_MEDIUM, TIMEOUT_VEDTAK } from '../shared/constants';
+import { velgIComboboxMedAutocomplete } from '../shared/combobox';
+import { LANDNAVN, TIMEOUT_LONG, TIMEOUT_MEDIUM, TIMEOUT_VEDTAK } from '../shared/constants';
 import { EuEosPensjonistBehandlingAssertions } from './eu-eos-pensjonist-behandling.assertions';
 
 export class EuEosPensjonistBehandlingPage extends BasePage {
@@ -12,7 +13,7 @@ export class EuEosPensjonistBehandlingPage extends BasePage {
 
   private readonly tilOgMedField = this.page.getByRole('textbox', { name: 'Til og med' });
 
-  private readonly bostedslandDropdown = this.page.getByLabel('Bostedsland');
+  private readonly bostedslandDropdown = this.page.getByRole('combobox', { name: 'Bostedsland' });
 
   private readonly bekreftOgFortsettButton = this.page.getByRole('button', {
     name: 'Bekreft og fortsett',
@@ -54,7 +55,7 @@ export class EuEosPensjonistBehandlingPage extends BasePage {
   }
 
   async velgBostedsland(landkode: string): Promise<void> {
-    await this.bostedslandDropdown.selectOption(landkode);
+    await velgIComboboxMedAutocomplete(this.bostedslandDropdown, LANDNAVN[landkode]);
     console.log(`✅ Valgte bostedsland: ${landkode}`);
   }
 

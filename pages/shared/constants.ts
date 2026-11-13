@@ -79,6 +79,15 @@ export const ARBEIDSLAND = {
   ICELAND: 'IS',
 } as const;
 
+/** Landnavn per landkode, for landvelgere som velges på visningstekst. */
+export const LANDNAVN: Record<string, string> = {
+  AU: 'Australia',
+  SE: 'Sverige',
+  DK: 'Danmark',
+  FI: 'Finland',
+  IS: 'Island',
+};
+
 export const BESTEMMELSER = {
   // Australia
   AUS_ART9_3: 'AUS_ART9_3',

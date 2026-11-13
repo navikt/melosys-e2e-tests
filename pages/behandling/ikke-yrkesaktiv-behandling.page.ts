@@ -1,5 +1,7 @@
 import { Page, expect } from '@playwright/test';
 import { BasePage } from '../shared/base.page';
+import { velgIComboboxMedAutocomplete, verifiserValgtIComboboxStarterMed } from '../shared/combobox';
+import { LANDNAVN } from '../shared/constants';
 import { KallSporing } from '../shared/kall-sporing';
 import { sporForhåndskontroll, ventPåForhåndskontroll } from '../shared/stoppet-vedtak.assertions';
 
@@ -39,7 +41,7 @@ export class IkkeYrkesaktivBehandlingPage extends BasePage {
   // «Til og med» har hjelpetekst i etiketten, så navnet er lengre enn selve etiketten
   private readonly tilOgMedField = this.inngang.getByRole('textbox', { name: /^Til og med/ });
 
-  private readonly landDropdown = this.inngang.getByLabel('Land', { exact: true });
+  private readonly landDropdown = this.inngang.getByRole('combobox', { name: 'Land', exact: true });
 
   // ── Steg 2: Bestemmelse og vurdering ─────────────────────────────────
   private readonly bestemmelseHeading = this.page.getByRole('heading', {
@@ -95,7 +97,7 @@ export class IkkeYrkesaktivBehandlingPage extends BasePage {
     await this.tilOgMedField.fill(tilOgMed);
     console.log(`✅ Fylte "Til og med": ${tilOgMed}`);
 
-    await this.landDropdown.selectOption(land);
+    await velgIComboboxMedAutocomplete(this.landDropdown, LANDNAVN[land]);
     console.log(`✅ Valgte land: ${land}`);
   }
 
@@ -117,7 +119,7 @@ export class IkkeYrkesaktivBehandlingPage extends BasePage {
     await this.inngangHeading.waitFor({ state: 'visible', timeout: 30000 });
     await expect(this.fraOgMedField).toHaveValue(fraOgMed);
     await expect(this.tilOgMedField).toHaveValue(tilOgMed);
-    await expect(this.landDropdown).toHaveValue(land);
+    await verifiserValgtIComboboxStarterMed(this.landDropdown, LANDNAVN[land]);
     console.log(`✅ Kopierte søknadsopplysninger: ${fraOgMed}–${tilOgMed}, ${land}`);
     await this.bekreftOgFortsett();
   }
