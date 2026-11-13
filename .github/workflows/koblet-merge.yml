@@ -1,11 +1,13 @@
 name: Koblet merge
-run-name: "Koblet merge · ${{ inputs.requested_by || 'ukjent' }}: ${{ inputs.tag }} · e2e #${{ inputs.e2e_pr }} · ${{ inputs.tjenester }}${{ inputs.dry_run && ' (prøvekjøring)' || '' }}"
+run-name: "Koblet merge · ${{ inputs.requested_by || 'ukjent' }}: ${{ inputs.tag }} · ${{ inputs.e2e_pr && format('e2e #{0}', inputs.e2e_pr) || 'uten e2e-PR' }} · ${{ inputs.tjenester }}${{ inputs.dry_run && ' (prøvekjøring)' || '' }}"
 
 # Setter pinnen for en koblet endring: service-PR-er som krever nye e2e-tester, og e2e-PR-en som
-# retter testene. melosys-console starter workflowen. Den sjekker paret og skriver pinnen i
+# retter testene, eller service-PR-er som må merges sammen uten e2e-PR (da styrer den første
+# tjenesten, lederen, pinnen). melosys-console starter workflowen. Den sjekker paret og skriver pinnen i
 # Actions-variabelen E2E_PINS med scripts/e2e-pins.mjs; utvikleren merger PR-ene selv med
-# «Merge when ready» i rekkefølgen sammendraget viser. Lesing bruker github.token (alle repoene
-# er offentlige); bare skrivingen av variabelen bruker app-tokenet.
+# «Merge when ready» i rekkefølgen sammendraget viser. Lesing bruker et lesetoken fra app-en
+# Melosys CI, fordi github.token ikke ser de private repoene (melosys-api, melosys-web). Skrivingen
+# av variabelen bruker et eget app-token for melosys-e2e-tests.
 # Oppskriften står i docs/ci-cd/KOBLEDE-ENDRINGER.md.
 
 on:
@@ -16,8 +18,9 @@ on:
         required: true
         type: string
       e2e_pr:
-        description: 'PR-nummeret i melosys-e2e-tests'
-        required: true
+        description: 'PR-nummeret i melosys-e2e-tests. Tom: paret har ingen e2e-PR, og den første tjenesten er lederen.'
+        required: false
+        default: ''
         type: string
       tjenester:
         description: '<repo>#<pr> i merge-rekkefølge, kommaseparert (f.eks. melosys-skjema-api#422,melosys-skjema-web#695). Bare repoer med merge-kø.'
@@ -36,7 +39,6 @@ on:
 
 permissions:
   contents: read
-  pull-requests: read
 
 # GitHub beholder én ventende kjøring per gruppe. En prøvekjøring får sin egen gruppe, så den
 # ikke avbryter en ekte kjøring for samme tag som venter.
@@ -51,7 +53,6 @@ env:
   REQUESTED_BY: ${{ inputs.requested_by }}
   DRY_RUN: ${{ inputs.dry_run }}
   RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
-  GH_TOKEN: ${{ github.token }}
 
 jobs:
   sjekk:
@@ -61,6 +62,7 @@ jobs:
     timeout-minutes: 60
     outputs:
       matrix: ${{ steps.input.outputs.matrix }}
+      leder: ${{ steps.input.outputs.leder }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -68,7 +70,27 @@ jobs:
       - name: Les input
         id: input
         run: node scripts/koblet-merge.mjs input
+      # Repoene er TJENESTER_MED_KO i scripts/e2e-pins.mjs, pluss melosys-e2e-tests.
+      - name: Hent lesetoken
+        id: lesetoken
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: |
+            melosys-api
+            melosys-web
+            melosys-skjema-api
+            melosys-skjema-web
+            melosys-eessi
+            faktureringskomponenten
+            melosys-e2e-tests
+          permission-contents: read
+          permission-pull-requests: read
       - name: Sjekk PR-ene
+        env:
+          GH_TOKEN: ${{ steps.lesetoken.outputs.token }}
         run: node scripts/koblet-merge.mjs sjekk
 
   pin:
@@ -78,9 +100,6 @@ jobs:
     timeout-minutes: 60
     permissions:
       contents: read
-      pull-requests: read
-      # gh run download av trigger-konteksten til br-kjøringen
-      actions: read
       # nais/login: skriveren leser revisjonen på latest for pinnene som står
       id-token: write
     # API-et har ingen sammenlign-og-skriv for variabler, så skrivingene går én om gangen.
@@ -96,6 +115,26 @@ jobs:
         uses: nais/login@v0
         with:
           team: teammelosys
+      # Som i «Sjekk paret», og actions: read for gh run download av trigger-konteksten til
+      # br-kjøringen.
+      - name: Hent lesetoken
+        id: lesetoken
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: |
+            melosys-api
+            melosys-web
+            melosys-skjema-api
+            melosys-skjema-web
+            melosys-eessi
+            faktureringskomponenten
+            melosys-e2e-tests
+          permission-contents: read
+          permission-pull-requests: read
+          permission-actions: read
       # Uten permission-*: action-en har ingen input for variabler, så tokenet får rettighetene
       # installasjonen har, men bare i melosys-e2e-tests.
       - name: Hent app-token
@@ -107,13 +146,15 @@ jobs:
           private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
           owner: navikt
           repositories: melosys-e2e-tests
-      # github.token kan ikke lese variabler. En prøvekjøring leser derfor verdien fra vars,
+      # Lesetokenet kan ikke lese variabler. En prøvekjøring leser derfor verdien fra vars,
       # låst ved jobbstart; en ekte skriving leser den med app-tokenet rett før den skriver.
       - name: Skriv pinnen
         env:
+          GH_TOKEN: ${{ steps.lesetoken.outputs.token }}
           E2E_PINS_TOKEN: ${{ steps.token.outputs.token }}
           E2E_PINS_VAR: ${{ vars.E2E_PINS }}
           MATRIX: ${{ needs.sjekk.outputs.matrix }}
+          LEDER: ${{ needs.sjekk.outputs.leder }}
         # Feiler set for en tjeneste, står pinnene før den (hva du gjør da, står i
         # docs/ci-cd/KOBLEDE-ENDRINGER.md). jq -e feiler på tom eller ugyldig matrise i stedet for
         # å skrive ingenting.
@@ -123,7 +164,11 @@ jobs:
           par=$(jq -er '.include[] | "\(.repo) \(.pr)"' <<< "$MATRIX") \
             || { echo "::error::Utdataene fra «Sjekk paret» har ingen gyldig liste over tjenester (se jq-feilen over)"; exit 1; }
           while read -r repo pr; do
-            node scripts/e2e-pins.mjs set "$repo" "$TAG" "$E2E_PR" "$pr" "${flagg[@]}"
+            if [ -n "$E2E_PR" ]; then
+              node scripts/e2e-pins.mjs set "$repo" "$TAG" "$E2E_PR" "$pr" "${flagg[@]}"
+            else
+              node scripts/e2e-pins.mjs set "$repo" "$TAG" "$pr" "--leder=$LEDER" "${flagg[@]}"
+            fi
           done <<< "$par"
       - name: Neste steg
         run: node scripts/koblet-merge.mjs neste

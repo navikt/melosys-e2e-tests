@@ -5,6 +5,7 @@ import { chmodSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import {
+  REPOER_MED_KO,
   hentMedNyeForsok,
   kjor,
   lagKlient,
@@ -18,7 +19,7 @@ import { utenE2eEffekt } from '../scripts/affected-tests.mjs';
 /**
  * Feilene som koster mest: en prøvekjøring som skriver variabelen, en prøvekjøring som tar plassen
  * til en ekte skriving i køen av skrivinger, en pin satt mens en PR allerede er i kø, og et
- * app-token som brukes til mer enn variabelen.
+ * skrive-token som brukes til mer enn variabelen.
  */
 
 const TAG = 'br-38725776923';
@@ -87,6 +88,11 @@ test('input: format og repoer uten merge-kø avvises', () => {
   assert.equal(lesInput(ok).dryRun, true);
   for (const tag of ['br-abc', '38725776923', 'latest', '']) assert.throws(() => lesInput({ ...ok, tag }), /tag må være/);
   assert.throws(() => lesInput({ ...ok, e2ePr: '0' }), /e2e_pr/);
+  assert.equal(lesInput(ok).leder, null);
+  const utenE2e = lesInput({ ...ok, e2ePr: '' });
+  assert.deepEqual([utenE2e.e2ePr, utenE2e.leder], [null, 'melosys-web#3253']);
+  assert.equal(lesInput({ ...ok, e2ePr: undefined }).leder, 'melosys-web#3253');
+  assert.throws(() => lesInput({ ...ok, e2ePr: '', tjenester: 'melosys-web#3253' }), /Uten e2e_pr må tjenester ha minst to/);
   assert.throws(() => lesInput({ ...ok, tjenester: '' }), /minst én/);
   assert.throws(() => lesInput({ ...ok, tjenester: 'melosys-web' }), /<repo>#<pr>/);
   assert.throws(() => lesInput({ ...ok, tjenester: 'melosys-web#1,melosys-web#2' }), /to ganger/);
@@ -183,6 +189,14 @@ test('sjekk: åpent par godtas, og bare spørringer sendes', async () => {
   for (const k of gh.kall) assert.match(k.body.query, /^\s*query\b/);
 });
 
+test('sjekk: uten e2e-PR sjekkes bare service-PR-ene', async () => {
+  const gh = par();
+  const { logg } = await kjorSteg(gh, 'sjekk', { E2E_PR: '', TJENESTER: 'melosys-api#100,melosys-web#3253' });
+  assert.ok(logg.some((l) => /Paret er klart: melosys-api #100, melosys-web #3253 \(/.test(l)));
+  assert.equal(gh.kall.length, 2);
+  assert.ok(gh.kall.every((k) => k.body.variables.repo !== 'melosys-e2e-tests'));
+});
+
 test('sjekk: en PR i kø, merget eller lukket stopper, fordi pinnen settes før køen', async () => {
   const tilfeller: [Pr, RegExp][] = [
     [{ isInMergeQueue: true }, /står i merge-køen/],
@@ -221,6 +235,15 @@ test('neste: rekkefølgen er e2e-PR-en og så service-PR-ene, hver når køen er
   assert.match(prøve.logg[0], /Prøvekjøring: E2E_PINS er ikke skrevet/);
 });
 
+test('neste: uten e2e-PR er lederen først, og pinnen gjelder fra lederens kø', async () => {
+  const { logg } = await kjorSteg(par(), 'neste', { E2E_PR: '', TJENESTER: 'melosys-api#100,melosys-web#3253' });
+  assert.match(logg[0], /melosys-api, melosys-web er pinnet til br-38725776923 i E2E_PINS med melosys-api #100 som leder/);
+  assert.equal(logg[1], '1. melosys-api #100: https://github.com/navikt/melosys-api/pull/100');
+  assert.equal(logg[2], '2. melosys-web #3253, når melosys-api #100 er merget og melosys-web-køen er tom: https://github.com/navikt/melosys-web/pull/3253');
+  assert.match(logg[3], /^Pinnene gjelder i køen til melosys-api #100 og etter at den er merget/);
+  assert.equal(logg.length, 4);
+});
+
 test('klienten sender ingen GraphQL-mutasjon', async () => {
   const kall: string[] = [];
   const fetch = async (url: string) => (kall.push(url), svar(200, { data: {} }));
@@ -237,7 +260,7 @@ test('neste: bestilleren vises som kode, så markdown i requested_by ikke blir e
   assert.match(logg.at(-1)!, /Bestilt av `` \[klikk\]\(https:\/\/example\.com\) `x` ``\.$/);
 });
 
-test('ingen steg skriver til GitHub med github.token', async () => {
+test('ingen steg i koblet-merge.mjs skriver til GitHub', async () => {
   for (const steg of ['pin-skriv', 'sett-i-ko', 'fjern-skriv', 'e2e-klar', 'vent-merget']) {
     await assert.rejects(kjorSteg(par(), steg), /Ukjent steg/, steg);
   }
@@ -249,6 +272,9 @@ test('CLI: input skriver matrisen, og feil blir ::error::', () => {
   const script = join(__dirname, '..', 'scripts', 'koblet-merge.mjs');
   const ut = execFileSync(process.execPath, [script, 'input'], { env: { TAG, E2E_PR: '380', TJENESTER: 'melosys-web#3253' } }).toString();
   assert.match(ut, /matrix=\{"include":\[\{"repo":"melosys-web","pr":3253\}\]\}/);
+  assert.match(ut, /^leder=$/m);
+  const utenE2e = execFileSync(process.execPath, [script, 'input'], { env: { TAG, E2E_PR: '', TJENESTER: 'melosys-skjema-api#422,melosys-skjema-web#695' } }).toString();
+  assert.match(utenE2e, /^leder=melosys-skjema-api#422$/m);
   assert.throws(
     () => execFileSync(process.execPath, [script, 'input'], { env: { TAG, E2E_PR: '1', TJENESTER: 'melosys-docker-compose#1' }, stdio: 'pipe' }),
     (e: { status: number; stdout: Buffer }) => e.status === 1 && /::error::melosys-docker-compose har ingen merge-kø/.test(e.stdout.toString()),
@@ -271,7 +297,7 @@ test('workflowen: to jobber, og inputene konsollen sender, står', () => {
   ]);
   for (const inp of ['tag', 'e2e_pr', 'tjenester', 'requested_by', 'dry_run']) assert.match(yml, new RegExp(`^      ${inp}:$`, 'm'));
   assert.match(yml, /^run-name: .*\$\{\{ inputs\.dry_run && ' \(prøvekjøring\)' \|\| '' \}\}"$/m);
-  assert.match(yml, /GH_TOKEN: \$\{\{ github\.token \}\}/);
+  assert.doesNotMatch(yml, /\$\{\{\s*(github\.token|secrets\.GITHUB_TOKEN)\s*\}\}/, 'github.token ser ikke de private repoene');
   assert.doesNotMatch(yml, /e2e-pins\.json|sett-i-ko|vent-merget|fjern-skriv|pin-skriv/);
 });
 
@@ -282,23 +308,45 @@ test('workflowen: skrivingene går én om gangen, og en prøvekjøring står ute
   assert.doesNotMatch(jobb('sjekk'), /concurrency:/);
 });
 
-test('workflowen: app-tokenet er bare for melosys-e2e-tests, bare uten dry_run, og bare for variabelen', () => {
-  const token = stegI(yml).filter((s) => /\buses: actions\/create-github-app-token@/.test(s));
+const appToken = (tekst: string) => stegI(tekst).filter((s) => /\buses: actions\/create-github-app-token@/.test(s));
+const repoerI = (steg: string) => (/\n\s+repositories: \|\n((?:\s+[a-z0-9-]+\n)+)/.exec(steg)?.[1] ?? '').split(/\s+/).filter(Boolean);
+const tillatelserI = (steg: string) => [...steg.matchAll(/\n\s+permission-([a-z-]+): ([a-z]+)/g)].map(([, p, v]) => `${p}: ${v}`);
+
+test('workflowen: skrive-tokenet er bare for melosys-e2e-tests, bare uten dry_run, og bare for variabelen', () => {
+  const token = appToken(yml).filter((s) => /\n\s+id: token\n/.test(s));
   assert.equal(token.length, 1);
   assert.match(token[0], /\n\s+if: \$\{\{ !inputs\.dry_run \}\}\n/);
   assert.match(token[0], /\n\s+repositories: melosys-e2e-tests\n/);
   assert.doesNotMatch(token[0], /permission-/);
-  assert.equal((yml.match(/MELOSYS_CI_PRIVATE_KEY/g) ?? []).length, 1);
+  // Et nytt app-token uten permission-* får alle rettighetene installasjonen har.
+  const ider = appToken(yml).map((s) => /\n\s+id: ([a-z-]+)\n/.exec(s)?.[1]);
+  assert.deepEqual(ider.sort(), ['lesetoken', 'lesetoken', 'token'], 'bare skrive-tokenet og de to lesetokenene');
   assert.equal((yml.match(/steps\.token\.outputs\.token/g) ?? []).length, 1);
   const skriv = stegI(jobb('pin')).find((s) => s.includes('e2e-pins.mjs set'))!;
   assert.match(skriv, /\n\s+E2E_PINS_TOKEN: \$\{\{ steps\.token\.outputs\.token \}\}\n/);
   assert.match(skriv, /\n\s+E2E_PINS_VAR: \$\{\{ vars\.E2E_PINS \}\}\n/);
-  assert.doesNotMatch(skriv, /GH_TOKEN:/, 'GH_TOKEN er github.token fra env på toppen');
 });
 
-test('workflowen: skrivejobben logger inn i GAR før skriveren, med id-token og actions: read', () => {
+test('workflowen: lesingen bruker et lesetoken for repoene med merge-kø, også i en prøvekjøring', () => {
+  // Mangler et privat repo i lista, svarer GitHub «Could not resolve to a Repository» for det. Lista
+  // låses også for de offentlige, så den holder hvis et av dem blir privat.
+  const forventet = [...REPOER_MED_KO, 'melosys-e2e-tests'].sort();
+  const forventetTillatelser = { sjekk: ['contents: read', 'pull-requests: read'], pin: ['contents: read', 'pull-requests: read', 'actions: read'] };
+  for (const id of ['sjekk', 'pin'] as const) {
+    const lesetoken = appToken(jobb(id)).filter((s) => /\n\s+id: lesetoken\n/.test(s));
+    assert.equal(lesetoken.length, 1, id);
+    assert.doesNotMatch(lesetoken[0], /\n\s+if:/, `${id}: lesetokenet hentes også i en prøvekjøring`);
+    assert.deepEqual(repoerI(lesetoken[0]).sort(), forventet, id);
+    assert.deepEqual(tillatelserI(lesetoken[0]), forventetTillatelser[id], id);
+  }
+  const sjekk = stegI(jobb('sjekk')).find((s) => s.includes('koblet-merge.mjs sjekk'))!;
+  const skriv = stegI(jobb('pin')).find((s) => s.includes('e2e-pins.mjs set'))!;
+  for (const steg of [sjekk, skriv]) assert.match(steg, /\n\s+GH_TOKEN: \$\{\{ steps\.lesetoken\.outputs\.token \}\}\n/);
+});
+
+test('workflowen: skrivejobben logger inn i GAR før skriveren, med id-token', () => {
   const pin = jobb('pin');
-  for (const r of ['contents: read', 'pull-requests: read', 'actions: read', 'id-token: write']) assert.match(pin, new RegExp(`\\n      ${r}\\n`), r);
+  for (const r of ['contents: read', 'id-token: write']) assert.match(pin, new RegExp(`\\n      ${r}\\n`), r);
   const login = pin.indexOf('uses: nais/login@v0');
   assert.ok(login !== -1 && login < pin.indexOf('e2e-pins.mjs set'));
   assert.ok(pin.indexOf('e2e-pins.mjs set') < pin.indexOf('koblet-merge.mjs neste'));
@@ -323,6 +371,19 @@ test('workflowen: skriveren kalles én gang per tjeneste, med --dry-run bare i e
   assert.equal(ekte.stdout, `node scripts/e2e-pins.mjs set melosys-api ${TAG} 380 100\nnode scripts/e2e-pins.mjs set melosys-web ${TAG} 380 3253\n`);
   const prøve = kjørSkrivSteg({ MATRIX, DRY_RUN: 'true' });
   assert.equal(prøve.stdout, `node scripts/e2e-pins.mjs set melosys-api ${TAG} 380 100 --dry-run\nnode scripts/e2e-pins.mjs set melosys-web ${TAG} 380 3253 --dry-run\n`);
+});
+
+test('workflowen: uten e2e-PR får hver tjeneste --leder i stedet for e2e_pr', () => {
+  const MATRIX = JSON.stringify({ include: [{ repo: 'melosys-skjema-api', pr: 422 }, { repo: 'melosys-skjema-web', pr: 695 }] });
+  const r = kjørSkrivSteg({ MATRIX, DRY_RUN: 'false', E2E_PR: '', LEDER: 'melosys-skjema-api#422' });
+  assert.equal(r.status, 0, r.stderr);
+  assert.equal(
+    r.stdout,
+    `node scripts/e2e-pins.mjs set melosys-skjema-api ${TAG} 422 --leder=melosys-skjema-api#422\nnode scripts/e2e-pins.mjs set melosys-skjema-web ${TAG} 695 --leder=melosys-skjema-api#422\n`,
+  );
+  assert.match(yml, /\n      e2e_pr:\n(?:        .*\n)*?        required: false\n/);
+  assert.match(yml, /format\('e2e #\{0\}', inputs\.e2e_pr\) \|\| 'uten e2e-PR'/);
+  assert.match(jobb('sjekk'), /\n      leder: \$\{\{ steps\.input\.outputs\.leder \}\}\n/);
 });
 
 test('workflowen: et tomt eller ugyldig utvalg av tjenester feiler i stedet for å skrive ingenting', () => {

@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Sjekker en koblet endring for .github/workflows/koblet-merge.yml. Hver underkommando er ett
- * steg i workflowen, og alle leser med github.token. Pinnen skrives av scripts/e2e-pins.mjs i
- * jobben etter. Utdata går til GITHUB_OUTPUT.
+ * steg i workflowen, og bare sjekk leser fra GitHub, med lesetokenet i GH_TOKEN. Pinnen skrives av
+ * scripts/e2e-pins.mjs i jobben etter. Utdata går til GITHUB_OUTPUT.
  * Oppskriften står i docs/ci-cd/KOBLEDE-ENDRINGER.md.
  */
 import { appendFileSync, existsSync, realpathSync } from 'node:fs';
@@ -34,13 +34,19 @@ export function kodespenn(t) {
   return '`'.repeat(n) + kant + t + kant + '`'.repeat(n);
 }
 
+/**
+ * Uten e2e_pr er paret styrt av lederen: den første tjenesten i `tjenester`, som står i
+ * merge-rekkefølgen. Da trengs minst to tjenester; én tjeneste alene trenger ingen pin.
+ */
 export function lesInput({ tag, e2ePr, tjenester, requestedBy, dryRun }) {
   const feil = [];
+  const medE2e = (e2ePr ?? '') !== '';
   if (!/^br-[0-9]+$/.test(tag ?? '')) feil.push('tag må være br-<run_id> fra «E2E med brancher».');
-  if (!/^[1-9][0-9]*$/.test(e2ePr ?? '')) feil.push('e2e_pr må være et PR-nummer i melosys-e2e-tests.');
+  if (medE2e && !/^[1-9][0-9]*$/.test(e2ePr)) feil.push('e2e_pr må være et PR-nummer i melosys-e2e-tests, eller tom for et par uten e2e-PR.');
   const liste = [];
   const deler = String(tjenester ?? '').split(',').map((s) => s.trim()).filter(Boolean);
   if (!deler.length) feil.push('tjenester må ha minst én <repo>#<pr>, for eksempel melosys-web#3253.');
+  else if (!medE2e && deler.length < 2) feil.push('Uten e2e_pr må tjenester ha minst to <repo>#<pr>; den første er lederen.');
   for (const del of deler) {
     const m = /^([A-Za-z0-9._-]+)#([1-9][0-9]*)$/.exec(del);
     if (!m) feil.push(`«${vask(del)}» er ikke på formen <repo>#<pr>.`);
@@ -49,7 +55,14 @@ export function lesInput({ tag, e2ePr, tjenester, requestedBy, dryRun }) {
     else liste.push({ repo: m[1], pr: Number(m[2]) });
   }
   if (feil.length) throw new Error(feil.join(' '));
-  return { tag, e2ePr: Number(e2ePr), tjenester: liste, bestiller: vaskBestiller(requestedBy), dryRun: String(dryRun) === 'true' };
+  return {
+    tag,
+    e2ePr: medE2e ? Number(e2ePr) : null,
+    leder: medE2e ? null : `${liste[0].repo}#${liste[0].pr}`,
+    tjenester: liste,
+    bestiller: vaskBestiller(requestedBy),
+    dryRun: String(dryRun) === 'true',
+  };
 }
 
 /**
@@ -126,7 +139,7 @@ export function lagKlient(ctx, token) {
     return tekst ? JSON.parse(tekst) : null;
   };
   return {
-    /** Bare spørringer: workflowen skriver ingenting med github.token. */
+    /** Bare spørringer: scriptet skriver ingenting til GitHub. */
     async graphql(query, variables) {
       if (/^\s*mutation\b/.test(query)) throw new Error('koblet-merge.mjs skriver ikke til GitHub.');
       for (let forsok = 0; ; forsok++) {
@@ -158,11 +171,15 @@ const lenke = (repo, nr) => `https://github.com/${EIER}/${repo}/pull/${nr}`;
 
 function input(ctx) {
   ctx.utdata('matrix', JSON.stringify({ include: ctx.input.tjenester }));
+  ctx.utdata('leder', ctx.input.leder ?? '');
 }
 
 async function sjekk(ctx) {
   const inp = ctx.input;
-  const prer = [{ repo: E2E_REPO, pr: inp.e2ePr, navn: e2eNavn(inp) }, ...inp.tjenester.map((t) => ({ ...t, navn: `${t.repo} #${t.pr}` }))];
+  const prer = [
+    ...(inp.e2ePr ? [{ repo: E2E_REPO, pr: inp.e2ePr, navn: e2eNavn(inp) }] : []),
+    ...inp.tjenester.map((t) => ({ ...t, navn: `${t.repo} #${t.pr}` })),
+  ];
   const feil = [];
   for (const { repo, pr, navn } of prer) {
     try {
@@ -178,21 +195,29 @@ async function sjekk(ctx) {
 /**
  * Rekkefølgen utvikleren merger i. Workflowen setter ingenting i kø (D2): e2e-PR-en først, så
  * service-PR-ene i rekkefølgen fra input, hver når køen i repoet er tom. En PR foran i køen har
- * ikke endringen og ville blitt rød mot de nye testene.
+ * ikke endringen og ville blitt rød mot de nye testene. Uten e2e-PR er lederen først.
  */
 function neste(ctx) {
   const inp = ctx.input;
   const tjenester = inp.tjenester.map((t) => t.repo).join(', ');
+  const navn = (t) => `${t.repo} #${t.pr}`;
+  const pinnet = inp.e2ePr ? `for ${e2eNavn(inp)}` : `med ${navn(inp.tjenester[0])} som leder`;
+  const forste = inp.e2ePr
+    ? [`1. ${e2eNavn(inp)}: ${lenke(E2E_REPO, inp.e2ePr)}`]
+    : [`1. ${navn(inp.tjenester[0])}: ${lenke(inp.tjenester[0].repo, inp.tjenester[0].pr)}`];
+  const resten = inp.e2ePr ? inp.tjenester : inp.tjenester.slice(1);
   const linjer = [
     inp.dryRun
       ? `🧪 Prøvekjøring: E2E_PINS er ikke skrevet. Med pinnen ville rekkefølgen vært:`
-      : `📌 ${tjenester} er pinnet til ${inp.tag} i E2E_PINS for ${e2eNavn(inp)}. Merge med «Merge when ready» i denne rekkefølgen:`,
-    `1. ${e2eNavn(inp)}: ${lenke(E2E_REPO, inp.e2ePr)}`,
-    ...inp.tjenester.map((t, i) => {
-      const forrige = i === 0 ? e2eNavn(inp) : `${inp.tjenester[i - 1].repo} #${inp.tjenester[i - 1].pr}`;
-      return `${i + 2}. ${t.repo} #${t.pr}, når ${forrige} er merget og ${t.repo}-køen er tom: ${lenke(t.repo, t.pr)}`;
+      : `📌 ${tjenester} er pinnet til ${inp.tag} i E2E_PINS ${pinnet}. Merge med «Merge when ready» i denne rekkefølgen:`,
+    ...forste,
+    ...resten.map((t, i) => {
+      const forrige = i === 0 ? (inp.e2ePr ? e2eNavn(inp) : navn(inp.tjenester[0])) : navn(resten[i - 1]);
+      return `${i + 2}. ${navn(t)}, når ${forrige} er merget og ${t.repo}-køen er tom: ${lenke(t.repo, t.pr)}`;
     }),
-    `Pinnen gjelder fra testene har ${e2eNavn(inp)} til latest har service-PR-en, og slår seg av selv. Bestilt av ${kodespenn(inp.bestiller)}.`,
+    inp.e2ePr
+      ? `Pinnen gjelder fra testene har ${e2eNavn(inp)} til latest har service-PR-en, og slår seg av selv. Bestilt av ${kodespenn(inp.bestiller)}.`
+      : `Pinnene gjelder i køen til ${navn(inp.tjenester[0])} og etter at den er merget, til latest har service-PR-en, og slår seg av selv. Bestilt av ${kodespenn(inp.bestiller)}.`,
   ];
   for (const l of linjer) ctx.sammendrag(l);
 }

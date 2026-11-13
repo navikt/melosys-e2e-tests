@@ -260,6 +260,44 @@ export class ArbeidFlereLandBehandlingPage extends BasePage {
     console.log('✅ Valgte: % eller mer');
   }
 
+  async velgMindreEnn25Prosent(): Promise<void> {
+    await this.page.getByRole('radio', { name: 'Mindre enn 25%' }).check();
+  }
+
+  async velgLønnetArbeidOgSelvstendigIToEllerFlereLand(): Promise<void> {
+    await this.page
+      .getByRole('radio', { name: 'Lønnet arbeid og selvstendig næringsvirksomhet i to eller flere land' })
+      .check();
+  }
+
+  async velgOffentligTjenesteOgAnnenYrkesaktivitet(): Promise<void> {
+    await this.page
+      .getByRole('radio', { name: 'Offentlig tjeneste og annen yrkesaktivitet i to eller flere land' })
+      .check();
+  }
+
+  /** Arbeidsmønster for lønnet og selvstendig, eller offentlig tjeneste: f.eks. «Lønnet arbeid i Norge og selvstendig virksomhet (13.3)» */
+  async velgAktivitet(aktivitet: string): Promise<void> {
+    await this.page.getByRole('radio', { name: aktivitet }).check();
+  }
+
+  /** Vurdering av 13.1.b: forretningssted for arbeidsgiveren, bestemmelse og at søkeren omfattes i Norge */
+  async fyllUtForretningsstedINorge(bestemmelse: string): Promise<void> {
+    const forretningssted = this.page.getByRole('combobox', { name: 'Har forretningssted i' });
+    await forretningssted.fill('Norge (NO)');
+    await forretningssted.press('Tab');
+    await this.page.getByLabel('Velg...').selectOption({ label: bestemmelse });
+    await this.page.getByRole('radiogroup', { name: 'Landet søkeren skal omfattes i:' }).getByRole('radio', { name: 'Norge' }).check();
+  }
+
+  /** Vurdering av 13.2.b: virksomheten har interessesenter i Norge */
+  async velgInteressesenterINorge(): Promise<void> {
+    await this.page
+      .getByRole('radiogroup', { name: 'I hvilket land har virksomheten sitt interessesenter?' })
+      .getByRole('radio', { name: 'Norge' })
+      .check();
+  }
+
   /**
    * Fyll inn fritekst til begrunnelse
    *

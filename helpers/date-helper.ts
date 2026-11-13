@@ -179,6 +179,19 @@ export const TestPeriods = {
       end: `31.12.${currentYear}`,
     };
   },
+
+  /**
+   * Full next year period (Jan 1st to Dec 31st of next year)
+   * Gives one faktura per kvartal regardless of run date; in the current year
+   * quarters that have already started are merged into the first faktura.
+   */
+  get fullNextYearPeriod(): { start: string; end: string } {
+    const nextYear = new Date().getFullYear() + 1;
+    return {
+      start: `01.01.${nextYear}`,
+      end: `31.12.${nextYear}`,
+    };
+  },
 };
 
 /**
