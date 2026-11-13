@@ -980,8 +980,9 @@ test('plan-jobben henter hele historikken og logger inn før taggvalget', () => 
 });
 
 test('pinvalget leser tjenestene som kan ha en pin, med et lesetoken som ser de private repoene', () => {
-  // Mangler et repo i lista, svarer GitHub 404 for PR-ene der. En pin med e2e_pr regnes da som
-  // forlatt, og en pin med leder som ikke startet; kjøringen bruker latest i begge tilfeller.
+  // Mangler et privat repo i lista, svarer GitHub 404 for PR-ene der. En pin med e2e_pr regnes da
+  // som forlatt, og en pin med leder som ikke startet; kjøringen bruker latest i begge tilfeller.
+  // Lista låses også for de offentlige, så den holder hvis et av dem blir privat.
   const plan = yml.slice(yml.indexOf('  plan:\n'), yml.indexOf('- name: Pin image-tagger til digest'));
   const tokenSteg = plan.indexOf('- name: Hent lesetoken for pinvalget');
   assert.ok(tokenSteg !== -1 && tokenSteg < plan.indexOf('- name: Determine image tags from trigger source'));
@@ -993,5 +994,5 @@ test('pinvalget leser tjenestene som kan ha en pin, med et lesetoken som ser de 
   assert.deepEqual([...steg.matchAll(/permission-([a-z-]+): ([a-z]+)/g)].map(([, p, v]) => `${p}: ${v}`), ['contents: read', 'pull-requests: read']);
   const tagger = plan.slice(plan.indexOf('- name: Determine image tags from trigger source'));
   assert.match(tagger, /\n\s+GH_TOKEN: \$\{\{ steps\.lesetoken\.outputs\.token \}\}\n/);
-  assert.doesNotMatch(tagger, /github\.token/);
+  assert.doesNotMatch(tagger, /github\.token|secrets\.GITHUB_TOKEN/);
 });

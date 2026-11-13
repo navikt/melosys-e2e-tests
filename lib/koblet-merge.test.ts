@@ -297,7 +297,7 @@ test('workflowen: to jobber, og inputene konsollen sender, står', () => {
   ]);
   for (const inp of ['tag', 'e2e_pr', 'tjenester', 'requested_by', 'dry_run']) assert.match(yml, new RegExp(`^      ${inp}:$`, 'm'));
   assert.match(yml, /^run-name: .*\$\{\{ inputs\.dry_run && ' \(prøvekjøring\)' \|\| '' \}\}"$/m);
-  assert.doesNotMatch(yml, /\$\{\{ github\.token \}\}/, 'github.token ser ikke de private repoene');
+  assert.doesNotMatch(yml, /\$\{\{\s*(github\.token|secrets\.GITHUB_TOKEN)\s*\}\}/, 'github.token ser ikke de private repoene');
   assert.doesNotMatch(yml, /e2e-pins\.json|sett-i-ko|vent-merget|fjern-skriv|pin-skriv/);
 });
 
@@ -328,7 +328,8 @@ test('workflowen: skrive-tokenet er bare for melosys-e2e-tests, bare uten dry_ru
 });
 
 test('workflowen: lesingen bruker et lesetoken for repoene med merge-kø, også i en prøvekjøring', () => {
-  // Mangler et repo i lista, svarer GitHub «Could not resolve to a Repository» for et privat repo.
+  // Mangler et privat repo i lista, svarer GitHub «Could not resolve to a Repository» for det. Lista
+  // låses også for de offentlige, så den holder hvis et av dem blir privat.
   const forventet = [...REPOER_MED_KO, 'melosys-e2e-tests'].sort();
   const forventetTillatelser = { sjekk: ['contents: read', 'pull-requests: read'], pin: ['contents: read', 'pull-requests: read', 'actions: read'] };
   for (const id of ['sjekk', 'pin'] as const) {

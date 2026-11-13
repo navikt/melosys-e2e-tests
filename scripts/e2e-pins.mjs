@@ -51,8 +51,8 @@ export const TJENESTER = {
 };
 
 /**
- * Repoene med merge-kø. Bare de kan ha en pin i variabelen: lesetokenene i koblet-merge.yml og
- * e2e-tests.yml har tilgang til nettopp dem, og repo-, image- og tjenestenavn er like.
+ * Repoene med merge-kø. Bare de kan ha en pin i variabelen. Lesetokenene i koblet-merge.yml og
+ * e2e-tests.yml må dekke nettopp dem (enhetstestene sjekker det); repo-, image- og tjenestenavn er like.
  */
 export const TJENESTER_MED_KO = ['melosys-api', 'melosys-web', 'melosys-skjema-api', 'melosys-skjema-web', 'melosys-eessi', 'faktureringskomponenten'];
 
