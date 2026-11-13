@@ -31,9 +31,9 @@ Workflowen setter ingenting i kø. Merge selv med **Merge when ready**, i rekkef
 1. e2e-PR-en. e2e-køen kjører de nye testene mot `br`-imaget, fordi køens commit har `(#<e2e_pr>)` i emnet.
 2. Hver service-PR, når PR-en foran er merget og køen i service-repoet er tom. En annen PR foran i køen har ikke endringen og blir rød mot de nye testene. Si fra i kanalen at andre merger i repoet venter.
 
-**Prøv først med `dry_run`.** Jobbene leser og sjekker som vanlig, og skriveren viser verdien den ville skrevet, men variabelen endres ikke. Kjøringen heter da «… (prøvekjøring)». En prøvekjøring leser `E2E_PINS` slik den var da jobben startet, fordi `github.token` ikke kan lese variabler. Med flere service-PR-er viser den derfor hver pin for seg, uten pinnene foran den.
+**Prøv først med `dry_run`.** Jobbene leser og sjekker som vanlig, og skriveren viser verdien den ville skrevet, men variabelen endres ikke. Kjøringen heter da «… (prøvekjøring)». En prøvekjøring leser `E2E_PINS` slik den var da jobben startet, fordi lesetokenet ikke kan lese variabler. Med flere service-PR-er viser den derfor hver pin for seg, uten pinnene foran den.
 
-**Rettigheter.** Workflowen leser PR-er og kjøringer med `github.token`; alle repoene er offentlige. Bare skrivingen av variabelen bruker et token fra app-en Melosys CI, avgrenset til melosys-e2e-tests. App-en trenger *Variables: write*. Uten den svarer GitHub `403 Resource not accessible by integration`, og jobben stopper før noe er skrevet. En prøvekjøring henter ikke app-token.
+**Rettigheter.** Workflowen leser PR-er og kjøringer med et lesetoken fra app-en Melosys CI (*Contents* og *Pull requests*: read, og *Actions*: read i skrivejobben for `gh run download`), avgrenset til repoene med merge-kø og melosys-e2e-tests. `github.token` holder ikke, fordi det ikke ser de private repoene (melosys-api, melosys-web). Pinvalget i E2E Tests leser tjenesterepoene med et tilsvarende token. Skrivingen av variabelen bruker et eget token fra samme app, avgrenset til melosys-e2e-tests. App-en trenger *Variables: write*. Uten den svarer GitHub `403 Resource not accessible by integration`, og jobben stopper før noe er skrevet. En prøvekjøring henter bare lesetokenet. Lista over repoer i lesetokenene må følge `TJENESTER_MED_KO` i `scripts/e2e-pins.mjs`, og enhetstestene sjekker det.
 
 **Én skriving om gangen.** API-et har ingen sammenlign-og-skriv for variabler, så skrivejobben har concurrency-gruppen `e2e-pins-variabel`, og hele workflowen har en gruppe per tag. GitHub beholder bare én ventende kjøring per gruppe: starter en ny ekte kjøring mens én kjører og én venter, avbrytes den som venter, og pinnen for den er ikke skrevet. Start den på nytt. En prøvekjøring står utenfor begge gruppene og avbryter ingenting.
 
@@ -119,6 +119,7 @@ Andre regler:
 - Startregelen ser etter `(#<e2e_pr>)` i emnet. Squash-merge gjennom køen gir alltid det. En rebase-merge forbi køen gir ikke det, og pinnen starter ikke. For `leder` gjelder [Par uten e2e-PR](#par-uten-e2e-pr).
 - Feiler et oppslag mot GitHub eller GAR, beholdes en aktiv pin en kort tid med en advarsel: et døgn etter at service-PR-en er merget, eller tre dager etter at pinnen ble satt hvis selve PR-oppslaget feiler. Det gjelder utløpsregelen. Startregelen for `leder` beholder ikke pinnen når oppslaget feiler (se [Par uten e2e-PR](#par-uten-e2e-pr)).
 - En utløpt pin kan stå i variabelen. Den er en linje i loggen, og neste `set` som skriver, rydder den bort, med mindre den bare regnes som utløpt fordi et oppslag feilet.
+- Plan-jobben henter lesetokenet til pinvalget fra app-en Melosys CI i hver kjøring, også uten pinner. Kan ikke tokenet hentes, for eksempel fordi nøkkelen er rotert eller installasjonen mangler et av repoene, stopper plan-jobben med en feil, og ingen tester kjører. Det gjelder også gatene i merge-køene.
 
 ## Når noe går galt
 

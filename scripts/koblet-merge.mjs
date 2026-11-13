@@ -1,8 +1,8 @@
 #!/usr/bin/env node
 /**
  * Sjekker en koblet endring for .github/workflows/koblet-merge.yml. Hver underkommando er ett
- * steg i workflowen, og alle leser med github.token. Pinnen skrives av scripts/e2e-pins.mjs i
- * jobben etter. Utdata går til GITHUB_OUTPUT.
+ * steg i workflowen, og bare sjekk leser fra GitHub, med lesetokenet i GH_TOKEN. Pinnen skrives av
+ * scripts/e2e-pins.mjs i jobben etter. Utdata går til GITHUB_OUTPUT.
  * Oppskriften står i docs/ci-cd/KOBLEDE-ENDRINGER.md.
  */
 import { appendFileSync, existsSync, realpathSync } from 'node:fs';
@@ -139,7 +139,7 @@ export function lagKlient(ctx, token) {
     return tekst ? JSON.parse(tekst) : null;
   };
   return {
-    /** Bare spørringer: workflowen skriver ingenting med github.token. */
+    /** Bare spørringer: scriptet skriver ingenting til GitHub. */
     async graphql(query, variables) {
       if (/^\s*mutation\b/.test(query)) throw new Error('koblet-merge.mjs skriver ikke til GitHub.');
       for (let forsok = 0; ; forsok++) {

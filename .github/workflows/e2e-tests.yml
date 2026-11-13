@@ -175,6 +175,25 @@ jobs:
         with:
           team: teammelosys
 
+      # Pinvalget leser PR-er og historikk i tjenestene som kan ha en pin (TJENESTER_MED_KO i
+      # scripts/e2e-pins.mjs). github.token ser ikke de private repoene (melosys-api, melosys-web).
+      - name: Hent lesetoken for pinvalget
+        id: lesetoken
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ vars.MELOSYS_CI_CLIENT_ID }}
+          private-key: ${{ secrets.MELOSYS_CI_PRIVATE_KEY }}
+          owner: navikt
+          repositories: |
+            melosys-api
+            melosys-web
+            melosys-skjema-api
+            melosys-skjema-web
+            melosys-eessi
+            faktureringskomponenten
+          permission-contents: read
+          permission-pull-requests: read
+
       - name: Determine image tags from trigger source
         id: image-tags
         # Payload-verdiene leses som miljøvariabler, ikke som ${{ }} rett inn i skriptet:
@@ -204,7 +223,7 @@ jobs:
           INPUT_BRANCH_CONTEXT: ${{ inputs.branch_context }}
           E2E_PINS_INPUT: ${{ inputs.e2e_pins }}
           E2E_PINS_VAR: ${{ vars.E2E_PINS }}
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ steps.lesetoken.outputs.token }}
         run: |
           # Verdier utenfra (payload og workflow_dispatch-input) får linjeskiftene
           # fjernet før de logges. En workflow-kommando

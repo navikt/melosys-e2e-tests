@@ -76,7 +76,7 @@ test('variabelen: ugyldige verdier avvises', () => {
   const med = (felt: Obj, tjeneste = 'melosys-web') => JSON.stringify({ [tjeneste]: { ...PIN, ...felt } });
   assert.throws(() => lesVariabel('{"melosys-web": '), /ikke gyldig JSON/);
   for (const tekst of ['null', '[]', '"x"', '1']) assert.throws(() => lesVariabel(tekst), /skal være et objekt/, tekst);
-  // melosys-mock har ingen merge-kø, og service-PR-en kan ikke leses med github.token.
+  // melosys-mock og melosys-dokgen har ingen merge-kø, så de kan ikke ha en pin.
   for (const nøkkel of ['melosys-mock', 'melosys-dokgen', '__proto__', 'constructor']) {
     assert.throws(() => lesVariabel(med({}, nøkkel)), /ukjent tjeneste/, nøkkel);
   }
@@ -750,7 +750,7 @@ test('skriv: en utløpt pin med feil etter mergen står igjen, og loggen sier at
 });
 
 test('skriv: --dry-run med verdien fra vars leser ikke variabelen med API-et', async () => {
-  // I «Koblet merge» har dry_run bare github.token, som ikke kan lese variabler.
+  // I «Koblet merge» har dry_run bare lesetokenet, som ikke kan lese variabler.
   const lagret = JSON.stringify({ 'melosys-api': PIN });
   const g = lagGitHub({});
   await skriv({ ...SET, dryRun: true }, { ...g.io, lagretVerdi: lagret });
@@ -977,4 +977,22 @@ test('plan-jobben henter hele historikken og logger inn før taggvalget', () => 
   assert.doesNotMatch(yml, /e2e-pins\.json/);
   // Begge trigger-kontekstene får pinnene.
   assert.equal([...yml.matchAll(/\+ \$gate \+ \$branch \+ \$pinner'\)/g)].length, 2);
+});
+
+test('pinvalget leser tjenestene som kan ha en pin, med et lesetoken som ser de private repoene', () => {
+  // Mangler et privat repo i lista, svarer GitHub 404 for PR-ene der. En pin med e2e_pr regnes da
+  // som forlatt, og en pin med leder som ikke startet; kjøringen bruker latest i begge tilfeller.
+  // Lista låses også for de offentlige, så den holder hvis et av dem blir privat.
+  const plan = yml.slice(yml.indexOf('  plan:\n'), yml.indexOf('- name: Pin image-tagger til digest'));
+  const tokenSteg = plan.indexOf('- name: Hent lesetoken for pinvalget');
+  assert.ok(tokenSteg !== -1 && tokenSteg < plan.indexOf('- name: Determine image tags from trigger source'));
+  const steg = plan.slice(tokenSteg, plan.indexOf('\n      - ', tokenSteg));
+  assert.match(steg, /\n\s+id: lesetoken\n/);
+  assert.doesNotMatch(steg, /\n\s+if:/);
+  const repoer = (/\n\s+repositories: \|\n((?:\s+[a-z0-9-]+\n)+)/.exec(steg)?.[1] ?? '').split(/\s+/).filter(Boolean);
+  assert.deepEqual(repoer.sort(), [...TJENESTER_MED_KO].sort());
+  assert.deepEqual([...steg.matchAll(/permission-([a-z-]+): ([a-z]+)/g)].map(([, p, v]) => `${p}: ${v}`), ['contents: read', 'pull-requests: read']);
+  const tagger = plan.slice(plan.indexOf('- name: Determine image tags from trigger source'));
+  assert.match(tagger, /\n\s+GH_TOKEN: \$\{\{ steps\.lesetoken\.outputs\.token \}\}\n/);
+  assert.doesNotMatch(tagger, /github\.token|secrets\.GITHUB_TOKEN/);
 });
